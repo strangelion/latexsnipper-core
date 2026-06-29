@@ -1,0 +1,15 @@
+[package]
+name = "latexsnipper-pipeline"
+description = "Pipeline capability — composable node graph for OCR workflows"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-ast = { path = "../ast" }
+latexsnipper-image = { path = "../image" }
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+async-trait = "0.1"

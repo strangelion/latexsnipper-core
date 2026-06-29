@@ -1,0 +1,9 @@
+[package]
+name = "latexsnipper-tensor"
+description = "Tensor type — shared across Image, Inference, Runtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,24 @@
+[package]
+name = "latexsnipper-cli"
+description = "CLI tool — snipper recognize/export"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "snipper"
+path = "src/main.rs"
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-ast = { path = "../ast" }
+latexsnipper-image = { path = "../image" }
+latexsnipper-runtime = { path = "../runtime" }
+latexsnipper-engine = { path = "../engine" }
+latexsnipper-mock = { path = "../mock" }
+latexsnipper-syntax = { path = "../syntax" }
+latexsnipper-export = { path = "../export" }
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+serde_json.workspace = true
+log.workspace = true
+env_logger = "0.11"

@@ -1,0 +1,35 @@
+[package]
+name = "latexsnipper-tests"
+description = "Unified test suite for all latexsnipper crates"
+version.workspace = true
+edition.workspace = true
+
+[[test]]
+name = "all_tests"
+path = "src/all_tests.rs"
+
+[[test]]
+name = "dual_track"
+path = "src/dual_track_tests.rs"
+
+[[test]]
+name = "real_model"
+path = "src/real_model_tests.rs"
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-ast = { path = "../ast" }
+latexsnipper-tensor = { path = "../tensor" }
+latexsnipper-image = { path = "../image" }
+latexsnipper-runtime = { path = "../runtime" }
+latexsnipper-inference = { path = "../inference" }
+latexsnipper-pipeline = { path = "../pipeline" }
+latexsnipper-model = { path = "../model" }
+latexsnipper-engine = { path = "../engine" }
+latexsnipper-mock = { path = "../mock" }
+latexsnipper-syntax = { path = "../syntax" }
+latexsnipper-export = { path = "../export" }
+latexsnipper-ffi = { path = "../ffi" }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["full"] }

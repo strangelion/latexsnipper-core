@@ -4,23 +4,27 @@ resolver = "2"
 members = [
     "crates/foundation",
     "crates/ast",
+    "crates/tensor",
     "crates/image",
     "crates/runtime",
     "crates/inference",
     "crates/pipeline",
+    "crates/syntax",
     "crates/conversion",
     "crates/export",
     "crates/model",
     "crates/engine",
+    "crates/mock",
     "crates/plugin",
     "crates/ffi",
     "crates/wasm",
     "crates/cli",
+    "crates/tests",
 ]
 
 [workspace.package]
 version = "1.0.0"
-edition = "2026"
+edition = "2021"
 license = "AGPL-3.0"
 repository = "https://github.com/strangelion/latexsnipper-core"
 

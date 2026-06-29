@@ -1,0 +1,18 @@
+[package]
+name = "latexsnipper-runtime"
+description = "Runtime abstraction — Session, Provider, ModelHandle"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-tensor = { path = "../tensor" }
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "download-binaries", "tls-native", "api-20"] }
+ndarray = "0.16"
+
+[dev-dependencies]
+latexsnipper-image = { path = "../image" }

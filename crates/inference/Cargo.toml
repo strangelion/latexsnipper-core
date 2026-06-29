@@ -1,0 +1,17 @@
+[package]
+name = "latexsnipper-inference"
+description = "Inference capability — Detection, Recognition, Layout"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-ast = { path = "../ast" }
+latexsnipper-image = { path = "../image" }
+latexsnipper-runtime = { path = "../runtime" }
+latexsnipper-tensor = { path = "../tensor" }
+ndarray = "0.16"
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true

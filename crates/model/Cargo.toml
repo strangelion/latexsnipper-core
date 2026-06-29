@@ -1,0 +1,14 @@
+[package]
+name = "latexsnipper-model"
+description = "Model management — manifest, config, download, cache"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+sha2 = "0.10"
+hex = "0.4"

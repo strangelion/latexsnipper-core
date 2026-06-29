@@ -1,0 +1,24 @@
+[package]
+name = "latexsnipper-ffi"
+description = "FFI bindings — Android JNI, iOS C FFI"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-ast = { path = "../ast" }
+latexsnipper-engine = { path = "../engine" }
+latexsnipper-runtime = { path = "../runtime" }
+latexsnipper-image = { path = "../image" }
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+once_cell = "1"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+[lib]
+crate-type = ["lib", "cdylib"]

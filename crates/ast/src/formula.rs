@@ -10,7 +10,7 @@ pub struct Formula {
 
 /// The source format of a formula.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "format")]
+#[serde(tag = "format", content = "content")]
 pub enum FormulaSource {
     Latex(String),
     Omml(String),

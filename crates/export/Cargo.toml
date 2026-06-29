@@ -1,0 +1,17 @@
+[package]
+name = "latexsnipper-export"
+description = "Export capability — RenderTree + SVG/PNG/PDF generators"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-ast = { path = "../ast" }
+latexsnipper-syntax = { path = "../syntax" }
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+latexsnipper-mock = { path = "../mock" }
