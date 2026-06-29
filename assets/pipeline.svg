@@ -4,7 +4,7 @@
       <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/>
     </filter>
     <marker id="arr" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto">
-      <path d="M0,0 L7,2.5 L0,5" fill="#94a3b8"/>
+      <path d="M0,0 L7,2.5 L0,6" fill="#94a3b8"/>
     </marker>
   </defs>
 
@@ -13,54 +13,58 @@
 
   <!-- Step 1: Image -->
   <rect x="20" y="50" width="100" height="80" rx="8" fill="#f8fafc" stroke="#e2e8f0" filter="url(#sh)"/>
-  <text x="70" y="75" text-anchor="middle" font-size="18">📷</text>
-  <text x="70" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Image</text>
-  <text x="70" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">PNG/JPEG</text>
+  <rect x="50" y="65" width="40" height="30" rx="4" fill="#e2e8f0"/>
+  <rect x="55" y="70" width="30" height="20" rx="2" fill="#cbd5e1"/>
+  <text x="70" y="112" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Image</text>
 
   <!-- Arrow -->
   <line x1="120" y1="90" x2="150" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- Step 2: Preprocess -->
   <rect x="150" y="50" width="100" height="80" rx="8" fill="#f0fdfa" stroke="#99f6e4" filter="url(#sh)"/>
-  <text x="200" y="75" text-anchor="middle" font-size="18">🔧</text>
-  <text x="200" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Preprocess</text>
-  <text x="200" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">letterbox/norm</text>
+  <circle cx="200" cy="78" r="12" fill="none" stroke="#0d9488" stroke-width="2"/>
+  <line x1="192" y1="78" x2="208" y2="78" stroke="#0d9488" stroke-width="2"/>
+  <line x1="200" y1="70" x2="200" y2="86" stroke="#0d9488" stroke-width="2"/>
+  <text x="200" y="112" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Preprocess</text>
 
   <!-- Arrow -->
   <line x1="250" y1="90" x2="280" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- Step 3: Detect -->
   <rect x="280" y="50" width="100" height="80" rx="8" fill="#fef3c7" stroke="#fde68a" filter="url(#sh)"/>
-  <text x="330" y="75" text-anchor="middle" font-size="18">🔍</text>
-  <text x="330" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#d97706">Detection</text>
-  <text x="330" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">YOLOv8 / DBNet</text>
+  <circle cx="330" cy="78" r="14" fill="none" stroke="#d97706" stroke-width="2"/>
+  <circle cx="330" cy="78" r="6" fill="none" stroke="#d97706" stroke-width="1.5"/>
+  <line x1="340" y1="88" x2="350" y2="98" stroke="#d97706" stroke-width="2"/>
+  <text x="330" y="112" text-anchor="middle" font-size="11" font-weight="500" fill="#d97706">Detection</text>
 
   <!-- Arrow -->
   <line x1="380" y1="90" x2="410" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- Step 4: Crop -->
   <rect x="410" y="50" width="80" height="80" rx="8" fill="#f8fafc" stroke="#e2e8f0" filter="url(#sh)"/>
-  <text x="450" y="75" text-anchor="middle" font-size="18">✂️</text>
-  <text x="450" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Crop</text>
-  <text x="450" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">regions</text>
+  <rect x="430" y="65" width="40" height="30" rx="3" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="3"/>
+  <rect x="438" y="70" width="24" height="18" rx="2" fill="#e2e8f0"/>
+  <text x="450" y="112" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Crop</text>
 
   <!-- Arrow -->
   <line x1="490" y1="90" x2="520" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- Step 5: Recognize -->
   <rect x="520" y="50" width="100" height="80" rx="8" fill="#fef3c7" stroke="#fde68a" filter="url(#sh)"/>
-  <text x="570" y="75" text-anchor="middle" font-size="18">🧠</text>
-  <text x="570" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#d97706">Recognize</text>
-  <text x="570" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">TrOCR / CRNN</text>
+  <rect x="550" y="65" width="40" height="30" rx="4" fill="#fde68a"/>
+  <text x="570" y="85" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">AI</text>
+  <text x="570" y="112" text-anchor="middle" font-size="11" font-weight="500" fill="#d97706">Recognize</text>
 
   <!-- Arrow -->
   <line x1="620" y1="90" x2="650" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- Step 6: AST -->
   <rect x="650" y="50" width="80" height="80" rx="8" fill="#0d9488" filter="url(#sh)"/>
-  <text x="690" y="75" text-anchor="middle" font-size="18" fill="white">📄</text>
-  <text x="690" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="white">Document</text>
-  <text x="690" y="110" text-anchor="middle" font-size="9" fill="#ccfbf1">AST</text>
+  <rect x="675" y="65" width="30" height="25" rx="3" fill="#0f766e"/>
+  <line x1="680" y1="72" x2="700" y2="72" stroke="#ccfbf1" stroke-width="1.5"/>
+  <line x1="680" y1="78" x2="695" y2="78" stroke="#ccfbf1" stroke-width="1.5"/>
+  <line x1="680" y1="84" x2="698" y2="84" stroke="#ccfbf1" stroke-width="1.5"/>
+  <text x="690" y="112" text-anchor="middle" font-size="11" font-weight="500" fill="white">AST</text>
 
   <!-- Arrow -->
   <line x1="730" y1="90" x2="760" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
