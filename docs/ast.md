@@ -14,15 +14,15 @@
 Document
 ├── Metadata
 └── Page[]
-    ├── width, height
+    ├── width, height, page_number
     └── Block[]
         ├── Paragraph → Inline[]
-        │   ├── Text → TextRun
+        │   ├── Text → TextRun (text, bold, italic)
         │   ├── Formula → FormulaSource
-        │   └── Image
+        │   └── Image → ImageInline
         ├── Formula → FormulaBlock
-        ├── Table → TableCell[][]
-        └── Figure → FigureBlock
+        ├── Table → TableCell[][] (colspan, rowspan)
+        └── Figure → FigureBlock (image_data, caption)
 ```
 
 ## 模块
@@ -40,7 +40,40 @@ Document
 
 ## 关键类型
 
+### Document
+
+```rust
+pub struct Document {
+    pub metadata: Metadata,
+    pub pages: Vec<Page>,
+}
+// methods: new(), block_count(), all_blocks()
+```
+
+### Page
+
+```rust
+pub struct Page {
+    pub width: f32,
+    pub height: f32,
+    pub blocks: Vec<Block>,
+    pub page_number: Option<u32>,
+}
+```
+
+### Block
+
+```rust
+pub enum Block {
+    Paragraph(ParagraphBlock),
+    Formula(FormulaBlock),
+    Table(TableBlock),
+    Figure(FigureBlock),
+}
+```
+
 ### Formula
+
 ```rust
 pub struct Formula {
     pub source: FormulaSource,  // Latex / Omml / Typst / MathML
@@ -49,16 +82,84 @@ pub struct Formula {
 }
 ```
 
+### FormulaSource
+
+```rust
+pub enum FormulaSource {
+    Latex(String),
+    Omml(String),
+    Typst(String),
+    MathML(String),
+}
+```
+
 ### Rect
+
 ```rust
 pub struct Rect {
     pub x: f32, pub y: f32,
     pub width: f32, pub height: f32,
 }
-// 支持 iou(), contains(), overlaps() 等方法
+// methods: new(), right(), bottom(), center_x(), center_y()
+//          iou(), contains(), overlaps()
+```
+
+### TextRun
+
+```rust
+pub struct TextRun {
+    pub text: String,
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+}
+```
+
+### TableCell
+
+```rust
+pub struct TableCell {
+    pub inlines: Vec<Inline>,
+    pub colspan: u32,
+    pub rowspan: u32,
+}
+```
+
+### FigureBlock
+
+```rust
+pub struct FigureBlock {
+    pub image_data: Option<String>, // base64 or path
+    pub caption: Option<String>,
+    pub geometry: Option<Rect>,
+}
+```
+
+### Metadata
+
+```rust
+pub struct Metadata {
+    pub language: Option<String>,
+    pub created_at: Option<String>,
+    pub ocr_model: Option<String>,
+    pub ocr_version: Option<String>,
+    pub ocr_time_ms: Option<u64>,
+}
+```
+
+### OcrMetadata
+
+```rust
+pub struct OcrMetadata {
+    pub confidence: f32,
+    pub geometry: Option<Rect>,
+    pub rotation: Option<f32>,
+    pub model: Option<String>,
+    pub time_ms: Option<u64>,
+}
 ```
 
 ### Operation（预留）
+
 ```rust
 pub enum Operation {
     InsertBlock { page, index, block },
@@ -66,6 +167,7 @@ pub enum Operation {
     ReplaceFormula { page, index, formula },
     ReplaceText { page, block_index, inline_index, text },
 }
+// methods: inverse()
 ```
 
 ## Visitor 模式
@@ -79,6 +181,8 @@ pub trait DocumentVisitor<T> {
     fn visit_inline(&mut self, inline: &Inline) -> T;
 }
 ```
+
+内置 `TextCollector`：收集 Document 中所有文本内容。
 
 ## 依赖关系
 

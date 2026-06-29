@@ -6,45 +6,64 @@ use latexsnipper_tensor::Tensor;
 
 use crate::types::DetectionBox;
 
-const MAX_SIDE: u32 = 960;
-const STRIDE: u32 = 32;
-const DET_THRESH: f32 = 0.3;
-const BOX_THRESH: f32 = 0.5;
-const UNCLIP_RATIO: f32 = 1.6;
+/// Text detection parameters loaded from config.json.
+#[derive(Debug, Clone)]
+pub struct TextDetParams {
+    pub max_side: u32,
+    pub stride: u32,
+    pub det_threshold: f32,
+    pub box_threshold: f32,
+    pub unclip_ratio: f32,
+    pub mean: [f32; 3],
+    pub std: [f32; 3],
+}
+
+impl Default for TextDetParams {
+    fn default() -> Self {
+        Self {
+            max_side: 960,
+            stride: 32,
+            det_threshold: 0.3,
+            box_threshold: 0.5,
+            unclip_ratio: 1.6,
+            mean: [0.5, 0.5, 0.5],
+            std: [0.5, 0.5, 0.5],
+        }
+    }
+}
 
 /// Detect text regions using DBNet.
-/// Inference only depends on Session trait.
 pub fn detect_text(
     image: &SnipperImage,
     session: &dyn InferenceSession,
+    params: &TextDetParams,
 ) -> Result<Vec<DetectionBox>> {
-    let (processed, orig_w, orig_h, scale) = preprocess(image);
+    let (processed, orig_w, orig_h, scale) = preprocess(image, params);
 
     let input = Tensor::float32(
-        "input",
+        "x",
         vec![1, 3, processed.height() as usize, processed.width() as usize],
-        latexsnipper_image::operations::normalize(&processed, &[0.485, 0.456, 0.406], &[0.229, 0.224, 0.225]),
+        latexsnipper_image::operations::normalize(&processed, &params.mean, &params.std),
     );
     let outputs = session.run(&[input])?;
 
-    // 3. Postprocess
     let output = outputs.first().ok_or_else(|| SnipperError::Inference("No output".into()))?;
     let prob_map = output.as_f32_slice()
         .ok_or_else(|| SnipperError::Inference("Output not float32".into()))?;
     let map_shape = output.shape().to_vec();
 
-    let boxes = postprocess(prob_map, &map_shape, orig_w, orig_h, scale)?;
+    let boxes = postprocess(prob_map, &map_shape, orig_w, orig_h, scale, params)?;
 
     Ok(boxes)
 }
 
-fn preprocess(image: &SnipperImage) -> (SnipperImage, u32, u32, f32) {
+fn preprocess(image: &SnipperImage, params: &TextDetParams) -> (SnipperImage, u32, u32, f32) {
     let w = image.width();
     let h = image.height();
     let max_side = w.max(h);
 
-    let scale = if max_side > MAX_SIDE {
-        MAX_SIDE as f32 / max_side as f32
+    let scale = if max_side > params.max_side {
+        params.max_side as f32 / max_side as f32
     } else {
         1.0
     };
@@ -52,12 +71,11 @@ fn preprocess(image: &SnipperImage) -> (SnipperImage, u32, u32, f32) {
     let new_w = (w as f32 * scale).ceil() as u32;
     let new_h = (h as f32 * scale).ceil() as u32;
 
-    // Round up to stride
-    let new_w = (new_w + STRIDE - 1) / STRIDE * STRIDE;
-    let new_h = (new_h + STRIDE - 1) / STRIDE * STRIDE;
+    let new_w = (new_w + params.stride - 1) / params.stride * params.stride;
+    let new_h = (new_h + params.stride - 1) / params.stride * params.stride;
 
     let resized = latexsnipper_image::operations::resize(image, new_w, new_h);
-    let padded = latexsnipper_image::operations::pad_to_stride(&resized, STRIDE);
+    let padded = latexsnipper_image::operations::pad_to_stride(&resized, params.stride);
 
     (padded, w, h, scale)
 }
@@ -68,23 +86,21 @@ fn postprocess(
     orig_w: u32,
     orig_h: u32,
     scale: f32,
+    params: &TextDetParams,
 ) -> Result<Vec<DetectionBox>> {
     let map_h = shape[2];
     let map_w = shape[3];
 
-    // Binary threshold
     let mut binary = vec![0u8; map_h * map_w];
     for i in 0..map_h * map_w {
-        binary[i] = if prob_map[i] > DET_THRESH { 1 } else { 0 };
+        binary[i] = if prob_map[i] > params.det_threshold { 1 } else { 0 };
     }
 
-    // Find contours (simplified Moore-Neighbor)
     let contours = find_contours(&binary, map_w, map_h);
 
     let mut boxes = Vec::new();
 
     for contour in &contours {
-        // Calculate area and perimeter
         let area = polygon_area(contour);
         let perimeter = polygon_perimeter(contour);
 
@@ -92,14 +108,11 @@ fn postprocess(
             continue;
         }
 
-        // Unclip expansion
-        let distance = area * UNCLIP_RATIO / perimeter;
+        let distance = area * params.unclip_ratio / perimeter;
         let expanded = expand_contour(contour, distance);
 
-        // Get bounding box
         let (min_x, min_y, max_x, max_y) = bounding_box(&expanded);
 
-        // Scale back to original coordinates
         let x1 = (min_x as f32 / scale).max(0.0);
         let y1 = (min_y as f32 / scale).max(0.0);
         let x2 = (max_x as f32 / scale).min(orig_w as f32);
@@ -112,9 +125,8 @@ fn postprocess(
             continue;
         }
 
-        // Check average score in the region
         let avg_score = average_score(prob_map, map_w, map_h, min_x, min_y, max_x, max_y);
-        if avg_score < BOX_THRESH {
+        if avg_score < params.box_threshold {
             continue;
         }
 
@@ -126,7 +138,6 @@ fn postprocess(
         });
     }
 
-    // Merge overlapping boxes
     merge_boxes(&mut boxes);
 
     Ok(boxes)
@@ -140,7 +151,6 @@ fn find_contours(binary: &[u8], width: usize, height: usize) -> Vec<Vec<(i32, i3
         for x in 0..width {
             let idx = y * width + x;
             if binary[idx] == 1 && !visited[idx] {
-                // Start Moore-Neighbor tracing
                 if let Some(contour) = trace_contour(binary, width, height, x, y, &mut visited) {
                     if contour.len() >= 4 {
                         contours.push(contour);
@@ -168,11 +178,10 @@ fn trace_contour(
     let mut y = start_y as i32;
     let mut dir = 0;
 
-    for _ in 0..10000 { // Safety limit
+    for _ in 0..10000 {
         contour.push((x, y));
         visited[(y as usize) * width + (x as usize)] = true;
 
-        // Search from (dir + 5) % 8 for next border pixel
         let start_dir = (dir + 5) % 8;
         let mut found = false;
 
@@ -231,7 +240,6 @@ fn polygon_perimeter(points: &[(i32, i32)]) -> f32 {
 }
 
 fn expand_contour(points: &[(i32, i32)], distance: f32) -> Vec<(i32, i32)> {
-    // Simplified expansion: offset each point outward from centroid
     let cx: f32 = points.iter().map(|p| p.0 as f32).sum::<f32>() / points.len() as f32;
     let cy: f32 = points.iter().map(|p| p.1 as f32).sum::<f32>() / points.len() as f32;
 
@@ -289,7 +297,6 @@ fn average_score(map: &[f32], width: usize, height: usize, x1: i32, y1: i32, x2:
 }
 
 fn merge_boxes(boxes: &mut Vec<DetectionBox>) {
-    // Simple horizontal merge for boxes on the same line
     boxes.sort_by(|a, b| a.rect.y.partial_cmp(&b.rect.y).unwrap());
 
     let mut merged = Vec::new();
@@ -308,14 +315,12 @@ fn merge_boxes(boxes: &mut Vec<DetectionBox>) {
                 continue;
             }
 
-            // Check if on same line (y overlap > 50%)
             let y_overlap = (current.rect.bottom().min(boxes[j].rect.bottom())
                 - current.rect.y.max(boxes[j].rect.y))
                 .max(0.0);
             let min_height = current.rect.height.min(boxes[j].rect.height);
 
             if y_overlap > min_height * 0.5 {
-                // Merge
                 let x1 = current.rect.x.min(boxes[j].rect.x);
                 let y1 = current.rect.y.min(boxes[j].rect.y);
                 let x2 = current.rect.right().max(boxes[j].rect.right());

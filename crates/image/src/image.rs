@@ -12,6 +12,18 @@ pub struct SnipperImage {
 
 impl SnipperImage {
     pub fn new(width: u32, height: u32, format: PixelFormat, pixels: Vec<u8>) -> Self {
+        let bpp = match format {
+            PixelFormat::Gray => 1,
+            PixelFormat::Rgb | PixelFormat::Bgr => 3,
+            PixelFormat::Rgba | PixelFormat::Bgra => 4,
+        };
+        let expected = width as usize * height as usize * bpp;
+        if pixels.len() != expected {
+            panic!(
+                "Pixel buffer size mismatch: expected {} ({}x{}x{}), got {}",
+                expected, width, height, bpp, pixels.len()
+            );
+        }
         Self { width, height, format, pixels }
     }
 

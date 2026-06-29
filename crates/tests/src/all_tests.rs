@@ -1,8 +1,8 @@
 // Unified test suite for latexsnipper-core
-// Consolidates all tests from individual crates into one location
+// Tests organized by module category
 
 // ═══════════════════════════════════════════════════════════════
-// Foundation Tests
+// Category 1: Foundation
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -62,7 +62,7 @@ mod foundation_tests {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// AST Tests
+// Category 2: AST
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -116,7 +116,7 @@ mod ast_tests {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Tensor Tests
+// Category 3: Tensor
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -147,7 +147,7 @@ mod tensor_tests {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Image Tests
+// Category 4: Image
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -178,7 +178,7 @@ mod image_tests {
     #[test]
     fn letterbox() {
         let img = SnipperImage::new(100, 50, PixelFormat::Rgb, vec![128u8; 15000]);
-        let (lb, scale, pad_x, pad_y) = operations::letterbox(&img, 64);
+        let (lb, _scale, _pad_x, _pad_y) = operations::letterbox(&img, 64);
         assert_eq!(lb.width(), 64);
         assert_eq!(lb.height(), 64);
     }
@@ -201,7 +201,7 @@ mod image_tests {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Model Tests
+// Category 5: Model
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -210,10 +210,77 @@ mod model_tests {
     use std::path::Path;
 
     #[test]
-    fn config_parse() {
-        let json = r#"{"model_type":"yolov8","input":{"name":"images","shape":[1,3,768,768],"dtype":"float32"},"output":{"name":"output","shape":[1,6,8400]}}"#;
+    fn config_parse_yolov8() {
+        let json = r#"{
+            "model_type": "yolov8",
+            "model_family": "YOLOv8",
+            "license": "Apache-2.0",
+            "input": {"name": "images", "shape": [1,3,768,768], "dtype": "float32", "range": [0.0, 1.0]},
+            "output": {"name": "output0", "shape": [1,6,8400]},
+            "preprocessing": {
+                "resize": {"width": 768, "height": 768, "keep_ratio": true, "pad_value": 114},
+                "normalization": {"mean": [0,0,0], "std": [255,255,255]},
+                "color_format": "BGR"
+            },
+            "postprocessing": {"type": "yolo_nms", "confidence_threshold": 0.25, "iou_threshold": 0.45}
+        }"#;
         let config = ModelConfig::parse(json).unwrap();
         assert_eq!(config.model_type, "yolov8");
+        assert_eq!(config.task_type(), "detection");
+        assert_eq!(config.color_format(), "BGR");
+        assert_eq!(config.normalization_mean(), vec![0.0, 0.0, 0.0]);
+        assert_eq!(config.normalization_std(), vec![255.0, 255.0, 255.0]);
+    }
+
+    #[test]
+    fn config_parse_trocr() {
+        let json = r#"{
+            "model_type": "trocr",
+            "encoder": {"input": {"name": "pixel_values", "shape": [1,3,384,384], "dtype": "float32"}, "output": {"name": "last_hidden_state", "shape": [1,577,384]}},
+            "decoder": {"input_ids": {"name": "input_ids"}, "encoder_hidden": {"name": "encoder_hidden_states"}, "output": {"name": "logits", "shape": [1,-1,50265]}, "max_length": 512, "eos_token_id": 2},
+            "preprocessing": {"normalization": {"mean": [0.5,0.5,0.5], "std": [0.5,0.5,0.5]}},
+            "decoding": {"type": "beam_search", "beam_width": 3, "top_k": 5}
+        }"#;
+        let config = ModelConfig::parse(json).unwrap();
+        assert_eq!(config.model_type, "trocr");
+        assert_eq!(config.task_type(), "ocr");
+        assert!(config.encoder.is_some());
+        assert!(config.decoder.is_some());
+        assert_eq!(config.decoder.as_ref().unwrap().max_length, Some(512));
+    }
+
+    #[test]
+    fn config_parse_dbnet() {
+        let json = r#"{
+            "model_type": "dbnet",
+            "input": {"name": "x", "shape": [1,3,-1,-1], "dtype": "float32"},
+            "output": {"name": "out", "shape": [1,1,-1,-1]},
+            "preprocessing": {"normalization": {"mean": [0.485,0.456,0.406], "std": [0.229,0.224,0.225]}, "divisible_by": 32},
+            "postprocessing": {"type": "dbnet", "threshold": 0.3, "box_threshold": 0.5, "unclip_ratio": 1.5}
+        }"#;
+        let config = ModelConfig::parse(json).unwrap();
+        assert_eq!(config.model_type, "dbnet");
+        assert!(config.has_dynamic_shapes() == false);
+    }
+
+    #[test]
+    fn config_parse_crnn() {
+        let json = r#"{
+            "model_type": "crnn_ctc",
+            "input": {"name": "x", "shape": [1,3,48,320], "dtype": "float32"},
+            "output": {"name": "out", "shape": [1,-1,6637]},
+            "decoding": {"type": "ctc_greedy", "blank_id": 0, "keys_file": "ppocr_keys.txt"}
+        }"#;
+        let config = ModelConfig::parse(json).unwrap();
+        assert_eq!(config.model_type, "crnn_ctc");
+        assert_eq!(config.decoding.as_ref().unwrap().decoding_type.as_deref(), Some("ctc_greedy"));
+    }
+
+    #[test]
+    fn config_task_type_auto() {
+        let json = r#"{"model_type": "yolov8", "input": {"name": "x", "shape": [1], "dtype": "float32"}, "output": {"name": "y", "shape": [1]}}"#;
+        let config = ModelConfig::parse(json).unwrap();
+        assert_eq!(config.task_type(), "detection");
     }
 
     #[test]
@@ -238,7 +305,7 @@ mod model_tests {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Syntax Tests
+// Category 6: Syntax
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -271,7 +338,7 @@ mod syntax_tests {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Export Tests
+// Category 7: Export
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -307,14 +374,141 @@ mod export_tests {
         let tree = RenderTree::from_document(&doc);
         let text = TextGenerator;
         let output = text.generate(&tree).unwrap();
-        // The parser may treat "Hello World" as a single text block
-        assert!(!output.is_empty(), "Output should not be empty");
-        assert!(output.contains("Hello") || output.contains("World"), "Output should contain text");
+        assert!(!output.is_empty());
+        assert!(output.contains("Hello") || output.contains("World"));
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Mock Tests
+// Category 8: Conversion (14 formats)
+// ═══════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod conversion_tests {
+    use latexsnipper_conversion::*;
+    use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, FormulaSource, ParagraphBlock, Inline, TextRun};
+
+    fn test_doc() -> Document {
+        Document {
+            metadata: latexsnipper_ast::Metadata::default(),
+            pages: vec![Page {
+                width: 800.0, height: 600.0,
+                blocks: vec![
+                    Block::Paragraph(ParagraphBlock {
+                        inlines: vec![Inline::Text(TextRun { text: "Given ".into(), bold: None, italic: None })],
+                        geometry: None,
+                    }),
+                    Block::Formula(FormulaBlock {
+                        formula: Formula { source: FormulaSource::Latex("E=mc^2".into()), display_mode: false, confidence: 0.95 },
+                        geometry: None,
+                    }),
+                    Block::Formula(FormulaBlock {
+                        formula: Formula { source: FormulaSource::Latex("\\frac{a+b}{c}".into()), display_mode: true, confidence: 0.92 },
+                        geometry: None,
+                    }),
+                ],
+                page_number: Some(1),
+            }],
+        }
+    }
+
+    #[test]
+    fn latex() { let r = LatexConverter.convert(&test_doc()).unwrap(); assert!(r.contains("E=mc^2")); }
+    #[test]
+    fn latex_display() { let r = LatexDisplayConverter.convert(&test_doc()).unwrap(); assert!(r.contains("\\[")); }
+    #[test]
+    fn latex_equation() { let r = LatexEquationConverter.convert(&test_doc()).unwrap(); assert!(r.contains("\\begin{equation}")); }
+    #[test]
+    fn markdown_inline() { let r = MarkdownInlineConverter.convert(&test_doc()).unwrap(); assert!(r.contains("$E=mc^2$")); }
+    #[test]
+    fn markdown_block() { let r = MarkdownBlockConverter.convert(&test_doc()).unwrap(); assert!(r.contains("$$")); }
+    #[test]
+    fn mathml() { let r = MathmlConverter.convert(&test_doc()).unwrap(); assert!(r.contains("<math")); }
+    #[test]
+    fn mathml_mml() { let r = MathmlMmlConverter.convert(&test_doc()).unwrap(); assert!(r.contains("mml:math")); }
+    #[test]
+    fn mathml_m() { let r = MathmlMConverter.convert(&test_doc()).unwrap(); assert!(r.contains("<m:math")); }
+    #[test]
+    fn mathml_attr() { let r = MathmlAttrConverter.convert(&test_doc()).unwrap(); assert!(r.contains("math")); }
+    #[test]
+    fn omml() { let r = OmmlConverter.convert(&test_doc()).unwrap(); assert!(r.contains("<m:f>")); }
+    #[test]
+    fn typst() { let r = TypstConverter.convert(&test_doc()).unwrap(); assert!(r.contains("(a+b)/(c)")); }
+    #[test]
+    fn html() { let r = HtmlConverter.convert(&test_doc()).unwrap(); assert!(r.contains("MathJax")); }
+
+    #[test]
+    fn fraction_omml() {
+        let doc = Document { metadata: Default::default(), pages: vec![Page { width: 0.0, height: 0.0,
+            blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None })],
+            page_number: None }] };
+        let r = OmmlConverter.convert(&doc).unwrap();
+        assert!(r.contains("<m:num>"));
+        assert!(r.contains("<m:den>"));
+    }
+
+    #[test]
+    fn fraction_mathml() {
+        let doc = Document { metadata: Default::default(), pages: vec![Page { width: 0.0, height: 0.0,
+            blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None })],
+            page_number: None }] };
+        let r = MathmlConverter.convert(&doc).unwrap();
+        assert!(r.contains("<mfrac>"));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Category 9: Plugin
+// ═══════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod plugin_tests {
+    use latexsnipper_plugin::*;
+    use latexsnipper_ast::{Document, Page};
+
+    #[test]
+    fn registry_register_list() {
+        let mut reg = PluginRegistry::new();
+        let plugin = latexsnipper_plugin::plugin::TransformPlugin::new("test", "0.1", |_| Ok(()));
+        reg.register(Box::new(plugin)).unwrap();
+        assert!(reg.has("test"));
+        assert_eq!(reg.list().len(), 1);
+    }
+
+    #[test]
+    fn registry_unregister() {
+        let mut reg = PluginRegistry::new();
+        let plugin = latexsnipper_plugin::plugin::TransformPlugin::new("test", "0.1", |_| Ok(()));
+        reg.register(Box::new(plugin)).unwrap();
+        reg.unregister("test").unwrap();
+        assert!(!reg.has("test"));
+    }
+
+    #[test]
+    fn registry_handle() {
+        let mut reg = PluginRegistry::new();
+        let plugin = latexsnipper_plugin::plugin::TransformPlugin::new("test", "0.1", |doc| {
+            if doc.pages.is_empty() {
+                doc.pages.push(Page { width: 0.0, height: 0.0, blocks: vec![], page_number: None });
+            }
+            Ok(())
+        });
+        reg.register(Box::new(plugin)).unwrap();
+        let req = PluginRequest::new("test", Document::new());
+        let resp = reg.handle("test", &req).unwrap();
+        assert!(!resp.document.pages.is_empty());
+    }
+
+    #[test]
+    fn registry_handle_not_found() {
+        let reg = PluginRegistry::new();
+        let req = PluginRequest::new("test", Document::new());
+        assert!(reg.handle("nonexistent", &req).is_err());
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Category 10: Mock
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -350,7 +544,59 @@ mod mock_tests {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Engine Integration Tests
+// Category 11: Runtime
+// ═══════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod runtime_tests {
+    use latexsnipper_runtime::{StubRuntime, AccelerationMode, ModelHandle, RuntimeBackend};
+
+    #[test]
+    fn stub_runtime() {
+        let rt = StubRuntime::new();
+        assert_eq!(rt.name(), "stub");
+        assert!(rt.is_available());
+    }
+
+    #[test]
+    fn model_handle() {
+        let h = ModelHandle::new("m1", "formula-det", "v1");
+        assert_eq!(h.id(), "m1");
+        assert_eq!(h.category(), "formula-det");
+    }
+
+    #[test]
+    fn acceleration_default() {
+        assert_eq!(AccelerationMode::default(), AccelerationMode::Auto);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Category 12: FFI
+// ═══════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod ffi_tests {
+    use latexsnipper_ffi::common::FfiResponse;
+
+    #[test]
+    fn ffi_response_success() {
+        let r = FfiResponse::success("E=mc^2", 0.95, 1234);
+        let json = r.to_json();
+        assert!(json.contains("E=mc^2"));
+        assert!(json.contains("0.95"));
+    }
+
+    #[test]
+    fn ffi_response_error() {
+        let r = FfiResponse::error("Model not found");
+        let json = r.to_json();
+        assert!(json.contains("Model not found"));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Category 13: Engine Integration
 // ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -373,7 +619,7 @@ mod engine_tests {
     async fn engine_mock() {
         let engine = SnipperEngine::new(EngineConfig::default(), Box::new(StubRuntime::new()));
         let doc = engine.recognize(test_image(), RecognizeMode::Formula).await.unwrap();
-        assert_eq!(doc.pages.len(), 0); // StubRuntime returns empty
+        assert_eq!(doc.pages.len(), 0);
     }
 
     #[test]
@@ -401,58 +647,5 @@ mod engine_tests {
         let renderer = LatexRenderer;
         let latex = renderer.render(&doc).unwrap();
         assert!(latex.contains("x^2"));
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Runtime Tests
-// ═══════════════════════════════════════════════════════════════
-
-#[cfg(test)]
-mod runtime_tests {
-    use latexsnipper_runtime::{StubRuntime, AccelerationMode, ModelHandle, RuntimeBackend};
-    use latexsnipper_tensor::Tensor;
-
-    #[test]
-    fn stub_runtime() {
-        let rt = StubRuntime::new();
-        assert_eq!(rt.name(), "stub");
-        assert!(rt.is_available());
-    }
-
-    #[test]
-    fn model_handle() {
-        let h = ModelHandle::new("m1", "formula-det", "v1");
-        assert_eq!(h.id(), "m1");
-        assert_eq!(h.category(), "formula-det");
-    }
-
-    #[test]
-    fn acceleration_default() {
-        assert_eq!(AccelerationMode::default(), AccelerationMode::Auto);
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// FFI Tests
-// ═══════════════════════════════════════════════════════════════
-
-#[cfg(test)]
-mod ffi_tests {
-    use latexsnipper_ffi::common::FfiResponse;
-
-    #[test]
-    fn ffi_response_success() {
-        let r = FfiResponse::success("E=mc^2", 0.95, 1234);
-        let json = r.to_json();
-        assert!(json.contains("E=mc^2"));
-        assert!(json.contains("0.95"));
-    }
-
-    #[test]
-    fn ffi_response_error() {
-        let r = FfiResponse::error("Model not found");
-        let json = r.to_json();
-        assert!(json.contains("Model not found"));
     }
 }

@@ -10,6 +10,7 @@ latexsnipper-ast = { path = "../ast" }
 latexsnipper-image = { path = "../image" }
 latexsnipper-runtime = { path = "../runtime" }
 latexsnipper-tensor = { path = "../tensor" }
+latexsnipper-model = { path = "../model" }
 ndarray = "0.16"
 serde.workspace = true
 serde_json.workspace = true

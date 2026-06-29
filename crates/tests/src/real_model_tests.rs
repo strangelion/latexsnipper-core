@@ -305,29 +305,27 @@ fn test_formula_e2e() {
 
     if let Some(data) = output[0].as_f32_slice() {
         let shape = output[0].shape();
-        let rows = shape[2];
-        let cols = shape[1];
-        println!("   YOLO output: {} predictions, {} values each", rows, cols);
+        // ort reports [1, 6, N] but data is [N, 6] row-major
+        // Each 6 values: [cx, cy, w, h, emb_score, iso_score]
+        let num_preds = shape[1].max(shape[2]);
+        println!("   YOLO output: shape={:?}, {} anchors", shape, num_preds);
 
         let mut detections = 0;
-        for r in 0..rows {
-            let base = r * cols;
-            if base + 4 >= data.len() { break; }
+        for p in 0..num_preds.min(20) {
+            let base = p * 6;
+            if base + 5 >= data.len() { break; }
             let cx = data[base];
             let cy = data[base + 1];
             let bw = data[base + 2];
             let bh = data[base + 3];
-            let conf = data[base + 4];
-            if conf > 0.25 {
-                let ox = ((cx - pad_x) / scale) as u32;
-                let oy = ((cy - pad_y) / scale) as u32;
-                let ow = (bw / scale) as u32;
-                let oh = (bh / scale) as u32;
-                println!("   Box {}: conf={:.3}, center=({},{})", detections, conf, ox, oy);
-                detections += 1;
-            }
+            let conf0 = data[base + 4];
+            let conf1 = data[base + 5];
+            let conf = conf0.max(conf1);
+            println!("   Anchor {}: cx={:.1}, cy={:.1}, w={:.1}, h={:.1}, emb={:.4}, iso={:.4}, max={:.4}",
+                p, cx, cy, bw, bh, conf0, conf1, conf);
+            if conf > 0.25 { detections += 1; }
         }
-        println!("3. Detections above 0.25: {}", detections);
+        println!("3. First 20 anchors, {} above 0.25", detections);
     }
     println!("4. Formula e2e: PASSED");
 }

@@ -28,6 +28,8 @@ latexsnipper-model = { path = "../model" }
 latexsnipper-engine = { path = "../engine" }
 latexsnipper-mock = { path = "../mock" }
 latexsnipper-syntax = { path = "../syntax" }
+latexsnipper-conversion = { path = "../conversion" }
+latexsnipper-plugin = { path = "../plugin" }
 latexsnipper-export = { path = "../export" }
 latexsnipper-ffi = { path = "../ffi" }
 serde.workspace = true

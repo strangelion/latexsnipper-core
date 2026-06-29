@@ -1,6 +1,11 @@
 [package]
 name = "latexsnipper-plugin"
+description = "Plugin API — extend Core capabilities with standard interfaces"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-ast = { path = "../ast" }
+serde_json.workspace = true
+log.workspace = true

@@ -5,3 +5,7 @@ pub mod text_recognizer;
 pub mod types;
 
 pub use types::{DetectionBox, RecognitionResult};
+pub use formula_detector::DetectionParams;
+pub use formula_recognizer::RecognitionParams;
+pub use text_detector::TextDetParams;
+pub use text_recognizer::TextRecParams;

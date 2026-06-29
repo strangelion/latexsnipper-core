@@ -1,6 +1,10 @@
 [package]
 name = "latexsnipper-conversion"
+description = "Format conversion — AST to LaTeX/OMML/MathML/Typst/Markdown"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-ast = { path = "../ast" }
+log.workspace = true

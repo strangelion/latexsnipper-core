@@ -103,6 +103,9 @@ fn recognize_sync(data: *const u8, len: usize, mode: RecognizeMode) -> FfiRespon
         None => return FfiResponse::error("Engine not initialized"),
     };
 
+    if data.is_null() || len == 0 || len > 100 * 1024 * 1024 {
+        return FfiResponse::error("Invalid image data: null pointer, empty, or too large (>100MB)");
+    }
     let _data = unsafe { std::slice::from_raw_parts(data, len) };
 
     let start = std::time::Instant::now();

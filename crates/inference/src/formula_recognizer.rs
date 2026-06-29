@@ -8,30 +8,54 @@ use latexsnipper_tensor::Tensor;
 
 use crate::types::RecognitionResult;
 
-const IMG_SIZE: u32 = 384;
-const BEAM_WIDTH: usize = 3;
-const TOP_K: usize = 5;
-const MAX_TOKENS: usize = 512;
-const DECODER_START_ID: i64 = 2;
-const EOS_ID: i64 = 2;
-const PAD_ID: i64 = 0;
+/// Recognition parameters loaded from config.json.
+#[derive(Debug, Clone)]
+pub struct RecognitionParams {
+    pub img_size: u32,
+    pub beam_width: usize,
+    pub top_k: usize,
+    pub max_tokens: usize,
+    pub decoder_start_id: i64,
+    pub eos_token_id: i64,
+    pub pad_token_id: i64,
+    pub mean: [f32; 3],
+    pub std: [f32; 3],
+    /// Use greedy decoding (argmax) instead of beam search.
+    /// Desktop app uses greedy by default.
+    pub greedy: bool,
+}
 
-/// Recognize formula using TrOCR encoder + beam search decoder.
-/// Inference only depends on Session trait.
+impl Default for RecognitionParams {
+    fn default() -> Self {
+        Self {
+            img_size: 384,
+            beam_width: 3,
+            top_k: 5,
+            max_tokens: 256,
+            decoder_start_id: 2,
+            eos_token_id: 2,
+            pad_token_id: 0,
+            mean: [0.5, 0.5, 0.5],
+            std: [0.5, 0.5, 0.5],
+            greedy: true,
+        }
+    }
+}
+
+/// Recognize formula using TrOCR encoder + decoder.
 pub fn recognize_formula(
     image: &SnipperImage,
     encoder: &dyn InferenceSession,
     decoder: &dyn InferenceSession,
     tokenizer_path: &std::path::Path,
+    params: &RecognitionParams,
 ) -> Result<RecognitionResult> {
     let tokenizer = load_tokenizer(tokenizer_path)?;
 
-    let resized = latexsnipper_image::operations::resize(image, IMG_SIZE, IMG_SIZE);
-    let mean = [0.5, 0.5, 0.5];
-    let std = [0.5, 0.5, 0.5];
-    let pixels = latexsnipper_image::operations::normalize(&resized, &mean, &std);
+    let resized = latexsnipper_image::operations::resize(image, params.img_size, params.img_size);
+    let pixels = latexsnipper_image::operations::normalize(&resized, &params.mean, &params.std);
 
-    let input = Tensor::float32("pixel_values", vec![1, 3, IMG_SIZE as usize, IMG_SIZE as usize], pixels);
+    let input = Tensor::float32("pixel_values", vec![1, 3, params.img_size as usize, params.img_size as usize], pixels);
     let encoder_outputs = encoder.run(&[input])?;
     let hidden_states = encoder_outputs.first()
         .ok_or_else(|| SnipperError::Inference("No encoder output".into()))?
@@ -40,11 +64,74 @@ pub fn recognize_formula(
         .to_vec();
     let hidden_shape = encoder_outputs.first().unwrap().shape().to_vec();
 
-    let text = beam_search(decoder, &hidden_states, &hidden_shape, &tokenizer)?;
+    let text = if params.greedy {
+        greedy_decode(decoder, &hidden_states, &hidden_shape, &tokenizer, params)?
+    } else {
+        beam_search(decoder, &hidden_states, &hidden_shape, &tokenizer, params)?
+    };
 
     let text = repair_latex(&text);
 
     Ok(RecognitionResult { text, confidence: 0.9 })
+}
+
+/// Greedy decoding: at each step, pick the token with highest probability.
+/// Matches desktop app behavior.
+fn greedy_decode(
+    decoder_session: &dyn latexsnipper_runtime::InferenceSession,
+    hidden_states: &[f32],
+    hidden_shape: &[usize],
+    tokenizer: &HashMap<i64, String>,
+    params: &RecognitionParams,
+) -> Result<String> {
+    let mut token_ids: Vec<i64> = vec![params.decoder_start_id];
+    let mut scores: Vec<f32> = Vec::new();
+
+    for _ in 0..params.max_tokens {
+        let input_ids = Tensor::int64("input_ids", vec![1, token_ids.len()], token_ids.clone());
+        let hidden_tensor = Tensor::float32("encoder_hidden_states", hidden_shape.to_vec(), hidden_states.to_vec());
+
+        let outputs = decoder_session.run(&[input_ids, hidden_tensor])?;
+        let logits = outputs.first()
+            .ok_or_else(|| SnipperError::Inference("No decoder output".into()))?
+            .as_f32_slice()
+            .ok_or_else(|| SnipperError::Inference("Decoder output not float32".into()))?;
+
+        let vocab_size = outputs.first().unwrap().shape().last().copied().unwrap_or(0);
+
+        // Get logits for the last position
+        let last_pos_start = (token_ids.len() - 1) * vocab_size;
+        let last_pos_end = last_pos_start + vocab_size;
+        if last_pos_end > logits.len() { break; }
+        let step_logits = &logits[last_pos_start..last_pos_end];
+
+        // Softmax
+        let max_logit = step_logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let mut probs: Vec<f32> = step_logits.iter().map(|&x| (x - max_logit).exp()).collect();
+        let sum: f32 = probs.iter().sum();
+        for p in probs.iter_mut() { *p /= sum; }
+
+        // Argmax
+        let (max_idx, max_prob) = probs.iter().enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap_or((0, &0.0));
+
+        scores.push(*max_prob);
+        token_ids.push(max_idx as i64);
+
+        if max_idx as i64 == params.eos_token_id || max_idx as i64 == params.pad_token_id {
+            break;
+        }
+    }
+
+    // Decode tokens to text
+    let text = token_ids.iter()
+        .filter(|&&id| id != params.eos_token_id && id != params.pad_token_id && id != params.decoder_start_id)
+        .filter_map(|id| tokenizer.get(id).cloned())
+        .collect::<Vec<_>>()
+        .join("");
+
+    Ok(text)
 }
 
 fn load_tokenizer(path: &Path) -> Result<HashMap<i64, String>> {
@@ -77,15 +164,16 @@ fn beam_search(
     hidden_states: &[f32],
     hidden_shape: &[usize],
     tokenizer: &HashMap<i64, String>,
+    params: &RecognitionParams,
 ) -> Result<String> {
-    let mut beams: Vec<(Vec<i64>, f32)> = vec![(vec![DECODER_START_ID], 0.0)];
+    let mut beams: Vec<(Vec<i64>, f32)> = vec![(vec![params.decoder_start_id], 0.0)];
 
-    for _ in 0..MAX_TOKENS {
+    for _ in 0..params.max_tokens {
         let mut all_candidates: Vec<(Vec<i64>, f32)> = Vec::new();
 
         for (token_ids, log_prob) in &beams {
             let last_token = *token_ids.last().unwrap();
-            if last_token == EOS_ID || last_token == PAD_ID {
+            if last_token == params.eos_token_id || last_token == params.pad_token_id {
                 all_candidates.push((token_ids.clone(), *log_prob));
                 continue;
             }
@@ -107,7 +195,7 @@ fn beam_search(
             let sum: f32 = probs.iter().sum();
             for p in probs.iter_mut() { *p /= sum; }
 
-            let k = TOP_K.min(vocab_size);
+            let k = params.top_k.min(vocab_size);
             let mut indexed: Vec<(usize, f32)> = probs.iter().enumerate().map(|(i, &p)| (i, p)).collect();
             indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             indexed.truncate(k);
@@ -120,10 +208,10 @@ fn beam_search(
         }
 
         all_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        all_candidates.truncate(BEAM_WIDTH);
+        all_candidates.truncate(params.beam_width);
         beams = all_candidates;
 
-        if beams.iter().all(|(ids, _)| ids.last() == Some(&EOS_ID) || ids.last() == Some(&PAD_ID)) {
+        if beams.iter().all(|(ids, _)| ids.last() == Some(&params.eos_token_id) || ids.last() == Some(&params.pad_token_id)) {
             break;
         }
     }
@@ -131,7 +219,7 @@ fn beam_search(
     let best = beams.first().ok_or_else(|| SnipperError::Inference("No beams".into()))?;
 
     let text = best.0.iter()
-        .filter(|&&id| id != EOS_ID && id != PAD_ID && id != DECODER_START_ID)
+        .filter(|&&id| id != params.eos_token_id && id != params.pad_token_id && id != params.decoder_start_id)
         .filter_map(|id| tokenizer.get(id).cloned())
         .collect::<Vec<_>>()
         .join("");

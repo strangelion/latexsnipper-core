@@ -7,24 +7,43 @@ use latexsnipper_tensor::Tensor;
 
 use crate::types::RecognitionResult;
 
-const TARGET_H: u32 = 48;
-const MAX_W: u32 = 320;
+/// Text recognition parameters loaded from config.json.
+#[derive(Debug, Clone)]
+pub struct TextRecParams {
+    pub target_h: u32,
+    pub max_w: u32,
+    pub blank_id: usize,
+    pub mean: [f32; 3],
+    pub std: [f32; 3],
+}
+
+impl Default for TextRecParams {
+    fn default() -> Self {
+        Self {
+            target_h: 48,
+            max_w: 320,
+            blank_id: 0,
+            mean: [0.5, 0.5, 0.5],
+            std: [0.5, 0.5, 0.5],
+        }
+    }
+}
 
 /// Recognize text using CRNN + CTC decode.
-/// Inference only depends on Session trait.
 pub fn recognize_text(
     image: &SnipperImage,
     session: &dyn InferenceSession,
     keys_path: &Path,
+    params: &TextRecParams,
 ) -> Result<RecognitionResult> {
     let keys = load_keys(keys_path)?;
 
-    let (processed, _orig_w) = preprocess(image);
+    let (processed, _orig_w) = preprocess(image, params);
 
     let input = Tensor::float32(
-        "input",
-        vec![1, 3, TARGET_H as usize, MAX_W as usize],
-        latexsnipper_image::operations::normalize(&processed, &[-1.0, -1.0, -1.0], &[2.0, 2.0, 2.0]),
+        "x",
+        vec![1, 3, params.target_h as usize, params.max_w as usize],
+        latexsnipper_image::operations::normalize(&processed, &params.mean, &params.std),
     );
     let outputs = session.run(&[input])?;
 
@@ -33,28 +52,28 @@ pub fn recognize_text(
         .ok_or_else(|| SnipperError::Inference("Output not float32".into()))?;
     let shape = output.shape().to_vec();
 
-    let (text, confidence) = ctc_decode(logits, &shape, &keys);
+    let (text, confidence) = ctc_decode(logits, &shape, &keys, params.blank_id);
 
     Ok(RecognitionResult { text, confidence })
 }
 
-fn preprocess(image: &SnipperImage) -> (SnipperImage, u32) {
+fn preprocess(image: &SnipperImage, params: &TextRecParams) -> (SnipperImage, u32) {
     let w = image.width();
     let h = image.height();
     let orig_w = w;
 
-    let scale = TARGET_H as f32 / h as f32;
+    let scale = params.target_h as f32 / h as f32;
     let new_w = (w as f32 * scale).round() as u32;
-    let new_w = new_w.min(MAX_W);
+    let new_w = new_w.min(params.max_w);
 
-    let resized = latexsnipper_image::operations::resize(image, new_w, TARGET_H);
+    let resized = latexsnipper_image::operations::resize(image, new_w, params.target_h);
 
-    let padded = if new_w < MAX_W {
+    let padded = if new_w < params.max_w {
         let bpp = resized.bytes_per_pixel();
         let mut pixels = resized.pixels().to_vec();
-        let pad_bytes = ((MAX_W - new_w) * TARGET_H * bpp as u32) as usize;
+        let pad_bytes = ((params.max_w - new_w) * params.target_h * bpp as u32) as usize;
         pixels.extend(vec![0u8; pad_bytes]);
-        SnipperImage::new(MAX_W, TARGET_H, resized.format(), pixels)
+        SnipperImage::new(params.max_w, params.target_h, resized.format(), pixels)
     } else {
         resized
     };
@@ -69,10 +88,9 @@ fn load_keys(path: &Path) -> Result<Vec<String>> {
     Ok(keys)
 }
 
-fn ctc_decode(logits: &[f32], shape: &[usize], keys: &[String]) -> (String, f32) {
+fn ctc_decode(logits: &[f32], shape: &[usize], keys: &[String], blank_id: usize) -> (String, f32) {
     let seq_len = shape[1];
     let vocab_size = shape[2];
-    let blank_id = 0;
 
     let mut prev_id = blank_id;
     let mut result = Vec::new();
