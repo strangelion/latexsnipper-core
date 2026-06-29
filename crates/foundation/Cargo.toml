@@ -1,0 +1,12 @@
+[package]
+name = "latexsnipper-foundation"
+description = "Foundation layer — Error, Result, Logging, Config, Event"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+once_cell = "1"

@@ -1,0 +1,9 @@
+[package]
+name = "latexsnipper-ast"
+description = "Document AST — the single source of truth for all data models"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

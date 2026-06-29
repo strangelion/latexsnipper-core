@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "crates/foundation",
+    "crates/ast",
+    "crates/image",
+    "crates/runtime",
+    "crates/inference",
+    "crates/pipeline",
+    "crates/conversion",
+    "crates/export",
+    "crates/model",
+    "crates/engine",
+    "crates/plugin",
+    "crates/ffi",
+    "crates/wasm",
+    "crates/cli",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2026"
+license = "AGPL-3.0"
+repository = "https://github.com/strangelion/latexsnipper-core"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
