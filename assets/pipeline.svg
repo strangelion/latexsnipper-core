@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <filter id="sh" x="-2%" y="-2%" width="104%" height="108%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/>
+    </filter>
+    <marker id="arr" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto">
+      <path d="M0,0 L7,2.5 L0,5" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="450" y="25" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Recognition Pipeline</text>
+
+  <!-- Step 1: Image -->
+  <rect x="20" y="50" width="100" height="80" rx="8" fill="#f8fafc" stroke="#e2e8f0" filter="url(#sh)"/>
+  <text x="70" y="75" text-anchor="middle" font-size="18">📷</text>
+  <text x="70" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Image</text>
+  <text x="70" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">PNG/JPEG</text>
+
+  <!-- Arrow -->
+  <line x1="120" y1="90" x2="150" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Step 2: Preprocess -->
+  <rect x="150" y="50" width="100" height="80" rx="8" fill="#f0fdfa" stroke="#99f6e4" filter="url(#sh)"/>
+  <text x="200" y="75" text-anchor="middle" font-size="18">🔧</text>
+  <text x="200" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Preprocess</text>
+  <text x="200" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">letterbox/norm</text>
+
+  <!-- Arrow -->
+  <line x1="250" y1="90" x2="280" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Step 3: Detect -->
+  <rect x="280" y="50" width="100" height="80" rx="8" fill="#fef3c7" stroke="#fde68a" filter="url(#sh)"/>
+  <text x="330" y="75" text-anchor="middle" font-size="18">🔍</text>
+  <text x="330" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#d97706">Detection</text>
+  <text x="330" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">YOLOv8 / DBNet</text>
+
+  <!-- Arrow -->
+  <line x1="380" y1="90" x2="410" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Step 4: Crop -->
+  <rect x="410" y="50" width="80" height="80" rx="8" fill="#f8fafc" stroke="#e2e8f0" filter="url(#sh)"/>
+  <text x="450" y="75" text-anchor="middle" font-size="18">✂️</text>
+  <text x="450" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Crop</text>
+  <text x="450" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">regions</text>
+
+  <!-- Arrow -->
+  <line x1="490" y1="90" x2="520" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Step 5: Recognize -->
+  <rect x="520" y="50" width="100" height="80" rx="8" fill="#fef3c7" stroke="#fde68a" filter="url(#sh)"/>
+  <text x="570" y="75" text-anchor="middle" font-size="18">🧠</text>
+  <text x="570" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="#d97706">Recognize</text>
+  <text x="570" y="110" text-anchor="middle" font-size="9" fill="#94a3b8">TrOCR / CRNN</text>
+
+  <!-- Arrow -->
+  <line x1="620" y1="90" x2="650" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Step 6: AST -->
+  <rect x="650" y="50" width="80" height="80" rx="8" fill="#0d9488" filter="url(#sh)"/>
+  <text x="690" y="75" text-anchor="middle" font-size="18" fill="white">📄</text>
+  <text x="690" y="95" text-anchor="middle" font-size="11" font-weight="500" fill="white">Document</text>
+  <text x="690" y="110" text-anchor="middle" font-size="9" fill="#ccfbf1">AST</text>
+
+  <!-- Arrow -->
+  <line x1="730" y1="90" x2="760" y2="90" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Step 7: Output -->
+  <rect x="760" y="50" width="110" height="80" rx="8" fill="#f0fdfa" stroke="#99f6e4" filter="url(#sh)"/>
+  <text x="815" y="70" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Output</text>
+  <text x="815" y="88" text-anchor="middle" font-size="9" fill="#64748b">LaTeX</text>
+  <text x="815" y="100" text-anchor="middle" font-size="9" fill="#64748b">OMML · MathML</text>
+  <text x="815" y="112" text-anchor="middle" font-size="9" fill="#64748b">Typst · Markdown</text>
+  <text x="815" y="124" text-anchor="middle" font-size="9" fill="#64748b">HTML · SVG</text>
+
+  <!-- Labels -->
+  <text x="200" y="155" text-anchor="middle" font-size="9" fill="#94a3b8">Image Pipeline</text>
+  <text x="330" y="155" text-anchor="middle" font-size="9" fill="#94a3b8">Detection</text>
+  <text x="570" y="155" text-anchor="middle" font-size="9" fill="#94a3b8">Recognition</text>
+  <text x="690" y="155" text-anchor="middle" font-size="9" fill="#94a3b8">Data Model</text>
+  <text x="815" y="155" text-anchor="middle" font-size="9" fill="#94a3b8">Conversion</text>
+
+  <!-- Underline decoration -->
+  <line x1="150" y1="145" x2="250" y2="145" stroke="#99f6e4" stroke-width="2"/>
+  <line x1="280" y1="145" x2="380" y2="145" stroke="#fde68a" stroke-width="2"/>
+  <line x1="520" y1="145" x2="620" y2="145" stroke="#fde68a" stroke-width="2"/>
+  <line x1="650" y1="145" x2="730" y2="145" stroke="#0d9488" stroke-width="2"/>
+  <line x1="760" y1="145" x2="870" y2="145" stroke="#99f6e4" stroke-width="2"/>
+</svg>

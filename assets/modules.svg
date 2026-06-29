@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 500" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <filter id="shadow2" x="-2%" y="-2%" width="104%" height="108%">
+      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="350" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Module Dependencies</text>
+
+  <!-- Foundation (bottom) -->
+  <rect x="250" y="420" width="200" height="40" rx="6" fill="#f1f5f9" stroke="#e2e8f0" filter="url(#shadow2)"/>
+  <text x="350" y="445" text-anchor="middle" font-size="12" font-weight="600" fill="#475569">Foundation</text>
+
+  <!-- AST -->
+  <rect x="100" y="340" width="120" height="36" rx="6" fill="#f0fdfa" stroke="#99f6e4" filter="url(#shadow2)"/>
+  <text x="160" y="363" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">AST</text>
+
+  <!-- Tensor -->
+  <rect x="290" y="340" width="120" height="36" rx="6" fill="#f0fdfa" stroke="#99f6e4" filter="url(#shadow2)"/>
+  <text x="350" y="363" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Tensor</text>
+
+  <!-- Image -->
+  <rect x="480" y="340" width="120" height="36" rx="6" fill="#f0fdfa" stroke="#99f6e4" filter="url(#shadow2)"/>
+  <text x="540" y="363" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Image</text>
+
+  <!-- Model -->
+  <rect x="100" y="260" width="120" height="36" rx="6" fill="#eff6ff" stroke="#bfdbfe" filter="url(#shadow2)"/>
+  <text x="160" y="283" text-anchor="middle" font-size="11" font-weight="500" fill="#2563eb">Model</text>
+
+  <!-- Runtime -->
+  <rect x="290" y="260" width="120" height="36" rx="6" fill="#eff6ff" stroke="#bfdbfe" filter="url(#shadow2)"/>
+  <text x="350" y="283" text-anchor="middle" font-size="11" font-weight="500" fill="#2563eb">Runtime</text>
+
+  <!-- Inference -->
+  <rect x="480" y="260" width="120" height="36" rx="6" fill="#fef3c7" stroke="#fde68a" filter="url(#shadow2)"/>
+  <text x="540" y="283" text-anchor="middle" font-size="11" font-weight="500" fill="#d97706">Inference</text>
+
+  <!-- Pipeline -->
+  <rect x="190" y="180" width="120" height="36" rx="6" fill="#fef3c7" stroke="#fde68a" filter="url(#shadow2)"/>
+  <text x="250" y="203" text-anchor="middle" font-size="11" font-weight="500" fill="#d97706">Pipeline</text>
+
+  <!-- Syntax -->
+  <rect x="390" y="180" width="120" height="36" rx="6" fill="#f0fdfa" stroke="#99f6e4" filter="url(#shadow2)"/>
+  <text x="450" y="203" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Syntax</text>
+
+  <!-- Conversion -->
+  <rect x="100" y="100" width="120" height="36" rx="6" fill="#f0fdfa" stroke="#99f6e4" filter="url(#shadow2)"/>
+  <text x="160" y="123" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Conversion</text>
+
+  <!-- Export -->
+  <rect x="290" y="100" width="120" height="36" rx="6" fill="#f0fdfa" stroke="#99f6e4" filter="url(#shadow2)"/>
+  <text x="350" y="123" text-anchor="middle" font-size="11" font-weight="500" fill="#0d9488">Export</text>
+
+  <!-- Engine (top) -->
+  <rect x="220" y="30" width="260" height="40" rx="6" fill="#0d9488" filter="url(#shadow2)"/>
+  <text x="350" y="55" text-anchor="middle" font-size="13" font-weight="600" fill="white">Engine</text>
+
+  <!-- Side crates -->
+  <rect x="30" y="180" width="90" height="30" rx="4" fill="#f8fafc" stroke="#e2e8f0" filter="url(#shadow2)"/>
+  <text x="75" y="199" text-anchor="middle" font-size="10" fill="#64748b">Mock</text>
+
+  <rect x="580" y="180" width="90" height="30" rx="4" fill="#f8fafc" stroke="#e2e8f0" filter="url(#shadow2)"/>
+  <text x="625" y="199" text-anchor="middle" font-size="10" fill="#64748b">Plugin</text>
+
+  <rect x="30" y="100" width="60" height="30" rx="4" fill="#f8fafc" stroke="#e2e8f0" filter="url(#shadow2)"/>
+  <text x="60" y="119" text-anchor="middle" font-size="10" fill="#64748b">FFI</text>
+
+  <rect x="580" y="100" width="60" height="30" rx="4" fill="#f8fafc" stroke="#e2e8f0" filter="url(#shadow2)"/>
+  <text x="610" y="119" text-anchor="middle" font-size="10" fill="#64748b">CLI</text>
+
+  <rect x="30" y="260" width="60" height="30" rx="4" fill="#f8fafc" stroke="#e2e8f0" filter="url(#shadow2)"/>
+  <text x="60" y="279" text-anchor="middle" font-size="10" fill="#64748b">WASM</text>
+
+  <!-- Arrows: Foundation up -->
+  <line x1="300" y1="420" x2="160" y2="376" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="350" y1="420" x2="350" y2="376" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="400" y1="420" x2="540" y2="376" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrows: Tensor/Runtime up -->
+  <line x1="350" y1="340" x2="350" y2="296" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrows: AST/Image to Inference -->
+  <line x1="160" y1="340" x2="480" y2="296" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="540" y1="340" x2="540" y2="296" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrows: to Pipeline -->
+  <line x1="350" y1="260" x2="250" y2="216" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="540" y1="260" x2="250" y2="216" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrows: Pipeline/Syntax to Conversion -->
+  <line x1="250" y1="180" x2="160" y2="136" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="450" y1="180" x2="160" y2="136" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrows: to Engine -->
+  <line x1="160" y1="100" x2="300" y2="70" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="350" y1="100" x2="350" y2="70" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrows: side crates to Engine -->
+  <line x1="75" y1="180" x2="260" y2="70" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="625" y1="180" x2="440" y2="70" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="60" y1="100" x2="260" y2="70" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="610" y1="100" x2="440" y2="70" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+
+  <!-- Legend -->
+  <rect x="30" y="460" width="12" height="12" rx="2" fill="#0d9488"/>
+  <text x="48" y="471" font-size="10" fill="#475569">Core capability</text>
+  <rect x="160" y="460" width="12" height="12" rx="2" fill="#2563eb"/>
+  <text x="178" y="471" font-size="10" fill="#475569">Infrastructure</text>
+  <rect x="300" y="460" width="12" height="12" rx="2" fill="#d97706"/>
+  <text x="318" y="471" font-size="10" fill="#475569">Processing</text>
+  <rect x="430" y="460" width="12" height="12" rx="2" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="448" y="471" font-size="10" fill="#475569">Platform adapter</text>
+</svg>
