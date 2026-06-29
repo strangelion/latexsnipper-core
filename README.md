@@ -15,7 +15,7 @@ A single Rust core powering Desktop, Mobile, Office Add-ins and Web applications
 
 [![About](assets/About.png)]()
 
-[English](README.md) · [中文](README.zh-CN.md)
+[English](README.md) · [中文](README-CN.md)
 
 </div>
 
@@ -156,7 +156,7 @@ See [docs/getting-started.md](docs/getting-started.md) for details.
 
 - [LaTeXSnipper Mobile](https://github.com/strangelion/LaTeXSnipper_mobile) — Android app
 - LaTeXSnipper Office — Office Add-in
-- LaTeXSnipper Desktop — Desktop app (planned)
+- [LaTeXSnipper Desktop](https://github.com/SakuraMathcraft/LaTeXSnipper) — Desktop app
 - LaTeXSnipper Web — Web app (planned)
 
 All share the same Rust Core.

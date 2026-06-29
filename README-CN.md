@@ -156,7 +156,7 @@ cargo test --workspace
 
 - [LaTeXSnipper Mobile](https://github.com/strangelion/LaTeXSnipper_mobile) — Android 应用
 - LaTeXSnipper Office — Office 插件
-- LaTeXSnipper Desktop — 桌面端（规划中）
+- [LaTeXSnipper 桌面端](https://github.com/SakuraMathcraft/LaTeXSnipper)
 - LaTeXSnipper Web — Web 端（规划中）
 
 所有项目共享同一个 Rust Core。
