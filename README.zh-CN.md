@@ -13,6 +13,8 @@
 
 单一 Rust 核心驱动桌面端、移动端、Office 插件和 Web 应用。
 
+[![About](assets/About.png)]()
+
 [English](README.md) · [中文](README.zh-CN.md)
 
 </div>
@@ -20,8 +22,6 @@
 ---
 
 ## 架构
-
-![架构图](assets/architecture.svg)
 
 LaTeXSnipper Core 采用严格的**四层架构**：
 
@@ -37,8 +37,6 @@ LaTeXSnipper Core 采用严格的**四层架构**：
 ---
 
 ## 模块依赖关系
-
-![模块图](assets/modules.svg)
 
 ```
 Engine

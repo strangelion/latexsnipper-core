@@ -13,6 +13,8 @@
 
 A single Rust core powering Desktop, Mobile, Office Add-ins and Web applications.
 
+[![About](assets/About.png)]()
+
 [English](README.md) · [中文](README.zh-CN.md)
 
 </div>
@@ -20,8 +22,6 @@ A single Rust core powering Desktop, Mobile, Office Add-ins and Web applications
 ---
 
 ## Architecture
-
-![Architecture](assets/architecture.svg)
 
 LaTeXSnipper Core follows a strict **four-layer architecture**:
 
@@ -37,8 +37,6 @@ LaTeXSnipper Core follows a strict **four-layer architecture**:
 ---
 
 ## Module Dependencies
-
-![Modules](assets/modules.svg)
 
 ```
 Engine
