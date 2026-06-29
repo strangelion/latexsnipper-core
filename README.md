@@ -1,10 +1,9 @@
-```markdown
 <div align="center">
 
 # LaTeXSnipper Core
 
 **A composable Rust engine for mathematical OCR, document understanding, and multi-format document processing.**
-
+[![About](docs/About.png)]()
 [![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)]()
 [![Status](https://img.shields.io/badge/Status-Alpha-yellow.svg)]()
@@ -343,4 +342,3 @@ Please open an Issue before submitting large changes.
 # License
 
 GNU AGPL-3.0。允许学习和个人使用，禁止闭源商业化分发。修改后分发或网络服务必须公开全部源码。
-```
