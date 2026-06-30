@@ -12,7 +12,7 @@ use latexsnipper_inference::{
 };
 
 use crate::config::EngineConfig;
-use crate::api::{RecognizeRequest, RecognizeResponse};
+use crate::api::{RecognizeRequest, RecognizeResponse, StreamItem};
 use crate::job::JobQueue;
 
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
@@ -61,6 +61,58 @@ impl SnipperEngine {
         let region_count = doc.block_count();
 
         Ok(RecognizeResponse::new(doc, mode, region_count, elapsed))
+    }
+
+    /// Recognize with streaming results (yields items as regions are processed).
+    pub async fn recognize_streaming(&self, request: RecognizeRequest) -> Result<Vec<StreamItem>> {
+        let start = std::time::Instant::now();
+        let mut items = Vec::new();
+
+        // Run recognition and collect block-level results
+        match self.recognize(request.image, request.mode).await {
+            Ok(doc) => {
+                let mut idx = 0;
+                for page in &doc.pages {
+                    for block in &page.blocks {
+                        match block {
+                            Block::Formula(f) => {
+                                items.push(StreamItem::RegionRecognized {
+                                    index: idx,
+                                    text: f.formula.as_latex().to_string(),
+                                    confidence: f.formula.confidence,
+                                });
+                            }
+                            Block::Paragraph(p) => {
+                                let text: String = p.inlines.iter().filter_map(|i| {
+                                    if let Inline::Text(t) = i { Some(t.text.as_str()) } else { None }
+                                }).collect();
+                                if !text.is_empty() {
+                                    items.push(StreamItem::RegionRecognized {
+                                        index: idx,
+                                        text,
+                                        confidence: 1.0,
+                                    });
+                                }
+                            }
+                            _ => {}
+                        }
+                        idx += 1;
+                    }
+                }
+
+                let elapsed = start.elapsed().as_millis() as u64;
+                items.push(StreamItem::Completed {
+                    document: doc,
+                    total_regions: idx,
+                    elapsed_ms: elapsed,
+                });
+            }
+            Err(e) => {
+                items.push(StreamItem::Error { message: e.to_string() });
+            }
+        }
+
+        Ok(items)
     }
 
     /// Recognize content in an image (legacy API).

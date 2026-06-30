@@ -51,23 +51,38 @@ pub struct RecognizeResponse {
 }
 
 impl RecognizeResponse {
-    /// Create a new response.
     pub fn new(document: Document, mode: RecognizeMode, region_count: usize, elapsed_ms: u64) -> Self {
         Self { document, mode, region_count, elapsed_ms }
     }
 
-    /// Get the recognized document.
-    pub fn document(&self) -> &Document {
-        &self.document
-    }
+    pub fn document(&self) -> &Document { &self.document }
+    pub fn region_count(&self) -> usize { self.region_count }
+    pub fn elapsed_ms(&self) -> u64 { self.elapsed_ms }
+}
 
-    /// Get the number of detected regions.
-    pub fn region_count(&self) -> usize {
-        self.region_count
-    }
-
-    /// Get the elapsed time in milliseconds.
-    pub fn elapsed_ms(&self) -> u64 {
-        self.elapsed_ms
-    }
+/// A single item in a streaming recognition response.
+#[derive(Debug, Clone)]
+pub enum StreamItem {
+    /// A region has been detected.
+    RegionDetected {
+        index: usize,
+        class: String,
+        confidence: f32,
+    },
+    /// A region has been recognized.
+    RegionRecognized {
+        index: usize,
+        text: String,
+        confidence: f32,
+    },
+    /// The full document is ready.
+    Completed {
+        document: Document,
+        total_regions: usize,
+        elapsed_ms: u64,
+    },
+    /// An error occurred during processing.
+    Error {
+        message: String,
+    },
 }
