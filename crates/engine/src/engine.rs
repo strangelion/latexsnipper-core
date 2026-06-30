@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::sync::Mutex;
 use log::info;
 
 use latexsnipper_foundation::{SnipperError, Result};
@@ -15,12 +17,18 @@ use crate::config::EngineConfig;
 use crate::api::{RecognizeRequest, RecognizeResponse, StreamItem};
 use crate::job::JobQueue;
 
+/// Cached session wrapper.
+struct CachedSession {
+    session: Box<dyn InferenceSession>,
+}
+
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 pub struct SnipperEngine {
     config: EngineConfig,
     runtime: Box<dyn RuntimeBackend>,
     model_manager: ModelManager,
     job_queue: JobQueue,
+    sessions: Mutex<HashMap<String, CachedSession>>,
 }
 
 /// Recognition mode.
@@ -40,6 +48,7 @@ impl SnipperEngine {
             runtime,
             model_manager,
             job_queue: JobQueue::new(),
+            sessions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -47,9 +56,22 @@ impl SnipperEngine {
     pub fn model_manager(&self) -> &ModelManager { &self.model_manager }
     pub fn config(&self) -> &EngineConfig { &self.config }
     pub fn job_queue(&self) -> &JobQueue { &self.job_queue }
-
-    /// Get a mutable reference to the job queue.
     pub fn job_queue_mut(&mut self) -> &mut JobQueue { &mut self.job_queue }
+
+    /// Get or create a cached session for a model.
+    /// Note: ORT internally caches sessions, so we create fresh handles each time
+    /// but ORT reuses the underlying session.
+    fn get_session(&self, _key: &str, handle: &ModelHandle) -> Result<Box<dyn InferenceSession>> {
+        self.runtime.create_session(handle, AccelerationMode::Cpu)
+    }
+
+    /// Clear all cached sessions.
+    pub fn clear_sessions(&self) {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            sessions.clear();
+            info!("Cleared all cached sessions");
+        }
+    }
 
     /// Recognize content using a Request object (Builder pattern).
     pub async fn recognize_with_request(&self, request: RecognizeRequest) -> Result<RecognizeResponse> {
@@ -339,74 +361,130 @@ impl SnipperEngine {
 
     async fn recognize_mixed(&self, image: &SnipperImage) -> Result<Document> {
         let models = &self.config.models_dir;
-
-        // Load formula detection model
-        let det_config = match load_model_config(models, "formula-det") {
-            Ok(c) => c,
-            Err(_) => {
-                info!("Formula detection model not found, falling back to text-only");
-                return self.recognize_text(image).await;
-            }
-        };
-        let det_params = DetectionParams::from_config(&det_config);
-        let det_model_path = det_config.find_model_file(&models.join("formula-det/yolov8-mfd"))
-            .ok_or_else(|| SnipperError::Model("Formula detection model not found".into()))?;
-        let det_handle = ModelHandle::with_path("formula-det", det_model_path);
-        let det_session = self.runtime.create_session(&det_handle, AccelerationMode::Cpu)?;
-
-        // Detect formula regions
-        let detections = detect_formulas(image, &*det_session, &det_params)?;
-        info!("Mixed: detected {} formula regions", detections.len());
-
-        // Load formula recognition model
-        let rec_config = load_model_config(models, "formula-rec").ok();
-        let rec_params = RecognitionParams::default();
-
         let mut blocks = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
 
-        if let Some(rec_cfg) = rec_config {
-            let rec_dir = models.join("formula-rec/trocr-deit");
-            let encoder_path = rec_cfg.find_encoder_file(&rec_dir)
-                .ok_or_else(|| SnipperError::Model("Encoder not found".into()))?;
-            let decoder_path = rec_cfg.find_decoder_file(&rec_dir)
-                .ok_or_else(|| SnipperError::Model("Decoder not found".into()))?;
-            let tokenizer_path = rec_cfg.find_tokenizer_file(&rec_dir)
-                .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
-
-            let enc_handle = ModelHandle::with_path("encoder", encoder_path);
-            let dec_handle = ModelHandle::with_path("decoder", decoder_path);
-            let enc_session = self.runtime.create_session(&enc_handle, AccelerationMode::Cpu)?;
-            let dec_session = self.runtime.create_session(&dec_handle, AccelerationMode::Cpu)?;
-
-            // Recognize each formula region
-            for det in &detections {
-                let rect = &det.rect;
-                let x = (rect.x.max(0.0) as u32).min(image.width().saturating_sub(1));
-                let y = (rect.y.max(0.0) as u32).min(image.height().saturating_sub(1));
-                let w = (rect.width as u32).min(image.width().saturating_sub(x));
-                let h = (rect.height as u32).min(image.height().saturating_sub(y));
-
-                if w < 4 || h < 4 { continue; }
-
-                let cropped = operations::crop(image, latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32));
-
-                match recognize_formula(&cropped, &*enc_session, &*dec_session, &tokenizer_path, &rec_params) {
-                    Ok(result) => {
-                        blocks.push(Block::Formula(FormulaBlock {
-                            formula: Formula {
-                                source: FormulaSource::Latex(result.text),
-                                display_mode: true,
-                                confidence: result.confidence,
-                            },
-                            geometry: Some(latexsnipper_ast::Rect::new(rect.x, rect.y, rect.width, rect.height)),
-                            source: Some(SourceInfo::new()),
-                        }));
+        // Step 1: Formula detection
+        let formula_detections = match load_model_config(models, "formula-det") {
+            Ok(det_config) => {
+                let det_params = DetectionParams::from_config(&det_config);
+                let det_model_path = det_config.find_model_file(&models.join("formula-det/yolov8-mfd"))
+                    .ok_or_else(|| SnipperError::Model("Formula detection model not found".into()))?;
+                let det_handle = ModelHandle::with_path("formula-det", det_model_path);
+                let det_session = self.runtime.create_session(&det_handle, AccelerationMode::Cpu)?;
+                match detect_formulas(image, &*det_session, &det_params) {
+                    Ok(d) => {
+                        info!("Mixed: detected {} formula regions", d.len());
+                        d
                     }
                     Err(e) => {
-                        log::warn!("Failed to recognize formula: {}", e);
+                        log::warn!("Formula detection failed: {}", e);
+                        errors.push(format!("Formula detection: {}", e));
+                        Vec::new()
                     }
                 }
             }
+            Err(_) => {
+                info!("Formula detection model not found");
+                Vec::new()
+            }
+        };
+
+        // Step 2: Text detection
+        let text_detections = match load_model_config(models, "text-det") {
+            Ok(det_config) => {
+                let det_params = latexsnipper_inference::TextDetParams::default();
+                let det_model_path = det_config.find_model_file(&models.join("text-det/ppocrv5-mobile"))
+                    .ok_or_else(|| SnipperError::Model("Text detection model not found".into()))?;
+                let det_handle = ModelHandle::with_path("text-det", det_model_path);
+                let det_session = self.runtime.create_session(&det_handle, AccelerationMode::Cpu)?;
+                match latexsnipper_inference::detect_text(image, &*det_session, &det_params) {
+                    Ok(d) => {
+                        info!("Mixed: detected {} text regions", d.len());
+                        d
+                    }
+                    Err(e) => {
+                        log::warn!("Text detection failed: {}", e);
+                        errors.push(format!("Text detection: {}", e));
+                        Vec::new()
+                    }
+                }
+            }
+            Err(_) => {
+                info!("Text detection model not found");
+                Vec::new()
+            }
+        };
+
+        // Step 3: Recognize formulas
+        if !formula_detections.is_empty() {
+            if let Ok(rec_cfg) = load_model_config(models, "formula-rec") {
+                let rec_params = RecognitionParams::default();
+                let rec_dir = models.join("formula-rec/trocr-deit");
+                if let (Some(enc_path), Some(dec_path), Some(tok_path)) = (
+                    rec_cfg.find_encoder_file(&rec_dir),
+                    rec_cfg.find_decoder_file(&rec_dir),
+                    rec_cfg.find_tokenizer_file(&rec_dir),
+                ) {
+                    let enc_handle = ModelHandle::with_path("encoder", enc_path);
+                    let dec_handle = ModelHandle::with_path("decoder", dec_path);
+                    if let (Ok(enc_session), Ok(dec_session)) = (
+                        self.runtime.create_session(&enc_handle, AccelerationMode::Cpu),
+                        self.runtime.create_session(&dec_handle, AccelerationMode::Cpu),
+                    ) {
+                        for det in &formula_detections {
+                            match self.crop_and_recognize_formula(image, &det.rect, &*enc_session, &*dec_session, &tok_path, &rec_params) {
+                                Ok(block) => blocks.push(block),
+                                Err(e) => errors.push(format!("Formula rec: {}", e)),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 4: Recognize text (excluding formula regions)
+        if !text_detections.is_empty() {
+            if let Ok(rec_cfg) = load_model_config(models, "text-rec") {
+                let rec_params = latexsnipper_inference::TextRecParams::default();
+                let rec_model_path = rec_cfg.find_model_file(&models.join("text-rec/ppocrv5-mobile"));
+                let keys_path = rec_cfg.find_tokenizer_file(&models.join("text-rec/ppocrv5-mobile"));
+
+                if let (Some(model_path), Some(keys)) = (rec_model_path, keys_path) {
+                    let rec_handle = ModelHandle::with_path("text-rec", model_path);
+                    if let Ok(rec_session) = self.runtime.create_session(&rec_handle, AccelerationMode::Cpu) {
+                        for det in &text_detections {
+                            // Skip regions that overlap with formula detections
+                            if formula_detections.iter().any(|fd| fd.rect.overlaps(&det.rect)) {
+                                continue;
+                            }
+                            match self.crop_and_recognize_text(image, &det.rect, &*rec_session, &keys, &rec_params) {
+                                Ok(block) => blocks.push(block),
+                                Err(e) => errors.push(format!("Text rec: {}", e)),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort blocks by y-coordinate (reading order)
+        blocks.sort_by(|a, b| {
+            let ay = match a {
+                Block::Formula(f) => f.geometry.as_ref().map_or(0.0, |g| g.y),
+                Block::Paragraph(p) => p.geometry.as_ref().map_or(0.0, |g| g.y),
+                _ => 0.0,
+            };
+            let by = match b {
+                Block::Formula(f) => f.geometry.as_ref().map_or(0.0, |g| g.y),
+                Block::Paragraph(p) => p.geometry.as_ref().map_or(0.0, |g| g.y),
+                _ => 0.0,
+            };
+            ay.partial_cmp(&by).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        if !errors.is_empty() {
+            info!("Mixed recognition completed with {} errors", errors.len());
         }
 
         Ok(Document {
@@ -418,6 +496,71 @@ impl SnipperEngine {
                 page_number: Some(1),
             }],
         })
+    }
+
+    /// Crop a region and recognize it as a formula.
+    fn crop_and_recognize_formula(
+        &self,
+        image: &SnipperImage,
+        rect: &latexsnipper_ast::Rect,
+        encoder: &dyn InferenceSession,
+        decoder: &dyn InferenceSession,
+        tokenizer_path: &std::path::Path,
+        params: &RecognitionParams,
+    ) -> Result<Block> {
+        let x = (rect.x.max(0.0) as u32).min(image.width().saturating_sub(1));
+        let y = (rect.y.max(0.0) as u32).min(image.height().saturating_sub(1));
+        let w = (rect.width as u32).min(image.width().saturating_sub(x));
+        let h = (rect.height as u32).min(image.height().saturating_sub(y));
+
+        if w < 4 || h < 4 {
+            return Err(SnipperError::Inference("Region too small".into()));
+        }
+
+        let cropped = operations::crop(image, latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32));
+        let result = recognize_formula(&cropped, encoder, decoder, tokenizer_path, params)?;
+
+        Ok(Block::Formula(FormulaBlock {
+            formula: Formula {
+                source: FormulaSource::Latex(result.text),
+                display_mode: true,
+                confidence: result.confidence,
+            },
+            geometry: Some(latexsnipper_ast::Rect::new(rect.x, rect.y, rect.width, rect.height)),
+            source: Some(SourceInfo::new()),
+        }))
+    }
+
+    /// Crop a region and recognize it as text.
+    fn crop_and_recognize_text(
+        &self,
+        image: &SnipperImage,
+        rect: &latexsnipper_ast::Rect,
+        session: &dyn InferenceSession,
+        keys_path: &std::path::Path,
+        params: &latexsnipper_inference::TextRecParams,
+    ) -> Result<Block> {
+        let x = (rect.x.max(0.0) as u32).min(image.width().saturating_sub(1));
+        let y = (rect.y.max(0.0) as u32).min(image.height().saturating_sub(1));
+        let w = (rect.width as u32).min(image.width().saturating_sub(x));
+        let h = (rect.height as u32).min(image.height().saturating_sub(y));
+
+        if w < 4 || h < 4 {
+            return Err(SnipperError::Inference("Region too small".into()));
+        }
+
+        let cropped = operations::crop(image, latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32));
+        let result = latexsnipper_inference::recognize_text(&cropped, session, keys_path, params)?;
+
+        Ok(Block::Paragraph(ParagraphBlock {
+            inlines: vec![Inline::Text(TextRun {
+                text: result.text,
+                bold: None,
+                italic: None,
+            })],
+            geometry: Some(latexsnipper_ast::Rect::new(rect.x, rect.y, rect.width, rect.height)),
+            source: Some(SourceInfo::new()),
+        }))
     }
 }
 
