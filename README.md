@@ -74,14 +74,14 @@ Image → Preprocess → Detection → Crop → Recognition → Document AST →
 | **AST** | ✅ | Document → Page → Block → Inline → Formula |
 | **Image** | ✅ | SnipperImage, ImageView, decode, resize, normalize |
 | **Inference** | ✅ | YOLOv8 detection, TrOCR recognition, CRNN+CTC |
-| **Pipeline** | ✅ | Node-based async pipeline with cancellation |
+| **Pipeline** | ✅ | DAG Node Graph, YAML/JSON Manifest, async with cancellation |
 | **Conversion** | ✅ | 12 formats: LaTeX, OMML, MathML, Typst, Markdown, HTML |
 | **Export** | ✅ | SVG, Text, PDF generators |
 | **Runtime** | ✅ | ONNX Runtime (with session caching) + Stub |
 | **Model** | ✅ | Manifest, Config, SHA256 verification |
 | **Syntax** | ✅ | LaTeX/Typst/Markdown Parser + Renderer |
 | **Plugin** | ✅ | Plugin trait, Registry, Request/Response |
-| **Engine** | ✅ | JobQueue, Service trait, Request/Response Builder |
+| **Engine** | ✅ | JobQueue, Service trait, Request/Response Builder, Streaming API |
 | **FFI** | ✅ | Android JNI, iOS C FFI (OnnxRuntimeBackend) |
 | **WASM** | ✅ | parse/render/convert/recognize bindings |
 | **CLI** | ✅ | recognize/parse/render/version |
