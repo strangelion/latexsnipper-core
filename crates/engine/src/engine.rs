@@ -8,6 +8,7 @@ use latexsnipper_image::SnipperImage;
 use latexsnipper_image::operations;
 use latexsnipper_runtime::{RuntimeBackend, AccelerationMode, ModelHandle, InferenceSession};
 use latexsnipper_model::ModelManager;
+use latexsnipper_pipeline::{PipelineGraph, PipelineContext};
 use latexsnipper_inference::{
     DetectionParams, RecognitionParams,
     detect_formulas, recognize_formula,
@@ -135,6 +136,36 @@ impl SnipperEngine {
         }
 
         Ok(items)
+    }
+
+    /// Build a PipelineGraph for the given recognition mode.
+    pub fn build_pipeline(&self, mode: RecognizeMode) -> PipelineGraph {
+        let mut graph = PipelineGraph::new(format!("{:?}_pipeline", mode));
+
+        match mode {
+            RecognizeMode::Formula => {
+                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
+                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
+                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::formula()));
+                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+            }
+            RecognizeMode::Text => {
+                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::text()));
+                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
+                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::text()));
+                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+            }
+            RecognizeMode::Mixed => {
+                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
+                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::text()));
+                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
+                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::formula()));
+                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::text()));
+                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+            }
+        }
+
+        graph
     }
 
     /// Recognize content in an image (legacy API).
