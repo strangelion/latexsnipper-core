@@ -18,7 +18,7 @@ pub use html::HtmlConverter;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, FormulaSource, ParagraphBlock, Inline, TextRun};
+    use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, ParagraphBlock, Inline, TextRun};
 
     fn test_doc() -> Document {
         Document {

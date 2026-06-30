@@ -84,14 +84,14 @@
 | `inference` | Detection + Recognition 推理能力 | runtime, image, ast |
 | `pipeline` | 节点化计算图 | ast, image |
 | `syntax` | LaTeX / Typst / Markdown Parser + Renderer | ast |
-| `conversion` | AST → 多格式中间表示（规划中） | ast, syntax |
+| `conversion` | AST → 多格式中间表示 | ast, syntax |
 | `export` | RenderTree → SVG / Text / PDF | ast, syntax |
 | `engine` | 统一入口，组织所有 Capability | 所有 Core crate |
-| `plugin` | 插件 API（规划中） | engine |
+| `plugin` | 插件 API | engine |
 | `mock` | 测试用 Fake 实现 | ast, image, inference |
 | `ffi` | Android JNI / iOS C FFI | engine |
-| `wasm` | WebAssembly 绑定（规划中） | engine |
-| `cli` | 命令行工具（规划中） | engine |
+| `wasm` | WebAssembly 绑定 | engine |
+| `cli` | 命令行工具 | engine |
 
 ---
 

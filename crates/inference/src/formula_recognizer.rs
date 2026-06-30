@@ -7,6 +7,7 @@ use latexsnipper_runtime::InferenceSession;
 use latexsnipper_tensor::Tensor;
 
 use crate::types::RecognitionResult;
+use crate::latex_repair;
 
 /// Recognition parameters loaded from config.json.
 #[derive(Debug, Clone)]
@@ -70,7 +71,7 @@ pub fn recognize_formula(
         beam_search(decoder, &hidden_states, &hidden_shape, &tokenizer, params)?
     };
 
-    let text = repair_latex(&text);
+    let text = latex_repair::repair_latex(&text);
 
     Ok(RecognitionResult { text, confidence: 0.9 })
 }
@@ -125,9 +126,19 @@ fn greedy_decode(
     }
 
     // Decode tokens to text
+    // Handle BPE tokens: Ġ prefix means space before character
     let text = token_ids.iter()
         .filter(|&&id| id != params.eos_token_id && id != params.pad_token_id && id != params.decoder_start_id)
         .filter_map(|id| tokenizer.get(id).cloned())
+        .map(|token| {
+            // BPE space prefix: Ā (U+0100) or Ġ (U+0120) — tokenizer.json uses Ā
+            if token.starts_with('\u{0100}') || token.starts_with('\u{0120}') {
+                let stripped: String = token.chars().skip(1).collect();
+                format!(" {}", stripped)
+            } else {
+                token
+            }
+        })
         .collect::<Vec<_>>()
         .join("");
 
@@ -227,16 +238,4 @@ fn beam_search(
     Ok(text)
 }
 
-fn repair_latex(text: &str) -> String {
-    let mut result = text.to_string();
-    result = result.trim_end_matches('\\').to_string();
-    let open = result.matches('{').count();
-    let close = result.matches('}').count();
-    if open > close {
-        for _ in 0..(open - close) { result.push('}'); }
-    }
-    if result.contains("\\frac{") && !result.contains("\\frac{}{") {
-        result = result.replace("\\frac{", "\\frac{}{");
-    }
-    result
-}
+// Old repair_latex removed — now using latex_repair::repair_latex

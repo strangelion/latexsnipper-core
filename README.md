@@ -109,7 +109,7 @@ crates/
 ├── ffi/            Android JNI + iOS C FFI
 ├── wasm/           WebAssembly bindings
 ├── cli/            CLI tool
-└── tests/          Integration tests (70 tests)
+└── tests/          Integration tests (150+ tests)
 ```
 
 ---
@@ -172,7 +172,7 @@ LaTeXSnipper Core uses PaddleOCR v6 ONNX models for text recognition.
 
 ### Quick Start
 
-Download `latexsnipper-models-all.zip` (168 MB) for all models:
+Download `latexsnipper-models-all.zip` (193 MB) for all models:
 
 ```bash
 curl -LO https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/latexsnipper-models-all.zip
@@ -243,7 +243,7 @@ This project builds on the work of these open-source projects:
 | [clap](https://github.com/clap-rs/clap) | CLI argument parsing |
 | [serde](https://github.com/serde-rs/serde) | Serialization framework |
 | [ndarray](https://github.com/rust-ndarray/ndarray) | N-dimensional array operations |
-| [wasm-bindgen](https://github.com/nicolo-ribaudo/nicolo-ribaudo) | WebAssembly bindings |
+| [wasm-bindgen](https://github.com/wasm-bindgen/wasm-bindgen) | WebAssembly bindings |
 | [jni](https://github.com/jni-rs/jni) | Android JNI bindings |
 
 ---

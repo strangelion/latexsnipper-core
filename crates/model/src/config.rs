@@ -240,6 +240,69 @@ impl ModelConfig {
             .map_err(|e| SnipperError::Model(format!("Invalid config.json: {}", e)))
     }
 
+    /// Build a minimal config for Paddle inference packages.
+    /// These packages still need an ONNX export before the ONNX runtime can execute them.
+    pub fn from_paddle_inference_dir(model_dir: &Path) -> Result<Self> {
+        let yml_path = model_dir.join("inference.yml");
+        if !yml_path.exists() {
+            return Err(SnipperError::Model(format!(
+                "Paddle inference.yml not found in {}",
+                model_dir.display()
+            )));
+        }
+
+        Ok(Self {
+            model_type: "crnn_ctc".into(),
+            model_family: Some("PaddleOCRv6 Text Recognition".into()),
+            license: None,
+            task_type: Some("ocr".into()),
+            num_classes: None,
+            dynamic_shapes: Some(true),
+            input: Some(InputConfig {
+                name: "x".into(),
+                shape: vec![1, 3, 48, 3200],
+                dtype: "float32".into(),
+                range: Some(vec![0.0, 1.0]),
+            }),
+            output: Some(OutputConfig {
+                name: "fetch_name_0".into(),
+                shape: vec![1, -1, -1],
+                description: Some("CTC probabilities from PaddleOCRv6".into()),
+            }),
+            encoder: None,
+            decoder: None,
+            preprocessing: Some(PreprocessConfig {
+                resize: Some(ResizeConfig {
+                    width: Some(3200),
+                    height: Some(48),
+                    keep_ratio: Some(true),
+                    pad_value: Some(0.0),
+                }),
+                normalization: Some(NormalizationConfig {
+                    mean: Some(vec![0.5, 0.5, 0.5]),
+                    std: Some(vec![0.5, 0.5, 0.5]),
+                }),
+                color_format: Some("BGR".into()),
+                divisible_by: None,
+                pad_value: Some(0.0),
+            }),
+            postprocessing: None,
+            decoding: Some(DecodingConfig {
+                decoding_type: Some("ctc_greedy".into()),
+                beam_width: None,
+                top_k: None,
+                blank_id: Some(0),
+                tokenizer_file: None,
+                keys_file: Some("inference.yml".into()),
+                temperature: None,
+                top_p: None,
+            }),
+            quantization: None,
+            outputs: None,
+            extra: None,
+        })
+    }
+
     /// Find the main ONNX model file in a directory.
     pub fn find_model_file(&self, model_dir: &Path) -> Option<std::path::PathBuf> {
         let candidates = ["model.onnx", "model_int8.onnx"];
@@ -279,7 +342,14 @@ impl ModelConfig {
 
     /// Find tokenizer file.
     pub fn find_tokenizer_file(&self, model_dir: &Path) -> Option<std::path::PathBuf> {
-        let candidates = ["tokenizer.json", "ppocrv5_keys.txt", "ppocr_keys.txt", "dict.txt"];
+        if let Some(decoding) = &self.decoding {
+            for configured in [decoding.tokenizer_file.as_deref(), decoding.keys_file.as_deref()].into_iter().flatten() {
+                let path = model_dir.join(configured);
+                if path.exists() { return Some(path); }
+            }
+        }
+
+        let candidates = ["tokenizer.json", "ppocrv6_keys.txt", "ppocrv5_keys.txt", "ppocr_keys.txt", "dict.txt", "inference.yml"];
         for name in &candidates {
             let path = model_dir.join(name);
             if path.exists() { return Some(path); }
@@ -345,3 +415,4 @@ impl ModelConfig {
         })
     }
 }
+

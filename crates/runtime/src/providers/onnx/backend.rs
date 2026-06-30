@@ -189,6 +189,17 @@ impl InferenceSession for OnnxSession {
         vec![]
     }
 
+    fn get_character_list(&self) -> Option<Vec<String>> {
+        let session = self.session.lock().ok()?;
+        let meta = session.metadata().ok()?;
+        let chars_str = meta.custom("character")?;
+        let mut chars: Vec<String> = chars_str.lines().map(|s| s.to_string()).collect();
+        // Model already has blank at position 0
+        // Just add space at end (RapidOCR convention)
+        chars.push(" ".to_string());
+        Some(chars)
+    }
+
     fn release(&mut self) {
         drop(self.session.lock());
     }

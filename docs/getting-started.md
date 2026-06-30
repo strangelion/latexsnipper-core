@@ -60,13 +60,13 @@ latexsnipper-core/
 │   ├── inference/       # 推理能力
 │   ├── pipeline/        # 节点化流水线
 │   ├── syntax/          # Parser + Renderer
-│   ├── conversion/      # 格式转换（规划中）
+│   ├── conversion/      # 格式转换
 │   ├── export/          # 导出能力
 │   ├── engine/          # 核心引擎
-│   ├── plugin/          # 插件 API（规划中）
+│   ├── plugin/          # 插件 API
 │   ├── mock/            # 测试 Mock
 │   ├── ffi/             # Android/iOS FFI
-│   ├── wasm/            # WebAssembly（规划中）
+│   ├── wasm/            # WebAssembly
 │   ├── cli/             # 命令行工具
 │   └── tests/           # 集成测试
 ├── docs/                # 架构文档

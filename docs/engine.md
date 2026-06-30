@@ -41,9 +41,9 @@ pub enum RecognizeMode { Formula, Text, Mixed }
 ```
 
 `recognize()` 根据 mode 分发到：
-- `recognize_formula()` — 公式识别（占位，待 Inference 集成）
-- `recognize_text()` — 文字识别（占位）
-- `recognize_mixed()` — 混合识别（占位）
+- `recognize_formula()` — 公式识别
+- `recognize_text()` — 文字识别
+- `recognize_mixed()` — 混合识别
 
 ## EngineConfig
 

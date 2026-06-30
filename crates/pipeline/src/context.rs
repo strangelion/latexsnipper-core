@@ -1,6 +1,13 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
+use latexsnipper_runtime::InferenceSession;
+
+/// Cached ONNX session for reuse across pipeline nodes.
+pub struct CachedSession {
+    pub session: Arc<Box<dyn InferenceSession>>,
+}
 
 /// Context passed through the pipeline.
 /// Each node reads from and writes to this context.
@@ -15,6 +22,8 @@ pub struct PipelineContext {
     pub cancelled: bool,
     /// Models directory path.
     pub models_dir: Option<std::path::PathBuf>,
+    /// Cached ONNX sessions for reuse across nodes.
+    pub sessions: HashMap<String, CachedSession>,
 }
 
 impl PipelineContext {
@@ -25,6 +34,7 @@ impl PipelineContext {
             metadata: HashMap::new(),
             cancelled: false,
             models_dir: None,
+            sessions: HashMap::new(),
         }
     }
 
@@ -48,6 +58,18 @@ impl PipelineContext {
     /// Get a metadata value.
     pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
         self.metadata.get(key)
+    }
+
+    /// Get a cached session by key.
+    pub fn get_session(&self, key: &str) -> Option<Arc<Box<dyn InferenceSession>>> {
+        self.sessions.get(key).map(|c| Arc::clone(&c.session))
+    }
+
+    /// Cache a session for reuse.
+    pub fn cache_session(&mut self, key: impl Into<String>, session: Box<dyn InferenceSession>) {
+        self.sessions.insert(key.into(), CachedSession {
+            session: Arc::new(session),
+        });
     }
 
     /// Cancel the pipeline.

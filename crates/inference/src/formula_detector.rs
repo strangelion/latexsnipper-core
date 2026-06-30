@@ -85,9 +85,18 @@ pub fn detect_formulas(
 
     let boxes = decode_yolo_output(raw_data, shape, scale, pad_x, pad_y, params)?;
 
-    let nms_boxes = nms(boxes, params.iou_threshold);
+    // Sort by confidence for better NMS
+    let mut sorted_boxes = boxes;
+    sorted_boxes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+    
+    // Apply NMS with stricter threshold
+    let nms_boxes = nms(sorted_boxes, 0.5);
+    
+    // Limit to reasonable number of detections
+    let mut final_boxes = nms_boxes;
+    final_boxes.truncate(50);
 
-    Ok(nms_boxes)
+    Ok(final_boxes)
 }
 
 fn decode_yolo_output(
@@ -178,4 +187,81 @@ fn nms(mut boxes: Vec<DetectionBox>, iou_threshold: f32) -> Vec<DetectionBox> {
 
 fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + (-x).exp())
+}
+
+/// Group nearby formula detections into complete expressions.
+/// This matches LaTeXSnipper's behavior of merging adjacent formula boxes.
+pub fn group_formula_detections(boxes: &mut Vec<DetectionBox>) {
+    if boxes.is_empty() {
+        return;
+    }
+
+    // Sort by Y position, then X position
+    boxes.sort_by(|a, b| {
+        a.rect.y.partial_cmp(&b.rect.y)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.rect.x.partial_cmp(&b.rect.x).unwrap_or(std::cmp::Ordering::Equal))
+    });
+
+    let mut merged = Vec::new();
+    let mut used = vec![false; boxes.len()];
+
+    for i in 0..boxes.len() {
+        if used[i] {
+            continue;
+        }
+
+        let mut current = boxes[i].clone();
+        used[i] = true;
+
+        // Try to merge with nearby boxes
+        for j in (i + 1)..boxes.len() {
+            if used[j] {
+                continue;
+            }
+
+            let other = &boxes[j];
+
+            // Check if on same line (Y centers within 1.5x average height)
+            let avg_height = (current.rect.height + other.rect.height) / 2.0;
+            let y_center_diff = (current.rect.center_y() - other.rect.center_y()).abs();
+
+            if y_center_diff > avg_height * 1.5 {
+                continue; // Too far vertically
+            }
+
+            // Check X proximity (gap < 50% of average width)
+            let x_gap = if other.rect.x > current.rect.right() {
+                other.rect.x - current.rect.right()
+            } else if current.rect.x > other.rect.right() {
+                current.rect.x - other.rect.right()
+            } else {
+                0.0 // Overlapping
+            };
+
+            let avg_width = (current.rect.width + other.rect.width) / 2.0;
+            if x_gap < avg_width * 0.5 {
+                // Merge boxes
+                let x1 = current.rect.x.min(other.rect.x);
+                let y1 = current.rect.y.min(other.rect.y);
+                let x2 = current.rect.right().max(other.rect.right());
+                let y2 = current.rect.bottom().max(other.rect.bottom());
+                current.rect = Rect::new(x1, y1, x2 - x1, y2 - y1);
+                current.confidence = current.confidence.max(other.confidence);
+                used[j] = true;
+            }
+        }
+
+        merged.push(current);
+    }
+
+    *boxes = merged;
+}
+
+/// Filter formula detections by size and confidence.
+pub fn filter_formula_detections(boxes: &mut Vec<DetectionBox>, min_area: f32, min_confidence: f32) {
+    boxes.retain(|b| {
+        let area = b.rect.width * b.rect.height;
+        area >= min_area && b.confidence >= min_confidence
+    });
 }

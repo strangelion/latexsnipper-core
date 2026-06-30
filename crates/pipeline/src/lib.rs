@@ -4,7 +4,7 @@ pub mod graph;
 pub mod manifest;
 pub mod nodes;
 
-pub use node::PipelineNode;
+pub use node::{PipelineNode, TransformNode};
 pub use context::PipelineContext;
 pub use graph::PipelineGraph;
 pub use manifest::PipelineManifest;
@@ -14,3 +14,4 @@ pub use nodes::detector_node::{DetectorNode, DetectorType};
 pub use nodes::crop_node::CropNode;
 pub use nodes::recognizer_node::{RecognizerNode, RecognizerType};
 pub use nodes::postprocess_node::PostprocessNode;
+

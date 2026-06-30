@@ -387,7 +387,7 @@ mod export_tests {
 #[cfg(test)]
 mod conversion_tests {
     use latexsnipper_conversion::*;
-    use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, FormulaSource, ParagraphBlock, Inline, TextRun};
+    use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, ParagraphBlock, Inline, TextRun};
 
     fn test_doc() -> Document {
         Document {
@@ -530,7 +530,6 @@ mod mock_tests {
     use latexsnipper_mock::*;
     use latexsnipper_image::SnipperImage;
     use latexsnipper_image::color::PixelFormat;
-    use latexsnipper_ast::Block;
 
     fn test_image() -> SnipperImage {
         SnipperImage::new(100, 100, PixelFormat::Rgb, vec![128u8; 30000])

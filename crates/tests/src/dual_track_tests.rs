@@ -1,32 +1,14 @@
 // Dual-track testing: Mock vs ONNX auto-comparison
 // Runs the same input through both runtimes and diffs the results
 
-use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-use latexsnipper_runtime::{StubRuntime, OnnxRuntimeBackend, RuntimeBackend, AccelerationMode};
+use latexsnipper_engine::{SnipperEngine, EngineConfig};
+use latexsnipper_runtime::{StubRuntime, OnnxRuntimeBackend};
 use latexsnipper_mock::FakePipeline;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_image::color::PixelFormat;
-use latexsnipper_ast::Document;
 
 fn test_image() -> SnipperImage {
     SnipperImage::new(100, 100, PixelFormat::Rgb, vec![128u8; 30000])
-}
-
-/// Compare two documents structurally (ignoring content differences from mock vs real).
-fn compare_documents(mock: &Document, real: &Document) -> Vec<String> {
-    let mut diffs = Vec::new();
-
-    if mock.pages.len() != real.pages.len() {
-        diffs.push(format!("Page count: mock={}, real={}", mock.pages.len(), real.pages.len()));
-    }
-
-    for (i, (mp, rp)) in mock.pages.iter().zip(real.pages.iter()).enumerate() {
-        if mp.blocks.len() != rp.blocks.len() {
-            diffs.push(format!("Page {} block count: mock={}, real={}", i, mp.blocks.len(), rp.blocks.len()));
-        }
-    }
-
-    diffs
 }
 
 /// Test that both runtimes can be initialized.

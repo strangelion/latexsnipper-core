@@ -12,6 +12,12 @@ pub trait InferenceSession: Send + Sync {
     /// Get output names produced by the model.
     fn output_names(&self) -> Vec<String>;
 
+    /// Get character list from model metadata (for text recognition models).
+    /// Returns None if the model doesn't have embedded characters.
+    fn get_character_list(&self) -> Option<Vec<String>> {
+        None
+    }
+
     /// Release resources.
     fn release(&mut self);
 }
@@ -28,6 +34,10 @@ impl InferenceSession for Box<dyn InferenceSession> {
 
     fn output_names(&self) -> Vec<String> {
         (**self).output_names()
+    }
+
+    fn get_character_list(&self) -> Option<Vec<String>> {
+        (**self).get_character_list()
     }
 
     fn release(&mut self) {

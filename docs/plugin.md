@@ -2,7 +2,7 @@
 
 > 插件 API — 扩展 Core 能力的标准接口
 
-> **状态：规划中（Planned）**
+> **状态：已实现**
 
 ## 核心原则
 
@@ -10,7 +10,7 @@
 2. **Plugin 只能访问 Engine 暴露的 Public API**
 3. **Plugin 之间互相隔离，一个 Plugin 崩溃不影响其他**
 
-## 规划架构
+## 架构
 
 ```
 Engine
@@ -21,7 +21,7 @@ Engine
        └── Plugin C (Custom Export)
 ```
 
-## 规划 Trait
+## Trait
 
 ### Plugin
 

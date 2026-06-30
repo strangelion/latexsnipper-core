@@ -297,36 +297,52 @@ fn average_score(map: &[f32], width: usize, height: usize, x1: i32, y1: i32, x2:
 }
 
 fn merge_boxes(boxes: &mut Vec<DetectionBox>) {
+    if boxes.is_empty() { return; }
+
+    // Sort by Y position
     boxes.sort_by(|a, b| a.rect.y.partial_cmp(&b.rect.y).unwrap());
 
     let mut merged = Vec::new();
     let mut used = vec![false; boxes.len()];
 
     for i in 0..boxes.len() {
-        if used[i] {
-            continue;
-        }
+        if used[i] { continue; }
 
         let mut current = boxes[i].clone();
         used[i] = true;
 
+        // Merge with nearby boxes on the same line
         for j in (i + 1)..boxes.len() {
-            if used[j] {
-                continue;
+            if used[j] { continue; }
+
+            let other = &boxes[j];
+
+            // Check if on same line: Y centers within 1.5x average height
+            let avg_height = (current.rect.height + other.rect.height) / 2.0;
+            let y_center_diff = (current.rect.center_y() - other.rect.center_y()).abs();
+
+            if y_center_diff > avg_height * 1.5 {
+                continue; // Too far vertically, skip
             }
 
-            let y_overlap = (current.rect.bottom().min(boxes[j].rect.bottom())
-                - current.rect.y.max(boxes[j].rect.y))
-                .max(0.0);
-            let min_height = current.rect.height.min(boxes[j].rect.height);
+            // Check X overlap or proximity
+            let x_gap = if other.rect.x > current.rect.right() {
+                other.rect.x - current.rect.right()
+            } else if current.rect.x > other.rect.right() {
+                current.rect.x - other.rect.right()
+            } else {
+                0.0 // Overlapping
+            };
 
-            if y_overlap > min_height * 0.5 {
-                let x1 = current.rect.x.min(boxes[j].rect.x);
-                let y1 = current.rect.y.min(boxes[j].rect.y);
-                let x2 = current.rect.right().max(boxes[j].rect.right());
-                let y2 = current.rect.bottom().max(boxes[j].rect.bottom());
+            // Merge if close enough (gap < 50% of average width)
+            let avg_width = (current.rect.width + other.rect.width) / 2.0;
+            if x_gap < avg_width * 0.5 {
+                let x1 = current.rect.x.min(other.rect.x);
+                let y1 = current.rect.y.min(other.rect.y);
+                let x2 = current.rect.right().max(other.rect.right());
+                let y2 = current.rect.bottom().max(other.rect.bottom());
                 current.rect = Rect::new(x1, y1, x2 - x1, y2 - y1);
-                current.confidence = current.confidence.max(boxes[j].confidence);
+                current.confidence = current.confidence.max(other.confidence);
                 used[j] = true;
             }
         }

@@ -25,6 +25,9 @@ fixtures/*.typ
 test-models/
 models-download/
 
+# release models (ONNX files)
+release_models/
+
 # Cargo local config (mirror settings)
 .cargo/
 
