@@ -13,12 +13,14 @@ use latexsnipper_inference::{
 
 use crate::config::EngineConfig;
 use crate::api::{RecognizeRequest, RecognizeResponse};
+use crate::job::JobQueue;
 
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 pub struct SnipperEngine {
     config: EngineConfig,
     runtime: Box<dyn RuntimeBackend>,
     model_manager: ModelManager,
+    job_queue: JobQueue,
 }
 
 /// Recognition mode.
@@ -37,12 +39,17 @@ impl SnipperEngine {
             config,
             runtime,
             model_manager,
+            job_queue: JobQueue::new(),
         }
     }
 
     pub fn runtime(&self) -> &dyn RuntimeBackend { &*self.runtime }
     pub fn model_manager(&self) -> &ModelManager { &self.model_manager }
     pub fn config(&self) -> &EngineConfig { &self.config }
+    pub fn job_queue(&self) -> &JobQueue { &self.job_queue }
+
+    /// Get a mutable reference to the job queue.
+    pub fn job_queue_mut(&mut self) -> &mut JobQueue { &mut self.job_queue }
 
     /// Recognize content using a Request object (Builder pattern).
     pub async fn recognize_with_request(&self, request: RecognizeRequest) -> Result<RecognizeResponse> {
