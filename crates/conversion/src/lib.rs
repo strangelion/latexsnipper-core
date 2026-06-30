@@ -1,5 +1,6 @@
 pub mod converter;
 pub mod latex;
+pub mod latex_utils;
 pub mod omml;
 pub mod mathml;
 pub mod typst;
@@ -27,28 +28,25 @@ mod tests {
                 height: 600.0,
                 blocks: vec![
                     Block::Paragraph(ParagraphBlock {
-                        inlines: vec![Inline::Text(TextRun {
-                            text: "Given the equation ".into(),
-                            bold: None,
-                            italic: None,
-                        })],
+                        inlines: vec![Inline::Text(TextRun::new("Given the equation "))],
                         geometry: None,
                         source: None,
                     }),
                     Block::Formula(FormulaBlock {
-                        formula: Formula {
-                            source: FormulaSource::Latex("E=mc^2".into()),
-                            display_mode: false,
-                            confidence: 0.95,
+                        formula: {
+                            let mut f = Formula::latex("E=mc^2");
+                            f.display_mode = false;
+                            f.confidence = 0.95;
+                            f
                         },
                         geometry: None,
                         source: None,
                     }),
                     Block::Formula(FormulaBlock {
-                        formula: Formula {
-                            source: FormulaSource::Latex("\\frac{a+b}{c}".into()),
-                            display_mode: true,
-                            confidence: 0.92,
+                        formula: {
+                            let mut f = Formula::latex("\\frac{a+b}{c}");
+                            f.confidence = 0.92;
+                            f
                         },
                         geometry: None,
                         source: None,
@@ -56,6 +54,7 @@ mod tests {
                 ],
                 page_number: Some(1),
             }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         }
     }
 
@@ -195,16 +194,13 @@ mod tests {
                 width: 0.0,
                 height: 0.0,
                 blocks: vec![Block::Formula(FormulaBlock {
-                    formula: Formula {
-                        source: FormulaSource::Latex("\\frac{a}{b}".into()),
-                        display_mode: true,
-                        confidence: 1.0,
-                    },
+                    formula: Formula::latex("\\frac{a}{b}"),
                     geometry: None,
                     source: None,
                 })],
                 page_number: None,
             }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         };
         let converter = OmmlConverter;
         let result = converter.convert(&doc).unwrap();
@@ -221,16 +217,13 @@ mod tests {
                 width: 0.0,
                 height: 0.0,
                 blocks: vec![Block::Formula(FormulaBlock {
-                    formula: Formula {
-                        source: FormulaSource::Latex("\\frac{a}{b}".into()),
-                        display_mode: true,
-                        confidence: 1.0,
-                    },
+                    formula: Formula::latex("\\frac{a}{b}"),
                     geometry: None,
                     source: None,
                 })],
                 page_number: None,
             }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         };
         let converter = MathmlConverter;
         let result = converter.convert(&doc).unwrap();

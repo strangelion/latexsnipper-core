@@ -396,23 +396,33 @@ mod conversion_tests {
                 width: 800.0, height: 600.0,
                 blocks: vec![
                     Block::Paragraph(ParagraphBlock {
-                        inlines: vec![Inline::Text(TextRun { text: "Given ".into(), bold: None, italic: None })],
+                        inlines: vec![Inline::Text(TextRun::new("Given "))],
                         geometry: None,
                         source: None,
                     }),
                     Block::Formula(FormulaBlock {
-                        formula: Formula { source: FormulaSource::Latex("E=mc^2".into()), display_mode: false, confidence: 0.95 },
+                        formula: {
+                            let mut f = Formula::latex("E=mc^2");
+                            f.display_mode = false;
+                            f.confidence = 0.95;
+                            f
+                        },
                         geometry: None,
                         source: None,
                     }),
                     Block::Formula(FormulaBlock {
-                        formula: Formula { source: FormulaSource::Latex("\\frac{a+b}{c}".into()), display_mode: true, confidence: 0.92 },
+                        formula: {
+                            let mut f = Formula::latex("\\frac{a+b}{c}");
+                            f.confidence = 0.92;
+                            f
+                        },
                         geometry: None,
                         source: None,
                     }),
                 ],
                 page_number: Some(1),
             }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         }
     }
 
@@ -445,7 +455,7 @@ mod conversion_tests {
     fn fraction_omml() {
         let doc = Document { metadata: Default::default(), pages: vec![Page { width: 0.0, height: 0.0,
             blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None, source: None })],
-            page_number: None }] };
+            page_number: None }], id_gen: latexsnipper_ast::NodeIdGenerator::new() };
         let r = OmmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<m:num>"));
         assert!(r.contains("<m:den>"));
@@ -455,7 +465,7 @@ mod conversion_tests {
     fn fraction_mathml() {
         let doc = Document { metadata: Default::default(), pages: vec![Page { width: 0.0, height: 0.0,
             blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None, source: None })],
-            page_number: None }] };
+            page_number: None }], id_gen: latexsnipper_ast::NodeIdGenerator::new() };
         let r = MathmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<mfrac>"));
     }

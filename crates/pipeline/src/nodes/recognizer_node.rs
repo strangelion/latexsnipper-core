@@ -3,7 +3,6 @@ use latexsnipper_foundation::{SnipperError, Result};
 use latexsnipper_ast::*;
 use latexsnipper_image::operations;
 use latexsnipper_runtime::{RuntimeBackend, AccelerationMode, ModelHandle};
-use latexsnipper_model::ModelManager;
 use latexsnipper_inference::{RecognitionParams, TextRecParams, recognize_formula, recognize_text};
 
 use crate::node::PipelineNode;
@@ -97,12 +96,10 @@ impl RecognizerNode {
                         let cropped = operations::crop(image, latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32));
                         match recognize_formula(&cropped, &*enc_session, &*dec_session, &tokenizer_path, &params) {
                             Ok(result) => {
+                                let mut f = Formula::latex(result.text);
+                                f.confidence = result.confidence;
                                 blocks.push(Block::Formula(FormulaBlock {
-                                    formula: Formula {
-                                        source: FormulaSource::Latex(result.text),
-                                        display_mode: true,
-                                        confidence: result.confidence,
-                                    },
+                                    formula: f,
                                     geometry: Some(latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32)),
                                     source: Some(SourceInfo::new()),
                                 }));
@@ -165,11 +162,7 @@ impl RecognizerNode {
                             Ok(result) => {
                                 if !result.text.is_empty() {
                                     blocks.push(Block::Paragraph(ParagraphBlock {
-                                        inlines: vec![Inline::Text(TextRun {
-                                            text: result.text,
-                                            bold: None,
-                                            italic: None,
-                                        })],
+                                        inlines: vec![Inline::Text(TextRun::new(result.text))],
                                         geometry: Some(latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32)),
                                         source: Some(SourceInfo::new()),
                                     }));

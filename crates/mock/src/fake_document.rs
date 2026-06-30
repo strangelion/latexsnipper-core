@@ -9,37 +9,30 @@ pub fn fake_document() -> Document {
             height: 600.0,
             blocks: vec![
                 Block::Paragraph(ParagraphBlock {
-                    inlines: vec![Inline::Text(TextRun {
-                        text: "Given the equation ".into(),
-                        bold: None,
-                        italic: None,
-                    })],
+                    inlines: vec![Inline::Text(TextRun::new("Given the equation "))],
                     geometry: None,
                     source: None,
                 }),
                 Block::Formula(FormulaBlock {
-                    formula: Formula {
-                        source: latexsnipper_ast::FormulaSource::Latex("E=mc^2".into()),
-                        display_mode: false,
-                        confidence: 0.95,
+                    formula: {
+                        let mut f = Formula::latex("E=mc^2");
+                        f.display_mode = false;
+                        f.confidence = 0.95;
+                        f
                     },
                     geometry: None,
                     source: None,
                 }),
                 Block::Paragraph(ParagraphBlock {
-                    inlines: vec![Inline::Text(TextRun {
-                        text: ", we can derive the following:".into(),
-                        bold: None,
-                        italic: None,
-                    })],
+                    inlines: vec![Inline::Text(TextRun::new(", we can derive the following:"))],
                     geometry: None,
                     source: None,
                 }),
                 Block::Formula(FormulaBlock {
-                    formula: Formula {
-                        source: latexsnipper_ast::FormulaSource::Latex("\\frac{a+b}{c}".into()),
-                        display_mode: true,
-                        confidence: 0.92,
+                    formula: {
+                        let mut f = Formula::latex("\\frac{a+b}{c}");
+                        f.confidence = 0.92;
+                        f
                     },
                     geometry: None,
                     source: None,
@@ -47,6 +40,7 @@ pub fn fake_document() -> Document {
             ],
             page_number: Some(1),
         }],
+        id_gen: latexsnipper_ast::NodeIdGenerator::new(),
     }
 }
 

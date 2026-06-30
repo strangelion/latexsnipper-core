@@ -83,22 +83,17 @@ impl FakePipeline {
             });
 
             if detection.class_name == "isolated" || detection.class_name == "embedding" {
+                let mut f = Formula::latex(result.text);
+                f.display_mode = detection.class_name == "isolated";
+                f.confidence = result.confidence;
                 blocks.push(Block::Formula(FormulaBlock {
-                    formula: Formula {
-                        source: latexsnipper_ast::FormulaSource::Latex(result.text),
-                        display_mode: detection.class_name == "isolated",
-                        confidence: result.confidence,
-                    },
+                    formula: f,
                     geometry: Some(detection.rect),
                     source: None,
                 }));
             } else {
                 blocks.push(Block::Paragraph(ParagraphBlock {
-                    inlines: vec![Inline::Text(TextRun {
-                        text: result.text,
-                        bold: None,
-                        italic: None,
-                    })],
+                    inlines: vec![Inline::Text(TextRun::new(result.text))],
                     geometry: Some(detection.rect),
                     source: None,
                 }));
@@ -113,6 +108,7 @@ impl FakePipeline {
                 blocks,
                 page_number: None,
             }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         })
     }
 }

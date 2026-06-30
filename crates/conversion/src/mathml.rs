@@ -2,80 +2,53 @@ use latexsnipper_ast::{Document, Block, Inline, Formula, FormulaSource};
 use latexsnipper_foundation::Result;
 
 use crate::converter::Converter;
+use crate::latex_utils::*;
 
-/// Converts Document AST to MathML format (standard namespace).
 pub struct MathmlConverter;
-
 impl Converter for MathmlConverter {
-    fn convert(&self, doc: &Document) -> Result<String> {
-        convert_mathml(doc, MathmlMode::Standard)
-    }
+    fn convert(&self, doc: &Document) -> Result<String> { convert_mathml(doc, MathmlMode::Standard) }
     fn name(&self) -> &str { "mathml" }
     fn extension(&self) -> &str { "xml" }
     fn mime_type(&self) -> &str { "application/mathml+xml" }
 }
 
-/// Converts Document AST to MathML format (mml: prefix).
 pub struct MathmlMmlConverter;
-
 impl Converter for MathmlMmlConverter {
-    fn convert(&self, doc: &Document) -> Result<String> {
-        convert_mathml(doc, MathmlMode::Mml)
-    }
+    fn convert(&self, doc: &Document) -> Result<String> { convert_mathml(doc, MathmlMode::Mml) }
     fn name(&self) -> &str { "mathml_mml" }
     fn extension(&self) -> &str { "mml" }
     fn mime_type(&self) -> &str { "application/mathml+xml" }
 }
 
-/// Converts Document AST to MathML format (m: prefix).
 pub struct MathmlMConverter;
-
 impl Converter for MathmlMConverter {
-    fn convert(&self, doc: &Document) -> Result<String> {
-        convert_mathml(doc, MathmlMode::M)
-    }
+    fn convert(&self, doc: &Document) -> Result<String> { convert_mathml(doc, MathmlMode::M) }
     fn name(&self) -> &str { "mathml_m" }
     fn extension(&self) -> &str { "xml" }
     fn mime_type(&self) -> &str { "application/mathml+xml" }
 }
 
-/// Converts Document AST to MathML format (attribute form).
 pub struct MathmlAttrConverter;
-
 impl Converter for MathmlAttrConverter {
-    fn convert(&self, doc: &Document) -> Result<String> {
-        convert_mathml(doc, MathmlMode::Attr)
-    }
+    fn convert(&self, doc: &Document) -> Result<String> { convert_mathml(doc, MathmlMode::Attr) }
     fn name(&self) -> &str { "mathml_attr" }
     fn extension(&self) -> &str { "xml" }
     fn mime_type(&self) -> &str { "application/mathml+xml" }
 }
 
-enum MathmlMode {
-    Standard,
-    Mml,
-    M,
-    Attr,
-}
+enum MathmlMode { Standard, Mml, M, Attr }
 
 fn convert_mathml(doc: &Document, mode: MathmlMode) -> Result<String> {
     let mut parts = Vec::new();
-
     for page in &doc.pages {
         for block in &page.blocks {
             match block {
-                Block::Formula(f) => {
-                    parts.push(convert_formula_to_mathml(&f.formula, &mode));
-                }
+                Block::Formula(f) => parts.push(convert_formula_to_mathml(&f.formula, &mode)),
                 Block::Paragraph(p) => {
                     for inline in &p.inlines {
                         match inline {
-                            Inline::Text(t) => {
-                                parts.push(format!("<mtext>{}</mtext>", xml_escape(&t.text)));
-                            }
-                            Inline::Formula(f) => {
-                                parts.push(convert_formula_to_mathml(f, &mode));
-                            }
+                            Inline::Text(t) => parts.push(format!("<mtext>{}</mtext>", xml_escape(&t.text))),
+                            Inline::Formula(f) => parts.push(convert_formula_to_mathml(f, &mode)),
                             Inline::Image(_) => {}
                         }
                     }
@@ -84,7 +57,6 @@ fn convert_mathml(doc: &Document, mode: MathmlMode) -> Result<String> {
             }
         }
     }
-
     let content = parts.join("\n");
     match &mode {
         MathmlMode::Standard => Ok(format!("<math xmlns=\"http://www.w3.org/1998/Math/MathML\">\n{}\n</math>", content)),
@@ -99,9 +71,8 @@ fn convert_formula_to_mathml(f: &Formula, _mode: &MathmlMode) -> String {
         FormulaSource::Latex(s) => latex_to_mathml(s),
         FormulaSource::MathML(s) => s.clone(),
         FormulaSource::Omml(s) => format!("<mrow><mi>{}</mi></mrow>", xml_escape(s)),
-        FormulaSource::Typst(s) => latex_to_mathml(&typst_to_latex_approx(s)),
+        FormulaSource::Typst(s) => latex_to_mathml(&typst_to_latex(s)),
     };
-
     if f.display_mode {
         format!("<displaymath>\n{}\n</displaymath>", content)
     } else {
@@ -114,11 +85,8 @@ fn latex_to_mathml(latex: &str) -> String {
 
     if let Some(inner) = latex.strip_prefix("\\frac{") {
         if let Some((num, den)) = split_brace_pair(inner) {
-            return format!(
-                "<mfrac>\n  <mrow>{}</mrow>\n  <mrow>{}</mrow>\n</mfrac>",
-                latex_to_mathml(num),
-                latex_to_mathml(den)
-            );
+            return format!("<mfrac>\n  <mrow>{}</mrow>\n  <mrow>{}</mrow>\n</mfrac>",
+                latex_to_mathml(num), latex_to_mathml(den));
         }
     }
 
@@ -127,25 +95,41 @@ fn latex_to_mathml(latex: &str) -> String {
         return format!("<msqrt><mrow>{}</mrow></msqrt>", latex_to_mathml(content));
     }
 
+    if let Some(inner) = latex.strip_prefix("\\sqrt[") {
+        if let Some((degree, rest)) = inner.split_once(']') {
+            let content = rest.strip_prefix('{').unwrap_or(rest).strip_suffix('}').unwrap_or(rest);
+            return format!("<mroot><mrow>{}</mrow><mrow>{}</mrow></mroot>",
+                latex_to_mathml(content), latex_to_mathml(degree));
+        }
+    }
+
+    // Matrix environments
+    if let Some(inner) = extract_env(latex, "matrix") { return matrix_to_mathml(inner, None); }
+    if let Some(inner) = extract_env(latex, "pmatrix") { return matrix_to_mathml(inner, Some(("(", ")"))); }
+    if let Some(inner) = extract_env(latex, "bmatrix") { return matrix_to_mathml(inner, Some(("[", "]"))); }
+    if let Some(inner) = extract_env(latex, "vmatrix") { return matrix_to_mathml(inner, Some(("|", "|"))); }
+    if let Some(inner) = extract_env(latex, "cases") { return cases_to_mathml(inner); }
+    if let Some(inner) = extract_env(latex, "aligned") { return aligned_to_mathml(inner); }
+    if let Some(inner) = extract_env(latex, "array") { return matrix_to_mathml(inner, None); }
+
+    // \phantom
+    if let Some(inner) = latex.strip_prefix("\\phantom{") {
+        let content = inner.strip_suffix('}').unwrap_or(inner);
+        return format!("<mpadded width=\"0\" height=\"0\" depth=\"0\"><mrow>{}</mrow></mpadded>",
+            latex_to_mathml(content));
+    }
+
     if let Some((base, sup)) = split_superscript(latex) {
-        return format!(
-            "<msup>\n  <mrow>{}</mrow>\n  <mrow>{}</mrow>\n</msup>",
-            latex_to_mathml(base),
-            latex_to_mathml(sup)
-        );
+        return format!("<msup>\n  <mrow>{}</mrow>\n  <mrow>{}</mrow>\n</msup>",
+            latex_to_mathml(base), latex_to_mathml(sup));
     }
 
     if let Some((base, sub)) = split_subscript(latex) {
-        return format!(
-            "<msub>\n  <mrow>{}</mrow>\n  <mrow>{}</mrow>\n</msub>",
-            latex_to_mathml(base),
-            latex_to_mathml(sub)
-        );
+        return format!("<msub>\n  <mrow>{}</mrow>\n  <mrow>{}</mrow>\n</msub>",
+            latex_to_mathml(base), latex_to_mathml(sub));
     }
 
-    if let Some(sym) = map_symbol_mathml(latex) {
-        return sym.to_string();
-    }
+    if let Some(sym) = map_symbol_mathml(latex) { return sym.to_string(); }
 
     if latex.len() == 1 && latex.chars().next().unwrap().is_alphabetic() {
         format!("<mi>{}</mi>", latex)
@@ -154,47 +138,6 @@ fn latex_to_mathml(latex: &str) -> String {
     } else {
         format!("<mi>{}</mi>", xml_escape(latex))
     }
-}
-
-fn typst_to_latex_approx(typst: &str) -> String {
-    let mut result = typst.to_string();
-    let mappings = [
-        ("sqrt(", "\\sqrt{"),
-        ("integral", "\\int"),
-        ("sum", "\\sum"),
-        ("product", "\\prod"),
-        ("infinity", "\\infty"),
-        ("pi", "\\pi"),
-        ("alpha", "\\alpha"),
-        ("beta", "\\beta"),
-        ("gamma", "\\gamma"),
-        ("delta", "\\delta"),
-        ("theta", "\\theta"),
-        ("lambda", "\\lambda"),
-        ("sigma", "\\sigma"),
-        ("omega", "\\omega"),
-        ("plus.minus", "\\pm"),
-        ("times", "\\times"),
-        ("div", "\\div"),
-        ("dot", "\\cdot"),
-        ("lt.eq", "\\leq"),
-        ("gt.eq", "\\geq"),
-        ("neq", "\\neq"),
-        ("approx", "\\approx"),
-        ("rightarrow", "\\rightarrow"),
-        ("leftarrow", "\\leftarrow"),
-        ("in", "\\in"),
-        ("notin", "\\notin"),
-        ("subset", "\\subset"),
-        ("cup", "\\cup"),
-        ("cap", "\\cap"),
-    ];
-
-    for (from, to) in &mappings {
-        result = result.replace(from, to);
-    }
-
-    result
 }
 
 fn map_symbol_mathml(latex: &str) -> Option<&str> {
@@ -223,93 +166,41 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
     }
 }
 
-fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
-    // Parse LaTeX brace pairs: {content1}{content2} or content1}{content2}
-    let s = s.trim();
-
-    // Find the first closing brace at depth 0
-    let mut depth = 0i32;
-    let mut first_end = None;
-
-    for (i, b) in s.bytes().enumerate() {
-        match b {
-            b'{' => depth += 1,
-            b'}' => {
-                if depth > 0 {
-                    depth -= 1;
-                    if depth == 0 {
-                        first_end = Some(i);
-                        break;
-                    }
-                }
-            }
-            _ => {}
-        }
+fn matrix_to_mathml(content: &str, delimiters: Option<(&str, &str)>) -> String {
+    let rows = split_matrix_rows(content);
+    let mut rows_xml = Vec::new();
+    for row in &rows {
+        let cells: Vec<String> = row.iter()
+            .map(|cell| format!("    <mtd><mrow>{}</mrow></mtd>", latex_to_mathml(cell.trim())))
+            .collect();
+        rows_xml.push(format!("  <mtr>\n{}\n  </mtr>", cells.join("\n")));
     }
-
-    let end = first_end?;
-
-    // Extract first argument
-    let first = if s.starts_with('{') {
-        &s[1..end]
-    } else {
-        &s[..end]
-    };
-
-    // Find second argument after }
-    let rest = &s[end + 1..];
-    let rest = rest.trim_start();
-
-    // Second argument may be {content} or just content
-    let second = if rest.starts_with('{') {
-        // Find matching }
-        let mut d = 0i32;
-        let mut close = None;
-        for (i, b) in rest.bytes().enumerate() {
-            match b {
-                b'{' => d += 1,
-                b'}' => {
-                    d -= 1;
-                    if d == 0 {
-                        close = Some(i);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        let c = close?;
-        &rest[1..c]
-    } else {
-        // No braces, take until next } or end
-        rest.find('}')
-            .map(|i| &rest[..i])
-            .unwrap_or(rest)
-    };
-
-    Some((first, second))
+    let table = format!("<mtable>\n{}\n</mtable>", rows_xml.join("\n"));
+    match delimiters {
+        Some((open, close)) => format!("<mrow><mo>{}</mo>{}</mrow><mo>{}</mo>", open, table, close),
+        None => table,
+    }
 }
 
-fn split_superscript(s: &str) -> Option<(&str, &str)> {
-    let pos = s.find("^{")?;
-    let base = &s[..pos];
-    let after = &s[pos + 2..];
-    let end = after.find('}')?;
-    Some((base, &after[..end]))
+fn cases_to_mathml(content: &str) -> String {
+    let rows = split_matrix_rows(content);
+    let mut rows_xml = Vec::new();
+    for row in &rows {
+        let left = row.get(0).map(|s| latex_to_mathml(s.trim())).unwrap_or_default();
+        let right = row.get(1).map(|s| latex_to_mathml(s.trim())).unwrap_or_default();
+        rows_xml.push(format!("  <mtr><mtd><mrow>{}</mrow></mtd><mtd><mrow>{}</mrow></mtd></mtr>", left, right));
+    }
+    format!("<mrow><mo>{{</mo><mtable>\n{}\n</mtable><mo>}}</mo></mrow>", rows_xml.join("\n"))
 }
 
-fn split_subscript(s: &str) -> Option<(&str, &str)> {
-    let pos = s.find("_{")?;
-    let base = &s[..pos];
-    let after = &s[pos + 2..];
-    let end = after.find('}')?;
-    Some((base, &after[..end]))
-}
-
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
+fn aligned_to_mathml(content: &str) -> String {
+    let rows = split_matrix_rows(content);
+    let mut rows_xml = Vec::new();
+    for row in &rows {
+        let cells: Vec<String> = row.iter()
+            .map(|cell| format!("    <mtd><mrow>{}</mrow></mtd>", latex_to_mathml(cell.trim())))
+            .collect();
+        rows_xml.push(format!("  <mtr>\n{}\n  </mtr>", cells.join("\n")));
+    }
+    format!("<mtable>\n{}\n</mtable>", rows_xml.join("\n"))
 }

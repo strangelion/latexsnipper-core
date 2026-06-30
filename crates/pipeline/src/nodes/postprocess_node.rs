@@ -19,7 +19,7 @@ impl PostprocessNode {
 impl PipelineNode for PostprocessNode {
     fn name(&self) -> &str { &self.name }
 
-    async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
+    async fn process(&self, _ctx: &mut PipelineContext) -> Result<()> {
         // Sort blocks by y-coordinate (reading order)
         // This is done after all recognition is complete
         log::info!("Pipeline: postprocess node executed");

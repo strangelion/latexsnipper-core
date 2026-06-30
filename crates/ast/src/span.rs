@@ -118,6 +118,28 @@ impl SourceInfo {
     }
 }
 
+/// Generates unique NodeIds for AST nodes.
+#[derive(Debug)]
+pub struct NodeIdGenerator {
+    counter: u64,
+}
+
+impl NodeIdGenerator {
+    pub fn new() -> Self {
+        Self { counter: 0 }
+    }
+
+    pub fn next(&mut self) -> NodeId {
+        NodeId::next(&mut self.counter)
+    }
+}
+
+impl Default for NodeIdGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,5 +167,16 @@ mod tests {
     #[test]
     fn position_display() {
         assert_eq!(Position::new(5, 12).to_string(), "5:12");
+    }
+
+    #[test]
+    fn node_id_generator() {
+        let mut gen = NodeIdGenerator::new();
+        let a = gen.next();
+        let b = gen.next();
+        let c = gen.next();
+        assert_eq!(a, NodeId(0));
+        assert_eq!(b, NodeId(1));
+        assert_eq!(c, NodeId(2));
     }
 }

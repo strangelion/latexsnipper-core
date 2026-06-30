@@ -1,13 +1,9 @@
 use clap::{Parser, Subcommand};
-use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-use latexsnipper_runtime::StubRuntime;
 use latexsnipper_mock::FakePipeline;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
-use latexsnipper_export::{RenderTree, Generator};
-use latexsnipper_export::svg::SvgGenerator;
 
 #[derive(Parser)]
 #[command(name = "snipper")]

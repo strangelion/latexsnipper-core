@@ -3,9 +3,6 @@ pub mod context;
 pub mod graph;
 pub mod manifest;
 pub mod nodes;
-pub mod formula_pipeline;
-pub mod text_pipeline;
-pub mod mixed_pipeline;
 
 pub use node::PipelineNode;
 pub use context::PipelineContext;

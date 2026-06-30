@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use log::info;
 
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::Result;
 use latexsnipper_ast::*;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::RuntimeBackend;
@@ -202,6 +202,7 @@ impl SnipperEngine {
                 blocks,
                 page_number: Some(1),
             }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         })
     }
 }

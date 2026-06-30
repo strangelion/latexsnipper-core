@@ -1,4 +1,4 @@
-use latexsnipper_ast::{Document, Block, Inline, Formula};
+use latexsnipper_ast::{Document, Block, Inline};
 
 /// An intermediate representation between AST and final output.
 /// Avoids re-traversing the AST for each export format.

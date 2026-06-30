@@ -1,9 +1,6 @@
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
 use log::info;
 
-use latexsnipper_foundation::{SnipperError, Result};
 
 /// Status of a job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,7 +91,7 @@ impl JobQueue {
             job.status = JobStatus::Cancelled;
             info!("Job '{}' cancelled", id);
             self.completed.insert(id.to_string(), job);
-        } else if let Some(mut job) = self.pending.iter_mut().find(|j| j.id == id) {
+        } else if let Some(job) = self.pending.iter_mut().find(|j| j.id == id) {
             job.status = JobStatus::Cancelled;
         }
     }

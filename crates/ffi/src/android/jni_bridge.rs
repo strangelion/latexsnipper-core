@@ -2,8 +2,7 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
 use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-use latexsnipper_runtime::{StubRuntime, OnnxRuntimeBackend, AccelerationMode};
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_runtime::{StubRuntime, OnnxRuntimeBackend};
 
 use crate::common::FfiResponse;
 
@@ -112,7 +111,7 @@ fn recognize_sync(image_data: *const u8, image_len: usize, mode: RecognizeMode) 
     if image_data.is_null() || image_len == 0 || image_len > 100 * 1024 * 1024 {
         return FfiResponse::error("Invalid image data: null pointer, empty, or too large (>100MB)");
     }
-    let data = unsafe { std::slice::from_raw_parts(image_data, image_len) };
+    let _data = unsafe { std::slice::from_raw_parts(image_data, image_len) };
 
     let start = std::time::Instant::now();
 

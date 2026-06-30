@@ -15,5 +15,5 @@ pub use geometry::{Point, Rect, Size};
 pub use inline::{ImageInline, Inline, TextRun};
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;
-pub use span::{NodeId, Span, Position, SourceInfo};
+pub use span::{NodeId, NodeIdGenerator, Span, Position, SourceInfo};
 pub use visitor::{DocumentVisitor, TextCollector};

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
-use latexsnipper_runtime::RuntimeBackend;
 
 /// Context passed through the pipeline.
 /// Each node reads from and writes to this context.

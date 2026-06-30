@@ -8,12 +8,12 @@ use crate::context::PipelineContext;
 /// Reads detection results from context metadata, crops regions, stores in metadata.
 pub struct CropNode {
     name: String,
-    min_size: u32,
+    _min_size: u32,
 }
 
 impl CropNode {
     pub fn new(min_size: u32) -> Self {
-        Self { name: "crop".into(), min_size }
+        Self { name: "crop".into(), _min_size: min_size }
     }
 
     pub fn default() -> Self {

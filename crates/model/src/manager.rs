@@ -31,14 +31,14 @@ fn validate_path(base: &Path, resolved: &Path) -> Result<()> {
 /// Manages model files on disk.
 pub struct ModelManager {
     models_dir: PathBuf,
-    installed: HashMap<String, Vec<String>>,
+    _installed: HashMap<String, Vec<String>>,
 }
 
 impl ModelManager {
     pub fn new(models_dir: PathBuf) -> Self {
         Self {
             models_dir,
-            installed: HashMap::new(),
+            _installed: HashMap::new(),
         }
     }
 

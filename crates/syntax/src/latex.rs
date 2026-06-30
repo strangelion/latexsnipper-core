@@ -1,5 +1,5 @@
-use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, FormulaSource, ParagraphBlock, Inline, TextRun};
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, ParagraphBlock, Inline, TextRun};
+use latexsnipper_foundation::Result;
 
 use crate::parser::Parser;
 use crate::renderer::Renderer;
@@ -18,6 +18,7 @@ impl Parser for LatexParser {
                 blocks,
                 page_number: None,
             }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         })
     }
 
@@ -84,21 +85,13 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                 let before = remaining[..start].trim();
                 if !before.is_empty() {
                     blocks.push(Block::Paragraph(ParagraphBlock {
-                        inlines: vec![Inline::Text(TextRun {
-                            text: before.to_string(),
-                            bold: None,
-                            italic: None,
-                        })],
+                        inlines: vec![Inline::Text(TextRun::new(before))],
                         geometry: None,
                         source: None,
                     }));
                 }
                 blocks.push(Block::Formula(FormulaBlock {
-                    formula: Formula {
-                        source: FormulaSource::Latex(formula),
-                        display_mode: true,
-                        confidence: 1.0,
-                    },
+                    formula: Formula::latex(formula),
                     geometry: None,
                     source: None,
                 }));
@@ -121,20 +114,16 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                 let before = remaining[..start].trim();
                 if !before.is_empty() {
                     blocks.push(Block::Paragraph(ParagraphBlock {
-                        inlines: vec![Inline::Text(TextRun {
-                            text: before.to_string(),
-                            bold: None,
-                            italic: None,
-                        })],
+                        inlines: vec![Inline::Text(TextRun::new(before))],
                         geometry: None,
                         source: None,
                     }));
                 }
                 blocks.push(Block::Formula(FormulaBlock {
-                    formula: Formula {
-                        source: FormulaSource::Latex(formula),
-                        display_mode: false,
-                        confidence: 1.0,
+                    formula: {
+                        let mut f = Formula::latex(formula);
+                        f.display_mode = false;
+                        f
                     },
                     geometry: None,
                     source: None,
@@ -148,11 +137,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
         let text = remaining.trim().to_string();
         if !text.is_empty() {
             blocks.push(Block::Paragraph(ParagraphBlock {
-                inlines: vec![Inline::Text(TextRun {
-                    text,
-                    bold: None,
-                    italic: None,
-                })],
+                inlines: vec![Inline::Text(TextRun::new(text))],
                 geometry: None,
                 source: None,
             }));

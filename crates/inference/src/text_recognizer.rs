@@ -88,43 +88,48 @@ fn load_keys(path: &Path) -> Result<Vec<String>> {
     Ok(keys)
 }
 
-fn ctc_decode(logits: &[f32], shape: &[usize], keys: &[String], blank_id: usize) -> (String, f32) {
+fn ctc_decode(logits: &[f32], shape: &[usize], keys: &[String], _blank_id: usize) -> (String, f32) {
     let seq_len = shape[1];
     let vocab_size = shape[2];
 
-    let mut prev_id = blank_id;
-    let mut result = Vec::new();
+    let mut prev_id = 0usize;
+    let mut result = String::new();
     let mut confidences = Vec::new();
 
     for t in 0..seq_len {
         let start = t * vocab_size;
         let end = start + vocab_size;
-
         if end > logits.len() { break; }
 
-        let mut max_id = 0;
-        let mut max_val = f32::NEG_INFINITY;
-        let mut sum_exp = 0.0f32;
+        let slice = &logits[start..end];
 
-        for (i, &val) in logits[start..end].iter().enumerate() {
-            let exp_val = (val - logits[start..end].iter().cloned().fold(f32::NEG_INFINITY, f32::max)).exp();
-            sum_exp += exp_val;
-            if val > max_val { max_val = val; max_id = i; }
-        }
-
-        let confidence = (max_val - logits[start..end].iter().cloned().fold(f32::NEG_INFINITY, f32::max)).exp() / sum_exp;
-
-        if max_id != blank_id && max_id != prev_id {
-            if let Some(ch) = keys.get(max_id) {
-                result.push(ch.clone());
-                confidences.push(confidence);
+        // Find best token (argmax)
+        let mut best_id = 0;
+        let mut best_val = f32::NEG_INFINITY;
+        for (i, &val) in slice.iter().enumerate() {
+            if val > best_val {
+                best_val = val;
+                best_id = i;
             }
         }
-        prev_id = max_id;
+
+        // PaddleOCR CTC: 0=blank, 1=space, 2+=character (offset by 2)
+        if best_id != 0 && best_id != prev_id {
+            if best_id >= 2 {
+                if let Some(ch) = keys.get(best_id - 2) {
+                    result.push_str(ch);
+                    confidences.push(1.0);
+                }
+            } else if best_id == 1 {
+                result.push(' ');
+                confidences.push(1.0);
+            }
+        }
+        prev_id = best_id;
     }
 
-    let text = result.join("");
-    let avg_confidence = if confidences.is_empty() { 0.0 } else { confidences.iter().sum::<f32>() / confidences.len() as f32 };
+    let avg_confidence = if confidences.is_empty() { 0.0 }
+    else { confidences.iter().sum::<f32>() / confidences.len() as f32 };
 
-    (text, avg_confidence)
+    (result, avg_confidence)
 }

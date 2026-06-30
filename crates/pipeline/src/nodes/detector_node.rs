@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use latexsnipper_foundation::{SnipperError, Result};
-use latexsnipper_ast::*;
 use latexsnipper_runtime::{RuntimeBackend, AccelerationMode, ModelHandle};
 use latexsnipper_inference::{DetectionParams, TextDetParams, detect_formulas, detect_text};
 
