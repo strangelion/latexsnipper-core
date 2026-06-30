@@ -5,7 +5,7 @@ use crate::node::PipelineNode;
 use crate::context::PipelineContext;
 
 /// Recognizes content in cropped regions.
-/// Stores recognition results in context document.
+/// Recognition results are passed via metadata by the Engine.
 pub struct RecognizerNode {
     name: String,
     recognizer_type: RecognizerType,
@@ -31,9 +31,20 @@ impl PipelineNode for RecognizerNode {
     fn name(&self) -> &str { &self.name }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
-        // Recognition is performed by the Engine which passes results via metadata
-        // This node acts as a marker in the pipeline graph
-        log::info!("Pipeline: {} node executed", self.name);
+        // Recognition results are passed via metadata by the Engine
+        // This node validates that recognition results exist
+        let key = match &self.recognizer_type {
+            RecognizerType::Formula => "formula_blocks",
+            RecognizerType::Text => "text_blocks",
+        };
+
+        if let Some(blocks) = ctx.get(key) {
+            let count = blocks.as_array().map_or(0, |a| a.len());
+            log::info!("Pipeline: {} recognized {} blocks", self.name, count);
+        } else {
+            log::info!("Pipeline: {} — no recognition results in context", self.name);
+        }
+
         Ok(())
     }
 }

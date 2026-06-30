@@ -6,7 +6,7 @@ use crate::node::PipelineNode;
 use crate::context::PipelineContext;
 
 /// Detects regions (formulas or text) in the image.
-/// Stores detection results in context metadata.
+/// Stores detection results in context metadata for downstream nodes.
 pub struct DetectorNode {
     name: String,
     detector_type: DetectorType,
@@ -32,9 +32,20 @@ impl PipelineNode for DetectorNode {
     fn name(&self) -> &str { &self.name }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
-        // Detection is performed by the Engine which passes results via metadata
-        // This node acts as a marker in the pipeline graph
-        log::info!("Pipeline: {} node executed", self.name);
+        // Detection results are passed via metadata by the Engine
+        // This node validates that detection results exist
+        let key = match &self.detector_type {
+            DetectorType::Formula => "formula_detections",
+            DetectorType::Text => "text_detections",
+        };
+
+        if let Some(detections) = ctx.get(key) {
+            let count = detections.as_array().map_or(0, |a| a.len());
+            log::info!("Pipeline: {} found {} regions", self.name, count);
+        } else {
+            log::info!("Pipeline: {} — no detections in context", self.name);
+        }
+
         Ok(())
     }
 }
