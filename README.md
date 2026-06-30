@@ -76,13 +76,14 @@ Image → Preprocess → Detection → Crop → Recognition → Document AST →
 | **Inference** | ✅ | YOLOv8 detection, TrOCR recognition, CRNN+CTC |
 | **Pipeline** | ✅ | Node-based async pipeline with cancellation |
 | **Conversion** | ✅ | 12 formats: LaTeX, OMML, MathML, Typst, Markdown, HTML |
-| **Export** | ✅ | SVG, Text generators |
+| **Export** | ✅ | SVG, Text, PDF generators |
 | **Runtime** | ✅ | ONNX Runtime (with session caching) + Stub |
 | **Model** | ✅ | Manifest, Config, SHA256 verification |
 | **Syntax** | ✅ | LaTeX/Typst/Markdown Parser + Renderer |
 | **Plugin** | ✅ | Plugin trait, Registry, Request/Response |
-| **FFI** | ✅ | Android JNI, iOS C FFI |
-| **WASM** | ✅ | parse/render/convert bindings |
+| **Engine** | ✅ | JobQueue, Service trait, Request/Response Builder |
+| **FFI** | ✅ | Android JNI, iOS C FFI (OnnxRuntimeBackend) |
+| **WASM** | ✅ | parse/render/convert/recognize bindings |
 | **CLI** | ✅ | recognize/parse/render/version |
 
 ---
@@ -101,8 +102,8 @@ crates/
 ├── pipeline/       Node-based async pipeline
 ├── syntax/         LaTeX/Typst/Markdown Parser + Renderer
 ├── conversion/     AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
-├── export/         RenderTree → SVG/Text
-├── engine/         SnipperEngine — main entry point
+├── export/         RenderTree → SVG/Text/PDF
+├── engine/         SnipperEngine + JobQueue + Service
 ├── plugin/         Plugin API (Plugin trait, Registry)
 ├── mock/           Fake implementations for testing
 ├── ffi/            Android JNI + iOS C FFI
