@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
 use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-use latexsnipper_runtime::StubRuntime;
+use latexsnipper_runtime::{StubRuntime, OnnxRuntimeBackend};
 use latexsnipper_foundation::{SnipperError, Result};
 
 use crate::common::FfiResponse;
@@ -21,12 +21,18 @@ pub extern "C" fn latexsnipper_init(models_dir: *const c_char) -> i32 {
         Err(_) => return 0,
     };
 
+    let models_path = std::path::PathBuf::from(dir);
     let config = EngineConfig {
-        models_dir: std::path::PathBuf::from(dir),
+        models_dir: models_path.clone(),
         ..Default::default()
     };
 
-    let runtime = Box::new(StubRuntime::new());
+    let runtime: Box<dyn latexsnipper_runtime::RuntimeBackend> =
+        match OnnxRuntimeBackend::new(models_path) {
+            Ok(backend) => Box::new(backend),
+            Err(_) => Box::new(StubRuntime::new()),
+        };
+
     let engine = SnipperEngine::new(config, runtime);
     *ENGINE.lock().unwrap() = Some(engine);
     1
