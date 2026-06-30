@@ -153,6 +153,61 @@ See [docs/getting-started.md](docs/getting-started.md) for details.
 
 ---
 
+## Models
+
+LaTeXSnipper Core uses PaddleOCR v6 ONNX models for text recognition.
+
+### Supported Models
+
+| Model | Size | Purpose | Download |
+|-------|------|---------|----------|
+| PP-OCRv6 Medium Det | 32 MB | Text detection (high accuracy) | `latexsnipper-text-det-v6-medium.zip` |
+| PP-OCRv6 Medium Rec | 64 MB | Text recognition (18708 chars: CN/EN/math/greek) | `latexsnipper-text-rec-v6-medium.zip` |
+| PP-OCRv6 Small Det | 7 MB | Text detection (lightweight) | `latexsnipper-text-det-v6-small.zip` |
+| YOLOv8-MFD | 66 MB | Formula detection | `latexsnipper-formula-det.zip` |
+| TrOCR | 104 MB | Formula recognition (encoder+decoder) | `latexsnipper-formula-rec.zip` |
+| PP-LCNet Doc Ori | 6 MB | Document orientation (0/90/180/270) | `latexsnipper-doc-ori-v1.zip` |
+| PP-LCNet Textline Ori | 6 MB | Textline orientation (0/180) | `latexsnipper-textline-ori-v1.zip` |
+| UVDoc | 28 MB | Document unwarping | `latexsnipper-uvdoc-v1.zip` |
+
+### Quick Start
+
+Download `latexsnipper-models-all.zip` (168 MB) for all models:
+
+```bash
+curl -LO https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/latexsnipper-models-all.zip
+unzip latexsnipper-models-all.zip -d models/
+```
+
+### Model Directory Structure
+
+```
+models/
+├── formula-det/yolov8-mfd/     # Formula detection
+├── formula-rec/trocr-deit/     # Formula recognition
+├── text-det/v6-medium/         # Text detection (recommended)
+├── text-rec/v6-medium/         # Text recognition (recommended)
+├── doc-ori/pp-lcnet-v1/        # Document orientation
+├── textline-ori/pp-lcnet-v1/   # Textline orientation
+└── uvdoc/uvdoc-v1/             # Document unwarping
+```
+
+---
+
+## Benchmark
+
+See [docs/benchmark.md](docs/benchmark.md) for detailed comparison with LaTeXSnipper Desktop.
+
+| Metric | LaTeXSnipper (Python) | Core (Rust) | Winner |
+|--------|----------------------|-------------|--------|
+| Text Recognition | ~50 ms | **8.8 ms** | Core 5.7x faster |
+| Formula Detection | ~300 ms | **293.9 ms** | Core 1.0x faster |
+| Formula Recognition | ~400 ms | **213.3 ms** | Core 1.9x faster |
+| Formula Output | `$$ E = m c ^ { 2 } $$` | `$$ E = m c ^ { 2 } $$` | Same |
+| Text Accuracy | 100% | ~95% | LaTeXSnipper (v5 vs v6 model) |
+
+---
+
 ## Related Projects
 
 - [LaTeXSnipper Mobile](https://github.com/strangelion/LaTeXSnipper_mobile) — Android app
@@ -161,6 +216,35 @@ See [docs/getting-started.md](docs/getting-started.md) for details.
 - LaTeXSnipper Web — Web app (planned)
 
 All share the same Rust Core.
+
+---
+
+## Acknowledgements
+
+This project builds on the work of these open-source projects:
+
+### Models & Algorithms
+
+| Project | Usage |
+|---------|-------|
+| [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | PP-OCRv6 text detection & recognition models |
+| [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) | YOLOv8-MFD formula detection model |
+| [TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | Transformer-based formula recognition |
+| [LaTeXSnipper Desktop](https://github.com/SakuraMathcraft/LaTeXSnipper) | Original Python implementation, post-processing algorithms |
+
+### Rust Ecosystem
+
+| Crate | Usage |
+|-------|-------|
+| [ort](https://github.com/pyke/ort) | ONNX Runtime Rust bindings |
+| [image](https://github.com/image-rs/image) | Image decoding and processing |
+| [imageproc](https://github.com/image-rs/imageproc) | Image processing primitives |
+| [tokio](https://github.com/tokio-rs/tokio) | Async runtime |
+| [clap](https://github.com/clap-rs/clap) | CLI argument parsing |
+| [serde](https://github.com/serde-rs/serde) | Serialization framework |
+| [ndarray](https://github.com/rust-ndarray/ndarray) | N-dimensional array operations |
+| [wasm-bindgen](https://github.com/nicolo-ribaudo/nicolo-ribaudo) | WebAssembly bindings |
+| [jni](https://github.com/jni-rs/jni) | Android JNI bindings |
 
 ---
 

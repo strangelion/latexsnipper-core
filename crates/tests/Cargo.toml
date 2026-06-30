@@ -16,6 +16,10 @@ path = "src/dual_track_tests.rs"
 name = "real_model"
 path = "src/real_model_tests.rs"
 
+[[test]]
+name = "contract_tests"
+path = "src/contract_tests.rs"
+
 [dependencies]
 latexsnipper-foundation = { path = "../foundation" }
 latexsnipper-ast = { path = "../ast" }
@@ -35,3 +39,13 @@ latexsnipper-ffi = { path = "../ffi" }
 serde.workspace = true
 serde_json.workspace = true
 tokio = { version = "1", features = ["full"] }
+
+[[bench]]
+name = "core_bench"
+path = "benches/core_bench.rs"
+harness = false
+
+[[bench]]
+name = "recognition_bench"
+path = "benches/recognition_bench.rs"
+harness = false
