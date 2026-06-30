@@ -242,23 +242,182 @@ impl SnipperEngine {
                         confidence: result.confidence,
                     },
                     geometry: None,
-                    source: None,
+                    source: Some(SourceInfo::new()),
                 })],
                 page_number: Some(1),
             }],
         })
     }
 
-    async fn recognize_text(&self, _image: &SnipperImage) -> Result<Document> {
-        info!("Text recognition: loading text-det + text-rec models");
-        // TODO: implement text detection + recognition pipeline
-        Ok(Document::new())
+    async fn recognize_text(&self, image: &SnipperImage) -> Result<Document> {
+        let models = &self.config.models_dir;
+
+        // Load text detection model
+        let det_config = match load_model_config(models, "text-det") {
+            Ok(c) => c,
+            Err(_) => {
+                info!("Text detection model not found");
+                return Ok(Document::new());
+            }
+        };
+        let det_params = latexsnipper_inference::TextDetParams::default();
+        let det_model_path = det_config.find_model_file(&models.join("text-det/ppocrv5-mobile"))
+            .ok_or_else(|| SnipperError::Model("Text detection model not found".into()))?;
+        let det_handle = ModelHandle::with_path("text-det", det_model_path);
+        let det_session = self.runtime.create_session(&det_handle, AccelerationMode::Cpu)?;
+
+        // Detect text regions
+        let detections = latexsnipper_inference::detect_text(image, &*det_session, &det_params)?;
+        info!("Detected {} text regions", detections.len());
+
+        if detections.is_empty() {
+            return Ok(Document::new());
+        }
+
+        // Load text recognition model
+        let rec_config = match load_model_config(models, "text-rec") {
+            Ok(c) => c,
+            Err(_) => {
+                info!("Text recognition model not found");
+                return Ok(Document::new());
+            }
+        };
+        let rec_params = latexsnipper_inference::TextRecParams::default();
+        let rec_model_path = rec_config.find_model_file(&models.join("text-rec/ppocrv5-mobile"))
+            .ok_or_else(|| SnipperError::Model("Text recognition model not found".into()))?;
+        let rec_handle = ModelHandle::with_path("text-rec", rec_model_path);
+        let rec_session = self.runtime.create_session(&rec_handle, AccelerationMode::Cpu)?;
+
+        // Load keys file
+        let rec_dir = models.join("text-rec/ppocrv5-mobile");
+        let keys_path = rec_config.find_tokenizer_file(&rec_dir)
+            .ok_or_else(|| SnipperError::Model("Text keys file not found".into()))?;
+
+        // Recognize each text region
+        let mut blocks = Vec::new();
+        for det in &detections {
+            let rect = &det.rect;
+            let x = (rect.x.max(0.0) as u32).min(image.width().saturating_sub(1));
+            let y = (rect.y.max(0.0) as u32).min(image.height().saturating_sub(1));
+            let w = (rect.width as u32).min(image.width().saturating_sub(x));
+            let h = (rect.height as u32).min(image.height().saturating_sub(y));
+
+            if w < 4 || h < 4 { continue; }
+
+            let cropped = operations::crop(image, latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32));
+
+            match latexsnipper_inference::recognize_text(&cropped, &*rec_session, &keys_path, &rec_params) {
+                Ok(result) => {
+                    if !result.text.is_empty() {
+                        blocks.push(Block::Paragraph(ParagraphBlock {
+                            inlines: vec![Inline::Text(TextRun {
+                                text: result.text,
+                                bold: None,
+                                italic: None,
+                            })],
+                            geometry: Some(latexsnipper_ast::Rect::new(rect.x, rect.y, rect.width, rect.height)),
+                            source: Some(SourceInfo::new()),
+                        }));
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to recognize text region: {}", e);
+                }
+            }
+        }
+
+        Ok(Document {
+            metadata: Metadata::default(),
+            pages: vec![Page {
+                width: image.width() as f32,
+                height: image.height() as f32,
+                blocks,
+                page_number: Some(1),
+            }],
+        })
     }
 
-    async fn recognize_mixed(&self, _image: &SnipperImage) -> Result<Document> {
-        info!("Mixed recognition: combining formula + text detection");
-        // TODO: implement mixed detection + classification pipeline
-        Ok(Document::new())
+    async fn recognize_mixed(&self, image: &SnipperImage) -> Result<Document> {
+        let models = &self.config.models_dir;
+
+        // Load formula detection model
+        let det_config = match load_model_config(models, "formula-det") {
+            Ok(c) => c,
+            Err(_) => {
+                info!("Formula detection model not found, falling back to text-only");
+                return self.recognize_text(image).await;
+            }
+        };
+        let det_params = DetectionParams::from_config(&det_config);
+        let det_model_path = det_config.find_model_file(&models.join("formula-det/yolov8-mfd"))
+            .ok_or_else(|| SnipperError::Model("Formula detection model not found".into()))?;
+        let det_handle = ModelHandle::with_path("formula-det", det_model_path);
+        let det_session = self.runtime.create_session(&det_handle, AccelerationMode::Cpu)?;
+
+        // Detect formula regions
+        let detections = detect_formulas(image, &*det_session, &det_params)?;
+        info!("Mixed: detected {} formula regions", detections.len());
+
+        // Load formula recognition model
+        let rec_config = load_model_config(models, "formula-rec").ok();
+        let rec_params = RecognitionParams::default();
+
+        let mut blocks = Vec::new();
+
+        if let Some(rec_cfg) = rec_config {
+            let rec_dir = models.join("formula-rec/trocr-deit");
+            let encoder_path = rec_cfg.find_encoder_file(&rec_dir)
+                .ok_or_else(|| SnipperError::Model("Encoder not found".into()))?;
+            let decoder_path = rec_cfg.find_decoder_file(&rec_dir)
+                .ok_or_else(|| SnipperError::Model("Decoder not found".into()))?;
+            let tokenizer_path = rec_cfg.find_tokenizer_file(&rec_dir)
+                .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
+
+            let enc_handle = ModelHandle::with_path("encoder", encoder_path);
+            let dec_handle = ModelHandle::with_path("decoder", decoder_path);
+            let enc_session = self.runtime.create_session(&enc_handle, AccelerationMode::Cpu)?;
+            let dec_session = self.runtime.create_session(&dec_handle, AccelerationMode::Cpu)?;
+
+            // Recognize each formula region
+            for det in &detections {
+                let rect = &det.rect;
+                let x = (rect.x.max(0.0) as u32).min(image.width().saturating_sub(1));
+                let y = (rect.y.max(0.0) as u32).min(image.height().saturating_sub(1));
+                let w = (rect.width as u32).min(image.width().saturating_sub(x));
+                let h = (rect.height as u32).min(image.height().saturating_sub(y));
+
+                if w < 4 || h < 4 { continue; }
+
+                let cropped = operations::crop(image, latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32));
+
+                match recognize_formula(&cropped, &*enc_session, &*dec_session, &tokenizer_path, &rec_params) {
+                    Ok(result) => {
+                        blocks.push(Block::Formula(FormulaBlock {
+                            formula: Formula {
+                                source: FormulaSource::Latex(result.text),
+                                display_mode: true,
+                                confidence: result.confidence,
+                            },
+                            geometry: Some(latexsnipper_ast::Rect::new(rect.x, rect.y, rect.width, rect.height)),
+                            source: Some(SourceInfo::new()),
+                        }));
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to recognize formula: {}", e);
+                    }
+                }
+            }
+        }
+
+        Ok(Document {
+            metadata: Metadata::default(),
+            pages: vec![Page {
+                width: image.width() as f32,
+                height: image.height() as f32,
+                blocks,
+                page_number: Some(1),
+            }],
+        })
     }
 }
 
