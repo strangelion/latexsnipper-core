@@ -5,6 +5,8 @@ use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::typst::TypstRenderer;
 use latexsnipper_syntax::markdown::MarkdownRenderer;
 use latexsnipper_conversion::{Converter, LatexConverter, OmmlConverter, MathmlConverter, TypstConverter, MarkdownInlineConverter, MarkdownBlockConverter, HtmlConverter};
+use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
+use latexsnipper_runtime::StubRuntime;
 
 /// Initialize the WASM module.
 #[wasm_bindgen]
@@ -81,6 +83,38 @@ pub fn available_formats() -> String {
         "mathml", "omml", "typst", "html",
     ];
     serde_json::to_string(&formats).unwrap_or_default()
+}
+
+/// Recognize content in image data (raw RGB bytes).
+/// Returns Document JSON string.
+/// mode: "formula", "text", or "mixed"
+#[wasm_bindgen]
+pub fn recognize(data: &[u8], width: u32, height: u32, mode: &str) -> Result<String, JsValue> {
+    use latexsnipper_image::SnipperImage;
+    use latexsnipper_image::color::PixelFormat;
+
+    if data.len() != (width * height * 3) as usize {
+        return Err(JsValue::from_str("Data length doesn't match width*height*3"));
+    }
+
+    let image = SnipperImage::new(width, height, PixelFormat::Rgb, data.to_vec());
+
+    let recognize_mode = match mode {
+        "text" => RecognizeMode::Text,
+        "mixed" => RecognizeMode::Mixed,
+        _ => RecognizeMode::Formula,
+    };
+
+    let config = EngineConfig::default();
+    let runtime = Box::new(StubRuntime::new());
+    let engine = SnipperEngine::new(config, runtime);
+
+    // Note: WASM is single-threaded, so we use a basic tokio runtime
+    let rt = tokio::runtime::Runtime::new().map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let doc = rt.block_on(engine.recognize(image, recognize_mode))
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    serde_json::to_string(&doc).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Check if the WASM module is working.
