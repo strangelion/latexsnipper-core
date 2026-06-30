@@ -12,6 +12,7 @@ use latexsnipper_inference::{
 };
 
 use crate::config::EngineConfig;
+use crate::api::{RecognizeRequest, RecognizeResponse};
 
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 pub struct SnipperEngine {
@@ -43,7 +44,19 @@ impl SnipperEngine {
     pub fn model_manager(&self) -> &ModelManager { &self.model_manager }
     pub fn config(&self) -> &EngineConfig { &self.config }
 
-    /// Recognize content in an image.
+    /// Recognize content using a Request object (Builder pattern).
+    pub async fn recognize_with_request(&self, request: RecognizeRequest) -> Result<RecognizeResponse> {
+        let start = std::time::Instant::now();
+        let mode = request.mode;
+
+        let doc = self.recognize(request.image, mode).await?;
+        let elapsed = start.elapsed().as_millis() as u64;
+        let region_count = doc.block_count();
+
+        Ok(RecognizeResponse::new(doc, mode, region_count, elapsed))
+    }
+
+    /// Recognize content in an image (legacy API).
     pub async fn recognize(&self, image: SnipperImage, mode: RecognizeMode) -> Result<Document> {
         info!("Recognizing image ({}, {}) in {:?} mode", image.width(), image.height(), mode);
 
