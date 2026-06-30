@@ -33,6 +33,7 @@ mod tests {
                             italic: None,
                         })],
                         geometry: None,
+                        source: None,
                     }),
                     Block::Formula(FormulaBlock {
                         formula: Formula {
@@ -41,6 +42,7 @@ mod tests {
                             confidence: 0.95,
                         },
                         geometry: None,
+                        source: None,
                     }),
                     Block::Formula(FormulaBlock {
                         formula: Formula {
@@ -49,6 +51,7 @@ mod tests {
                             confidence: 0.92,
                         },
                         geometry: None,
+                        source: None,
                     }),
                 ],
                 page_number: Some(1),

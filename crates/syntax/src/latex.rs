@@ -90,6 +90,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                             italic: None,
                         })],
                         geometry: None,
+                        source: None,
                     }));
                 }
                 blocks.push(Block::Formula(FormulaBlock {
@@ -99,6 +100,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                         confidence: 1.0,
                     },
                     geometry: None,
+                    source: None,
                 }));
                 remaining = &after_start[end + 2..];
                 continue;
@@ -125,6 +127,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                             italic: None,
                         })],
                         geometry: None,
+                        source: None,
                     }));
                 }
                 blocks.push(Block::Formula(FormulaBlock {
@@ -134,6 +137,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                         confidence: 1.0,
                     },
                     geometry: None,
+                    source: None,
                 }));
                 remaining = &after_start[end + 1..];
                 continue;
@@ -150,6 +154,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                     italic: None,
                 })],
                 geometry: None,
+                source: None,
             }));
         }
         break;

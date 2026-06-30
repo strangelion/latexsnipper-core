@@ -15,6 +15,7 @@ pub fn fake_document() -> Document {
                         italic: None,
                     })],
                     geometry: None,
+                    source: None,
                 }),
                 Block::Formula(FormulaBlock {
                     formula: Formula {
@@ -23,6 +24,7 @@ pub fn fake_document() -> Document {
                         confidence: 0.95,
                     },
                     geometry: None,
+                    source: None,
                 }),
                 Block::Paragraph(ParagraphBlock {
                     inlines: vec![Inline::Text(TextRun {
@@ -31,6 +33,7 @@ pub fn fake_document() -> Document {
                         italic: None,
                     })],
                     geometry: None,
+                    source: None,
                 }),
                 Block::Formula(FormulaBlock {
                     formula: Formula {
@@ -39,6 +42,7 @@ pub fn fake_document() -> Document {
                         confidence: 0.92,
                     },
                     geometry: None,
+                    source: None,
                 }),
             ],
             page_number: Some(1),

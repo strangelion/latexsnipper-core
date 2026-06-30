@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use latexsnipper_foundation::{SnipperError, Result};
 
-use crate::config::ModelConfig;
-use crate::manifest::ModelManifest;
 
 /// Validates that a name contains no path traversal characters.
 fn validate_name(name: &str) -> Result<()> {

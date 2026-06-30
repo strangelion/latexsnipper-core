@@ -3,7 +3,7 @@ use crate::session::InferenceSession;
 use crate::model_handle::ModelHandle;
 use crate::acceleration::AccelerationMode;
 use latexsnipper_tensor::Tensor;
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::Result;
 
 /// Stub runtime for testing and development.
 /// Returns placeholder results without actual inference.

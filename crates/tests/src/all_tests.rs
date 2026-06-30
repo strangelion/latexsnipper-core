@@ -106,6 +106,7 @@ mod ast_tests {
             blocks: vec![Block::Formula(FormulaBlock {
                 formula: Formula::latex("E=mc^2"),
                 geometry: None,
+                source: None,
             })],
             page_number: Some(1),
         });
@@ -397,14 +398,17 @@ mod conversion_tests {
                     Block::Paragraph(ParagraphBlock {
                         inlines: vec![Inline::Text(TextRun { text: "Given ".into(), bold: None, italic: None })],
                         geometry: None,
+                        source: None,
                     }),
                     Block::Formula(FormulaBlock {
                         formula: Formula { source: FormulaSource::Latex("E=mc^2".into()), display_mode: false, confidence: 0.95 },
                         geometry: None,
+                        source: None,
                     }),
                     Block::Formula(FormulaBlock {
                         formula: Formula { source: FormulaSource::Latex("\\frac{a+b}{c}".into()), display_mode: true, confidence: 0.92 },
                         geometry: None,
+                        source: None,
                     }),
                 ],
                 page_number: Some(1),
@@ -440,7 +444,7 @@ mod conversion_tests {
     #[test]
     fn fraction_omml() {
         let doc = Document { metadata: Default::default(), pages: vec![Page { width: 0.0, height: 0.0,
-            blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None })],
+            blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None, source: None })],
             page_number: None }] };
         let r = OmmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<m:num>"));
@@ -450,7 +454,7 @@ mod conversion_tests {
     #[test]
     fn fraction_mathml() {
         let doc = Document { metadata: Default::default(), pages: vec![Page { width: 0.0, height: 0.0,
-            blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None })],
+            blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None, source: None })],
             page_number: None }] };
         let r = MathmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<mfrac>"));

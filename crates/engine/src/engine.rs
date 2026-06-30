@@ -242,6 +242,7 @@ impl SnipperEngine {
                         confidence: result.confidence,
                     },
                     geometry: None,
+                    source: None,
                 })],
                 page_number: Some(1),
             }],

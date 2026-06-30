@@ -3,7 +3,6 @@ use std::sync::Arc;
 use ort::{
     session::Session,
     environment::Environment,
-    session::builder::SessionBuilder,
     value::Value,
 };
 
@@ -129,7 +128,7 @@ impl RuntimeBackend for OnnxRuntimeBackend {
                 drop(sessions);
                 let sessions = self.sessions.lock().map_err(|_| SnipperError::Runtime("Lock poisoned".into()))?;
                 if let Some(cached) = sessions.get(&cache_key) {
-                    let session_guard = cached.lock().map_err(|_| SnipperError::Runtime("Session lock".into()))?;
+                    let _session_guard = cached.lock().map_err(|_| SnipperError::Runtime("Session lock".into()))?;
                     // We can't clone Session, so we return a reference-based wrapper
                     // For now, just create a new session (ORT handles caching internally)
                 }

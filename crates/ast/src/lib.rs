@@ -5,6 +5,7 @@ pub mod geometry;
 pub mod inline;
 pub mod metadata;
 pub mod operation;
+pub mod span;
 pub mod visitor;
 
 pub use block::{Block, FormulaBlock, ParagraphBlock, TableCell, TableBlock, FigureBlock};
@@ -14,4 +15,5 @@ pub use geometry::{Point, Rect, Size};
 pub use inline::{ImageInline, Inline, TextRun};
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;
+pub use span::{NodeId, Span, Position, SourceInfo};
 pub use visitor::{DocumentVisitor, TextCollector};

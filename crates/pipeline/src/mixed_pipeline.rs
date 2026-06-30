@@ -61,6 +61,7 @@ pub fn build_document_from_mixed(
                     confidence,
                 },
                 geometry: None,
+                source: None,
             }),
             RegionType::Text => Block::Paragraph(ParagraphBlock {
                 inlines: vec![Inline::Text(TextRun {
@@ -69,6 +70,7 @@ pub fn build_document_from_mixed(
                     italic: None,
                 })],
                 geometry: None,
+                source: None,
             }),
         }
     }).collect();

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Inline, Rect};
+use crate::{Inline, Rect, SourceInfo};
 
 /// A layout block in the document.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +22,8 @@ pub struct ParagraphBlock {
     pub inlines: Vec<Inline>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
 }
 
 /// A standalone formula block (display math).
@@ -30,6 +32,8 @@ pub struct FormulaBlock {
     pub formula: crate::Formula,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
 }
 
 /// A table block.
@@ -38,6 +42,8 @@ pub struct TableBlock {
     pub rows: Vec<Vec<TableCell>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
 }
 
 /// A table cell.
@@ -55,4 +61,6 @@ pub struct FigureBlock {
     pub caption: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
 }

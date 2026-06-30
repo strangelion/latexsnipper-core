@@ -53,6 +53,7 @@ pub fn build_document(
                 italic: None,
             })],
             geometry: None,
+            source: None,
         }));
     }
 
@@ -64,6 +65,7 @@ pub fn build_document(
                 confidence,
             },
             geometry: None,
+            source: None,
         }));
     }
 

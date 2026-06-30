@@ -90,6 +90,7 @@ impl FakePipeline {
                         confidence: result.confidence,
                     },
                     geometry: Some(detection.rect),
+                    source: None,
                 }));
             } else {
                 blocks.push(Block::Paragraph(ParagraphBlock {
@@ -99,6 +100,7 @@ impl FakePipeline {
                         italic: None,
                     })],
                     geometry: Some(detection.rect),
+                    source: None,
                 }));
             }
         }

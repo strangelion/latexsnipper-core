@@ -40,6 +40,7 @@ pub fn build_document_from_text(lines: Vec<(String, f32)>) -> Document {
                 italic: None,
             })],
             geometry: None,
+            source: None,
         })
     }).collect();
 
