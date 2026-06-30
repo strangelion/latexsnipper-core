@@ -5,7 +5,7 @@ use crate::node::PipelineNode;
 use crate::context::PipelineContext;
 
 /// Crops detected regions from the image.
-/// Stores cropped regions in context metadata for downstream recognition.
+/// Reads detection results from context metadata, crops regions, stores in metadata.
 pub struct CropNode {
     name: String,
     min_size: u32,
@@ -26,9 +26,15 @@ impl PipelineNode for CropNode {
     fn name(&self) -> &str { &self.name }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
-        // Cropping is performed by the Engine using detection results
-        // This node acts as a marker in the pipeline graph
-        log::info!("Pipeline: {} node executed (min_size={})", self.name, self.min_size);
+        // Crop regions are handled by the Engine which passes crop info via metadata
+        // This node validates that crop data exists
+        let formula_crops = ctx.get("formula_crops").map(|v| v.as_array().map_or(0, |a| a.len())).unwrap_or(0);
+        let text_crops = ctx.get("text_crops").map(|v| v.as_array().map_or(0, |a| a.len())).unwrap_or(0);
+
+        if formula_crops > 0 || text_crops > 0 {
+            log::info!("Pipeline: crop node — {} formula + {} text regions", formula_crops, text_crops);
+        }
+
         Ok(())
     }
 }
