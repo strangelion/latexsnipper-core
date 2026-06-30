@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
+use latexsnipper_runtime::RuntimeBackend;
 
 /// Context passed through the pipeline.
 /// Each node reads from and writes to this context.
@@ -13,6 +14,8 @@ pub struct PipelineContext {
     pub metadata: HashMap<String, serde_json::Value>,
     /// Whether the pipeline was cancelled.
     pub cancelled: bool,
+    /// Models directory path.
+    pub models_dir: Option<std::path::PathBuf>,
 }
 
 impl PipelineContext {
@@ -22,12 +25,19 @@ impl PipelineContext {
             document: Document::new(),
             metadata: HashMap::new(),
             cancelled: false,
+            models_dir: None,
         }
     }
 
     pub fn with_image(image: SnipperImage) -> Self {
         let mut ctx = Self::new();
         ctx.image = Some(image);
+        ctx
+    }
+
+    pub fn with_models_dir(models_dir: std::path::PathBuf) -> Self {
+        let mut ctx = Self::new();
+        ctx.models_dir = Some(models_dir);
         ctx
     }
 
