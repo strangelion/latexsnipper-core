@@ -101,7 +101,7 @@ fn render_block(block: &Block, mode: &MarkdownMode) -> String {
     }
 }
 
-fn render_inlines(inlines: &[Inline], mode: &MarkdownMode) -> String {
+fn render_inlines(inlines: &[Inline], _mode: &MarkdownMode) -> String {
     let mut parts = Vec::new();
     for inline in inlines {
         match inline {

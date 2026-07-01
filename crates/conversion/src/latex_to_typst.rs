@@ -27,7 +27,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
         }
         LatexNode::Group(nodes) => nodes
             .iter()
-            .map(|n| latex_ast_to_typst(n))
+            .map(latex_ast_to_typst)
             .collect::<Vec<_>>()
             .join(" "),
         LatexNode::Fraction { num, den } => {
@@ -64,7 +64,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
         LatexNode::Math { content, display } => {
             let inner = content
                 .iter()
-                .map(|n| latex_ast_to_typst(n))
+                .map(latex_ast_to_typst)
                 .collect::<Vec<_>>()
                 .join(" ");
             if *display {
@@ -80,7 +80,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
         } => {
             let inner = content
                 .iter()
-                .map(|n| latex_ast_to_typst(n))
+                .map(latex_ast_to_typst)
                 .collect::<Vec<_>>()
                 .join(" ");
             let typst_left = convert_delimiter(left);
@@ -107,7 +107,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 .iter()
                 .map(|row| {
                     let cells: Vec<String> =
-                        row.iter().map(|cell| latex_ast_to_typst(cell)).collect();
+                        row.iter().map(latex_ast_to_typst).collect();
                     cells.join(", ")
                 })
                 .collect();
@@ -118,7 +118,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 .iter()
                 .map(|row| {
                     row.iter()
-                        .map(|cell| latex_ast_to_typst(cell))
+                        .map(latex_ast_to_typst)
                         .collect::<Vec<_>>()
                         .join(" ")
                 })
@@ -126,7 +126,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             format!("cases({})", cases.join(", "))
         }
         LatexNode::Command { name, args } => {
-            let arg_str: Vec<String> = args.iter().map(|a| latex_ast_to_typst(a)).collect();
+            let arg_str: Vec<String> = args.iter().map(latex_ast_to_typst).collect();
             convert_command(name, &arg_str, args)
         }
     }
@@ -138,7 +138,7 @@ fn convert_delimiter(s: &str) -> &str {
         "(" | ")" => s,
         "[" | "]" => s,
         "{" | "}" => s,
-        "|" | "|" => "|",
+        "|" => "|",
         "||" => "||",
         "." => ".", // invisible delimiter
         _ => s,

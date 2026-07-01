@@ -9,11 +9,12 @@ pub struct LatexConverter;
 
 impl Converter for LatexConverter {
     fn convert(&self, doc: &Document) -> Result<String> {
-        let mut parts = Vec::new();
-        parts.push("\\documentclass{article}".to_string());
-        parts.push("\\usepackage{amsmath}".to_string());
-        parts.push("\\usepackage{amssymb}".to_string());
-        parts.push("\\begin{document}".to_string());
+        let mut parts = vec![
+            "\\documentclass{article}".to_string(),
+            "\\usepackage{amsmath}".to_string(),
+            "\\usepackage{amssymb}".to_string(),
+            "\\begin{document}".to_string(),
+        ];
 
         for page in &doc.pages {
             for block in &page.blocks {
