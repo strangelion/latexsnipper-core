@@ -54,9 +54,7 @@ pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
     let first = if s.starts_with('{') {
         &s[1..end]
     } else {
-        // Skip leading non-brace content (e.g. \frac prefix from nested command)
-        let start = s.find('{').unwrap_or(0);
-        &s[start..end]
+        &s[..end]
     };
     let rest = &s[end + 1..];
     let rest = rest.trim_start();

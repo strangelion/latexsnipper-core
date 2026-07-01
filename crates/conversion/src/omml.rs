@@ -230,7 +230,7 @@ fn latex_to_omml(latex: &str) -> String {
     }
 
     // \frac{...}{...}
-    if let Some(inner) = latex.strip_prefix("\\frac{") {
+    if let Some(inner) = latex.strip_prefix("\\frac") {
         if let Some((num, den)) = split_brace_pair(inner) {
             return format!(
                 "<m:f>\n  <m:num>{}</m:num>\n  <m:den>{}</m:den>\n</m:f>",
