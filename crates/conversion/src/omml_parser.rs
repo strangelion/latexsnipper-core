@@ -222,7 +222,11 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
         "nary" => {
             let chr = {
                 let c = get_child(children, "chr");
-                if c.is_empty() { get_child(children, "naryPr") } else { c }
+                if c.is_empty() {
+                    get_child(children, "naryPr")
+                } else {
+                    c
+                }
             };
             let op = map_nary(&chr);
             let sub = get_child(children, "sub");
