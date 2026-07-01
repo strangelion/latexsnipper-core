@@ -4,6 +4,11 @@ use std::os::raw::c_char;
 use latexsnipper_foundation::{Result, SnipperError};
 
 /// Convert a C string to a Rust String.
+///
+/// # Safety
+///
+/// - `ptr` must be a valid pointer to a null-terminated C string.
+/// - `ptr` must remain valid for the duration of this function.
 pub unsafe fn cstr_to_string(ptr: *const c_char) -> Result<String> {
     if ptr.is_null() {
         return Err(SnipperError::Other("Null pointer".into()));
@@ -22,6 +27,11 @@ pub fn string_to_cstr(s: &str) -> Result<*mut c_char> {
 }
 
 /// Free a C string allocated by string_to_cstr.
+///
+/// # Safety
+///
+/// - `ptr` must be a valid pointer to a C string allocated by `string_to_cstr`.
+/// - `ptr` must not be used after this function is called.
 pub unsafe fn free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         drop(CString::from_raw(ptr));

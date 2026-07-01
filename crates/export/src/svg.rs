@@ -12,14 +12,11 @@ impl Generator for SvgGenerator {
         );
 
         for node in &tree.nodes {
-            match node {
-                RenderNode::Page(nodes) => {
-                    let mut y = 20;
-                    for child in nodes {
-                        y = render_node(child, &mut svg, y);
-                    }
+            if let RenderNode::Page(nodes) = node {
+                let mut y = 20;
+                for child in nodes {
+                    y = render_node(child, &mut svg, y);
                 }
-                _ => {}
             }
         }
 

@@ -15,6 +15,7 @@ static ENGINE: Lazy<Mutex<Option<SnipperEngine>>> = Lazy::new(|| Mutex::new(None
 /// Initialize the engine.
 /// Returns 1 on success, 0 on failure.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn latexsnipper_init(models_dir: *const c_char) -> i32 {
     let dir = match unsafe { cstr_to_string(models_dir) } {
         Ok(s) => s,
@@ -94,6 +95,7 @@ pub extern "C" fn latexsnipper_release() {
 
 /// Free a string.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn latexsnipper_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {

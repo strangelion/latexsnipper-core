@@ -12,6 +12,7 @@ static ENGINE: Lazy<Mutex<Option<SnipperEngine>>> = Lazy::new(|| Mutex::new(None
 /// Initialize the engine with a models directory.
 /// Returns 1 on success, 0 on failure.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeInit(
     models_dir: *const std::os::raw::c_char,
 ) -> i32 {
@@ -100,6 +101,7 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRelease() {
 
 /// Free a string returned by the bridge.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeFreeString(
     ptr: *mut std::os::raw::c_char,
 ) {

@@ -10,32 +10,29 @@ impl Generator for TextGenerator {
         let mut parts = Vec::new();
 
         for node in &tree.nodes {
-            match node {
-                RenderNode::Page(nodes) => {
-                    for child in nodes {
-                        match child {
-                            RenderNode::Text(text) => {
-                                parts.push(text.clone());
-                            }
-                            RenderNode::Formula { latex, .. } => {
-                                parts.push(latex.clone());
-                            }
-                            RenderNode::Paragraph(inlines) => {
-                                for inline in inlines {
-                                    match inline {
-                                        RenderNode::Text(text) => parts.push(text.clone()),
-                                        RenderNode::Formula { latex, .. } => {
-                                            parts.push(latex.clone())
-                                        }
-                                        _ => {}
+            if let RenderNode::Page(nodes) = node {
+                for child in nodes {
+                    match child {
+                        RenderNode::Text(text) => {
+                            parts.push(text.clone());
+                        }
+                        RenderNode::Formula { latex, .. } => {
+                            parts.push(latex.clone());
+                        }
+                        RenderNode::Paragraph(inlines) => {
+                            for inline in inlines {
+                                match inline {
+                                    RenderNode::Text(text) => parts.push(text.clone()),
+                                    RenderNode::Formula { latex, .. } => {
+                                        parts.push(latex.clone())
                                     }
+                                    _ => {}
                                 }
                             }
-                            _ => {}
                         }
+                        _ => {}
                     }
                 }
-                _ => {}
             }
         }
 
