@@ -139,7 +139,11 @@ fn latex_to_mathml(latex: &str) -> String {
         if let Some(close) = content.find('}') {
             let color = &content[..close];
             let rest = &content[close + 1..];
-            let inner = rest.strip_prefix('{').unwrap_or(rest).strip_suffix('}').unwrap_or(rest);
+            let inner = rest
+                .strip_prefix('{')
+                .unwrap_or(rest)
+                .strip_suffix('}')
+                .unwrap_or(rest);
             let hex = mathml_color_name(color.trim());
             return format!(
                 "<mstyle mathcolor=\"{}\"><mrow>{}</mrow></mstyle>",

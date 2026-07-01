@@ -7,14 +7,26 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
     let mut reader = Reader::from_str(&cleaned);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
-    let mut stack: Vec<(String, Vec<String>)> = Vec::new();
+    let mut stack: Vec<(String, Vec<String>, String)> = Vec::new();
     let mut current_text = String::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
                 let tag = local_tag(e.name().as_ref());
-                stack.push((tag, Vec::new()));
+                let mut attrs = String::new();
+                for attr in e.attributes().flatten() {
+                    let key = local_tag(attr.key.as_ref());
+                    if key == "xmlns" || key.starts_with("xmlns:") {
+                        continue;
+                    }
+                    let val = String::from_utf8_lossy(&attr.value).to_string();
+                    if !attrs.is_empty() {
+                        attrs.push(' ');
+                    }
+                    attrs.push_str(&format!("{}={}", key, val));
+                }
+                stack.push((tag, Vec::new(), attrs));
                 current_text.clear();
             }
             Ok(Event::Text(e)) => {
@@ -24,23 +36,23 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
             Ok(Event::Empty(e)) => {
                 let tag = local_tag(e.name().as_ref());
                 let text = extract_text_attrs(&e);
-                let node = build_mathml_node(&tag, &text, &[]);
-                if let Some((_, ref mut parent)) = stack.last_mut() {
+                let node = build_mathml_node(&tag, &text, &[], "");
+                if let Some((_, ref mut parent, _)) = stack.last_mut() {
                     parent.push(node);
                 } else {
                     return Ok(node);
                 }
             }
             Ok(Event::End(_)) => {
-                if let Some((tag, children)) = stack.pop() {
+                if let Some((tag, children, attrs)) = stack.pop() {
                     let text = if current_text.is_empty() {
                         collect_text(&children)
                     } else {
                         current_text.clone()
                     };
-                    let node = build_mathml_node(&tag, &text, &children);
+                    let node = build_mathml_node(&tag, &text, &children, &attrs);
                     current_text.clear();
-                    if let Some((_, ref mut parent)) = stack.last_mut() {
+                    if let Some((_, ref mut parent, _)) = stack.last_mut() {
                         parent.push(node);
                     } else {
                         return Ok(node);
@@ -54,9 +66,9 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
         buf.clear();
     }
 
-    if let Some((tag, children)) = stack.pop() {
+    if let Some((tag, children, attrs)) = stack.pop() {
         let text = collect_text(&children);
-        Ok(build_mathml_node(&tag, &text, &children))
+        Ok(build_mathml_node(&tag, &text, &children, &attrs))
     } else {
         Err("Empty MathML document".to_string())
     }
@@ -95,7 +107,7 @@ fn collect_text(children: &[String]) -> String {
     children.concat()
 }
 
-fn build_mathml_node(tag: &str, text: &str, children: &[String]) -> String {
+fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) -> String {
     match tag {
         "math" | "mrow" | "style" | "semantics" | "annotation-xml" | "none" => {
             if children.is_empty() {
@@ -103,6 +115,40 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String]) -> String {
             } else {
                 children.join("")
             }
+        }
+
+        "mstyle" => {
+            let inner = if children.is_empty() {
+                text.to_string()
+            } else {
+                children.join("")
+            };
+            let mut color = String::new();
+            let mut bold = false;
+            let mut italic = false;
+            // Check attrs string "mathcolor=red fontweight=bold"
+            for part in attrs.split_whitespace() {
+                if let Some(v) = part.strip_prefix("mathcolor=") {
+                    color = v.to_string();
+                }
+                if part.starts_with("fontweight=") && part.contains("bold") {
+                    bold = true;
+                }
+                if part.starts_with("fontstyle=") && part.contains("italic") {
+                    italic = true;
+                }
+            }
+            let mut result = inner;
+            if !color.is_empty() {
+                result = format!("\\textcolor{{{}}}{{{}}}", color, result);
+            }
+            if bold {
+                result = format!("\\mathbf{{{}}}", result);
+            }
+            if italic {
+                result = format!("\\mathit{{{}}}", result);
+            }
+            result
         }
 
         "mi" => {

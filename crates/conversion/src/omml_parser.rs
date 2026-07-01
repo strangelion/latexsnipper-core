@@ -133,13 +133,7 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                     let result = build_latex(&tag, &tagged_children, &text);
 
                     if let Some((_, ref mut parent)) = stack.last_mut() {
-                        if tag.ends_with("Pr") || tag == "mcs" || tag == "mc" {
-                            for tc in tagged_children {
-                                parent.push(tc);
-                            }
-                        } else {
-                            parent.push((tag, result));
-                        }
+                        parent.push((tag, result));
                     } else {
                         return Ok(result);
                     }
@@ -161,12 +155,44 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .map(|(_, v)| v.clone())
             .collect::<Vec<_>>()
             .join(""),
-        "r" => children
-            .iter()
-            .filter(|(t, _)| t == "t")
-            .map(|(_, v)| v.as_str())
-            .collect::<Vec<_>>()
-            .concat(),
+        "r" => {
+            // Extract run properties (color, bold, italic) from rPr
+            let mut color = String::new();
+            let mut bold = false;
+            let mut italic = false;
+            for (tag, val) in children {
+                if tag == "rPr" {
+                    for part in val.split(',') {
+                        if let Some(c) = part.strip_prefix("color=") {
+                            color = c.to_string();
+                        }
+                        if part == "b=1" {
+                            bold = true;
+                        }
+                        if part == "i=1" {
+                            italic = true;
+                        }
+                    }
+                }
+            }
+            let text: String = children
+                .iter()
+                .filter(|(t, _)| t == "t")
+                .map(|(_, v)| v.as_str())
+                .collect::<Vec<_>>()
+                .concat();
+            let mut result = text;
+            if !color.is_empty() {
+                result = format!("\\textcolor{{{}}}{{{}}}", color, result);
+            }
+            if bold {
+                result = format!("\\mathbf{{{}}}", result);
+            }
+            if italic {
+                result = format!("\\mathit{{{}}}", result);
+            }
+            result
+        }
         "t" => _text.to_string(),
         "f" => {
             let (num, den) = get_two(children);
@@ -194,7 +220,10 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
         }
         "nary" => {
-            let chr = get_child(children, "chr");
+            let chr = {
+                let c = get_child(children, "chr");
+                if c.is_empty() { get_child(children, "naryPr") } else { c }
+            };
             let op = map_nary(&chr);
             let sub = get_child(children, "sub");
             let sup = get_child(children, "sup");
@@ -282,6 +311,30 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .map(|(_, v)| v.clone())
             .collect::<Vec<_>>()
             .join(""),
+        // Run properties: extract color/bold/italic for parent <m:r>
+        "rPr" | "w:rPr" => {
+            let mut parts = Vec::new();
+            for (tag, val) in children {
+                if tag == "color" || tag == "w:color" {
+                    parts.push(format!("color={}", val));
+                }
+                if tag == "b" || tag == "w:b" {
+                    parts.push("b=1".to_string());
+                }
+                if tag == "i" || tag == "w:i" {
+                    parts.push("i=1".to_string());
+                }
+                // Handle nested w:rPr inside rPr
+                if (tag == "w:rPr" || tag == "rPr") && !val.is_empty() {
+                    for part in val.split(',') {
+                        if !part.is_empty() {
+                            parts.push(part.to_string());
+                        }
+                    }
+                }
+            }
+            parts.join(",")
+        }
         _ => children
             .iter()
             .map(|(_, v)| v.clone())
