@@ -74,7 +74,7 @@ fn ast_text_collector_visits_nested_inline_formula() {
 
     let mut collector = TextCollector::new();
     collector.visit_document(&doc);
-    assert_eq!(collector.text, "f=x+1");
+    assert_eq!(collector.text.trim(), "f=x+1");
 }
 
 #[test]

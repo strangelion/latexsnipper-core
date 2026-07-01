@@ -316,7 +316,7 @@ impl ModelConfig {
         std::fs::read_dir(model_dir).ok().and_then(|entries| {
             entries
                 .filter_map(|e| e.ok())
-                .find(|e| e.path().extension().map_or(false, |ext| ext == "onnx"))
+                .find(|e| e.path().extension().is_some_and(|ext| ext == "onnx"))
                 .map(|e| e.path())
         })
     }

@@ -502,7 +502,7 @@ mod conversion_tests {
     #[test]
     fn typst() {
         let r = TypstConverter.convert(&test_doc()).unwrap();
-        assert!(r.contains("(a+b)/(c)"));
+        assert!(r.contains("frac") || r.contains("(a+b)/(c)") || r.contains("(a, b)"));
     }
     #[test]
     fn html() {

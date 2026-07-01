@@ -1,10 +1,14 @@
 //! LaTeXSnipper Core SDK — One-line Image to Export
 //!
-//! ```rust
-//! use latexsnipper_sdk::Snipper;
+//! ```rust,no_run
+//! use latexsnipper_pipeline::sdk::Snipper;
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let result = Snipper::from_file("input.png")?
-//!     .to_latex();
+//!     .to_latex()?;
+//! println!("{}", result);
+//! # Ok(())
+//! # }
 //! ```
 
 use latexsnipper_ast::*;
