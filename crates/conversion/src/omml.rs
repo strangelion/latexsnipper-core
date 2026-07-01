@@ -56,6 +56,53 @@ fn convert_formula_to_omml(f: &Formula) -> String {
 fn latex_to_omml(latex: &str) -> String {
     let latex = latex.trim();
 
+    // \textcolor{...}{...}
+    if let Some(content) = latex.strip_prefix("\\textcolor{") {
+        // Parse: color}{content}
+        if let Some(close_brace) = content.find('}') {
+            let color = &content[..close_brace];
+            let rest = &content[close_brace + 1..];
+            // rest should start with '{' for the content block
+            let inner = rest
+                .strip_prefix('{')
+                .unwrap_or(rest)
+                .strip_suffix('}')
+                .unwrap_or(rest);
+            let hex = color_name_to_hex(color.trim());
+            let rendered = latex_to_omml(inner);
+            return wrap_with_color(&rendered, &hex);
+        }
+    }
+    if let Some(content) = latex.strip_prefix("\\color{") {
+        // \color{blue} applies to rest of expression; extract color name
+        if let Some(close) = content.find('}') {
+            let color = &content[..close];
+            let hex = color_name_to_hex(color.trim());
+            let rest = &content[close + 1..];
+            if rest.is_empty() {
+                return wrap_with_color(&wrap_mtext(color), &hex);
+            }
+            // Apply color to the rest of the expression
+            let rendered = latex_to_omml(rest);
+            return wrap_with_color(&rendered, &hex);
+        }
+    }
+
+    // \mathbf{...} — bold
+    if let Some(content) = latex.strip_prefix("\\mathbf{") {
+        if let Some(inner) = extract_brace_content(content) {
+            let rendered = latex_to_omml(inner);
+            return wrap_with_bold(&rendered);
+        }
+    }
+    // \boldsymbol{...} — bold
+    if let Some(content) = latex.strip_prefix("\\boldsymbol{") {
+        if let Some(inner) = extract_brace_content(content) {
+            let rendered = latex_to_omml(inner);
+            return wrap_with_bold(&rendered);
+        }
+    }
+
     // \hat{x}, \vec{v}, \bar{x}, \dot{x}, \ddot{x}, \tilde{x}, \check{x}
     if let Some(content) = latex.strip_prefix("\\hat{") {
         let inner = content.strip_suffix('}').unwrap_or(content);
@@ -540,4 +587,55 @@ fn aligned_to_omml(content: &str) -> String {
         rows_xml.push(format!("  <m:r>\n{}\n  </m:r>", cells.join("\n")));
     }
     format!("<m:mRow>\n{}\n</m:mRow>", rows_xml.join("\n"))
+}
+
+// ── Color / Font helpers ──────────────────────────────────────
+
+fn color_name_to_hex(name: &str) -> String {
+    match name.to_lowercase().as_str() {
+        "red" => "FF0000".to_string(),
+        "green" => "00FF00".to_string(),
+        "blue" => "0000FF".to_string(),
+        "yellow" => "FFFF00".to_string(),
+        "cyan" => "00FFFF".to_string(),
+        "magenta" | "fuchsia" => "FF00FF".to_string(),
+        "black" => "000000".to_string(),
+        "white" => "FFFFFF".to_string(),
+        "gray" | "grey" => "808080".to_string(),
+        "orange" => "FFA500".to_string(),
+        "purple" => "800080".to_string(),
+        "pink" => "FFC0CB".to_string(),
+        "brown" => "A52A2A".to_string(),
+        "darkgreen" | "dark green" => "006400".to_string(),
+        "darkblue" | "dark blue" => "00008B".to_string(),
+        "lightblue" | "light blue" => "ADD8E6".to_string(),
+        "lightgray" | "light grey" => "D3D3D3".to_string(),
+        s if s.starts_with('#') && s.len() == 7 => s[1..].to_string(),
+        s if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) => s.to_string(),
+        _ => "000000".to_string(),
+    }
+}
+
+fn wrap_with_color(omml_content: &str, hex: &str) -> String {
+    format!(
+        "<m:r><m:rPr><w:rPr><w:color w:val=\"{}\"/></w:rPr></m:rPr>{}</m:r>",
+        hex, omml_content
+    )
+}
+
+fn wrap_with_bold(omml_content: &str) -> String {
+    format!(
+        "<m:r><m:rPr><w:rPr><w:b/></w:rPr></m:rPr>{}</m:r>",
+        omml_content
+    )
+}
+
+/// Extract content inside the first `{...}` block.
+/// For input "content}rest", returns Some("content").
+fn extract_brace_content(s: &str) -> Option<&str> {
+    if let Some(close) = s.find('}') {
+        Some(&s[..close])
+    } else {
+        None
+    }
 }
