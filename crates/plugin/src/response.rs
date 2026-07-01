@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use latexsnipper_ast::Document;
+use std::collections::HashMap;
 
 /// A response from a plugin.
 #[derive(Debug, Clone)]

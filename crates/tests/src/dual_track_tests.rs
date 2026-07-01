@@ -1,11 +1,11 @@
 // Dual-track testing: Mock vs ONNX auto-comparison
 // Runs the same input through both runtimes and diffs the results
 
-use latexsnipper_engine::{SnipperEngine, EngineConfig};
-use latexsnipper_runtime::{StubRuntime, OnnxRuntimeBackend};
-use latexsnipper_mock::FakePipeline;
-use latexsnipper_image::SnipperImage;
+use latexsnipper_engine::{EngineConfig, SnipperEngine};
 use latexsnipper_image::color::PixelFormat;
+use latexsnipper_image::SnipperImage;
+use latexsnipper_mock::FakePipeline;
+use latexsnipper_runtime::{OnnxRuntimeBackend, StubRuntime};
 
 fn test_image() -> SnipperImage {
     SnipperImage::new(100, 100, PixelFormat::Rgb, vec![128u8; 30000])
@@ -22,7 +22,11 @@ fn dual_runtime_initialization() {
 
     // ONNX runtime (may fail if ORT not available)
     let models_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap().parent().unwrap().join("models");
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("models");
     if models_dir.exists() {
         if let Ok(ort_backend) = OnnxRuntimeBackend::new(models_dir) {
             let ort_engine = SnipperEngine::new(config, Box::new(ort_backend));
@@ -63,12 +67,22 @@ fn mode_distinction() {
     let doc_mixed = mixed.run(&image).unwrap();
 
     // Formula should have formula blocks
-    assert!(doc_formula.pages[0].blocks.iter().any(|b| matches!(b, latexsnipper_ast::Block::Formula(_))));
+    assert!(doc_formula.pages[0]
+        .blocks
+        .iter()
+        .any(|b| matches!(b, latexsnipper_ast::Block::Formula(_))));
     // Text should have paragraph blocks
-    assert!(doc_text.pages[0].blocks.iter().any(|b| matches!(b, latexsnipper_ast::Block::Paragraph(_))));
+    assert!(doc_text.pages[0]
+        .blocks
+        .iter()
+        .any(|b| matches!(b, latexsnipper_ast::Block::Paragraph(_))));
     // Mixed should have both
     assert!(doc_mixed.block_count() >= 2);
 
-    println!("Mode distinction: formula={}, text={}, mixed={}",
-        doc_formula.block_count(), doc_text.block_count(), doc_mixed.block_count());
+    println!(
+        "Mode distinction: formula={}, text={}, mixed={}",
+        doc_formula.block_count(),
+        doc_text.block_count(),
+        doc_mixed.block_count()
+    );
 }

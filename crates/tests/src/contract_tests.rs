@@ -1,4 +1,7 @@
-use latexsnipper_ast::{Block, Document, DocumentVisitor, Formula, FormulaBlock, Inline, Page, ParagraphBlock, Rect, TextCollector, TextRun};
+use latexsnipper_ast::{
+    Block, Document, DocumentVisitor, Formula, FormulaBlock, Inline, Page, ParagraphBlock, Rect,
+    TextCollector, TextRun,
+};
 use latexsnipper_conversion::{Converter, MathmlConverter, TypstConverter};
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_pipeline::{PipelineContext, PipelineGraph, TransformNode};
@@ -58,7 +61,10 @@ fn ast_text_collector_visits_nested_inline_formula() {
             height: 0.0,
             page_number: None,
             blocks: vec![Block::Paragraph(ParagraphBlock {
-                inlines: vec![Inline::Text(TextRun::new("f=")), Inline::Formula(Formula::latex("x+1"))],
+                inlines: vec![
+                    Inline::Text(TextRun::new("f=")),
+                    Inline::Formula(Formula::latex("x+1")),
+                ],
                 geometry: None,
                 source: None,
             })],
@@ -78,10 +84,22 @@ fn conversion_handles_complex_latex_environments() {
     let aligned = formula_doc(r"\begin{aligned}a&=b+c\\d&=e+f\end{aligned}");
     let phantom = formula_doc(r"\phantom{x}");
 
-    assert!(MathmlConverter.convert(&cases).unwrap().contains("<mtable>"));
-    assert!(MathmlConverter.convert(&matrix).unwrap().contains("<mtable>"));
-    assert!(MathmlConverter.convert(&aligned).unwrap().contains("<mtable>"));
-    assert!(MathmlConverter.convert(&phantom).unwrap().contains("<mpadded"));
+    assert!(MathmlConverter
+        .convert(&cases)
+        .unwrap()
+        .contains("<mtable>"));
+    assert!(MathmlConverter
+        .convert(&matrix)
+        .unwrap()
+        .contains("<mtable>"));
+    assert!(MathmlConverter
+        .convert(&aligned)
+        .unwrap()
+        .contains("<mtable>"));
+    assert!(MathmlConverter
+        .convert(&phantom)
+        .unwrap()
+        .contains("<mpadded"));
     assert!(TypstConverter.convert(&matrix).unwrap().contains("matrix"));
 }
 
@@ -136,7 +154,9 @@ async fn pipeline_graph_stops_after_node_error() {
 fn runtime_stub_preserves_input_shape_for_mock_output() {
     let runtime = StubRuntime::new();
     let handle = ModelHandle::new("mock", "text-rec", "test");
-    let session = runtime.create_session(&handle, AccelerationMode::Cpu).unwrap();
+    let session = runtime
+        .create_session(&handle, AccelerationMode::Cpu)
+        .unwrap();
     let input = Tensor::float32("x", vec![1, 3, 48, 320], vec![0.0; 1 * 3 * 48 * 320]);
 
     let outputs = session.run(&[input]).unwrap();
@@ -144,8 +164,3 @@ fn runtime_stub_preserves_input_shape_for_mock_output() {
     assert_eq!(outputs[0].name(), "x_output");
     assert_eq!(outputs[0].shape(), &[1, 3, 48, 320]);
 }
-
-
-
-
-

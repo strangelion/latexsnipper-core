@@ -21,18 +21,39 @@ impl SnipperImage {
         if pixels.len() != expected {
             panic!(
                 "Pixel buffer size mismatch: expected {} ({}x{}x{}), got {}",
-                expected, width, height, bpp, pixels.len()
+                expected,
+                width,
+                height,
+                bpp,
+                pixels.len()
             );
         }
-        Self { width, height, format, pixels }
+        Self {
+            width,
+            height,
+            format,
+            pixels,
+        }
     }
 
-    pub fn width(&self) -> u32 { self.width }
-    pub fn height(&self) -> u32 { self.height }
-    pub fn format(&self) -> PixelFormat { self.format }
-    pub fn pixels(&self) -> &[u8] { &self.pixels }
-    pub fn pixels_mut(&mut self) -> &mut Vec<u8> { &mut self.pixels }
-    pub fn into_pixels(self) -> Vec<u8> { self.pixels }
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+    pub fn format(&self) -> PixelFormat {
+        self.format
+    }
+    pub fn pixels(&self) -> &[u8] {
+        &self.pixels
+    }
+    pub fn pixels_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.pixels
+    }
+    pub fn into_pixels(self) -> Vec<u8> {
+        self.pixels
+    }
 
     pub fn bytes_per_pixel(&self) -> usize {
         match self.format {
@@ -56,6 +77,11 @@ impl SnipperImage {
 
     /// Create from raw pixel buffer ( caller must ensure correct size ).
     pub fn from_raw(width: u32, height: u32, format: PixelFormat, data: Vec<u8>) -> Self {
-        Self { width, height, format, pixels: data }
+        Self {
+            width,
+            height,
+            format,
+            pixels: data,
+        }
     }
 }

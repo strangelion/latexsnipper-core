@@ -62,7 +62,10 @@ fn show_all_results() {
     show_conversion("a \\leq b \\quad a \\geq b \\quad a \\neq b", "10. 关系符");
 
     // 集合论
-    show_conversion("x \\in A \\quad A \\subset B \\quad A \\cup B", "11. 集合论");
+    show_conversion(
+        "x \\in A \\quad A \\subset B \\quad A \\cup B",
+        "11. 集合论",
+    );
 
     // 逻辑
     show_conversion("\\forall x \\quad \\exists y \\quad \\neg P", "12. 逻辑");
@@ -70,15 +73,33 @@ fn show_all_results() {
     // 复杂公式
     show_conversion("e^{i\\pi} + 1 = 0", "13. 欧拉公式");
     show_conversion("\\frac{dy}{dx} + P(x)y = Q(x)", "14. 微分方程");
-    show_conversion("\\mathbf{A} \\cdot \\mathbf{x} = \\lambda \\mathbf{x}", "15. 特征值方程");
-    show_conversion("\\nabla \\cdot \\vec{F} = \\frac{\\partial F_x}{\\partial x}", "16. 散度定理");
-    show_conversion("T_{\\mu\\nu} = g_{\\mu\\nu} + \\partial_\\mu \\phi \\partial_\\nu \\phi", "17. 度规张量");
-    show_conversion("\\zeta(s) = \\sum_{n=1}^{\\infty} \\frac{1}{n^s}", "18. 黎曼ζ函数");
+    show_conversion(
+        "\\mathbf{A} \\cdot \\mathbf{x} = \\lambda \\mathbf{x}",
+        "15. 特征值方程",
+    );
+    show_conversion(
+        "\\nabla \\cdot \\vec{F} = \\frac{\\partial F_x}{\\partial x}",
+        "16. 散度定理",
+    );
+    show_conversion(
+        "T_{\\mu\\nu} = g_{\\mu\\nu} + \\partial_\\mu \\phi \\partial_\\nu \\phi",
+        "17. 度规张量",
+    );
+    show_conversion(
+        "\\zeta(s) = \\sum_{n=1}^{\\infty} \\frac{1}{n^s}",
+        "18. 黎曼ζ函数",
+    );
 
     // 矩阵
-    show_conversion("\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}", "19. 矩阵");
+    show_conversion(
+        "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}",
+        "19. 矩阵",
+    );
 
     // 向量与字体
-    show_conversion("\\vec{v} = \\begin{pmatrix} x \\\\ y \\\\ z \\end{pmatrix}", "20. 向量+矩阵");
+    show_conversion(
+        "\\vec{v} = \\begin{pmatrix} x \\\\ y \\\\ z \\end{pmatrix}",
+        "20. 向量+矩阵",
+    );
     show_conversion("\\mathbb{R}^n", "21. 黑板粗体");
 }

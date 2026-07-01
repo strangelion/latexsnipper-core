@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::InferenceSession;
 use latexsnipper_tensor::Tensor;
@@ -21,8 +21,12 @@ impl TextRecParams {
     pub fn from_config(config: &latexsnipper_model::ModelConfig) -> Self {
         let mut params = Self::default();
         let (width, height) = config.resize_dimensions();
-        if let Some(h) = height { params.target_h = h; }
-        if let Some(w) = width { params.max_w = w; }
+        if let Some(h) = height {
+            params.target_h = h;
+        }
+        if let Some(w) = width {
+            params.max_w = w;
+        }
         if let Some(decoding) = &config.decoding {
             if let Some(blank_id) = decoding.blank_id {
                 params.blank_id = blank_id;
@@ -82,8 +86,11 @@ pub fn recognize_text_with_keys(
     );
     let outputs = session.run(&[input])?;
 
-    let output = outputs.first().ok_or_else(|| SnipperError::Inference("No output".into()))?;
-    let logits = output.as_f32_slice()
+    let output = outputs
+        .first()
+        .ok_or_else(|| SnipperError::Inference("No output".into()))?;
+    let logits = output
+        .as_f32_slice()
         .ok_or_else(|| SnipperError::Inference("Output not float32".into()))?;
     let shape = output.shape().to_vec();
 
@@ -137,7 +144,8 @@ pub fn load_keys(path: &Path) -> Result<(Vec<String>, usize)> {
 
     // For .txt keys files, strip only newlines (not whitespace)
     // to preserve fullwidth space \u3000 as first character
-    let keys: Vec<String> = content.lines()
+    let keys: Vec<String> = content
+        .lines()
         .map(|l| l.trim_end_matches('\n').trim_end_matches('\r').to_string())
         .collect();
     Ok((keys, 2))
@@ -157,7 +165,11 @@ fn load_paddle_character_dict(content: &str) -> Vec<String> {
             break;
         }
         if in_dict {
-            let value = trimmed.trim_start_matches('-').trim().trim_matches('\'').trim_matches('"');
+            let value = trimmed
+                .trim_start_matches('-')
+                .trim()
+                .trim_matches('\'')
+                .trim_matches('"');
             keys.push(value.to_string());
         }
     }
@@ -170,7 +182,12 @@ fn load_paddle_character_dict(content: &str) -> Vec<String> {
     keys
 }
 
-fn ctc_decode(logits: &[f32], shape: &[usize], keys: &[String], first_char_id: usize) -> (String, f32) {
+fn ctc_decode(
+    logits: &[f32],
+    shape: &[usize],
+    keys: &[String],
+    first_char_id: usize,
+) -> (String, f32) {
     if shape.len() < 3 {
         return (String::new(), 0.0);
     }
@@ -185,7 +202,9 @@ fn ctc_decode(logits: &[f32], shape: &[usize], keys: &[String], first_char_id: u
     for t in 0..seq_len {
         let start = t * vocab_size;
         let end = start + vocab_size;
-        if end > logits.len() { break; }
+        if end > logits.len() {
+            break;
+        }
 
         let slice = &logits[start..end];
 
@@ -204,9 +223,9 @@ fn ctc_decode(logits: &[f32], shape: &[usize], keys: &[String], first_char_id: u
             // Model metadata: blank at 0, chars at 1..N, space at N+1 (first_char_id=0)
             // File keys: blank at 0, space at 1, chars at 2+ (first_char_id=1 or 2)
             let char_idx = if first_char_id == 0 {
-                best_id  // Direct mapping for model metadata
+                best_id // Direct mapping for model metadata
             } else {
-                best_id.wrapping_sub(first_char_id)  // Offset for file keys
+                best_id.wrapping_sub(first_char_id) // Offset for file keys
             };
             if let Some(ch) = keys.get(char_idx) {
                 result.push_str(ch);
@@ -216,8 +235,11 @@ fn ctc_decode(logits: &[f32], shape: &[usize], keys: &[String], first_char_id: u
         prev_id = best_id;
     }
 
-    let avg_confidence = if confidences.is_empty() { 0.0 }
-    else { confidences.iter().sum::<f32>() / confidences.len() as f32 };
+    let avg_confidence = if confidences.is_empty() {
+        0.0
+    } else {
+        confidences.iter().sum::<f32>() / confidences.len() as f32
+    };
 
     (result, avg_confidence)
 }
@@ -273,13 +295,17 @@ fn char_type(ch: char) -> CharType {
     match ch {
         'a'..='z' | 'A'..='Z' => CharType::Latin,
         '0'..='9' => CharType::Digit,
-        '\u{4E00}'..='\u{9FFF}' | '\u{3400}'..='\u{4DBF}' | '\u{F900}'..='\u{FAFF}' => CharType::CJK,
-        '(' | ')' | '[' | ']' | '{' | '}' | '\u{3008}' | '\u{3009}' | '\u{FF08}' | '\u{FF09}' => CharType::Bracket,
-        '.' | ',' | ';' | ':' | '!' | '?' | '\u{3002}' | '\u{FF0C}' | '\u{FF1B}' | '\u{FF01}' | '\u{FF1F}' => CharType::Punct,
+        '\u{4E00}'..='\u{9FFF}' | '\u{3400}'..='\u{4DBF}' | '\u{F900}'..='\u{FAFF}' => {
+            CharType::CJK
+        }
+        '(' | ')' | '[' | ']' | '{' | '}' | '\u{3008}' | '\u{3009}' | '\u{FF08}' | '\u{FF09}' => {
+            CharType::Bracket
+        }
+        '.' | ',' | ';' | ':' | '!' | '?' | '\u{3002}' | '\u{FF0C}' | '\u{FF1B}' | '\u{FF01}'
+        | '\u{FF1F}' => CharType::Punct,
         _ => CharType::Other,
     }
 }
-
 
 #[cfg(test)]
 mod tests {

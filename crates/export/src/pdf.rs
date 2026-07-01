@@ -1,6 +1,6 @@
-use latexsnipper_foundation::Result;
 use crate::generator::Generator;
-use crate::render_tree::{RenderTree, RenderNode};
+use crate::render_tree::{RenderNode, RenderTree};
+use latexsnipper_foundation::Result;
 
 /// Minimal PDF generator — outputs a basic PDF with text content.
 /// For production use, consider using printpdf or genpdf crate.
@@ -18,9 +18,15 @@ impl Generator for PdfGenerator {
         Ok(pdf)
     }
 
-    fn extension(&self) -> &str { "pdf" }
-    fn mime_type(&self) -> &str { "application/pdf" }
-    fn name(&self) -> &str { "pdf" }
+    fn extension(&self) -> &str {
+        "pdf"
+    }
+    fn mime_type(&self) -> &str {
+        "application/pdf"
+    }
+    fn name(&self) -> &str {
+        "pdf"
+    }
 }
 
 fn render_node(node: &RenderNode, content: &mut String) {
@@ -67,16 +73,24 @@ fn generate_minimal_pdf(text: &str) -> String {
     // Object 4: Content stream
     let mut stream = String::from("BT\n/F1 12 Tf\n1 780 Td\n");
     for line in &lines {
-        let escaped = line.replace('\\', "\\\\").replace('{', "\\{").replace('}', "\\}");
+        let escaped = line
+            .replace('\\', "\\\\")
+            .replace('{', "\\{")
+            .replace('}', "\\}");
         stream.push_str(&format!("({}) '\n", escaped));
     }
     stream.push_str("ET\n");
 
-    objects.push(format!("4 0 obj\n<< /Length {} >>\nstream\n{}\nendstream\nendobj\n",
-        stream.len(), stream));
+    objects.push(format!(
+        "4 0 obj\n<< /Length {} >>\nstream\n{}\nendstream\nendobj\n",
+        stream.len(),
+        stream
+    ));
 
     // Object 5: Font
-    objects.push("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n".to_string());
+    objects.push(
+        "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n".to_string(),
+    );
 
     // Build PDF
     let mut pdf = String::from("%PDF-1.4\n");
@@ -110,11 +124,13 @@ fn generate_minimal_pdf(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render_tree::{RenderTree, RenderNode};
+    use crate::render_tree::{RenderNode, RenderTree};
 
     #[test]
     fn pdf_generator_produces_valid_header() {
-        let tree = RenderTree { nodes: vec![RenderNode::Text("Hello World".into())] };
+        let tree = RenderTree {
+            nodes: vec![RenderNode::Text("Hello World".into())],
+        };
         let generator = PdfGenerator;
         let output = generator.generate(&tree).unwrap();
         assert!(output.starts_with("%PDF-1.4"));

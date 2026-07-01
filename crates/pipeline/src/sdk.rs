@@ -9,14 +9,14 @@
 
 use latexsnipper_ast::*;
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
-use latexsnipper_runtime::{OnnxRuntimeBackend, RuntimeBackend, AccelerationMode, ModelHandle};
+use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::image::SnipperImage;
-use latexsnipper_image::color::PixelFormat;
 use latexsnipper_inference::{
-    detect_formulas, recognize_formula, group_formula_detections, filter_formula_detections,
+    detect_formulas, filter_formula_detections, group_formula_detections, recognize_formula,
     DetectionParams, RecognitionParams,
 };
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 use std::path::{Path, PathBuf};
 
 /// Main entry point for LaTeXSnipper SDK.
@@ -28,8 +28,8 @@ impl Snipper {
     /// Create from an image file path.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, SnipperError> {
         let path = path.as_ref();
-        let img = decode(ImageSource::File(path))
-            .map_err(|e| SnipperError::Image(e.to_string()))?;
+        let img =
+            decode(ImageSource::File(path)).map_err(|e| SnipperError::Image(e.to_string()))?;
         let rgb = rgba_to_rgb(&img);
         Self::from_image(rgb)
     }
@@ -41,14 +41,15 @@ impl Snipper {
             .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
         // 1. Detect formulas
-        let det_config = latexsnipper_model::ModelConfig::load(
-            &models.join("formula-det/yolov8-mfd")
-        ).map_err(|e| SnipperError::Model(e.to_string()))?;
+        let det_config =
+            latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
+                .map_err(|e| SnipperError::Model(e.to_string()))?;
 
         let det_params = DetectionParams::from_config(&det_config);
         let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
         let det_handle = ModelHandle::with_path("formula-det", det_path);
-        let det_session = backend.create_session(&det_handle, AccelerationMode::Cpu)
+        let det_session = backend
+            .create_session(&det_handle, AccelerationMode::Cpu)
             .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
         let mut detections = detect_formulas(&img, &*det_session, &det_params)
@@ -59,8 +60,16 @@ impl Snipper {
 
         // Sort by position for reading order
         detections.sort_by(|a, b| {
-            a.rect.y.partial_cmp(&b.rect.y).unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.rect.x.partial_cmp(&b.rect.x).unwrap_or(std::cmp::Ordering::Equal))
+            a.rect
+                .y
+                .partial_cmp(&b.rect.y)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| {
+                    a.rect
+                        .x
+                        .partial_cmp(&b.rect.x)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
         });
 
         // 2. Recognize formulas
@@ -70,9 +79,11 @@ impl Snipper {
 
         let enc_handle = ModelHandle::with_path("encoder", enc_path);
         let dec_handle = ModelHandle::with_path("decoder", dec_path);
-        let enc_session = backend.create_session(&enc_handle, AccelerationMode::Cpu)
+        let enc_session = backend
+            .create_session(&enc_handle, AccelerationMode::Cpu)
             .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-        let dec_session = backend.create_session(&dec_handle, AccelerationMode::Cpu)
+        let dec_session = backend
+            .create_session(&dec_handle, AccelerationMode::Cpu)
             .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
         let rec_params = RecognitionParams::default();
@@ -86,7 +97,9 @@ impl Snipper {
 
             if w >= 4 && h >= 4 {
                 let crop = crop_region(&img, x, y, w, h);
-                if let Ok(result) = recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params) {
+                if let Ok(result) =
+                    recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params)
+                {
                     let mut f = Formula::latex(result.text);
                     f.confidence = result.confidence;
                     blocks.push(Block::Formula(FormulaBlock {
@@ -206,7 +219,10 @@ fn find_models_dir() -> Result<PathBuf, SnipperError> {
     ];
 
     for path in &candidates {
-        if path.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx").exists() {
+        if path
+            .join("formula-det/yolov8-mfd/mathcraft-mfd.onnx")
+            .exists()
+        {
             return Ok(path.clone());
         }
     }

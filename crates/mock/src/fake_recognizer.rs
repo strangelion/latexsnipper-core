@@ -34,12 +34,14 @@ impl FakeRecognizer {
 
     /// Create a recognizer for multiple regions.
     pub fn from_detections(detections: &[DetectionBox], texts: &[&str]) -> Self {
-        let results = detections.iter().zip(texts.iter()).map(|(d, t)| {
-            RecognitionResult {
+        let results = detections
+            .iter()
+            .zip(texts.iter())
+            .map(|(d, t)| RecognitionResult {
                 text: t.to_string(),
                 confidence: d.confidence,
-            }
-        }).collect();
+            })
+            .collect();
         Self { results }
     }
 

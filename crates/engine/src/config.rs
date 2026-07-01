@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use latexsnipper_runtime::AccelerationMode;
+use std::path::PathBuf;
 
 /// Engine configuration.
 #[derive(Debug, Clone)]

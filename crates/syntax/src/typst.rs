@@ -1,4 +1,4 @@
-use latexsnipper_ast::{Document, Block, Inline};
+use latexsnipper_ast::{Block, Document, Inline};
 use latexsnipper_foundation::Result;
 
 use crate::renderer::Renderer;
@@ -22,8 +22,10 @@ impl Renderer for TypstRenderer {
                         }
                     }
                     Block::Paragraph(p) => {
-                        let text: String = p.inlines.iter().map(|i| {
-                            match i {
+                        let text: String = p
+                            .inlines
+                            .iter()
+                            .map(|i| match i {
                                 Inline::Text(t) => t.text.clone(),
                                 Inline::Formula(f) => {
                                     let typst = latex_to_typst(f.as_latex());
@@ -34,8 +36,8 @@ impl Renderer for TypstRenderer {
                                     }
                                 }
                                 _ => String::new(),
-                            }
-                        }).collect();
+                            })
+                            .collect();
                         if !text.is_empty() {
                             parts.push(text);
                         }
@@ -47,7 +49,9 @@ impl Renderer for TypstRenderer {
         Ok(parts.join("\n\n"))
     }
 
-    fn name(&self) -> &str { "typst" }
+    fn name(&self) -> &str {
+        "typst"
+    }
 }
 
 /// Convert LaTeX formula to Typst syntax.
@@ -56,19 +60,37 @@ pub fn latex_to_typst(latex: &str) -> String {
 
     // LaTeX → Typst symbol mappings
     let mappings = [
-        ("\\frac{", "("), ("}{", ")/("),
+        ("\\frac{", "("),
+        ("}{", ")/("),
         ("\\sqrt{", "sqrt("),
-        ("\\int", "integral"), ("\\sum", "sum"), ("\\prod", "product"),
-        ("\\infty", "infinity"), ("\\pi", "pi"),
-        ("\\alpha", "alpha"), ("\\beta", "beta"), ("\\gamma", "gamma"),
-        ("\\delta", "delta"), ("\\theta", "theta"), ("\\lambda", "lambda"),
-        ("\\sigma", "sigma"), ("\\omega", "omega"),
-        ("\\pm", "plus.minus"), ("\\times", "times"), ("\\div", "div"),
-        ("\\cdot", "dot"), ("\\leq", "lt.eq"), ("\\geq", "gt.eq"),
-        ("\\neq", "neq"), ("\\approx", "approx"),
-        ("\\rightarrow", "rightarrow"), ("\\leftarrow", "leftarrow"),
-        ("\\in", "in"), ("\\notin", "notin"), ("\\subset", "subset"),
-        ("\\cup", "union"), ("\\cap", "intersect"),
+        ("\\int", "integral"),
+        ("\\sum", "sum"),
+        ("\\prod", "product"),
+        ("\\infty", "infinity"),
+        ("\\pi", "pi"),
+        ("\\alpha", "alpha"),
+        ("\\beta", "beta"),
+        ("\\gamma", "gamma"),
+        ("\\delta", "delta"),
+        ("\\theta", "theta"),
+        ("\\lambda", "lambda"),
+        ("\\sigma", "sigma"),
+        ("\\omega", "omega"),
+        ("\\pm", "plus.minus"),
+        ("\\times", "times"),
+        ("\\div", "div"),
+        ("\\cdot", "dot"),
+        ("\\leq", "lt.eq"),
+        ("\\geq", "gt.eq"),
+        ("\\neq", "neq"),
+        ("\\approx", "approx"),
+        ("\\rightarrow", "rightarrow"),
+        ("\\leftarrow", "leftarrow"),
+        ("\\in", "in"),
+        ("\\notin", "notin"),
+        ("\\subset", "subset"),
+        ("\\cup", "union"),
+        ("\\cap", "intersect"),
     ];
 
     for (from, to) in &mappings {

@@ -1,4 +1,4 @@
-use latexsnipper_ast::{Document, Block, Inline};
+use latexsnipper_ast::{Block, Document, Inline};
 
 /// An intermediate representation between AST and final output.
 /// Avoids re-traversing the AST for each export format.
@@ -25,16 +25,18 @@ impl RenderTree {
             for block in &page.blocks {
                 match block {
                     Block::Paragraph(p) => {
-                        let inlines: Vec<RenderNode> = p.inlines.iter().map(|i| {
-                            match i {
+                        let inlines: Vec<RenderNode> = p
+                            .inlines
+                            .iter()
+                            .map(|i| match i {
                                 Inline::Text(t) => RenderNode::Text(t.text.clone()),
                                 Inline::Formula(f) => RenderNode::Formula {
                                     latex: f.as_latex().to_string(),
                                     display_mode: f.display_mode,
                                 },
                                 _ => RenderNode::Text(String::new()),
-                            }
-                        }).collect();
+                            })
+                            .collect();
                         page_nodes.push(RenderNode::Paragraph(inlines));
                     }
                     Block::Formula(f) => {

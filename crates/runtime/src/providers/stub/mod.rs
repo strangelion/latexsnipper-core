@@ -1,9 +1,9 @@
-use crate::backend::RuntimeBackend;
-use crate::session::InferenceSession;
-use crate::model_handle::ModelHandle;
 use crate::acceleration::AccelerationMode;
-use latexsnipper_tensor::Tensor;
+use crate::backend::RuntimeBackend;
+use crate::model_handle::ModelHandle;
+use crate::session::InferenceSession;
 use latexsnipper_foundation::Result;
+use latexsnipper_tensor::Tensor;
 
 /// Stub runtime for testing and development.
 /// Returns placeholder results without actual inference.
@@ -45,13 +45,16 @@ struct StubSession;
 impl InferenceSession for StubSession {
     fn run(&self, inputs: &[Tensor]) -> Result<Vec<Tensor>> {
         // Return empty output tensors matching input names
-        let outputs = inputs.iter().map(|input| {
-            Tensor::float32(
-                format!("{}_output", input.name()),
-                input.shape().to_vec(),
-                vec![0.0; input.len()],
-            )
-        }).collect();
+        let outputs = inputs
+            .iter()
+            .map(|input| {
+                Tensor::float32(
+                    format!("{}_output", input.name()),
+                    input.shape().to_vec(),
+                    vec![0.0; input.len()],
+                )
+            })
+            .collect();
         Ok(outputs)
     }
 

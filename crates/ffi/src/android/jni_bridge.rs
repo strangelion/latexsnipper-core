@@ -1,8 +1,8 @@
-use std::sync::Mutex;
 use once_cell::sync::Lazy;
+use std::sync::Mutex;
 
-use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-use latexsnipper_runtime::{StubRuntime, OnnxRuntimeBackend};
+use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
+use latexsnipper_runtime::{OnnxRuntimeBackend, StubRuntime};
 
 use crate::common::FfiResponse;
 
@@ -104,7 +104,9 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeFreeString(
     ptr: *mut std::os::raw::c_char,
 ) {
     if !ptr.is_null() {
-        unsafe { drop(std::ffi::CString::from_raw(ptr)); }
+        unsafe {
+            drop(std::ffi::CString::from_raw(ptr));
+        }
     }
 }
 
@@ -123,7 +125,9 @@ fn recognize_sync(
 
     // Safety: validate pointer and length before creating slice
     if image_data.is_null() || image_len == 0 || image_len > 100 * 1024 * 1024 {
-        return FfiResponse::error("Invalid image data: null pointer, empty, or too large (>100MB)");
+        return FfiResponse::error(
+            "Invalid image data: null pointer, empty, or too large (>100MB)",
+        );
     }
 
     // Validate dimensions
@@ -158,23 +162,40 @@ fn recognize_sync(
     let elapsed = start.elapsed().as_millis() as u64;
 
     // Extract text from document
-    let text: String = doc.pages.iter().flat_map(|p| &p.blocks).filter_map(|b| {
-        match b {
+    let text: String = doc
+        .pages
+        .iter()
+        .flat_map(|p| &p.blocks)
+        .filter_map(|b| match b {
             latexsnipper_ast::Block::Formula(f) => Some(f.formula.as_latex().to_string()),
             latexsnipper_ast::Block::Paragraph(p) => {
-                let t: String = p.inlines.iter().filter_map(|i| {
-                    if let latexsnipper_ast::Inline::Text(t) = i { Some(t.text.as_str()) } else { None }
-                }).collect();
+                let t: String = p
+                    .inlines
+                    .iter()
+                    .filter_map(|i| {
+                        if let latexsnipper_ast::Inline::Text(t) = i {
+                            Some(t.text.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(t)
             }
             _ => None,
-        }
-    }).collect::<Vec<_>>().join("\n");
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
-    FfiResponse::success(&text, doc.pages.first().and_then(|p| p.blocks.first()).map_or(0.0, |b| {
-        match b {
-            latexsnipper_ast::Block::Formula(f) => f.formula.confidence,
-            _ => 0.0,
-        }
-    }), elapsed)
+    FfiResponse::success(
+        &text,
+        doc.pages
+            .first()
+            .and_then(|p| p.blocks.first())
+            .map_or(0.0, |b| match b {
+                latexsnipper_ast::Block::Formula(f) => f.formula.confidence,
+                _ => 0.0,
+            }),
+        elapsed,
+    )
 }

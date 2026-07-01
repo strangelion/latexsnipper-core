@@ -4,11 +4,13 @@
 
 use latexsnipper_ast::*;
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
-use latexsnipper_runtime::{OnnxRuntimeBackend, RuntimeBackend, AccelerationMode, ModelHandle};
+use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::image::SnipperImage;
-use latexsnipper_image::color::PixelFormat;
-use latexsnipper_inference::{detect_formulas, recognize_formula, DetectionParams, RecognitionParams};
+use latexsnipper_inference::{
+    detect_formulas, recognize_formula, DetectionParams, RecognitionParams,
+};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 use std::path::PathBuf;
 
 fn models_dir() -> PathBuf {
@@ -71,19 +73,28 @@ fn main() {
     println!("1. Input: {}x{} image\n", rgb.width(), rgb.height());
 
     // 2. Detect formulas
-    let det_config = latexsnipper_model::ModelConfig::load(
-        &models.join("formula-det/yolov8-mfd")
-    ).expect("Failed to load detection config");
+    let det_config = latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
+        .expect("Failed to load detection config");
 
     let det_params = DetectionParams::from_config(&det_config);
     let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
     let det_handle = ModelHandle::with_path("formula-det", det_path);
-    let det_session = backend.create_session(&det_handle, AccelerationMode::Cpu).unwrap();
+    let det_session = backend
+        .create_session(&det_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let mut detections = detect_formulas(&rgb, &*det_session, &det_params).unwrap();
     detections.sort_by(|a, b| {
-        a.rect.y.partial_cmp(&b.rect.y).unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.rect.x.partial_cmp(&b.rect.x).unwrap_or(std::cmp::Ordering::Equal))
+        a.rect
+            .y
+            .partial_cmp(&b.rect.y)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                a.rect
+                    .x
+                    .partial_cmp(&b.rect.x)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     });
     println!("2. Detected {} formula regions\n", detections.len());
 
@@ -94,8 +105,12 @@ fn main() {
 
     let enc_handle = ModelHandle::with_path("encoder", enc_path);
     let dec_handle = ModelHandle::with_path("decoder", dec_path);
-    let enc_session = backend.create_session(&enc_handle, AccelerationMode::Cpu).unwrap();
-    let dec_session = backend.create_session(&dec_handle, AccelerationMode::Cpu).unwrap();
+    let enc_session = backend
+        .create_session(&enc_handle, AccelerationMode::Cpu)
+        .unwrap();
+    let dec_session = backend
+        .create_session(&dec_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let rec_params = RecognitionParams::default();
     let mut blocks = Vec::new();
@@ -110,7 +125,10 @@ fn main() {
             let crop = crop_region(&rgb, x, y, w, h);
             match recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params) {
                 Ok(result) => {
-                    println!("   [{i}] \"{}\"", result.text.chars().take(50).collect::<String>());
+                    println!(
+                        "   [{i}] \"{}\"",
+                        result.text.chars().take(50).collect::<String>()
+                    );
                     let mut f = Formula::latex(result.text);
                     f.confidence = result.confidence;
                     blocks.push(Block::Formula(FormulaBlock {
@@ -140,19 +158,25 @@ fn main() {
     // 5. Export to all formats
     println!("4. Export Results:\n");
 
-    let latex = DocumentConverter::new(OutputFormat::Latex).convert(&doc).unwrap();
+    let latex = DocumentConverter::new(OutputFormat::Latex)
+        .convert(&doc)
+        .unwrap();
     println!("   ── LaTeX ({} chars) ──", latex.len());
     for line in latex.lines().take(3) {
         println!("   {}", line);
     }
 
-    let md = DocumentConverter::new(OutputFormat::MarkdownBlock).convert(&doc).unwrap();
+    let md = DocumentConverter::new(OutputFormat::MarkdownBlock)
+        .convert(&doc)
+        .unwrap();
     println!("\n   ── Markdown ({} chars) ──", md.len());
     for line in md.lines().take(3) {
         println!("   {}", line);
     }
 
-    let typst = DocumentConverter::new(OutputFormat::Typst).convert(&doc).unwrap();
+    let typst = DocumentConverter::new(OutputFormat::Typst)
+        .convert(&doc)
+        .unwrap();
     println!("\n   ── Typst ({} chars) ──", typst.len());
     for line in typst.lines().take(3) {
         println!("   {}", line);

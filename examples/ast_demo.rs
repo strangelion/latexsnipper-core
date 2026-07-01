@@ -30,7 +30,11 @@ fn main() {
         })
         .build();
 
-    println!("Document: {} pages, {} blocks", doc.pages.len(), doc.block_count());
+    println!(
+        "Document: {} pages, {} blocks",
+        doc.pages.len(),
+        doc.block_count()
+    );
 
     // List all blocks
     for (i, block) in doc.all_blocks().iter().enumerate() {

@@ -1,12 +1,12 @@
-pub mod engine;
-pub mod config;
 pub mod api;
+pub mod config;
+pub mod engine;
 pub mod job;
 pub mod service;
 
-pub use engine::SnipperEngine;
-pub use engine::RecognizeMode;
-pub use config::EngineConfig;
 pub use api::{RecognizeRequest, RecognizeResponse, StreamItem};
-pub use job::{Job, JobStatus, JobQueue};
+pub use config::EngineConfig;
+pub use engine::RecognizeMode;
+pub use engine::SnipperEngine;
+pub use job::{Job, JobQueue, JobStatus};
 pub use service::{Service, ServiceStatus};

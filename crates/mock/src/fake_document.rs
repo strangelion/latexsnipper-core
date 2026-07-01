@@ -1,4 +1,6 @@
-use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, ParagraphBlock, Inline, TextRun};
+use latexsnipper_ast::{
+    Block, Document, Formula, FormulaBlock, Inline, Page, ParagraphBlock, TextRun,
+};
 
 /// Create a fake document with mixed formula and text content.
 pub fn fake_document() -> Document {
@@ -58,9 +60,17 @@ mod tests {
     #[test]
     fn fake_document_has_formula() {
         let doc = fake_document();
-        let formulas: Vec<_> = doc.pages[0].blocks.iter().filter_map(|b| {
-            if let Block::Formula(f) = b { Some(f) } else { None }
-        }).collect();
+        let formulas: Vec<_> = doc.pages[0]
+            .blocks
+            .iter()
+            .filter_map(|b| {
+                if let Block::Formula(f) = b {
+                    Some(f)
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(formulas.len(), 2);
         assert_eq!(formulas[0].formula.as_latex(), "E=mc^2");
         assert_eq!(formulas[1].formula.as_latex(), "\\frac{a+b}{c}");

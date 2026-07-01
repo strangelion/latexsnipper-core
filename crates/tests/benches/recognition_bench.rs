@@ -1,26 +1,33 @@
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::operations;
-use latexsnipper_runtime::{OnnxRuntimeBackend, RuntimeBackend, AccelerationMode, ModelHandle};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 use latexsnipper_tensor::Tensor;
 use std::time::{Duration, Instant};
 
 fn models_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()
-        .parent().unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
         .join("models")
 }
 
 fn fixtures_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()
-        .parent().unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
         .join("fixtures")
 }
 
 fn report(name: &str, iterations: usize, elapsed: Duration) {
     let per_iter = elapsed.as_nanos() / iterations as u128;
-    println!("bench {name}: {iterations} iters, {elapsed:.2?}, {per_iter} ns/iter ({:.1} ms/iter)", elapsed.as_millis() as f64 / iterations as f64);
+    println!(
+        "bench {name}: {iterations} iters, {elapsed:.2?}, {per_iter} ns/iter ({:.1} ms/iter)",
+        elapsed.as_millis() as f64 / iterations as f64
+    );
 }
 
 fn bench_text_recognition() {
@@ -33,7 +40,9 @@ fn bench_text_recognition() {
 
     let rec_path = models.join("text-rec/v6-small/inference.onnx");
     let rec_handle = ModelHandle::with_path("text-rec", rec_path);
-    let rec_session = backend.create_session(&rec_handle, AccelerationMode::Cpu).unwrap();
+    let rec_session = backend
+        .create_session(&rec_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     for _ in 0..3 {
         let resized = operations::resize(&crop, 320, 48);
@@ -64,7 +73,9 @@ fn bench_formula_detection() {
 
     let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
     let det_handle = ModelHandle::with_path("formula-det", det_path);
-    let det_session = backend.create_session(&det_handle, AccelerationMode::Cpu).unwrap();
+    let det_session = backend
+        .create_session(&det_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     for _ in 0..3 {
         let input = Tensor::float32("images", vec![1, 3, 768, 768], pixels.clone());
@@ -92,8 +103,12 @@ fn bench_formula_recognition() {
     let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
     let enc_handle = ModelHandle::with_path("encoder", enc_path);
     let dec_handle = ModelHandle::with_path("decoder", dec_path);
-    let enc_session = backend.create_session(&enc_handle, AccelerationMode::Cpu).unwrap();
-    let dec_session = backend.create_session(&dec_handle, AccelerationMode::Cpu).unwrap();
+    let enc_session = backend
+        .create_session(&enc_handle, AccelerationMode::Cpu)
+        .unwrap();
+    let dec_session = backend
+        .create_session(&dec_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let resized = operations::resize(&crop, 384, 384);
     let pixels = operations::normalize(&resized, &[0.5, 0.5, 0.5], &[0.5, 0.5, 0.5]);
@@ -106,16 +121,29 @@ fn bench_formula_recognition() {
         let mut token_ids: Vec<i64> = vec![2];
         for _ in 0..10 {
             let input_ids = Tensor::int64("input_ids", vec![1, token_ids.len()], token_ids.clone());
-            let hidden_tensor = Tensor::float32("encoder_hidden_states", hidden_shape.clone(), hidden.clone());
+            let hidden_tensor = Tensor::float32(
+                "encoder_hidden_states",
+                hidden_shape.clone(),
+                hidden.clone(),
+            );
             let dec_out = dec_session.run(&[input_ids, hidden_tensor]).unwrap();
             let logits = dec_out[0].as_f32_slice().unwrap();
             let vocab_size = dec_out[0].shape().last().unwrap_or(&0);
             let last_start = (token_ids.len() - 1) * vocab_size;
             let last_end = last_start + vocab_size;
-            if last_end > logits.len() { break; }
+            if last_end > logits.len() {
+                break;
+            }
             let step = &logits[last_start..last_end];
-            let best = step.iter().enumerate().max_by(|a,b| a.1.partial_cmp(b.1).unwrap()).map(|(i,_)| i).unwrap_or(0);
-            if best == 2 { break; }
+            let best = step
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            if best == 2 {
+                break;
+            }
             token_ids.push(best as i64);
         }
     }
@@ -130,16 +158,29 @@ fn bench_formula_recognition() {
         let mut token_ids: Vec<i64> = vec![2];
         for _ in 0..50 {
             let input_ids = Tensor::int64("input_ids", vec![1, token_ids.len()], token_ids.clone());
-            let hidden_tensor = Tensor::float32("encoder_hidden_states", hidden_shape.clone(), hidden.clone());
+            let hidden_tensor = Tensor::float32(
+                "encoder_hidden_states",
+                hidden_shape.clone(),
+                hidden.clone(),
+            );
             let dec_out = dec_session.run(&[input_ids, hidden_tensor]).unwrap();
             let logits = dec_out[0].as_f32_slice().unwrap();
             let vocab_size = dec_out[0].shape().last().unwrap_or(&0);
             let last_start = (token_ids.len() - 1) * vocab_size;
             let last_end = last_start + vocab_size;
-            if last_end > logits.len() { break; }
+            if last_end > logits.len() {
+                break;
+            }
             let step = &logits[last_start..last_end];
-            let best = step.iter().enumerate().max_by(|a,b| a.1.partial_cmp(b.1).unwrap()).map(|(i,_)| i).unwrap_or(0);
-            if best == 2 { break; }
+            let best = step
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            if best == 2 {
+                break;
+            }
             token_ids.push(best as i64);
         }
     }

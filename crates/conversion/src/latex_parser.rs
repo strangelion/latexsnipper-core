@@ -125,14 +125,18 @@ impl LatexParser {
                 let content = self.parse_until('}');
                 // Unwrap single-element groups
                 if content.len() == 1 {
-                    content.into_iter().next().unwrap_or(LatexNode::Text(String::new()))
+                    content
+                        .into_iter()
+                        .next()
+                        .unwrap_or(LatexNode::Text(String::new()))
                 } else {
                     LatexNode::Group(content)
                 }
             }
             '\\' => {
                 self.pos += 1;
-                self.parse_command().unwrap_or(LatexNode::Text(String::new()))
+                self.parse_command()
+                    .unwrap_or(LatexNode::Text(String::new()))
             }
             _ => {
                 // Read a single token (letter, digit, or symbol)
@@ -192,35 +196,26 @@ impl LatexParser {
 
         match cmd.as_str() {
             // Greek letters
-            "alpha" | "beta" | "gamma" | "delta" | "epsilon" | "varepsilon" | "zeta"
-            | "eta" | "theta" | "vartheta" | "iota" | "kappa" | "varkappa" | "lambda"
-            | "mu" | "nu" | "xi" | "pi" | "varpi" | "rho" | "varrho" | "sigma"
-            | "varsigma" | "tau" | "upsilon" | "phi" | "varphi" | "chi" | "psi"
-            | "omega" | "Gamma" | "Delta" | "Theta" | "Lambda" | "Xi" | "Pi"
-            | "Sigma" | "Upsilon" | "Phi" | "Psi" | "Omega" => {
+            "alpha" | "beta" | "gamma" | "delta" | "epsilon" | "varepsilon" | "zeta" | "eta"
+            | "theta" | "vartheta" | "iota" | "kappa" | "varkappa" | "lambda" | "mu" | "nu"
+            | "xi" | "pi" | "varpi" | "rho" | "varrho" | "sigma" | "varsigma" | "tau"
+            | "upsilon" | "phi" | "varphi" | "chi" | "psi" | "omega" | "Gamma" | "Delta"
+            | "Theta" | "Lambda" | "Xi" | "Pi" | "Sigma" | "Upsilon" | "Phi" | "Psi" | "Omega" => {
                 Some(LatexNode::Greek(cmd))
             }
             // Operators
-            "int" | "iint" | "iiint" | "oint" | "sum" | "prod" | "coprod"
-            | "lim" | "limsup" | "liminf" | "max" | "min" | "sup" | "inf" => {
-                Some(LatexNode::Operator(cmd))
-            }
+            "int" | "iint" | "iiint" | "oint" | "sum" | "prod" | "coprod" | "lim" | "limsup"
+            | "liminf" | "max" | "min" | "sup" | "inf" => Some(LatexNode::Operator(cmd)),
             // Relations
-            "leq" | "le" | "geq" | "ge" | "neq" | "ne" | "approx" | "equiv"
-            | "sim" | "propto" | "ll" | "gg" | "prec" | "succ" => {
-                Some(LatexNode::Relation(cmd))
-            }
+            "leq" | "le" | "geq" | "ge" | "neq" | "ne" | "approx" | "equiv" | "sim" | "propto"
+            | "ll" | "gg" | "prec" | "succ" => Some(LatexNode::Relation(cmd)),
             // Symbols
-            "infty" | "partial" | "nabla" | "forall" | "exists" | "neg"
-            | "land" | "lor" | "in" | "notin" | "subset" | "supset"
-            | "cup" | "cap" | "emptyset" | "pm" | "mp" | "times" | "div"
-            | "cdot" | "ast" | "star" | "circ" | "bullet" | "diamond"
-            | "oplus" | "otimes" | "odot" | "lfloor" | "rfloor" | "lceil"
-            | "rceil" | "langle" | "rangle" | "lvert" | "rvert" | "lVert"
-            | "rVert" | "quad" | "qquad" | "ldots" | "cdots" | "vdots"
-            | "ddots" | "hbar" | "ell" => {
-                Some(LatexNode::Symbol(cmd))
-            }
+            "infty" | "partial" | "nabla" | "forall" | "exists" | "neg" | "land" | "lor" | "in"
+            | "notin" | "subset" | "supset" | "cup" | "cap" | "emptyset" | "pm" | "mp"
+            | "times" | "div" | "cdot" | "ast" | "star" | "circ" | "bullet" | "diamond"
+            | "oplus" | "otimes" | "odot" | "lfloor" | "rfloor" | "lceil" | "rceil" | "langle"
+            | "rangle" | "lvert" | "rvert" | "lVert" | "rVert" | "quad" | "qquad" | "ldots"
+            | "cdots" | "vdots" | "ddots" | "hbar" | "ell" => Some(LatexNode::Symbol(cmd)),
             // Commands with arguments
             "frac" => {
                 let num = self.parse_single();
@@ -263,8 +258,8 @@ impl LatexParser {
                 })
             }
             // Font modifiers
-            "mathbb" | "mathbf" | "mathit" | "mathsf" | "mathtt" | "mathcal"
-            | "mathfrak" | "mathrm" | "mathnormal" => {
+            "mathbb" | "mathbf" | "mathit" | "mathsf" | "mathtt" | "mathcal" | "mathfrak"
+            | "mathrm" | "mathnormal" => {
                 let content = self.parse_single();
                 Some(LatexNode::FontModifier {
                     font: cmd,
@@ -280,12 +275,10 @@ impl LatexParser {
                 })
             }
             // Unknown command
-            _ => {
-                Some(LatexNode::Command {
-                    name: cmd,
-                    args: Vec::new(),
-                })
-            }
+            _ => Some(LatexNode::Command {
+                name: cmd,
+                args: Vec::new(),
+            }),
         }
     }
 

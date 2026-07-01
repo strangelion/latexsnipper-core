@@ -1,15 +1,15 @@
 //! Integration tests using real ONNX models from models/
 
-use latexsnipper_runtime::{OnnxRuntimeBackend, RuntimeBackend, AccelerationMode, ModelHandle};
-use latexsnipper_tensor::Tensor;
-use latexsnipper_image::decode::{decode, ImageSource};
-use latexsnipper_image::operations;
-use latexsnipper_image::image::SnipperImage;
 use latexsnipper_image::color::PixelFormat;
+use latexsnipper_image::decode::{decode, ImageSource};
+use latexsnipper_image::image::SnipperImage;
+use latexsnipper_image::operations;
 use latexsnipper_inference::{
-    detect_formulas, recognize_formula, DetectionParams, RecognitionParams,
-    group_formula_detections, filter_formula_detections,
+    detect_formulas, filter_formula_detections, group_formula_detections, recognize_formula,
+    DetectionParams, RecognitionParams,
 };
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_tensor::Tensor;
 use std::path::PathBuf;
 
 fn models_dir() -> PathBuf {
@@ -56,14 +56,14 @@ fn test_formula_detection_with_real_model() {
     let img = decode(ImageSource::File(&image_path)).unwrap();
     let rgb = rgba_to_rgb(&img);
 
-    let det_config = latexsnipper_model::ModelConfig::load(
-        &models.join("formula-det/yolov8-mfd"),
-    )
-    .unwrap();
+    let det_config =
+        latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd")).unwrap();
     let params = DetectionParams::from_config(&det_config);
 
     let handle = ModelHandle::with_path("formula-det", model_path);
-    let session = backend.create_session(&handle, AccelerationMode::Cpu).unwrap();
+    let session = backend
+        .create_session(&handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let mut detections = detect_formulas(&rgb, &*session, &params).unwrap();
     group_formula_detections(&mut detections);
@@ -107,12 +107,16 @@ fn test_formula_recognition_with_real_model() {
 
     let enc_handle = ModelHandle::with_path("encoder", enc_path);
     let dec_handle = ModelHandle::with_path("decoder", dec_path);
-    let enc_session = backend.create_session(&enc_handle, AccelerationMode::Cpu).unwrap();
-    let dec_session = backend.create_session(&dec_handle, AccelerationMode::Cpu).unwrap();
+    let enc_session = backend
+        .create_session(&enc_handle, AccelerationMode::Cpu)
+        .unwrap();
+    let dec_session = backend
+        .create_session(&dec_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let params = RecognitionParams::default();
-    let result = recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &params)
-        .unwrap();
+    let result =
+        recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &params).unwrap();
 
     println!("Formula recognition: {}", result.text);
     assert!(!result.text.is_empty(), "Should recognize formula");
@@ -140,7 +144,9 @@ fn test_text_detection_with_real_model() {
     let rgb = rgba_to_rgb(&img);
 
     let handle = ModelHandle::with_path("text-det", model_path);
-    let session = backend.create_session(&handle, AccelerationMode::Cpu).unwrap();
+    let session = backend
+        .create_session(&handle, AccelerationMode::Cpu)
+        .unwrap();
 
     // Preprocess: resize, pad, normalize
     let w = rgb.width();
@@ -165,7 +171,11 @@ fn test_text_detection_with_real_model() {
 
     if let Some(data) = output[0].as_f32_slice() {
         let non_zero = data.iter().filter(|&&v| v > 0.3).count();
-        println!("Text detection: shape={:?}, pixels>0.3={}", output[0].shape(), non_zero);
+        println!(
+            "Text detection: shape={:?}, pixels>0.3={}",
+            output[0].shape(),
+            non_zero
+        );
         assert!(non_zero > 0, "Should detect text regions");
     }
 }
@@ -202,7 +212,9 @@ fn test_text_recognition_with_real_model() {
     let crop = crop_region(&rgb, 35, 30, 700, 45);
 
     let handle = ModelHandle::with_path("text-rec", rec_path.unwrap().to_path_buf());
-    let session = backend.create_session(&handle, AccelerationMode::Cpu).unwrap();
+    let session = backend
+        .create_session(&handle, AccelerationMode::Cpu)
+        .unwrap();
 
     // Prepare input
     let img_wh_ratio = crop.width() as f32 / crop.height() as f32;

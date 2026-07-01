@@ -6,8 +6,8 @@ pub mod latex_ast;
 pub mod latex_parser;
 pub mod latex_to_typst;
 pub mod latex_utils;
-pub mod mathml;
 pub mod markdown;
+pub mod mathml;
 pub mod omml;
 pub mod typst;
 
@@ -15,8 +15,8 @@ pub use converter::Converter;
 pub use document_converter::{DocumentConverter, OutputFormat};
 pub use html::HtmlConverter;
 pub use latex::{LatexConverter, LatexDisplayConverter, LatexEquationConverter};
-pub use mathml::{MathmlAttrConverter, MathmlConverter, MathmlMConverter, MathmlMmlConverter};
 pub use markdown::{MarkdownBlockConverter, MarkdownInlineConverter};
+pub use mathml::{MathmlAttrConverter, MathmlConverter, MathmlMConverter, MathmlMmlConverter};
 pub use omml::OmmlConverter;
 pub use typst::TypstConverter;
 
@@ -106,7 +106,9 @@ mod tests {
         let result = converter.convert(&doc).unwrap();
         assert!(result.contains("Given the equation"));
         assert!(result.contains("E") && result.contains("m") && result.contains("c"));
-        assert!(result.contains("frac") || result.contains("(a+b)/(c)") || result.contains("(a, b)"));
+        assert!(
+            result.contains("frac") || result.contains("(a+b)/(c)") || result.contains("(a, b)")
+        );
         assert_eq!(converter.name(), "typst");
         assert_eq!(converter.extension(), "typ");
     }

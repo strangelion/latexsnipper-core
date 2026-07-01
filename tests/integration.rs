@@ -143,11 +143,17 @@ fn conversion_to_json() {
 #[test]
 fn sdk_formula_image() {
     let path = std::path::PathBuf::from("fixtures/formula.png");
-    if !path.exists() { println!("Skipping: fixture not found"); return; }
+    if !path.exists() {
+        println!("Skipping: fixture not found");
+        return;
+    }
 
     let snipper = Snipper::from_file(&path).expect("Failed to process formula.png");
 
-    assert!(snipper.document().block_count() > 0, "Should detect formulas");
+    assert!(
+        snipper.document().block_count() > 0,
+        "Should detect formulas"
+    );
 
     let latex = snipper.to_latex().unwrap();
     assert!(!latex.is_empty(), "LaTeX output should not be empty");
@@ -161,13 +167,19 @@ fn sdk_formula_image() {
     let json = snipper.to_json().unwrap();
     assert!(json.contains("\"pages\""), "JSON should contain pages");
 
-    println!("SDK test passed: {} formulas detected", snipper.document().block_count());
+    println!(
+        "SDK test passed: {} formulas detected",
+        snipper.document().block_count()
+    );
 }
 
 #[test]
 fn sdk_multiple_formats() {
     let path = std::path::PathBuf::from("fixtures/formula.png");
-    if !path.exists() { println!("Skipping: fixture not found"); return; }
+    if !path.exists() {
+        println!("Skipping: fixture not found");
+        return;
+    }
 
     let snipper = Snipper::from_file(&path).expect("Failed to process image");
 
@@ -183,6 +195,10 @@ fn sdk_multiple_formats() {
     for (format, name) in &formats {
         let result = snipper.to_format(*format);
         assert!(result.is_ok(), "{} export failed: {:?}", name, result.err());
-        assert!(!result.unwrap().is_empty(), "{} output should not be empty", name);
+        assert!(
+            !result.unwrap().is_empty(),
+            "{} output should not be empty",
+            name
+        );
     }
 }

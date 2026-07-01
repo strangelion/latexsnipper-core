@@ -1,5 +1,5 @@
-use latexsnipper_tensor::Tensor;
 use latexsnipper_foundation::Result;
+use latexsnipper_tensor::Tensor;
 
 /// An inference session for running models.
 pub trait InferenceSession: Send + Sync {

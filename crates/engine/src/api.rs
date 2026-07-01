@@ -51,13 +51,29 @@ pub struct RecognizeResponse {
 }
 
 impl RecognizeResponse {
-    pub fn new(document: Document, mode: RecognizeMode, region_count: usize, elapsed_ms: u64) -> Self {
-        Self { document, mode, region_count, elapsed_ms }
+    pub fn new(
+        document: Document,
+        mode: RecognizeMode,
+        region_count: usize,
+        elapsed_ms: u64,
+    ) -> Self {
+        Self {
+            document,
+            mode,
+            region_count,
+            elapsed_ms,
+        }
     }
 
-    pub fn document(&self) -> &Document { &self.document }
-    pub fn region_count(&self) -> usize { self.region_count }
-    pub fn elapsed_ms(&self) -> u64 { self.elapsed_ms }
+    pub fn document(&self) -> &Document {
+        &self.document
+    }
+    pub fn region_count(&self) -> usize {
+        self.region_count
+    }
+    pub fn elapsed_ms(&self) -> u64 {
+        self.elapsed_ms
+    }
 }
 
 /// A single item in a streaming recognition response.
@@ -82,7 +98,5 @@ pub enum StreamItem {
         elapsed_ms: u64,
     },
     /// An error occurred during processing.
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }

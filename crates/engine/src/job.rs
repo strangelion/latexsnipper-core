@@ -1,6 +1,5 @@
-use std::collections::VecDeque;
 use log::info;
-
+use std::collections::VecDeque;
 
 /// Status of a job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

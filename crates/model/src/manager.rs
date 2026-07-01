@@ -1,13 +1,13 @@
+use latexsnipper_foundation::{Result, SnipperError};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use latexsnipper_foundation::{SnipperError, Result};
-
 
 /// Validates that a name contains no path traversal characters.
 fn validate_name(name: &str) -> Result<()> {
     if name.contains('/') || name.contains('\\') || name.contains("..") || name.is_empty() {
         return Err(SnipperError::Model(format!(
-            "Invalid name '{}' — contains path traversal characters", name
+            "Invalid name '{}' — contains path traversal characters",
+            name
         )));
     }
     Ok(())
@@ -19,7 +19,8 @@ fn validate_path(base: &Path, resolved: &Path) -> Result<()> {
         Ok(canonical) => {
             if !canonical.starts_with(base.canonicalize().unwrap_or_default()) {
                 return Err(SnipperError::Model(format!(
-                    "Path escapes base directory: {}", resolved.display()
+                    "Path escapes base directory: {}",
+                    resolved.display()
                 )));
             }
             Ok(())
@@ -87,8 +88,9 @@ impl ModelManager {
         validate_path(&self.models_dir, &dir)?;
 
         if dir.exists() {
-            std::fs::remove_dir_all(&dir)
-                .map_err(|e| SnipperError::Model(format!("Failed to delete {}: {}", dir.display(), e)))?;
+            std::fs::remove_dir_all(&dir).map_err(|e| {
+                SnipperError::Model(format!("Failed to delete {}: {}", dir.display(), e))
+            })?;
         }
         Ok(())
     }

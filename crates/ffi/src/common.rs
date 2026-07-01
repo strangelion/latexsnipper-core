@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::{Result, SnipperError};
 
 /// Convert a C string to a Rust String.
 pub unsafe fn cstr_to_string(ptr: *const c_char) -> Result<String> {

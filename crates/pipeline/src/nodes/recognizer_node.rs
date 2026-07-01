@@ -1,13 +1,15 @@
 use async_trait::async_trait;
-use latexsnipper_foundation::{SnipperError, Result};
 use latexsnipper_ast::*;
+use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
-use latexsnipper_runtime::{RuntimeBackend, AccelerationMode, ModelHandle, OnnxRuntimeBackend};
-use latexsnipper_inference::{RecognitionParams, TextRecParams, recognize_formula, recognize_text_with_keys, load_keys};
 use latexsnipper_inference::formula_lines::split_formula_line_groups;
+use latexsnipper_inference::{
+    load_keys, recognize_formula, recognize_text_with_keys, RecognitionParams, TextRecParams,
+};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 
-use crate::node::PipelineNode;
 use crate::context::PipelineContext;
+use crate::node::PipelineNode;
 
 struct TextRecModel {
     config: latexsnipper_model::ModelConfig,
@@ -28,11 +30,17 @@ pub enum RecognizerType {
 
 impl RecognizerNode {
     pub fn formula() -> Self {
-        Self { name: "recognize_formula".into(), recognizer_type: RecognizerType::Formula }
+        Self {
+            name: "recognize_formula".into(),
+            recognizer_type: RecognizerType::Formula,
+        }
     }
 
     pub fn text() -> Self {
-        Self { name: "recognize_text".into(), recognizer_type: RecognizerType::Text }
+        Self {
+            name: "recognize_text".into(),
+            recognizer_type: RecognizerType::Text,
+        }
     }
 
     fn create_backend(models: &std::path::Path) -> Result<OnnxRuntimeBackend> {
@@ -43,7 +51,9 @@ impl RecognizerNode {
 
 #[async_trait]
 impl PipelineNode for RecognizerNode {
-    fn name(&self) -> &str { &self.name }
+    fn name(&self) -> &str {
+        &self.name
+    }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
         let models = match &ctx.models_dir {
@@ -59,7 +69,11 @@ impl PipelineNode for RecognizerNode {
 }
 
 impl RecognizerNode {
-    async fn recognize_formulas(&self, ctx: &mut PipelineContext, models: &std::path::Path) -> Result<()> {
+    async fn recognize_formulas(
+        &self,
+        ctx: &mut PipelineContext,
+        models: &std::path::Path,
+    ) -> Result<()> {
         let crop_key = "formula_crops";
         let crops = match ctx.get(crop_key) {
             Some(v) => v.clone(),
@@ -71,19 +85,27 @@ impl RecognizerNode {
             None => return Ok(()),
         };
 
-        if crop_array.is_empty() { return Ok(()); }
+        if crop_array.is_empty() {
+            return Ok(());
+        }
 
         let rec_config = match load_config(models, "formula-rec") {
             Ok(c) => c,
-            Err(_) => { log::warn!("Formula rec model not found"); return Ok(()); }
+            Err(_) => {
+                log::warn!("Formula rec model not found");
+                return Ok(());
+            }
         };
 
         let rec_dir = models.join("formula-rec/trocr-deit");
-        let encoder_path = rec_config.find_encoder_file(&rec_dir)
+        let encoder_path = rec_config
+            .find_encoder_file(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Encoder not found".into()))?;
-        let decoder_path = rec_config.find_decoder_file(&rec_dir)
+        let decoder_path = rec_config
+            .find_decoder_file(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Decoder not found".into()))?;
-        let tokenizer_path = rec_config.find_tokenizer_file(&rec_dir)
+        let tokenizer_path = rec_config
+            .find_tokenizer_file(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
 
         let backend = Self::create_backend(models)?;
@@ -117,17 +139,28 @@ impl RecognizerNode {
 
                 if let Some(ref image) = ctx.image {
                     if w >= 4 && h >= 4 {
-                        let cropped = operations::crop(image, Rect::new(x as f32, y as f32, w as f32, h as f32));
+                        let cropped = operations::crop(
+                            image,
+                            Rect::new(x as f32, y as f32, w as f32, h as f32),
+                        );
                         let line_groups = split_formula_line_groups(&cropped);
 
                         if line_groups.is_empty() {
-                            match recognize_formula(&cropped, &*enc_session, &*dec_session, &tokenizer_path, &params) {
+                            match recognize_formula(
+                                &cropped,
+                                &*enc_session,
+                                &*dec_session,
+                                &tokenizer_path,
+                                &params,
+                            ) {
                                 Ok(result) => {
                                     let mut f = Formula::latex(result.text);
                                     f.confidence = result.confidence;
                                     blocks.push(Block::Formula(FormulaBlock {
                                         formula: f,
-                                        geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                                        geometry: Some(Rect::new(
+                                            x as f32, y as f32, w as f32, h as f32,
+                                        )),
                                         source: Some(SourceInfo::new()),
                                     }));
                                 }
@@ -143,7 +176,13 @@ impl RecognizerNode {
                                         latexsnipper_image::color::PixelFormat::Rgb,
                                         crop.pixels.clone(),
                                     );
-                                    match recognize_formula(&crop_img, &*enc_session, &*dec_session, &tokenizer_path, &params) {
+                                    match recognize_formula(
+                                        &crop_img,
+                                        &*enc_session,
+                                        &*dec_session,
+                                        &tokenizer_path,
+                                        &params,
+                                    ) {
                                         Ok(result) => all_results.push(result.text),
                                         Err(e) => log::warn!("Formula line rec failed: {}", e),
                                     }
@@ -156,7 +195,9 @@ impl RecognizerNode {
                                 f.confidence = 0.9;
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
-                                    geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                                    geometry: Some(Rect::new(
+                                        x as f32, y as f32, w as f32, h as f32,
+                                    )),
                                     source: Some(SourceInfo::new()),
                                 }));
                             }
@@ -166,12 +207,19 @@ impl RecognizerNode {
             }
         }
 
-        ctx.set("formula_blocks", serde_json::to_value(&blocks).unwrap_or_default());
+        ctx.set(
+            "formula_blocks",
+            serde_json::to_value(&blocks).unwrap_or_default(),
+        );
         log::info!("Recognized {} formula blocks", blocks.len());
         Ok(())
     }
 
-    async fn recognize_texts(&self, ctx: &mut PipelineContext, models: &std::path::Path) -> Result<()> {
+    async fn recognize_texts(
+        &self,
+        ctx: &mut PipelineContext,
+        models: &std::path::Path,
+    ) -> Result<()> {
         let crop_key = "text_crops";
         let crops = match ctx.get(crop_key) {
             Some(v) => v.clone(),
@@ -183,11 +231,16 @@ impl RecognizerNode {
             None => return Ok(()),
         };
 
-        if crop_array.is_empty() { return Ok(()); }
+        if crop_array.is_empty() {
+            return Ok(());
+        }
 
         let rec_model = match select_text_rec_model(models) {
             Ok(m) => m,
-            Err(e) => { log::warn!("Text rec model not found: {}", e); return Ok(()); }
+            Err(e) => {
+                log::warn!("Text rec model not found: {}", e);
+                return Ok(());
+            }
         };
 
         let backend = Self::create_backend(models)?;
@@ -224,13 +277,24 @@ impl RecognizerNode {
                         let crop_h = h + pad_y * 2;
                         let crop_y_end = (crop_y + crop_h).min(image.height());
                         let final_h = crop_y_end - crop_y;
-                        let cropped = operations::crop(image, Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32));
-                        match recognize_text_with_keys(&cropped, &*session, &keys, first_char_id, &params) {
+                        let cropped = operations::crop(
+                            image,
+                            Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32),
+                        );
+                        match recognize_text_with_keys(
+                            &cropped,
+                            &*session,
+                            &keys,
+                            first_char_id,
+                            &params,
+                        ) {
                             Ok(result) => {
                                 if !result.text.is_empty() {
                                     blocks.push(Block::Paragraph(ParagraphBlock {
                                         inlines: vec![Inline::Text(TextRun::new(result.text))],
-                                        geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                                        geometry: Some(Rect::new(
+                                            x as f32, y as f32, w as f32, h as f32,
+                                        )),
                                         source: Some(SourceInfo::new()),
                                     }));
                                 }
@@ -242,13 +306,19 @@ impl RecognizerNode {
             }
         }
 
-        ctx.set("text_blocks", serde_json::to_value(&blocks).unwrap_or_default());
+        ctx.set(
+            "text_blocks",
+            serde_json::to_value(&blocks).unwrap_or_default(),
+        );
         log::info!("Recognized {} text blocks", blocks.len());
         Ok(())
     }
 }
 
-fn load_config(models: &std::path::Path, category: &str) -> Result<latexsnipper_model::ModelConfig> {
+fn load_config(
+    models: &std::path::Path,
+    category: &str,
+) -> Result<latexsnipper_model::ModelConfig> {
     let cat_dir = models.join(category);
     let variant_dir = std::fs::read_dir(&cat_dir)
         .map_err(|e| SnipperError::Model(format!("Cannot read {}: {}", cat_dir.display(), e)))?
@@ -267,7 +337,9 @@ fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
 
     let mut unsupported = Vec::new();
     for dir in candidates {
-        if !dir.is_dir() { continue; }
+        if !dir.is_dir() {
+            continue;
+        }
 
         let config = match if dir.join("config.json").exists() {
             latexsnipper_model::ModelConfig::load(&dir)
@@ -275,7 +347,10 @@ fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
             latexsnipper_model::ModelConfig::from_paddle_inference_dir(&dir)
         } {
             Ok(config) => config,
-            Err(e) => { unsupported.push(format!("{} cannot be parsed: {}", dir.display(), e)); continue; }
+            Err(e) => {
+                unsupported.push(format!("{} cannot be parsed: {}", dir.display(), e));
+                continue;
+            }
         };
 
         let Some(model_path) = config.find_model_file(&dir) else {
@@ -283,16 +358,26 @@ fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
             continue;
         };
 
-        let keys_path = config.find_tokenizer_file(&dir)
-            .ok_or_else(|| SnipperError::Model(format!("Text keys not found in {}", dir.display())))?;
+        let keys_path = config.find_tokenizer_file(&dir).ok_or_else(|| {
+            SnipperError::Model(format!("Text keys not found in {}", dir.display()))
+        })?;
 
-        return Ok(TextRecModel { config, model_path, keys_path });
+        return Ok(TextRecModel {
+            config,
+            model_path,
+            keys_path,
+        });
     }
 
     if unsupported.is_empty() {
-        Err(SnipperError::Model("No text recognition model directory found".into()))
+        Err(SnipperError::Model(
+            "No text recognition model directory found".into(),
+        ))
     } else {
-        Err(SnipperError::Model(format!("No supported text recognition model found ({})", unsupported.join("; "))))
+        Err(SnipperError::Model(format!(
+            "No supported text recognition model found ({})",
+            unsupported.join("; ")
+        )))
     }
 }
 
@@ -303,7 +388,10 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_models_dir(name: &str) -> std::path::PathBuf {
-        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         std::env::temp_dir().join(format!("latexsnipper-{}-{}", name, stamp))
     }
 

@@ -1,7 +1,7 @@
 pub mod config;
-pub mod manifest;
 pub mod manager;
+pub mod manifest;
 
 pub use config::ModelConfig;
-pub use manifest::ModelManifest;
 pub use manager::ModelManager;
+pub use manifest::ModelManifest;

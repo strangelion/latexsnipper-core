@@ -1,9 +1,9 @@
 //! Comprehensive formula conversion tests covering all supported formats
 
 use latexsnipper_ast::*;
-use latexsnipper_conversion::{DocumentConverter, OutputFormat};
 use latexsnipper_conversion::latex_parser::parse_latex;
 use latexsnipper_conversion::latex_to_typst::latex_ast_to_typst;
+use latexsnipper_conversion::{DocumentConverter, OutputFormat};
 
 /// Test LaTeX → Typst conversion
 fn test_latex_to_typst(latex: &str, expected: &str, desc: &str) {
@@ -85,8 +85,16 @@ fn test_comprehensive_formulas() {
     // ═══════════════════════════════════════════════════════════
     println!("━━━ 2. 希腊字母 ━━━\n");
 
-    test_latex_to_typst("\\alpha \\beta \\gamma \\delta", "alpha beta gamma delta", "小写希腊字母");
-    test_latex_to_typst("\\Gamma \\Delta \\Theta \\Omega", "Gamma Delta Theta Omega", "大写希腊字母");
+    test_latex_to_typst(
+        "\\alpha \\beta \\gamma \\delta",
+        "alpha beta gamma delta",
+        "小写希腊字母",
+    );
+    test_latex_to_typst(
+        "\\Gamma \\Delta \\Theta \\Omega",
+        "Gamma Delta Theta Omega",
+        "大写希腊字母",
+    );
 
     // ═══════════════════════════════════════════════════════════
     // 3. 运算符
@@ -95,9 +103,17 @@ fn test_comprehensive_formulas() {
 
     test_latex_to_typst("\\sum_{i=1}^{n} x_i", "sum_(i=1)^(n) x_(i)", "求和");
     test_latex_to_typst("\\prod_{i=1}^{n} x_i", "product_(i=1)^(n) x_(i)", "求积");
-    test_latex_to_typst("\\int_{0}^{\\infty} f(x) dx", "integral_(0)^(infinity) f(x) d x", "积分");
+    test_latex_to_typst(
+        "\\int_{0}^{\\infty} f(x) dx",
+        "integral_(0)^(infinity) f(x) d x",
+        "积分",
+    );
     test_latex_to_typst("\\lim_{x \\to 0} f(x)", "limit_(x to 0) f(x)", "极限");
-    test_latex_to_typst("\\sin^2(x) + \\cos^2(x) = 1", "sin^(2)(x) + cos^(2)(x) = 1", "三角函数");
+    test_latex_to_typst(
+        "\\sin^2(x) + \\cos^2(x) = 1",
+        "sin^(2)(x) + cos^(2)(x) = 1",
+        "三角函数",
+    );
 
     // ═══════════════════════════════════════════════════════════
     // 4. 关系符
@@ -142,17 +158,29 @@ fn test_comprehensive_formulas() {
     test_all_formats("\\int_{0}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}", "高斯积分");
     test_all_formats("e^{i\\pi} + 1 = 0", "欧拉公式");
     test_all_formats("\\frac{dy}{dx} + P(x)y = Q(x)", "微分方程");
-    test_all_formats("\\mathbf{A} \\cdot \\mathbf{x} = \\lambda \\mathbf{x}", "特征值方程");
+    test_all_formats(
+        "\\mathbf{A} \\cdot \\mathbf{x} = \\lambda \\mathbf{x}",
+        "特征值方程",
+    );
 
     // ═══════════════════════════════════════════════════════════
     // 8. 高级数学
     // ═══════════════════════════════════════════════════════════
     println!("━━━ 8. 高级数学 ━━━\n");
 
-    test_all_formats("\\nabla \\cdot \\vec{F} = \\frac{\\partial F_x}{\\partial x}", "散度定理");
-    test_all_formats("T_{\\mu\\nu} = g_{\\mu\\nu} + \\partial_\\mu \\phi \\partial_\\nu \\phi", "度规张量");
+    test_all_formats(
+        "\\nabla \\cdot \\vec{F} = \\frac{\\partial F_x}{\\partial x}",
+        "散度定理",
+    );
+    test_all_formats(
+        "T_{\\mu\\nu} = g_{\\mu\\nu} + \\partial_\\mu \\phi \\partial_\\nu \\phi",
+        "度规张量",
+    );
     test_all_formats("F: \\mathcal{C} \\to \\mathcal{D}", "函子");
-    test_all_formats("\\zeta(s) = \\sum_{n=1}^{\\infty} \\frac{1}{n^s}", "黎曼ζ函数");
+    test_all_formats(
+        "\\zeta(s) = \\sum_{n=1}^{\\infty} \\frac{1}{n^s}",
+        "黎曼ζ函数",
+    );
     test_all_formats("\\binom{n}{k} = \\frac{n!}{k!(n-k)!}", "组合数公式");
 
     // ═══════════════════════════════════════════════════════════
@@ -160,16 +188,28 @@ fn test_comprehensive_formulas() {
     // ═══════════════════════════════════════════════════════════
     println!("━━━ 9. 矩阵 ━━━\n");
 
-    test_all_formats("\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}", "圆括号矩阵");
-    test_all_formats("\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}", "方括号矩阵");
+    test_all_formats(
+        "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}",
+        "圆括号矩阵",
+    );
+    test_all_formats(
+        "\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}",
+        "方括号矩阵",
+    );
 
     // ═══════════════════════════════════════════════════════════
     // 10. 向量与字体
     // ═══════════════════════════════════════════════════════════
     println!("━━━ 10. 向量与字体 ━━━\n");
 
-    test_all_formats("\\vec{v} = \\begin{pmatrix} x \\\\ y \\\\ z \\end{pmatrix}", "向量+矩阵");
-    test_all_formats("\\mathbf{A} \\cdot \\mathbf{x} = \\lambda \\mathbf{x}", "粗体特征值");
+    test_all_formats(
+        "\\vec{v} = \\begin{pmatrix} x \\\\ y \\\\ z \\end{pmatrix}",
+        "向量+矩阵",
+    );
+    test_all_formats(
+        "\\mathbf{A} \\cdot \\mathbf{x} = \\lambda \\mathbf{x}",
+        "粗体特征值",
+    );
     test_all_formats("\\mathbb{R}^n", "黑板粗体");
 
     // ═══════════════════════════════════════════════════════════

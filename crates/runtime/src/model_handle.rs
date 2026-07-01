@@ -13,7 +13,11 @@ pub struct ModelHandle {
 }
 
 impl ModelHandle {
-    pub fn new(id: impl Into<String>, category: impl Into<String>, variant: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        category: impl Into<String>,
+        variant: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             category: category.into(),
@@ -24,7 +28,8 @@ impl ModelHandle {
 
     /// Create with explicit model path (avoids path guessing).
     pub fn with_path(id: impl Into<String>, path: PathBuf) -> Self {
-        let file_stem = path.file_stem()
+        let file_stem = path
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown")
             .to_string();
@@ -36,10 +41,18 @@ impl ModelHandle {
         }
     }
 
-    pub fn id(&self) -> &str { &self.id }
-    pub fn category(&self) -> &str { &self.category }
-    pub fn variant(&self) -> &str { &self.variant }
-    pub fn model_path(&self) -> Option<&Path> { self.model_path.as_deref() }
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    pub fn category(&self) -> &str {
+        &self.category
+    }
+    pub fn variant(&self) -> &str {
+        &self.variant
+    }
+    pub fn model_path(&self) -> Option<&Path> {
+        self.model_path.as_deref()
+    }
 }
 
 use std::path::Path;

@@ -8,8 +8,7 @@ fn main() {
     println!("=== LaTeXSnipper SDK Demo ===\n");
 
     // One line to process an image
-    let snipper = Snipper::from_file("fixtures/formula.png")
-        .expect("Failed to process image");
+    let snipper = Snipper::from_file("fixtures/formula.png").expect("Failed to process image");
 
     println!("Detected {} formulas\n", snipper.document().block_count());
 

@@ -1,4 +1,4 @@
-use latexsnipper_ast::{Document, Block, Inline};
+use latexsnipper_ast::{Block, Document, Inline};
 use latexsnipper_foundation::Result;
 
 use crate::renderer::Renderer;
@@ -21,8 +21,10 @@ impl Renderer for MarkdownRenderer {
                         }
                     }
                     Block::Paragraph(p) => {
-                        let text: String = p.inlines.iter().map(|i| {
-                            match i {
+                        let text: String = p
+                            .inlines
+                            .iter()
+                            .map(|i| match i {
                                 Inline::Text(t) => t.text.clone(),
                                 Inline::Formula(f) => {
                                     if f.display_mode {
@@ -32,8 +34,8 @@ impl Renderer for MarkdownRenderer {
                                     }
                                 }
                                 _ => String::new(),
-                            }
-                        }).collect();
+                            })
+                            .collect();
                         if !text.is_empty() {
                             parts.push(text);
                         }
@@ -45,5 +47,7 @@ impl Renderer for MarkdownRenderer {
         Ok(parts.join("\n\n"))
     }
 
-    fn name(&self) -> &str { "markdown" }
+    fn name(&self) -> &str {
+        "markdown"
+    }
 }

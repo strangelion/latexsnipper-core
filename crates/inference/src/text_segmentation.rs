@@ -16,7 +16,9 @@ pub fn split_text_box_around_formulas(
     min_width: f32,
 ) -> Vec<TextSegment> {
     if formula_boxes.is_empty() {
-        return vec![TextSegment { box_rect: *text_box }];
+        return vec![TextSegment {
+            box_rect: *text_box,
+        }];
     }
 
     // Start with the full text box x-range
@@ -28,7 +30,7 @@ pub fn split_text_box_around_formulas(
         // Check vertical overlap
         let y_overlap = (text_box.bottom().min(fb.bottom()) - text_box.y.max(fb.y)).max(0.0);
         let min_height = text_box.height.min(fb.height);
-        
+
         if y_overlap > min_height * 0.6 {
             // Check horizontal overlap or proximity
             let x_gap = if fb.x > text_box.right() {
@@ -38,7 +40,7 @@ pub fn split_text_box_around_formulas(
             } else {
                 0.0 // Overlapping
             };
-            
+
             let text_width = text_box.width;
             if x_gap < text_width * 0.5 || x_gap < 50.0 {
                 relevant_formulas.push(fb);
@@ -70,7 +72,8 @@ pub fn split_text_box_around_formulas(
     }
 
     // Filter by minimum width and create segments
-    intervals.into_iter()
+    intervals
+        .into_iter()
         .filter(|(start, end)| end - start >= min_width)
         .map(|(start, end)| TextSegment {
             box_rect: Rect::new(start, text_box.y, end - start, text_box.height),

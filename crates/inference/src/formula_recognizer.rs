@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::InferenceSession;
 use latexsnipper_tensor::Tensor;
 
-use crate::types::RecognitionResult;
 use crate::latex_repair;
+use crate::types::RecognitionResult;
 
 /// Recognition parameters loaded from config.json.
 #[derive(Debug, Clone)]
@@ -56,9 +56,14 @@ pub fn recognize_formula(
     let resized = latexsnipper_image::operations::resize(image, params.img_size, params.img_size);
     let pixels = latexsnipper_image::operations::normalize(&resized, &params.mean, &params.std);
 
-    let input = Tensor::float32("pixel_values", vec![1, 3, params.img_size as usize, params.img_size as usize], pixels);
+    let input = Tensor::float32(
+        "pixel_values",
+        vec![1, 3, params.img_size as usize, params.img_size as usize],
+        pixels,
+    );
     let encoder_outputs = encoder.run(&[input])?;
-    let hidden_states = encoder_outputs.first()
+    let hidden_states = encoder_outputs
+        .first()
         .ok_or_else(|| SnipperError::Inference("No encoder output".into()))?
         .as_f32_slice()
         .ok_or_else(|| SnipperError::Inference("Encoder output not float32".into()))?
@@ -73,7 +78,10 @@ pub fn recognize_formula(
 
     let text = latex_repair::repair_latex(&text);
 
-    Ok(RecognitionResult { text, confidence: 0.9 })
+    Ok(RecognitionResult {
+        text,
+        confidence: 0.9,
+    })
 }
 
 /// Greedy decoding: at each step, pick the token with highest probability.
@@ -90,30 +98,50 @@ fn greedy_decode(
 
     for _ in 0..params.max_tokens {
         let input_ids = Tensor::int64("input_ids", vec![1, token_ids.len()], token_ids.clone());
-        let hidden_tensor = Tensor::float32("encoder_hidden_states", hidden_shape.to_vec(), hidden_states.to_vec());
+        let hidden_tensor = Tensor::float32(
+            "encoder_hidden_states",
+            hidden_shape.to_vec(),
+            hidden_states.to_vec(),
+        );
 
         let outputs = decoder_session.run(&[input_ids, hidden_tensor])?;
-        let logits = outputs.first()
+        let logits = outputs
+            .first()
             .ok_or_else(|| SnipperError::Inference("No decoder output".into()))?
             .as_f32_slice()
             .ok_or_else(|| SnipperError::Inference("Decoder output not float32".into()))?;
 
-        let vocab_size = outputs.first().unwrap().shape().last().copied().unwrap_or(0);
+        let vocab_size = outputs
+            .first()
+            .unwrap()
+            .shape()
+            .last()
+            .copied()
+            .unwrap_or(0);
 
         // Get logits for the last position
         let last_pos_start = (token_ids.len() - 1) * vocab_size;
         let last_pos_end = last_pos_start + vocab_size;
-        if last_pos_end > logits.len() { break; }
+        if last_pos_end > logits.len() {
+            break;
+        }
         let step_logits = &logits[last_pos_start..last_pos_end];
 
         // Softmax
-        let max_logit = step_logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let max_logit = step_logits
+            .iter()
+            .cloned()
+            .fold(f32::NEG_INFINITY, f32::max);
         let mut probs: Vec<f32> = step_logits.iter().map(|&x| (x - max_logit).exp()).collect();
         let sum: f32 = probs.iter().sum();
-        for p in probs.iter_mut() { *p /= sum; }
+        for p in probs.iter_mut() {
+            *p /= sum;
+        }
 
         // Argmax
-        let (max_idx, max_prob) = probs.iter().enumerate()
+        let (max_idx, max_prob) = probs
+            .iter()
+            .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .unwrap_or((0, &0.0));
 
@@ -127,8 +155,11 @@ fn greedy_decode(
 
     // Decode tokens to text
     // Handle BPE tokens: Ġ prefix means space before character
-    let text = token_ids.iter()
-        .filter(|&&id| id != params.eos_token_id && id != params.pad_token_id && id != params.decoder_start_id)
+    let text = token_ids
+        .iter()
+        .filter(|&&id| {
+            id != params.eos_token_id && id != params.pad_token_id && id != params.decoder_start_id
+        })
         .filter_map(|id| tokenizer.get(id).cloned())
         .map(|token| {
             // BPE space prefix: Ā (U+0100) or Ġ (U+0120) — tokenizer.json uses Ā
@@ -151,7 +182,8 @@ fn load_tokenizer(path: &Path) -> Result<HashMap<i64, String>> {
     let json: serde_json::Value = serde_json::from_str(&content)
         .map_err(|e| SnipperError::Model(format!("Invalid tokenizer JSON: {}", e)))?;
 
-    let vocab = json.get("model")
+    let vocab = json
+        .get("model")
         .and_then(|m| m.get("vocab"))
         .ok_or_else(|| SnipperError::Model("Missing model.vocab in tokenizer".into()))?;
 
@@ -190,24 +222,40 @@ fn beam_search(
             }
 
             let input_ids = Tensor::int64("input_ids", vec![1, token_ids.len()], token_ids.clone());
-            let hidden_tensor = Tensor::float32("encoder_hidden_states", hidden_shape.to_vec(), hidden_states.to_vec());
+            let hidden_tensor = Tensor::float32(
+                "encoder_hidden_states",
+                hidden_shape.to_vec(),
+                hidden_states.to_vec(),
+            );
 
             let outputs = decoder_session.run(&[input_ids, hidden_tensor])?;
-            let logits = outputs.first()
+            let logits = outputs
+                .first()
                 .ok_or_else(|| SnipperError::Inference("No decoder output".into()))?
                 .as_f32_slice()
                 .ok_or_else(|| SnipperError::Inference("Decoder output not float32".into()))?;
 
-            let vocab_size = outputs.first().unwrap().shape().last().copied().unwrap_or(0);
+            let vocab_size = outputs
+                .first()
+                .unwrap()
+                .shape()
+                .last()
+                .copied()
+                .unwrap_or(0);
 
             let mut probs: Vec<f32> = logits.to_vec();
             let max_logit = probs.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-            for p in probs.iter_mut() { *p = (*p - max_logit).exp(); }
+            for p in probs.iter_mut() {
+                *p = (*p - max_logit).exp();
+            }
             let sum: f32 = probs.iter().sum();
-            for p in probs.iter_mut() { *p /= sum; }
+            for p in probs.iter_mut() {
+                *p /= sum;
+            }
 
             let k = params.top_k.min(vocab_size);
-            let mut indexed: Vec<(usize, f32)> = probs.iter().enumerate().map(|(i, &p)| (i, p)).collect();
+            let mut indexed: Vec<(usize, f32)> =
+                probs.iter().enumerate().map(|(i, &p)| (i, p)).collect();
             indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             indexed.truncate(k);
 
@@ -222,15 +270,23 @@ fn beam_search(
         all_candidates.truncate(params.beam_width);
         beams = all_candidates;
 
-        if beams.iter().all(|(ids, _)| ids.last() == Some(&params.eos_token_id) || ids.last() == Some(&params.pad_token_id)) {
+        if beams.iter().all(|(ids, _)| {
+            ids.last() == Some(&params.eos_token_id) || ids.last() == Some(&params.pad_token_id)
+        }) {
             break;
         }
     }
 
-    let best = beams.first().ok_or_else(|| SnipperError::Inference("No beams".into()))?;
+    let best = beams
+        .first()
+        .ok_or_else(|| SnipperError::Inference("No beams".into()))?;
 
-    let text = best.0.iter()
-        .filter(|&&id| id != params.eos_token_id && id != params.pad_token_id && id != params.decoder_start_id)
+    let text = best
+        .0
+        .iter()
+        .filter(|&&id| {
+            id != params.eos_token_id && id != params.pad_token_id && id != params.decoder_start_id
+        })
         .filter_map(|id| tokenizer.get(id).cloned())
         .collect::<Vec<_>>()
         .join("");

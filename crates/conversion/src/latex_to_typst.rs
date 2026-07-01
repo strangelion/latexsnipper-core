@@ -25,18 +25,26 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             }
             result
         }
-        LatexNode::Group(nodes) => {
-            nodes.iter().map(|n| latex_ast_to_typst(n)).collect::<Vec<_>>().join(" ")
-        }
+        LatexNode::Group(nodes) => nodes
+            .iter()
+            .map(|n| latex_ast_to_typst(n))
+            .collect::<Vec<_>>()
+            .join(" "),
         LatexNode::Fraction { num, den } => {
-            format!("frac({}, {})", latex_ast_to_typst(num), latex_ast_to_typst(den))
+            format!(
+                "frac({}, {})",
+                latex_ast_to_typst(num),
+                latex_ast_to_typst(den)
+            )
         }
-        LatexNode::SquareRoot { index, content } => {
-            match index {
-                Some(idx) => format!("root({}, {})", latex_ast_to_typst(idx), latex_ast_to_typst(content)),
-                None => format!("sqrt({})", latex_ast_to_typst(content)),
-            }
-        }
+        LatexNode::SquareRoot { index, content } => match index {
+            Some(idx) => format!(
+                "root({}, {})",
+                latex_ast_to_typst(idx),
+                latex_ast_to_typst(content)
+            ),
+            None => format!("sqrt({})", latex_ast_to_typst(content)),
+        },
         LatexNode::Superscript { base, exp } => {
             let base_str = latex_ast_to_typst(base);
             if base_str.is_empty() {
@@ -54,15 +62,27 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             }
         }
         LatexNode::Math { content, display } => {
-            let inner = content.iter().map(|n| latex_ast_to_typst(n)).collect::<Vec<_>>().join(" ");
+            let inner = content
+                .iter()
+                .map(|n| latex_ast_to_typst(n))
+                .collect::<Vec<_>>()
+                .join(" ");
             if *display {
                 format!("$ {} $", inner)
             } else {
                 format!("${}$", inner)
             }
         }
-        LatexNode::Delimited { left, content, right } => {
-            let inner = content.iter().map(|n| latex_ast_to_typst(n)).collect::<Vec<_>>().join(" ");
+        LatexNode::Delimited {
+            left,
+            content,
+            right,
+        } => {
+            let inner = content
+                .iter()
+                .map(|n| latex_ast_to_typst(n))
+                .collect::<Vec<_>>()
+                .join(" ");
             let typst_left = convert_delimiter(left);
             let typst_right = convert_delimiter(right);
             format!("lr({}{}{})", typst_left, inner, typst_right)
@@ -83,16 +103,26 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 "cases" => "cases",
                 _ => "mat",
             };
-            let cell_rows: Vec<String> = rows.iter().map(|row| {
-                let cells: Vec<String> = row.iter().map(|cell| latex_ast_to_typst(cell)).collect();
-                cells.join(", ")
-            }).collect();
+            let cell_rows: Vec<String> = rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<String> =
+                        row.iter().map(|cell| latex_ast_to_typst(cell)).collect();
+                    cells.join(", ")
+                })
+                .collect();
             format!("{}({})", typst_fn, cell_rows.join("; "))
         }
         LatexNode::Cases(rows) => {
-            let cases: Vec<String> = rows.iter().map(|row| {
-                row.iter().map(|cell| latex_ast_to_typst(cell)).collect::<Vec<_>>().join(" ")
-            }).collect();
+            let cases: Vec<String> = rows
+                .iter()
+                .map(|row| {
+                    row.iter()
+                        .map(|cell| latex_ast_to_typst(cell))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .collect();
             format!("cases({})", cases.join(", "))
         }
         LatexNode::Command { name, args } => {
@@ -110,7 +140,7 @@ fn convert_delimiter(s: &str) -> &str {
         "{" | "}" => s,
         "|" | "|" => "|",
         "||" => "||",
-        "." => ".",  // invisible delimiter
+        "." => ".", // invisible delimiter
         _ => s,
     }
 }

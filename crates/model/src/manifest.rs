@@ -1,7 +1,7 @@
+use latexsnipper_foundation::{Result, SnipperError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use latexsnipper_foundation::{SnipperError, Result};
 
 /// Model manifest describing available models and their variants.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,11 +60,17 @@ impl ModelManifest {
         }
         for (cat, info) in &self.categories {
             if info.variants.is_empty() {
-                return Err(SnipperError::Model(format!("Category {} has no variants", cat)));
+                return Err(SnipperError::Model(format!(
+                    "Category {} has no variants",
+                    cat
+                )));
             }
             for v in &info.variants {
                 if v.id.is_empty() {
-                    return Err(SnipperError::Model(format!("Variant in {} has empty id", cat)));
+                    return Err(SnipperError::Model(format!(
+                        "Variant in {} has empty id",
+                        cat
+                    )));
                 }
             }
         }
@@ -74,7 +80,7 @@ impl ModelManifest {
     /// Verify SHA256 checksum of a file.
     pub fn verify_checksum(&self, filename: &str, data: &[u8]) -> Result<bool> {
         if let Some(expected) = self.checksums.get(filename) {
-            use sha2::{Sha256, Digest};
+            use sha2::{Digest, Sha256};
             let hash = Sha256::digest(data);
             let hex_hash = hex::encode(hash);
             Ok(hex_hash == *expected)

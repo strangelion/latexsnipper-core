@@ -21,7 +21,11 @@ pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
     }
 
     let end = first_end?;
-    let first = if s.starts_with('{') { &s[1..end] } else { &s[..end] };
+    let first = if s.starts_with('{') {
+        &s[1..end]
+    } else {
+        &s[..end]
+    };
     let rest = &s[end + 1..];
     let rest = rest.trim_start();
 
@@ -80,7 +84,8 @@ pub fn extract_env<'a>(latex: &'a str, env: &str) -> Option<&'a str> {
 
 /// Split matrix rows by \\ separator
 pub fn split_matrix_rows(content: &str) -> Vec<Vec<&str>> {
-    content.split('\\')
+    content
+        .split('\\')
         .filter(|s| !s.trim().is_empty() && s.trim() != "\\")
         .map(|row| row.split('&').filter(|s| !s.trim().is_empty()).collect())
         .filter(|row: &Vec<&str>| !row.is_empty())
@@ -91,18 +96,39 @@ pub fn split_matrix_rows(content: &str) -> Vec<Vec<&str>> {
 pub fn typst_to_latex(typst: &str) -> String {
     let mut result = typst.to_string();
     let mappings = [
-        ("sqrt(", "\\sqrt{"), ("integral", "\\int"), ("sum", "\\sum"),
-        ("product", "\\prod"), ("infinity", "\\infty"), ("pi", "\\pi"),
-        ("alpha", "\\alpha"), ("beta", "\\beta"), ("gamma", "\\gamma"),
-        ("delta", "\\delta"), ("theta", "\\theta"), ("lambda", "\\lambda"),
-        ("sigma", "\\sigma"), ("omega", "\\omega"), ("plus.minus", "\\pm"),
-        ("times", "\\times"), ("div", "\\div"), ("dot", "\\cdot"),
-        ("lt.eq", "\\leq"), ("gt.eq", "\\geq"), ("neq", "\\neq"),
-        ("approx", "\\approx"), ("rightarrow", "\\rightarrow"),
-        ("leftarrow", "\\leftarrow"), ("in", "\\in"), ("notin", "\\notin"),
-        ("subset", "\\subset"), ("cup", "\\cup"), ("cap", "\\cap"),
+        ("sqrt(", "\\sqrt{"),
+        ("integral", "\\int"),
+        ("sum", "\\sum"),
+        ("product", "\\prod"),
+        ("infinity", "\\infty"),
+        ("pi", "\\pi"),
+        ("alpha", "\\alpha"),
+        ("beta", "\\beta"),
+        ("gamma", "\\gamma"),
+        ("delta", "\\delta"),
+        ("theta", "\\theta"),
+        ("lambda", "\\lambda"),
+        ("sigma", "\\sigma"),
+        ("omega", "\\omega"),
+        ("plus.minus", "\\pm"),
+        ("times", "\\times"),
+        ("div", "\\div"),
+        ("dot", "\\cdot"),
+        ("lt.eq", "\\leq"),
+        ("gt.eq", "\\geq"),
+        ("neq", "\\neq"),
+        ("approx", "\\approx"),
+        ("rightarrow", "\\rightarrow"),
+        ("leftarrow", "\\leftarrow"),
+        ("in", "\\in"),
+        ("notin", "\\notin"),
+        ("subset", "\\subset"),
+        ("cup", "\\cup"),
+        ("cap", "\\cap"),
     ];
-    for (from, to) in &mappings { result = result.replace(from, to); }
+    for (from, to) in &mappings {
+        result = result.replace(from, to);
+    }
     result
 }
 
@@ -145,9 +171,14 @@ pub fn map_symbol_unicode(latex: &str) -> Option<&str> {
 /// Map large operators to Unicode
 pub fn map_large_op(latex: &str) -> Option<&str> {
     match latex {
-        "\\sum" => Some("∑"), "\\prod" => Some("∏"), "\\int" => Some("∫"),
-        "\\iint" => Some("∬"), "\\iiint" => Some("∭"), "\\oint" => Some("∮"),
-        "\\bigcup" => Some("⋃"), "\\bigcap" => Some("⋂"),
+        "\\sum" => Some("∑"),
+        "\\prod" => Some("∏"),
+        "\\int" => Some("∫"),
+        "\\iint" => Some("∬"),
+        "\\iiint" => Some("∭"),
+        "\\oint" => Some("∮"),
+        "\\bigcup" => Some("⋃"),
+        "\\bigcap" => Some("⋂"),
         _ => None,
     }
 }

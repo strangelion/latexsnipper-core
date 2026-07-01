@@ -6,10 +6,7 @@ pub enum LatexNode {
     /// Plain text
     Text(String),
     /// Command with arguments: \cmd{arg1}{arg2}
-    Command {
-        name: String,
-        args: Vec<LatexNode>,
-    },
+    Command { name: String, args: Vec<LatexNode> },
     /// Superscript: a^{b}
     Superscript {
         base: Box<LatexNode>,

@@ -3,8 +3,9 @@ use latexsnipper_foundation::Result;
 
 use crate::converter::Converter;
 use crate::{
-    HtmlConverter, LatexConverter, LatexDisplayConverter, LatexEquationConverter, MathmlConverter,
-    MarkdownBlockConverter, MarkdownInlineConverter, OmmlConverter, TypstConverter,
+    HtmlConverter, LatexConverter, LatexDisplayConverter, LatexEquationConverter,
+    MarkdownBlockConverter, MarkdownInlineConverter, MathmlConverter, OmmlConverter,
+    TypstConverter,
 };
 
 /// Supported output formats.

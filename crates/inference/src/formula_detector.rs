@@ -1,5 +1,5 @@
 use latexsnipper_ast::Rect;
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::InferenceSession;
 use latexsnipper_tensor::Tensor;
@@ -47,7 +47,8 @@ impl DetectionParams {
         let conf_threshold = post.and_then(|p| p.confidence_threshold).unwrap_or(0.25);
         let iou_threshold = post.and_then(|p| p.iou_threshold).unwrap_or(0.45);
         let apply_sigmoid = post.and_then(|p| p.apply_sigmoid).unwrap_or(true);
-        let output_layout = post.and_then(|p| p.output_layout.clone())
+        let output_layout = post
+            .and_then(|p| p.output_layout.clone())
             .unwrap_or_else(|| "row_major".into());
 
         let target_size = w.or(h).unwrap_or(768);
@@ -70,16 +71,29 @@ pub fn detect_formulas(
     session: &dyn InferenceSession,
     params: &DetectionParams,
 ) -> Result<Vec<DetectionBox>> {
-    let (letterboxed, scale, pad_x, pad_y) = latexsnipper_image::operations::letterbox(image, params.target_size);
+    let (letterboxed, scale, pad_x, pad_y) =
+        latexsnipper_image::operations::letterbox(image, params.target_size);
 
     let pixels = latexsnipper_image::operations::normalize(&letterboxed, &params.mean, &params.std);
 
-    let input = Tensor::float32("images", vec![1, 3, params.target_size as usize, params.target_size as usize], pixels);
+    let input = Tensor::float32(
+        "images",
+        vec![
+            1,
+            3,
+            params.target_size as usize,
+            params.target_size as usize,
+        ],
+        pixels,
+    );
 
     let outputs = session.run(&[input])?;
 
-    let output = outputs.first().ok_or_else(|| SnipperError::Inference("No output tensor".into()))?;
-    let raw_data = output.as_f32_slice()
+    let output = outputs
+        .first()
+        .ok_or_else(|| SnipperError::Inference("No output tensor".into()))?;
+    let raw_data = output
+        .as_f32_slice()
         .ok_or_else(|| SnipperError::Inference("Output is not float32".into()))?;
     let shape = output.shape();
 
@@ -88,10 +102,10 @@ pub fn detect_formulas(
     // Sort by confidence for better NMS
     let mut sorted_boxes = boxes;
     sorted_boxes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
-    
+
     // Apply NMS with stricter threshold
     let nms_boxes = nms(sorted_boxes, 0.5);
-    
+
     // Limit to reasonable number of detections
     let mut final_boxes = nms_boxes;
     final_boxes.truncate(50);
@@ -110,15 +124,26 @@ fn decode_yolo_output(
     let mut boxes = Vec::new();
 
     // Determine number of anchors from shape
-    let num_anchors = if shape.len() == 3 { shape[1].max(shape[2]) }
-        else if shape.len() == 2 { shape[0].max(shape[1]) }
-        else { return Err(SnipperError::Inference(format!("Unexpected YOLO shape: {:?}", shape))); };
+    let num_anchors = if shape.len() == 3 {
+        shape[1].max(shape[2])
+    } else if shape.len() == 2 {
+        shape[0].max(shape[1])
+    } else {
+        return Err(SnipperError::Inference(format!(
+            "Unexpected YOLO shape: {:?}",
+            shape
+        )));
+    };
 
     // Handle layout: col_major needs transpose to row_major
     let is_col_major = params.output_layout == "col_major";
     let num_anchors_actual = if is_col_major {
         // [6, N] layout: shape[smaller] is anchor count
-        if shape.len() == 3 { shape[1].min(shape[2]) } else { shape[0].min(shape[1]) }
+        if shape.len() == 3 {
+            shape[1].min(shape[2])
+        } else {
+            shape[0].min(shape[1])
+        }
     } else {
         num_anchors
     };
@@ -126,15 +151,39 @@ fn decode_yolo_output(
     for i in 0..num_anchors_actual {
         let (cx, cy, w, h, raw_conf0, raw_conf1) = if is_col_major {
             let n = num_anchors_actual;
-            (data[i], data[n + i], data[2*n + i], data[3*n + i], data[4*n + i], data[5*n + i])
+            (
+                data[i],
+                data[n + i],
+                data[2 * n + i],
+                data[3 * n + i],
+                data[4 * n + i],
+                data[5 * n + i],
+            )
         } else {
             let base = i * 6;
-            if base + 5 >= data.len() { break; }
-            (data[base], data[base + 1], data[base + 2], data[base + 3], data[base + 4], data[base + 5])
+            if base + 5 >= data.len() {
+                break;
+            }
+            (
+                data[base],
+                data[base + 1],
+                data[base + 2],
+                data[base + 3],
+                data[base + 4],
+                data[base + 5],
+            )
         };
 
-        let conf0 = if params.apply_sigmoid { sigmoid(raw_conf0) } else { raw_conf0 };
-        let conf1 = if params.apply_sigmoid { sigmoid(raw_conf1) } else { raw_conf1 };
+        let conf0 = if params.apply_sigmoid {
+            sigmoid(raw_conf0)
+        } else {
+            raw_conf0
+        };
+        let conf1 = if params.apply_sigmoid {
+            sigmoid(raw_conf1)
+        } else {
+            raw_conf1
+        };
 
         let max_conf = conf0.max(conf1);
         if max_conf < params.conf_threshold {
@@ -142,7 +191,12 @@ fn decode_yolo_output(
         }
 
         let class_id = if conf1 > conf0 { 1 } else { 0 };
-        let class_name = if class_id == 1 { "isolated" } else { "embedding" }.to_string();
+        let class_name = if class_id == 1 {
+            "isolated"
+        } else {
+            "embedding"
+        }
+        .to_string();
 
         let x1 = (cx - w / 2.0 - pad_x) / scale;
         let y1 = (cy - h / 2.0 - pad_y) / scale;
@@ -198,9 +252,16 @@ pub fn group_formula_detections(boxes: &mut Vec<DetectionBox>) {
 
     // Sort by Y position, then X position
     boxes.sort_by(|a, b| {
-        a.rect.y.partial_cmp(&b.rect.y)
+        a.rect
+            .y
+            .partial_cmp(&b.rect.y)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.rect.x.partial_cmp(&b.rect.x).unwrap_or(std::cmp::Ordering::Equal))
+            .then_with(|| {
+                a.rect
+                    .x
+                    .partial_cmp(&b.rect.x)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     });
 
     let mut merged = Vec::new();
@@ -259,7 +320,11 @@ pub fn group_formula_detections(boxes: &mut Vec<DetectionBox>) {
 }
 
 /// Filter formula detections by size and confidence.
-pub fn filter_formula_detections(boxes: &mut Vec<DetectionBox>, min_area: f32, min_confidence: f32) {
+pub fn filter_formula_detections(
+    boxes: &mut Vec<DetectionBox>,
+    min_area: f32,
+    min_confidence: f32,
+) {
     boxes.retain(|b| {
         let area = b.rect.width * b.rect.height;
         area >= min_area && b.confidence >= min_confidence

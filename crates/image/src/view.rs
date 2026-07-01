@@ -14,8 +14,12 @@ impl<'a> ImageView<'a> {
         Self { image, rect }
     }
 
-    pub fn image(&self) -> &'a SnipperImage { self.image }
-    pub fn rect(&self) -> Rect { self.rect }
+    pub fn image(&self) -> &'a SnipperImage {
+        self.image
+    }
+    pub fn rect(&self) -> Rect {
+        self.rect
+    }
 
     pub fn width(&self) -> u32 {
         self.rect.width.round() as u32

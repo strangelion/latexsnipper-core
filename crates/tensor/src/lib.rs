@@ -19,16 +19,30 @@ pub enum TensorData {
 
 impl Tensor {
     pub fn float32(name: impl Into<String>, shape: Vec<usize>, data: Vec<f32>) -> Self {
-        Self { name: name.into(), shape, data: TensorData::Float32(data) }
+        Self {
+            name: name.into(),
+            shape,
+            data: TensorData::Float32(data),
+        }
     }
 
     pub fn int64(name: impl Into<String>, shape: Vec<usize>, data: Vec<i64>) -> Self {
-        Self { name: name.into(), shape, data: TensorData::Int64(data) }
+        Self {
+            name: name.into(),
+            shape,
+            data: TensorData::Int64(data),
+        }
     }
 
-    pub fn name(&self) -> &str { &self.name }
-    pub fn shape(&self) -> &[usize] { &self.shape }
-    pub fn data(&self) -> &TensorData { &self.data }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn shape(&self) -> &[usize] {
+        &self.shape
+    }
+    pub fn data(&self) -> &TensorData {
+        &self.data
+    }
 
     pub fn as_f32_slice(&self) -> Option<&[f32]> {
         match &self.data {

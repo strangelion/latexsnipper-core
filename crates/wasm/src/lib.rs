@@ -1,10 +1,13 @@
-use wasm_bindgen::prelude::*;
 use latexsnipper_ast::Document;
-use latexsnipper_syntax::{Parser as _, Renderer as _};
+use latexsnipper_conversion::{
+    Converter, HtmlConverter, LatexConverter, MarkdownBlockConverter, MarkdownInlineConverter,
+    MathmlConverter, OmmlConverter, TypstConverter,
+};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
-use latexsnipper_syntax::typst::TypstRenderer;
 use latexsnipper_syntax::markdown::MarkdownRenderer;
-use latexsnipper_conversion::{Converter, LatexConverter, OmmlConverter, MathmlConverter, TypstConverter, MarkdownInlineConverter, MarkdownBlockConverter, HtmlConverter};
+use latexsnipper_syntax::typst::TypstRenderer;
+use latexsnipper_syntax::{Parser as _, Renderer as _};
+use wasm_bindgen::prelude::*;
 
 /// Initialize the WASM module.
 #[wasm_bindgen]
@@ -68,7 +71,8 @@ pub fn convert_document(doc_json: &str, format: &str) -> Result<String, JsValue>
 /// Get the LaTeX string from a formula JSON.
 #[wasm_bindgen]
 pub fn formula_to_latex(formula_json: &str) -> Result<String, JsValue> {
-    let formula: latexsnipper_ast::Formula = serde_json::from_str(formula_json).map_err(err_to_js)?;
+    let formula: latexsnipper_ast::Formula =
+        serde_json::from_str(formula_json).map_err(err_to_js)?;
     Ok(formula.as_latex().to_string())
 }
 
@@ -76,9 +80,15 @@ pub fn formula_to_latex(formula_json: &str) -> Result<String, JsValue> {
 #[wasm_bindgen]
 pub fn available_formats() -> String {
     let formats = vec![
-        "latex", "latex_display", "latex_equation",
-        "markdown_inline", "markdown_block",
-        "mathml", "omml", "typst", "html",
+        "latex",
+        "latex_display",
+        "latex_equation",
+        "markdown_inline",
+        "markdown_block",
+        "mathml",
+        "omml",
+        "typst",
+        "html",
     ];
     serde_json::to_string(&formats).unwrap_or_default()
 }
@@ -111,11 +121,13 @@ pub fn formula_to_document(latex: &str, format: &str) -> Result<String, JsValue>
         pages: vec![latexsnipper_ast::Page {
             width: 800.0,
             height: 600.0,
-            blocks: vec![latexsnipper_ast::Block::Formula(latexsnipper_ast::FormulaBlock {
-                formula: latexsnipper_ast::Formula::latex(latex),
-                geometry: None,
-                source: None,
-            })],
+            blocks: vec![latexsnipper_ast::Block::Formula(
+                latexsnipper_ast::FormulaBlock {
+                    formula: latexsnipper_ast::Formula::latex(latex),
+                    geometry: None,
+                    source: None,
+                },
+            )],
             page_number: Some(1),
         }],
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),

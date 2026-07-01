@@ -7,7 +7,9 @@
 
 #[cfg(test)]
 mod foundation_tests {
-    use latexsnipper_foundation::{SnipperError, Result, CoreConfig, AccelerationMode, EventBus, EventType};
+    use latexsnipper_foundation::{
+        AccelerationMode, CoreConfig, EventBus, EventType, Result, SnipperError,
+    };
 
     #[test]
     fn error_display() {
@@ -31,14 +33,22 @@ mod foundation_tests {
             SnipperError::Cancelled,
             SnipperError::Other("unknown".into()),
         ];
-        for err in cases { assert!(!err.to_string().is_empty()); }
+        for err in cases {
+            assert!(!err.to_string().is_empty());
+        }
     }
 
     #[test]
-    fn result_ok() { let r: Result<i32> = Ok(42); assert_eq!(r.unwrap(), 42); }
+    fn result_ok() {
+        let r: Result<i32> = Ok(42);
+        assert_eq!(r.unwrap(), 42);
+    }
 
     #[test]
-    fn result_err() { let r: Result<i32> = Err(SnipperError::Cancelled); assert!(r.is_err()); }
+    fn result_err() {
+        let r: Result<i32> = Err(SnipperError::Cancelled);
+        assert!(r.is_err());
+    }
 
     #[test]
     fn config_default() {
@@ -53,10 +63,16 @@ mod foundation_tests {
         let bus = EventBus::new();
         let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let c = called.clone();
-        bus.subscribe(EventType::RecognitionCompleted, Arc::new(move |_| {
-            c.store(true, std::sync::atomic::Ordering::Relaxed);
-        }));
-        bus.emit(latexsnipper_foundation::Event { event_type: EventType::RecognitionCompleted, data: serde_json::json!({}) });
+        bus.subscribe(
+            EventType::RecognitionCompleted,
+            Arc::new(move |_| {
+                c.store(true, std::sync::atomic::Ordering::Relaxed);
+            }),
+        );
+        bus.emit(latexsnipper_foundation::Event {
+            event_type: EventType::RecognitionCompleted,
+            data: serde_json::json!({}),
+        });
         assert!(called.load(std::sync::atomic::Ordering::Relaxed));
     }
 }
@@ -102,7 +118,8 @@ mod ast_tests {
     fn document_serialization() {
         let mut doc = Document::new();
         doc.pages.push(Page {
-            width: 800.0, height: 600.0,
+            width: 800.0,
+            height: 600.0,
             blocks: vec![Block::Formula(FormulaBlock {
                 formula: Formula::latex("E=mc^2"),
                 geometry: None,
@@ -153,9 +170,9 @@ mod tensor_tests {
 
 #[cfg(test)]
 mod image_tests {
-    use latexsnipper_image::*;
-    use latexsnipper_image::color::PixelFormat;
     use latexsnipper_ast::Rect;
+    use latexsnipper_image::color::PixelFormat;
+    use latexsnipper_image::*;
 
     fn test_image() -> SnipperImage {
         SnipperImage::new(100, 100, PixelFormat::Rgb, vec![128u8; 30000])
@@ -274,7 +291,10 @@ mod model_tests {
         }"#;
         let config = ModelConfig::parse(json).unwrap();
         assert_eq!(config.model_type, "crnn_ctc");
-        assert_eq!(config.decoding.as_ref().unwrap().decoding_type.as_deref(), Some("ctc_greedy"));
+        assert_eq!(
+            config.decoding.as_ref().unwrap().decoding_type.as_deref(),
+            Some("ctc_greedy")
+        );
     }
 
     #[test]
@@ -311,9 +331,9 @@ mod model_tests {
 
 #[cfg(test)]
 mod syntax_tests {
-    use latexsnipper_syntax::{Parser, Renderer};
     use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
     use latexsnipper_syntax::typst::latex_to_typst;
+    use latexsnipper_syntax::{Parser, Renderer};
 
     #[test]
     fn latex_parse_display_math() {
@@ -344,9 +364,9 @@ mod syntax_tests {
 
 #[cfg(test)]
 mod export_tests {
-    use latexsnipper_export::{RenderTree, Generator};
     use latexsnipper_export::svg::SvgGenerator;
     use latexsnipper_export::text::TextGenerator;
+    use latexsnipper_export::{Generator, RenderTree};
     use latexsnipper_syntax::latex::LatexParser;
     use latexsnipper_syntax::Parser;
 
@@ -386,14 +406,17 @@ mod export_tests {
 
 #[cfg(test)]
 mod conversion_tests {
+    use latexsnipper_ast::{
+        Block, Document, Formula, FormulaBlock, Inline, Page, ParagraphBlock, TextRun,
+    };
     use latexsnipper_conversion::*;
-    use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, ParagraphBlock, Inline, TextRun};
 
     fn test_doc() -> Document {
         Document {
             metadata: latexsnipper_ast::Metadata::default(),
             pages: vec![Page {
-                width: 800.0, height: 600.0,
+                width: 800.0,
+                height: 600.0,
                 blocks: vec![
                     Block::Paragraph(ParagraphBlock {
                         inlines: vec![Inline::Text(TextRun::new("Given "))],
@@ -427,35 +450,82 @@ mod conversion_tests {
     }
 
     #[test]
-    fn latex() { let r = LatexConverter.convert(&test_doc()).unwrap(); assert!(r.contains("E=mc^2")); }
+    fn latex() {
+        let r = LatexConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("E=mc^2"));
+    }
     #[test]
-    fn latex_display() { let r = LatexDisplayConverter.convert(&test_doc()).unwrap(); assert!(r.contains("\\[")); }
+    fn latex_display() {
+        let r = LatexDisplayConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("\\["));
+    }
     #[test]
-    fn latex_equation() { let r = LatexEquationConverter.convert(&test_doc()).unwrap(); assert!(r.contains("\\begin{equation}")); }
+    fn latex_equation() {
+        let r = LatexEquationConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("\\begin{equation}"));
+    }
     #[test]
-    fn markdown_inline() { let r = MarkdownInlineConverter.convert(&test_doc()).unwrap(); assert!(r.contains("$E=mc^2$")); }
+    fn markdown_inline() {
+        let r = MarkdownInlineConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("$E=mc^2$"));
+    }
     #[test]
-    fn markdown_block() { let r = MarkdownBlockConverter.convert(&test_doc()).unwrap(); assert!(r.contains("$$")); }
+    fn markdown_block() {
+        let r = MarkdownBlockConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("$$"));
+    }
     #[test]
-    fn mathml() { let r = MathmlConverter.convert(&test_doc()).unwrap(); assert!(r.contains("<math")); }
+    fn mathml() {
+        let r = MathmlConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("<math"));
+    }
     #[test]
-    fn mathml_mml() { let r = MathmlMmlConverter.convert(&test_doc()).unwrap(); assert!(r.contains("mml:math")); }
+    fn mathml_mml() {
+        let r = MathmlMmlConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("mml:math"));
+    }
     #[test]
-    fn mathml_m() { let r = MathmlMConverter.convert(&test_doc()).unwrap(); assert!(r.contains("<m:math")); }
+    fn mathml_m() {
+        let r = MathmlMConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("<m:math"));
+    }
     #[test]
-    fn mathml_attr() { let r = MathmlAttrConverter.convert(&test_doc()).unwrap(); assert!(r.contains("math")); }
+    fn mathml_attr() {
+        let r = MathmlAttrConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("math"));
+    }
     #[test]
-    fn omml() { let r = OmmlConverter.convert(&test_doc()).unwrap(); assert!(r.contains("<m:f>")); }
+    fn omml() {
+        let r = OmmlConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("<m:f>"));
+    }
     #[test]
-    fn typst() { let r = TypstConverter.convert(&test_doc()).unwrap(); assert!(r.contains("(a+b)/(c)")); }
+    fn typst() {
+        let r = TypstConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("(a+b)/(c)"));
+    }
     #[test]
-    fn html() { let r = HtmlConverter.convert(&test_doc()).unwrap(); assert!(r.contains("MathJax")); }
+    fn html() {
+        let r = HtmlConverter.convert(&test_doc()).unwrap();
+        assert!(r.contains("MathJax"));
+    }
 
     #[test]
     fn fraction_omml() {
-        let doc = Document { metadata: Default::default(), pages: vec![Page { width: 0.0, height: 0.0,
-            blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None, source: None })],
-            page_number: None }], id_gen: latexsnipper_ast::NodeIdGenerator::new() };
+        let doc = Document {
+            metadata: Default::default(),
+            pages: vec![Page {
+                width: 0.0,
+                height: 0.0,
+                blocks: vec![Block::Formula(FormulaBlock {
+                    formula: Formula::latex("\\frac{a}{b}"),
+                    geometry: None,
+                    source: None,
+                })],
+                page_number: None,
+            }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+        };
         let r = OmmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<m:num>"));
         assert!(r.contains("<m:den>"));
@@ -463,9 +533,20 @@ mod conversion_tests {
 
     #[test]
     fn fraction_mathml() {
-        let doc = Document { metadata: Default::default(), pages: vec![Page { width: 0.0, height: 0.0,
-            blocks: vec![Block::Formula(FormulaBlock { formula: Formula::latex("\\frac{a}{b}"), geometry: None, source: None })],
-            page_number: None }], id_gen: latexsnipper_ast::NodeIdGenerator::new() };
+        let doc = Document {
+            metadata: Default::default(),
+            pages: vec![Page {
+                width: 0.0,
+                height: 0.0,
+                blocks: vec![Block::Formula(FormulaBlock {
+                    formula: Formula::latex("\\frac{a}{b}"),
+                    geometry: None,
+                    source: None,
+                })],
+                page_number: None,
+            }],
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+        };
         let r = MathmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<mfrac>"));
     }
@@ -477,8 +558,8 @@ mod conversion_tests {
 
 #[cfg(test)]
 mod plugin_tests {
-    use latexsnipper_plugin::*;
     use latexsnipper_ast::{Document, Page};
+    use latexsnipper_plugin::*;
 
     #[test]
     fn registry_register_list() {
@@ -503,7 +584,12 @@ mod plugin_tests {
         let mut reg = PluginRegistry::new();
         let plugin = latexsnipper_plugin::plugin::TransformPlugin::new("test", "0.1", |doc| {
             if doc.pages.is_empty() {
-                doc.pages.push(Page { width: 0.0, height: 0.0, blocks: vec![], page_number: None });
+                doc.pages.push(Page {
+                    width: 0.0,
+                    height: 0.0,
+                    blocks: vec![],
+                    page_number: None,
+                });
             }
             Ok(())
         });
@@ -527,9 +613,9 @@ mod plugin_tests {
 
 #[cfg(test)]
 mod mock_tests {
-    use latexsnipper_mock::*;
-    use latexsnipper_image::SnipperImage;
     use latexsnipper_image::color::PixelFormat;
+    use latexsnipper_image::SnipperImage;
+    use latexsnipper_mock::*;
 
     fn test_image() -> SnipperImage {
         SnipperImage::new(100, 100, PixelFormat::Rgb, vec![128u8; 30000])
@@ -562,7 +648,7 @@ mod mock_tests {
 
 #[cfg(test)]
 mod runtime_tests {
-    use latexsnipper_runtime::{StubRuntime, AccelerationMode, ModelHandle, RuntimeBackend};
+    use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend, StubRuntime};
 
     #[test]
     fn stub_runtime() {
@@ -614,15 +700,15 @@ mod ffi_tests {
 
 #[cfg(test)]
 mod engine_tests {
-    use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-    use latexsnipper_runtime::StubRuntime;
-    use latexsnipper_mock::FakePipeline;
-    use latexsnipper_image::SnipperImage;
-    use latexsnipper_image::color::PixelFormat;
-    use latexsnipper_syntax::{Parser, Renderer};
-    use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
-    use latexsnipper_export::{RenderTree, Generator};
+    use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
     use latexsnipper_export::svg::SvgGenerator;
+    use latexsnipper_export::{Generator, RenderTree};
+    use latexsnipper_image::color::PixelFormat;
+    use latexsnipper_image::SnipperImage;
+    use latexsnipper_mock::FakePipeline;
+    use latexsnipper_runtime::StubRuntime;
+    use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
+    use latexsnipper_syntax::{Parser, Renderer};
 
     fn test_image() -> SnipperImage {
         SnipperImage::new(100, 100, PixelFormat::Rgb, vec![128u8; 30000])
@@ -631,7 +717,10 @@ mod engine_tests {
     #[tokio::test]
     async fn engine_mock() {
         let engine = SnipperEngine::new(EngineConfig::default(), Box::new(StubRuntime::new()));
-        let doc = engine.recognize(test_image(), RecognizeMode::Formula).await.unwrap();
+        let doc = engine
+            .recognize(test_image(), RecognizeMode::Formula)
+            .await
+            .unwrap();
         // Pipeline First: document always has 1 page, blocks may be empty
         assert!(doc.pages.len() <= 1);
     }

@@ -57,7 +57,13 @@ pub fn latex_quality_flags(text: &str) -> Vec<String> {
 pub fn has_severe_latex_issue(text: &str) -> bool {
     let flags = latex_quality_flags(text);
     flags.iter().any(|f| {
-        matches!(f.as_str(), "duplicate_relation" | "repeated_token_run" | "unbalanced_group" | "mismatched_environment")
+        matches!(
+            f.as_str(),
+            "duplicate_relation"
+                | "repeated_token_run"
+                | "unbalanced_group"
+                | "mismatched_environment"
+        )
     })
 }
 
@@ -69,9 +75,9 @@ fn has_duplicate_relation(text: &str) -> bool {
     // Check for == (not \=)
     let bytes = text.as_bytes();
     for i in 1..bytes.len() {
-        if bytes[i] == b'=' && bytes[i-1] == b'=' {
+        if bytes[i] == b'=' && bytes[i - 1] == b'=' {
             // Make sure not preceded by backslash
-            if i >= 2 && bytes[i-2] == b'\\' {
+            if i >= 2 && bytes[i - 2] == b'\\' {
                 continue;
             }
             return true;
@@ -87,7 +93,9 @@ fn has_repeated_token_run(text: &str) -> bool {
     for token in &tokens {
         if *token == prev {
             run += 1;
-            if run >= 8 { return true; }
+            if run >= 8 {
+                return true;
+            }
         } else {
             prev = token;
             run = 1;
@@ -170,12 +178,14 @@ fn environments_balanced(text: &str) -> bool {
     while i < len {
         // Look for \begin{ or \end{
         if i + 6 < len && bytes[i] == b'\\' {
-            if i + 6 <= len && &bytes[i..i+6] == b"\\begin" {
-                if i + 7 < len && bytes[i+6] == b'{' {
+            if i + 6 <= len && &bytes[i..i + 6] == b"\\begin" {
+                if i + 7 < len && bytes[i + 6] == b'{' {
                     // Find matching }
                     let start = i + 7;
                     let mut j = start;
-                    while j < len && bytes[j] != b'}' { j += 1; }
+                    while j < len && bytes[j] != b'}' {
+                        j += 1;
+                    }
                     if j < len {
                         let env = std::str::from_utf8(&bytes[start..j]).unwrap_or("").trim();
                         stack.push(env.to_string());
@@ -183,11 +193,13 @@ fn environments_balanced(text: &str) -> bool {
                         continue;
                     }
                 }
-            } else if i + 4 <= len && &bytes[i..i+4] == b"\\end" {
-                if i + 5 < len && bytes[i+4] == b'{' {
+            } else if i + 4 <= len && &bytes[i..i + 4] == b"\\end" {
+                if i + 5 < len && bytes[i + 4] == b'{' {
                     let start = i + 5;
                     let mut j = start;
-                    while j < len && bytes[j] != b'}' { j += 1; }
+                    while j < len && bytes[j] != b'}' {
+                        j += 1;
+                    }
                     if j < len {
                         let env = std::str::from_utf8(&bytes[start..j]).unwrap_or("").trim();
                         if stack.last().map_or(false, |e| e == env) {
@@ -214,13 +226,13 @@ fn left_right_unbalanced(text: &str) -> bool {
 
     let mut i = 0;
     while i < len {
-        if i + 5 <= len && &bytes[i..i+5] == b"\\left" {
-            if i + 5 >= len || !bytes[i+5].is_ascii_alphabetic() {
+        if i + 5 <= len && &bytes[i..i + 5] == b"\\left" {
+            if i + 5 >= len || !bytes[i + 5].is_ascii_alphabetic() {
                 left_count += 1;
             }
         }
-        if i + 6 <= len && &bytes[i..i+6] == b"\\right" {
-            if i + 6 >= len || !bytes[i+6].is_ascii_alphabetic() {
+        if i + 6 <= len && &bytes[i..i + 6] == b"\\right" {
+            if i + 6 >= len || !bytes[i + 6].is_ascii_alphabetic() {
                 right_count += 1;
             }
         }
@@ -265,14 +277,14 @@ fn make_left_right_render_safe(text: &str) -> String {
     let mut i = 0;
 
     while i < len {
-        if i + 5 <= len && &bytes[i..i+5] == b"\\left" {
-            if i + 5 >= len || !bytes[i+5].is_ascii_alphabetic() {
+        if i + 5 <= len && &bytes[i..i + 5] == b"\\left" {
+            if i + 5 >= len || !bytes[i + 5].is_ascii_alphabetic() {
                 i += 5;
                 continue;
             }
         }
-        if i + 6 <= len && &bytes[i..i+6] == b"\\right" {
-            if i + 6 >= len || !bytes[i+6].is_ascii_alphabetic() {
+        if i + 6 <= len && &bytes[i..i + 6] == b"\\right" {
+            if i + 6 >= len || !bytes[i + 6].is_ascii_alphabetic() {
                 i += 6;
                 continue;
             }
@@ -321,14 +333,17 @@ fn make_double_scripts_render_safe(text: &str) -> String {
                 // Check if there's another ^ or _ immediately after the argument
                 let mut j = i + 1;
                 // Skip space
-                while j < len && bytes[j] == b' ' { j += 1; }
+                while j < len && bytes[j] == b' ' {
+                    j += 1;
+                }
 
                 if j < len && (bytes[j] == b'^' || bytes[j] == b'_') {
                     // Find the atom before this first script
                     if let Some(atom_start) = find_scripted_atom_start(&result, i) {
                         let atom = result[atom_start..i].trim();
                         if !atom.is_empty() {
-                            result = format!("{}{{{}}}{}", &result[..atom_start], atom, &result[i..]);
+                            result =
+                                format!("{}{{{}}}{}", &result[..atom_start], atom, &result[i..]);
                             changed = true;
                             break;
                         }
@@ -347,23 +362,33 @@ fn find_scripted_atom_start(text: &str, script_index: usize) -> Option<usize> {
     let mut pos = script_index as i32 - 1;
 
     // Skip space
-    while pos >= 0 && bytes[pos as usize] == b' ' { pos -= 1; }
-    if pos < 0 { return None; }
+    while pos >= 0 && bytes[pos as usize] == b' ' {
+        pos -= 1;
+    }
+    if pos < 0 {
+        return None;
+    }
 
     // If we're at a }, find matching {
     if bytes[pos as usize] == b'}' {
         let mut depth = 1i32;
         pos -= 1;
         while pos >= 0 && depth > 0 {
-            if bytes[pos as usize] == b'}' { depth += 1; }
-            if bytes[pos as usize] == b'{' { depth -= 1; }
+            if bytes[pos as usize] == b'}' {
+                depth += 1;
+            }
+            if bytes[pos as usize] == b'{' {
+                depth -= 1;
+            }
             pos -= 1;
         }
         pos += 1;
     }
 
     // Skip alphanumeric characters (the atom)
-    while pos >= 0 && bytes[pos as usize].is_ascii_alphanumeric() { pos -= 1; }
+    while pos >= 0 && bytes[pos as usize].is_ascii_alphanumeric() {
+        pos -= 1;
+    }
     pos += 1;
 
     Some(pos as usize)
@@ -375,10 +400,10 @@ fn wrap_latex_delimiters(text: &str) -> String {
     let text = text.trim();
     // Strip existing delimiters if present
     if text.starts_with("$$") && text.ends_with("$$") {
-        return text[2..text.len()-2].trim().to_string();
+        return text[2..text.len() - 2].trim().to_string();
     }
     if text.starts_with('$') && text.ends_with('$') && !text.starts_with("$$") {
-        return text[1..text.len()-1].trim().to_string();
+        return text[1..text.len() - 1].trim().to_string();
     }
     text.to_string()
 }

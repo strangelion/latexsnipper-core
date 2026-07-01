@@ -1,11 +1,11 @@
+use once_cell::sync::Lazy;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
 
-use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-use latexsnipper_runtime::{StubRuntime, OnnxRuntimeBackend};
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
+use latexsnipper_foundation::{Result, SnipperError};
+use latexsnipper_runtime::{OnnxRuntimeBackend, StubRuntime};
 
 use crate::common::FfiResponse;
 
@@ -96,7 +96,9 @@ pub extern "C" fn latexsnipper_release() {
 #[no_mangle]
 pub extern "C" fn latexsnipper_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
-        unsafe { drop(CString::from_raw(ptr)); }
+        unsafe {
+            drop(CString::from_raw(ptr));
+        }
     }
 }
 
@@ -124,7 +126,9 @@ fn recognize_sync(
     };
 
     if data.is_null() || len == 0 || len > 100 * 1024 * 1024 {
-        return FfiResponse::error("Invalid image data: null pointer, empty, or too large (>100MB)");
+        return FfiResponse::error(
+            "Invalid image data: null pointer, empty, or too large (>100MB)",
+        );
     }
 
     if width == 0 || height == 0 || width > 10000 || height > 10000 {
@@ -155,23 +159,40 @@ fn recognize_sync(
 
     let elapsed = start.elapsed().as_millis() as u64;
 
-    let text: String = doc.pages.iter().flat_map(|p| &p.blocks).filter_map(|b| {
-        match b {
+    let text: String = doc
+        .pages
+        .iter()
+        .flat_map(|p| &p.blocks)
+        .filter_map(|b| match b {
             latexsnipper_ast::Block::Formula(f) => Some(f.formula.as_latex().to_string()),
             latexsnipper_ast::Block::Paragraph(p) => {
-                let t: String = p.inlines.iter().filter_map(|i| {
-                    if let latexsnipper_ast::Inline::Text(t) = i { Some(t.text.as_str()) } else { None }
-                }).collect();
+                let t: String = p
+                    .inlines
+                    .iter()
+                    .filter_map(|i| {
+                        if let latexsnipper_ast::Inline::Text(t) = i {
+                            Some(t.text.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(t)
             }
             _ => None,
-        }
-    }).collect::<Vec<_>>().join("\n");
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
-    FfiResponse::success(&text, doc.pages.first().and_then(|p| p.blocks.first()).map_or(0.0, |b| {
-        match b {
-            latexsnipper_ast::Block::Formula(f) => f.formula.confidence,
-            _ => 0.0,
-        }
-    }), elapsed)
+    FfiResponse::success(
+        &text,
+        doc.pages
+            .first()
+            .and_then(|p| p.blocks.first())
+            .map_or(0.0, |b| match b {
+                latexsnipper_ast::Block::Formula(f) => f.formula.confidence,
+                _ => 0.0,
+            }),
+        elapsed,
+    )
 }

@@ -1,4 +1,6 @@
-use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, ParagraphBlock, Inline, TextRun};
+use latexsnipper_ast::{
+    Block, Document, Formula, FormulaBlock, Inline, Page, ParagraphBlock, TextRun,
+};
 use latexsnipper_foundation::Result;
 
 use crate::parser::Parser;
@@ -22,7 +24,9 @@ impl Parser for LatexParser {
         })
     }
 
-    fn name(&self) -> &str { "latex" }
+    fn name(&self) -> &str {
+        "latex"
+    }
 }
 
 /// LaTeX renderer — converts Document AST to LaTeX string.
@@ -43,8 +47,10 @@ impl Renderer for LatexRenderer {
                         }
                     }
                     Block::Paragraph(p) => {
-                        let text: String = p.inlines.iter().map(|i| {
-                            match i {
+                        let text: String = p
+                            .inlines
+                            .iter()
+                            .map(|i| match i {
                                 Inline::Text(t) => t.text.clone(),
                                 Inline::Formula(f) => {
                                     if f.display_mode {
@@ -54,8 +60,8 @@ impl Renderer for LatexRenderer {
                                     }
                                 }
                                 _ => String::new(),
-                            }
-                        }).collect();
+                            })
+                            .collect();
                         if !text.is_empty() {
                             parts.push(text);
                         }
@@ -67,7 +73,9 @@ impl Renderer for LatexRenderer {
         Ok(parts.join("\n\n"))
     }
 
-    fn name(&self) -> &str { "latex" }
+    fn name(&self) -> &str {
+        "latex"
+    }
 }
 
 /// Parse LaTeX content into blocks.

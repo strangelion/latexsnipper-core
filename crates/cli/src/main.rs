@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use latexsnipper_pipeline::sdk::Snipper;
-use latexsnipper_syntax::{Parser as _, Renderer as _};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
+use latexsnipper_syntax::{Parser as _, Renderer as _};
 
 #[derive(Parser)]
 #[command(name = "snipper")]
@@ -68,7 +68,10 @@ fn main() {
                 "omml" => snipper.to_omml(),
                 "json" => snipper.to_json(),
                 _ => {
-                    eprintln!("Unknown format: {}. Use: latex, markdown, typst, html, json", format);
+                    eprintln!(
+                        "Unknown format: {}. Use: latex, markdown, typst, html, json",
+                        format
+                    );
                     std::process::exit(1);
                 }
             };

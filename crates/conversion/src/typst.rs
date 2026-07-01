@@ -2,8 +2,8 @@ use latexsnipper_ast::{Block, Document, Formula, FormulaSource, Inline};
 use latexsnipper_foundation::Result;
 
 use crate::converter::Converter;
-use crate::latex_to_typst::latex_ast_to_typst;
 use crate::latex_parser::parse_latex;
+use crate::latex_to_typst::latex_ast_to_typst;
 
 /// Converts Document AST to Typst format.
 pub struct TypstConverter;

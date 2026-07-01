@@ -1,17 +1,17 @@
 //! End-to-end pipeline test: Image → Detection → Recognition → AST → Export
 
-use latexsnipper_runtime::{OnnxRuntimeBackend, RuntimeBackend, AccelerationMode, ModelHandle};
-use latexsnipper_tensor::Tensor;
-use latexsnipper_image::decode::{decode, ImageSource};
-use latexsnipper_image::operations;
-use latexsnipper_image::image::SnipperImage;
-use latexsnipper_image::color::PixelFormat;
-use latexsnipper_inference::{
-    detect_formulas, recognize_formula, DetectionParams, RecognitionParams,
-    group_formula_detections, filter_formula_detections,
-};
 use latexsnipper_ast::*;
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
+use latexsnipper_image::color::PixelFormat;
+use latexsnipper_image::decode::{decode, ImageSource};
+use latexsnipper_image::image::SnipperImage;
+use latexsnipper_image::operations;
+use latexsnipper_inference::{
+    detect_formulas, filter_formula_detections, group_formula_detections, recognize_formula,
+    DetectionParams, RecognitionParams,
+};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_tensor::Tensor;
 use std::path::PathBuf;
 
 fn models_dir() -> PathBuf {
@@ -141,14 +141,14 @@ fn test_formula_pipeline_e2e() {
     println!("1. Loaded image: {}x{}", rgb.width(), rgb.height());
 
     // 2. Detect formulas
-    let det_config = latexsnipper_model::ModelConfig::load(
-        &models.join("formula-det/yolov8-mfd"),
-    )
-    .unwrap();
+    let det_config =
+        latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd")).unwrap();
     let det_params = DetectionParams::from_config(&det_config);
 
     let det_handle = ModelHandle::with_path("formula-det", det_path);
-    let det_session = backend.create_session(&det_handle, AccelerationMode::Cpu).unwrap();
+    let det_session = backend
+        .create_session(&det_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let mut detections = detect_formulas(&rgb, &*det_session, &det_params).unwrap();
     group_formula_detections(&mut detections);
@@ -158,8 +158,12 @@ fn test_formula_pipeline_e2e() {
     // 3. Recognize formulas
     let enc_handle = ModelHandle::with_path("encoder", enc_path);
     let dec_handle = ModelHandle::with_path("decoder", dec_path);
-    let enc_session = backend.create_session(&enc_handle, AccelerationMode::Cpu).unwrap();
-    let dec_session = backend.create_session(&dec_handle, AccelerationMode::Cpu).unwrap();
+    let enc_session = backend
+        .create_session(&enc_handle, AccelerationMode::Cpu)
+        .unwrap();
+    let dec_session = backend
+        .create_session(&dec_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let rec_params = RecognitionParams::default();
     let mut blocks = Vec::new();
@@ -174,7 +178,12 @@ fn test_formula_pipeline_e2e() {
             let crop = crop_region(&rgb, x, y, w, h);
             match recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params) {
                 Ok(result) => {
-                    println!("   Formula {}: \"{}\" (conf={:.3})", i + 1, result.text, result.confidence);
+                    println!(
+                        "   Formula {}: \"{}\" (conf={:.3})",
+                        i + 1,
+                        result.text,
+                        result.confidence
+                    );
                     let mut f = Formula::latex(result.text);
                     f.confidence = result.confidence;
                     blocks.push(Block::Formula(FormulaBlock {
@@ -203,15 +212,21 @@ fn test_formula_pipeline_e2e() {
 
     // 5. Export to formats
     println!("\n=== LaTeX Output ===");
-    let latex = DocumentConverter::new(OutputFormat::Latex).convert(&doc).unwrap();
+    let latex = DocumentConverter::new(OutputFormat::Latex)
+        .convert(&doc)
+        .unwrap();
     println!("{}\n", latex);
 
     println!("=== Markdown Output ===");
-    let md = DocumentConverter::new(OutputFormat::MarkdownBlock).convert(&doc).unwrap();
+    let md = DocumentConverter::new(OutputFormat::MarkdownBlock)
+        .convert(&doc)
+        .unwrap();
     println!("{}\n", md);
 
     println!("=== Typst Output ===");
-    let typst = DocumentConverter::new(OutputFormat::Typst).convert(&doc).unwrap();
+    let typst = DocumentConverter::new(OutputFormat::Typst)
+        .convert(&doc)
+        .unwrap();
     println!("{}\n", typst);
 
     assert!(!doc.all_blocks().is_empty(), "Document should have blocks");
@@ -258,11 +273,17 @@ fn test_text_pipeline_e2e() {
 
     // 2. Detect text regions (simplified: use probability map)
     let handle = ModelHandle::with_path("text-det", det_path.unwrap().to_path_buf());
-    let session = backend.create_session(&handle, AccelerationMode::Cpu).unwrap();
+    let session = backend
+        .create_session(&handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let w = rgb.width();
     let h = rgb.height();
-    let scale = if w.max(h) > 960 { 960.0 / w.max(h) as f32 } else { 1.0 };
+    let scale = if w.max(h) > 960 {
+        960.0 / w.max(h) as f32
+    } else {
+        1.0
+    };
     let nw = ((w as f32 * scale).ceil() as u32 + 31) / 32 * 32;
     let nh = ((h as f32 * scale).ceil() as u32 + 31) / 32 * 32;
     let resized = operations::resize(&rgb, nw, nh);
@@ -288,16 +309,23 @@ fn test_text_pipeline_e2e() {
     let mut visited = vec![false; det_h * det_w];
     for y in 0..det_h {
         for x in 0..det_w {
-            if visited[y * det_w + x] { continue; }
+            if visited[y * det_w + x] {
+                continue;
+            }
             if det_data[y * det_w + x] > thresh {
-                let mut min_x = x; let mut max_x = x;
-                let mut min_y = y; let mut max_y = y;
-                let mut queue: std::collections::VecDeque<(usize, usize)> = std::collections::VecDeque::new();
+                let mut min_x = x;
+                let mut max_x = x;
+                let mut min_y = y;
+                let mut max_y = y;
+                let mut queue: std::collections::VecDeque<(usize, usize)> =
+                    std::collections::VecDeque::new();
                 queue.push_back((x, y));
                 visited[y * det_w + x] = true;
                 while let Some((cx, cy)) = queue.pop_front() {
-                    min_x = min_x.min(cx); max_x = max_x.max(cx);
-                    min_y = min_y.min(cy); max_y = max_y.max(cy);
+                    min_x = min_x.min(cx);
+                    max_x = max_x.max(cx);
+                    min_y = min_y.min(cy);
+                    max_y = max_y.max(cy);
                     for (dx, dy) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
                         let nx = cx as i32 + dx;
                         let ny = cy as i32 + dy;
@@ -325,7 +353,9 @@ fn test_text_pipeline_e2e() {
 
     // 3. Recognize text
     let rec_handle = ModelHandle::with_path("text-rec", rec_path.unwrap().to_path_buf());
-    let rec_session = backend.create_session(&rec_handle, AccelerationMode::Cpu).unwrap();
+    let rec_session = backend
+        .create_session(&rec_handle, AccelerationMode::Cpu)
+        .unwrap();
 
     let keys_content = std::fs::read_to_string(keys_path.unwrap()).unwrap();
     let keys = load_paddle_character_dict(&keys_content);
@@ -378,7 +408,9 @@ fn test_text_pipeline_e2e() {
 
     // 5. Export
     println!("\n=== Markdown Output ===");
-    let md = DocumentConverter::new(OutputFormat::MarkdownBlock).convert(&doc).unwrap();
+    let md = DocumentConverter::new(OutputFormat::MarkdownBlock)
+        .convert(&doc)
+        .unwrap();
     println!("{}\n", md);
 
     assert!(!doc.all_blocks().is_empty(), "Document should have blocks");
@@ -431,14 +463,14 @@ fn test_mixed_pipeline_e2e() {
 
     // 2. Detect and recognize formulas
     if det_path.exists() && enc_path.exists() {
-        let det_config = latexsnipper_model::ModelConfig::load(
-            &models.join("formula-det/yolov8-mfd"),
-        )
-        .unwrap();
+        let det_config =
+            latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd")).unwrap();
         let det_params = DetectionParams::from_config(&det_config);
 
         let det_handle = ModelHandle::with_path("formula-det", det_path);
-        let det_session = backend.create_session(&det_handle, AccelerationMode::Cpu).unwrap();
+        let det_session = backend
+            .create_session(&det_handle, AccelerationMode::Cpu)
+            .unwrap();
 
         let mut detections = detect_formulas(&rgb, &*det_session, &det_params).unwrap();
         group_formula_detections(&mut detections);
@@ -447,8 +479,12 @@ fn test_mixed_pipeline_e2e() {
 
         let enc_handle = ModelHandle::with_path("encoder", enc_path);
         let dec_handle = ModelHandle::with_path("decoder", dec_path);
-        let enc_session = backend.create_session(&enc_handle, AccelerationMode::Cpu).unwrap();
-        let dec_session = backend.create_session(&dec_handle, AccelerationMode::Cpu).unwrap();
+        let enc_session = backend
+            .create_session(&enc_handle, AccelerationMode::Cpu)
+            .unwrap();
+        let dec_session = backend
+            .create_session(&dec_handle, AccelerationMode::Cpu)
+            .unwrap();
 
         let rec_params = RecognitionParams::default();
         for det in &detections {
@@ -459,7 +495,9 @@ fn test_mixed_pipeline_e2e() {
 
             if w >= 4 && h >= 4 {
                 let crop = crop_region(&rgb, x, y, w, h);
-                if let Ok(result) = recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params) {
+                if let Ok(result) =
+                    recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params)
+                {
                     let mut f = Formula::latex(result.text);
                     f.confidence = result.confidence;
                     all_blocks.push(Block::Formula(FormulaBlock {
@@ -478,7 +516,11 @@ fn test_mixed_pipeline_e2e() {
         if let Ok(session) = backend.create_session(&handle, AccelerationMode::Cpu) {
             let w = rgb.width();
             let h = rgb.height();
-            let scale = if w.max(h) > 960 { 960.0 / w.max(h) as f32 } else { 1.0 };
+            let scale = if w.max(h) > 960 {
+                960.0 / w.max(h) as f32
+            } else {
+                1.0
+            };
             let nw = ((w as f32 * scale).ceil() as u32 + 31) / 32 * 32;
             let nh = ((h as f32 * scale).ceil() as u32 + 31) / 32 * 32;
             let resized = operations::resize(&rgb, nw, nh);
@@ -503,20 +545,31 @@ fn test_mixed_pipeline_e2e() {
                     let mut visited = vec![false; det_h * det_w];
                     for y in 0..det_h {
                         for x in 0..det_w {
-                            if visited[y * det_w + x] { continue; }
+                            if visited[y * det_w + x] {
+                                continue;
+                            }
                             if det_data[y * det_w + x] > thresh {
-                                let mut min_x = x; let mut max_x = x;
-                                let mut min_y = y; let mut max_y = y;
-                                let mut queue: std::collections::VecDeque<(usize, usize)> = std::collections::VecDeque::new();
+                                let mut min_x = x;
+                                let mut max_x = x;
+                                let mut min_y = y;
+                                let mut max_y = y;
+                                let mut queue: std::collections::VecDeque<(usize, usize)> =
+                                    std::collections::VecDeque::new();
                                 queue.push_back((x, y));
                                 visited[y * det_w + x] = true;
                                 while let Some((cx, cy)) = queue.pop_front() {
-                                    min_x = min_x.min(cx); max_x = max_x.max(cx);
-                                    min_y = min_y.min(cy); max_y = max_y.max(cy);
+                                    min_x = min_x.min(cx);
+                                    max_x = max_x.max(cx);
+                                    min_y = min_y.min(cy);
+                                    max_y = max_y.max(cy);
                                     for (dx, dy) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
                                         let nx = cx as i32 + dx;
                                         let ny = cy as i32 + dy;
-                                        if nx >= 0 && nx < det_w as i32 && ny >= 0 && ny < det_h as i32 {
+                                        if nx >= 0
+                                            && nx < det_w as i32
+                                            && ny >= 0
+                                            && ny < det_h as i32
+                                        {
                                             let ni = ny as usize * det_w + nx as usize;
                                             if !visited[ni] && det_data[ni] > thresh {
                                                 visited[ni] = true;
@@ -527,8 +580,12 @@ fn test_mixed_pipeline_e2e() {
                                 }
                                 let bx = (min_x as f32 * scale_x).max(0.0) as u32;
                                 let by = (min_y as f32 * scale_y).max(0.0) as u32;
-                                let bw = ((max_x - min_x + 1) as f32 * scale_x).min(w as f32 - bx as f32) as u32;
-                                let bh = ((max_y - min_y + 1) as f32 * scale_y).min(h as f32 - by as f32) as u32;
+                                let bw = ((max_x - min_x + 1) as f32 * scale_x)
+                                    .min(w as f32 - bx as f32)
+                                    as u32;
+                                let bh = ((max_y - min_y + 1) as f32 * scale_y)
+                                    .min(h as f32 - by as f32)
+                                    as u32;
                                 if bw > 4 && bh > 4 {
                                     boxes.push((bx, by, bw, bh));
                                 }
@@ -541,7 +598,9 @@ fn test_mixed_pipeline_e2e() {
                     // Recognize text
                     if let Some(text_rec) = text_rec_path {
                         let rec_handle = ModelHandle::with_path("text-rec", text_rec.to_path_buf());
-                        if let Ok(rec_session) = backend.create_session(&rec_handle, AccelerationMode::Cpu) {
+                        if let Ok(rec_session) =
+                            backend.create_session(&rec_handle, AccelerationMode::Cpu)
+                        {
                             let keys_content = std::fs::read_to_string(keys_path.unwrap()).unwrap();
                             let keys = load_paddle_character_dict(&keys_content);
 
@@ -557,9 +616,14 @@ fn test_mixed_pipeline_e2e() {
                                 let target_w = (48.0 * max_wh_ratio).round() as u32;
 
                                 let resized = operations::resize(&crop, target_w, 48);
-                                let norm = operations::normalize(&resized, &[0.5, 0.5, 0.5], &[0.5, 0.5, 0.5]);
+                                let norm = operations::normalize(
+                                    &resized,
+                                    &[0.5, 0.5, 0.5],
+                                    &[0.5, 0.5, 0.5],
+                                );
 
-                                let input = Tensor::float32("x", vec![1, 3, 48, target_w as usize], norm);
+                                let input =
+                                    Tensor::float32("x", vec![1, 3, 48, target_w as usize], norm);
                                 if let Ok(output) = rec_session.run(&[input]) {
                                     if let Some(data) = output[0].as_f32_slice() {
                                         let shape = output[0].shape();
@@ -567,7 +631,9 @@ fn test_mixed_pipeline_e2e() {
                                         if !text.trim().is_empty() {
                                             all_blocks.push(Block::Paragraph(ParagraphBlock {
                                                 inlines: vec![Inline::Text(TextRun::new(text))],
-                                                geometry: Some(Rect::new(bx as f32, by as f32, bw as f32, bh as f32)),
+                                                geometry: Some(Rect::new(
+                                                    bx as f32, by as f32, bw as f32, bh as f32,
+                                                )),
                                                 source: Some(SourceInfo::new()),
                                             }));
                                         }
@@ -603,11 +669,15 @@ fn test_mixed_pipeline_e2e() {
 
     // 6. Export
     println!("\n=== LaTeX Output ===");
-    let latex = DocumentConverter::new(OutputFormat::Latex).convert(&doc).unwrap();
+    let latex = DocumentConverter::new(OutputFormat::Latex)
+        .convert(&doc)
+        .unwrap();
     println!("{}\n", latex);
 
     println!("=== Markdown Output ===");
-    let md = DocumentConverter::new(OutputFormat::MarkdownBlock).convert(&doc).unwrap();
+    let md = DocumentConverter::new(OutputFormat::MarkdownBlock)
+        .convert(&doc)
+        .unwrap();
     println!("{}\n", md);
 
     assert!(!doc.all_blocks().is_empty(), "Document should have blocks");

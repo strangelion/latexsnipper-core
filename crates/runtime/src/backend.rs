@@ -1,6 +1,6 @@
-use crate::session::InferenceSession;
-use crate::model_handle::ModelHandle;
 use crate::acceleration::AccelerationMode;
+use crate::model_handle::ModelHandle;
+use crate::session::InferenceSession;
 use latexsnipper_foundation::Result;
 
 /// Abstraction over inference runtimes (ONNX Runtime, TensorRT, etc.).

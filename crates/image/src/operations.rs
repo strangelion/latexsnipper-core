@@ -1,5 +1,5 @@
-use crate::image::SnipperImage;
 use crate::color::PixelFormat;
+use crate::image::SnipperImage;
 use latexsnipper_ast::Rect;
 
 /// Resize image to target dimensions.
@@ -60,7 +60,12 @@ pub fn letterbox(image: &SnipperImage, target: u32) -> (SnipperImage, f32, f32, 
             .copy_from_slice(&resized.pixels()[src_off..src_off + copy_len as usize]);
     }
 
-    (SnipperImage::new(target, target, image.format(), pixels), scale, pad_x, pad_y)
+    (
+        SnipperImage::new(target, target, image.format(), pixels),
+        scale,
+        pad_x,
+        pad_y,
+    )
 }
 
 /// Normalize pixels to float range, return as f32 vector in CHW layout.

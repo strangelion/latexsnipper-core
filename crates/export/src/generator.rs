@@ -1,5 +1,5 @@
-use latexsnipper_foundation::Result;
 use crate::render_tree::RenderTree;
+use latexsnipper_foundation::Result;
 
 /// Trait for generating output from a RenderTree.
 pub trait Generator {

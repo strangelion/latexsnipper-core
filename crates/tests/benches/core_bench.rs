@@ -1,4 +1,6 @@
-use latexsnipper_ast::{Block, Document, DocumentVisitor, Formula, FormulaBlock, Page, TextCollector};
+use latexsnipper_ast::{
+    Block, Document, DocumentVisitor, Formula, FormulaBlock, Page, TextCollector,
+};
 use latexsnipper_conversion::{Converter, MathmlConverter, OmmlConverter, TypstConverter};
 use latexsnipper_pipeline::{PipelineContext, PipelineGraph, TransformNode};
 use std::hint::black_box;
@@ -6,11 +8,13 @@ use std::time::{Duration, Instant};
 
 fn formulas_doc(count: usize, latex: &str) -> Document {
     let blocks = (0..count)
-        .map(|_| Block::Formula(FormulaBlock {
-            formula: Formula::latex(latex),
-            geometry: None,
-            source: None,
-        }))
+        .map(|_| {
+            Block::Formula(FormulaBlock {
+                formula: Formula::latex(latex),
+                geometry: None,
+                source: None,
+            })
+        })
         .collect();
 
     Document {
@@ -69,7 +73,11 @@ fn bench_pipeline() {
     let mut graph = PipelineGraph::new("bench");
     for index in 0..8 {
         let name = format!("node_{index}");
-        let deps = if index == 0 { vec![] } else { vec![format!("node_{}", index - 1)] };
+        let deps = if index == 0 {
+            vec![]
+        } else {
+            vec![format!("node_{}", index - 1)]
+        };
         graph.add_node_with_deps(
             Box::new(TransformNode::new(name, move |ctx| {
                 ctx.set(format!("step_{index}"), serde_json::json!(index));

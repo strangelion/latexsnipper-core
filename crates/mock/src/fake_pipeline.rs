@@ -1,4 +1,6 @@
-use latexsnipper_ast::{Document, Page, Block, FormulaBlock, Formula, ParagraphBlock, Inline, TextRun, Rect};
+use latexsnipper_ast::{
+    Block, Document, Formula, FormulaBlock, Inline, Page, ParagraphBlock, Rect, TextRun,
+};
 use latexsnipper_foundation::Result;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_inference::{DetectionBox, RecognitionResult};
@@ -14,7 +16,10 @@ pub struct FakePipeline {
 
 impl FakePipeline {
     pub fn new(detector: FakeDetector, recognizer: FakeRecognizer) -> Self {
-        Self { detector, recognizer }
+        Self {
+            detector,
+            recognizer,
+        }
     }
 
     /// Create a pipeline that returns a single formula.

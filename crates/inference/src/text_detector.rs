@@ -1,5 +1,5 @@
 use latexsnipper_ast::Rect;
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::InferenceSession;
 use latexsnipper_tensor::Tensor;
@@ -42,13 +42,21 @@ pub fn detect_text(
 
     let input = Tensor::float32(
         "x",
-        vec![1, 3, processed.height() as usize, processed.width() as usize],
+        vec![
+            1,
+            3,
+            processed.height() as usize,
+            processed.width() as usize,
+        ],
         latexsnipper_image::operations::normalize(&processed, &params.mean, &params.std),
     );
     let outputs = session.run(&[input])?;
 
-    let output = outputs.first().ok_or_else(|| SnipperError::Inference("No output".into()))?;
-    let prob_map = output.as_f32_slice()
+    let output = outputs
+        .first()
+        .ok_or_else(|| SnipperError::Inference("No output".into()))?;
+    let prob_map = output
+        .as_f32_slice()
         .ok_or_else(|| SnipperError::Inference("Output not float32".into()))?;
     let map_shape = output.shape().to_vec();
 
@@ -93,7 +101,11 @@ fn postprocess(
 
     let mut binary = vec![0u8; map_h * map_w];
     for i in 0..map_h * map_w {
-        binary[i] = if prob_map[i] > params.det_threshold { 1 } else { 0 };
+        binary[i] = if prob_map[i] > params.det_threshold {
+            1
+        } else {
+            0
+        };
     }
 
     let contours = find_contours(&binary, map_w, map_h);
@@ -172,7 +184,16 @@ fn trace_contour(
     visited: &mut [bool],
 ) -> Option<Vec<(i32, i32)>> {
     let mut contour = Vec::new();
-    let dirs = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)];
+    let dirs = [
+        (0, 1),
+        (1, 1),
+        (1, 0),
+        (1, -1),
+        (0, -1),
+        (-1, -1),
+        (-1, 0),
+        (-1, 1),
+    ];
 
     let mut x = start_x as i32;
     let mut y = start_y as i32;
@@ -211,12 +232,18 @@ fn trace_contour(
         }
     }
 
-    if contour.len() > 3 { Some(contour) } else { None }
+    if contour.len() > 3 {
+        Some(contour)
+    } else {
+        None
+    }
 }
 
 fn polygon_area(points: &[(i32, i32)]) -> f32 {
     let n = points.len();
-    if n < 3 { return 0.0; }
+    if n < 3 {
+        return 0.0;
+    }
     let mut area = 0.0f32;
     for i in 0..n {
         let j = (i + 1) % n;
@@ -228,7 +255,9 @@ fn polygon_area(points: &[(i32, i32)]) -> f32 {
 
 fn polygon_perimeter(points: &[(i32, i32)]) -> f32 {
     let n = points.len();
-    if n < 2 { return 0.0; }
+    if n < 2 {
+        return 0.0;
+    }
     let mut perim = 0.0f32;
     for i in 0..n {
         let j = (i + 1) % n;
@@ -243,19 +272,22 @@ fn expand_contour(points: &[(i32, i32)], distance: f32) -> Vec<(i32, i32)> {
     let cx: f32 = points.iter().map(|p| p.0 as f32).sum::<f32>() / points.len() as f32;
     let cy: f32 = points.iter().map(|p| p.1 as f32).sum::<f32>() / points.len() as f32;
 
-    points.iter().map(|&(px, py)| {
-        let dx = px as f32 - cx;
-        let dy = py as f32 - cy;
-        let len = (dx * dx + dy * dy).sqrt();
-        if len > 0.0 {
-            (
-                (px as f32 + dx / len * distance) as i32,
-                (py as f32 + dy / len * distance) as i32,
-            )
-        } else {
-            (px, py)
-        }
-    }).collect()
+    points
+        .iter()
+        .map(|&(px, py)| {
+            let dx = px as f32 - cx;
+            let dy = py as f32 - cy;
+            let len = (dx * dx + dy * dy).sqrt();
+            if len > 0.0 {
+                (
+                    (px as f32 + dx / len * distance) as i32,
+                    (py as f32 + dy / len * distance) as i32,
+                )
+            } else {
+                (px, py)
+            }
+        })
+        .collect()
 }
 
 fn bounding_box(points: &[(i32, i32)]) -> (i32, i32, i32, i32) {
@@ -274,7 +306,15 @@ fn bounding_box(points: &[(i32, i32)]) -> (i32, i32, i32, i32) {
     (min_x, min_y, max_x, max_y)
 }
 
-fn average_score(map: &[f32], width: usize, height: usize, x1: i32, y1: i32, x2: i32, y2: i32) -> f32 {
+fn average_score(
+    map: &[f32],
+    width: usize,
+    height: usize,
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+) -> f32 {
     let x1 = x1.max(0) as usize;
     let y1 = y1.max(0) as usize;
     let x2 = (x2 as usize).min(width);
@@ -293,11 +333,17 @@ fn average_score(map: &[f32], width: usize, height: usize, x1: i32, y1: i32, x2:
         }
     }
 
-    if count > 0 { sum / count as f32 } else { 0.0 }
+    if count > 0 {
+        sum / count as f32
+    } else {
+        0.0
+    }
 }
 
 fn merge_boxes(boxes: &mut Vec<DetectionBox>) {
-    if boxes.is_empty() { return; }
+    if boxes.is_empty() {
+        return;
+    }
 
     // Sort by Y position
     boxes.sort_by(|a, b| a.rect.y.partial_cmp(&b.rect.y).unwrap());
@@ -306,14 +352,18 @@ fn merge_boxes(boxes: &mut Vec<DetectionBox>) {
     let mut used = vec![false; boxes.len()];
 
     for i in 0..boxes.len() {
-        if used[i] { continue; }
+        if used[i] {
+            continue;
+        }
 
         let mut current = boxes[i].clone();
         used[i] = true;
 
         // Merge with nearby boxes on the same line
         for j in (i + 1)..boxes.len() {
-            if used[j] { continue; }
+            if used[j] {
+                continue;
+            }
 
             let other = &boxes[j];
 

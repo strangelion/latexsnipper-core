@@ -126,7 +126,10 @@ fn render_block(block: &Block) -> String {
         Block::Figure(f) => {
             if let Some(caption) = &f.caption {
                 if let Some(data) = &f.image_data {
-                    format!("\\includegraphics[width=0.8\\textwidth]{{{}}}\n\\caption{{{}}}", data, caption)
+                    format!(
+                        "\\includegraphics[width=0.8\\textwidth]{{{}}}\n\\caption{{{}}}",
+                        data, caption
+                    )
                 } else {
                     format!("\\caption{{{}}}", caption)
                 }
@@ -199,12 +202,7 @@ fn render_list(l: &latexsnipper_ast::ListBlock) -> String {
         let text = render_inlines(&item.inlines);
         items.push(format!("  \\item {}", text));
     }
-    format!(
-        "\\begin{{{}}}\n{}\n\\end{{{}}}",
-        env,
-        items.join("\n"),
-        env
-    )
+    format!("\\begin{{{}}}\n{}\n\\end{{{}}}", env, items.join("\n"), env)
 }
 
 fn render_quote(q: &latexsnipper_ast::QuoteBlock) -> String {
@@ -256,10 +254,7 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
     }
 
     let mut lines = Vec::new();
-    lines.push(format!(
-        "\\begin{{tabular}}{{|{}|}}",
-        "c|".repeat(cols)
-    ));
+    lines.push(format!("\\begin{{tabular}}{{|{}|}}", "c|".repeat(cols)));
     lines.push("\\hline".to_string());
 
     for row in &t.rows {

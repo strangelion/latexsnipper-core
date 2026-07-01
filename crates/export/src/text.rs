@@ -1,6 +1,6 @@
-use latexsnipper_foundation::Result;
-use crate::render_tree::{RenderTree, RenderNode};
 use crate::generator::Generator;
+use crate::render_tree::{RenderNode, RenderTree};
+use latexsnipper_foundation::Result;
 
 /// Plain text generator — produces plain text output from RenderTree.
 pub struct TextGenerator;
@@ -24,7 +24,9 @@ impl Generator for TextGenerator {
                                 for inline in inlines {
                                     match inline {
                                         RenderNode::Text(text) => parts.push(text.clone()),
-                                        RenderNode::Formula { latex, .. } => parts.push(latex.clone()),
+                                        RenderNode::Formula { latex, .. } => {
+                                            parts.push(latex.clone())
+                                        }
                                         _ => {}
                                     }
                                 }
@@ -40,7 +42,13 @@ impl Generator for TextGenerator {
         Ok(parts.join("\n"))
     }
 
-    fn extension(&self) -> &str { "txt" }
-    fn mime_type(&self) -> &str { "text/plain" }
-    fn name(&self) -> &str { "text" }
+    fn extension(&self) -> &str {
+        "txt"
+    }
+    fn mime_type(&self) -> &str {
+        "text/plain"
+    }
+    fn name(&self) -> &str {
+        "text"
+    }
 }

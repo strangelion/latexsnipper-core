@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use log::info;
+use std::collections::HashMap;
 
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::{Result, SnipperError};
 
 use crate::plugin::Plugin;
 use crate::request::PluginRequest;
@@ -59,9 +59,10 @@ impl PluginRegistry {
 
     /// Send a request to a specific plugin.
     pub fn handle(&self, plugin_name: &str, request: &PluginRequest) -> Result<PluginResponse> {
-        let plugin = self.plugins.get(plugin_name).ok_or_else(|| {
-            SnipperError::Plugin(format!("Plugin '{}' not found", plugin_name))
-        })?;
+        let plugin = self
+            .plugins
+            .get(plugin_name)
+            .ok_or_else(|| SnipperError::Plugin(format!("Plugin '{}' not found", plugin_name)))?;
 
         plugin.handle(request)
     }
