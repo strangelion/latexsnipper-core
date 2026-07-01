@@ -22,7 +22,7 @@ fixtures/*.png
 fixtures/*.typ
 
 # Test models (ONNX files)
-models/
+test-models/
 models-download/
 
 # release models (ONNX files)
