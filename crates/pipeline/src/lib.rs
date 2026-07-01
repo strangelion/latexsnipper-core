@@ -16,7 +16,8 @@ pub use nodes::normalize_node::NormalizeNode;
 pub use nodes::postprocess_node::PostprocessNode;
 pub use nodes::recognizer_node::{RecognizerNode, RecognizerType};
 pub use nodes::resize_node::ResizeNode;
-pub use sdk::{Snipper, SnipperError};
+pub use sdk::Snipper;
+pub use latexsnipper_foundation::SnipperError;
 pub use simple::{
     MockCropper, MockDetector, MockRecognizer, PipelineContext as SimpleContext, SimplePipeline,
     Stage,

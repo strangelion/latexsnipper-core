@@ -13,6 +13,7 @@
 
 use latexsnipper_ast::*;
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
+use latexsnipper_foundation::SnipperError;
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::image::SnipperImage;
@@ -32,22 +33,28 @@ impl Snipper {
     /// Create from an image file path.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, SnipperError> {
         let path = path.as_ref();
-        let img =
-            decode(ImageSource::File(path)).map_err(|e| SnipperError::Image(e.to_string()))?;
+        log::info!("Loading image from {:?}", path);
+
+        let img = decode(ImageSource::File(path))
+            .map_err(|e| SnipperError::Image(e.to_string()))?;
         let rgb = rgba_to_rgb(&img);
+        log::info!("Image loaded: {}x{}", rgb.width(), rgb.height());
+
         Self::from_image(rgb)
     }
 
     /// Create from raw RGB pixels.
     pub fn from_image(img: SnipperImage) -> Result<Self, SnipperError> {
         let models = find_models_dir()?;
+        log::info!("Using models from {:?}", models);
+
         let backend = OnnxRuntimeBackend::new(models.clone())
             .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
         // 1. Detect formulas
-        let det_config =
-            latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
-                .map_err(|e| SnipperError::Model(e.to_string()))?;
+        log::info!("Detecting formulas...");
+        let det_config = latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
+            .map_err(|e| SnipperError::Model(e.to_string()))?;
 
         let det_params = DetectionParams::from_config(&det_config);
         let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
@@ -75,8 +82,10 @@ impl Snipper {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
         });
+        log::info!("Detected {} formula regions", detections.len());
 
         // 2. Recognize formulas
+        log::info!("Recognizing formulas...");
         let enc_path = models.join("formula-rec/trocr-deit/encoder_model.onnx");
         let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
         let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
@@ -101,14 +110,29 @@ impl Snipper {
 
             if w >= 4 && h >= 4 {
                 let crop = crop_region(&img, x, y, w, h);
-                if let Ok(result) =
-                    recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params)
-                {
+                if let Ok(result) = recognize_formula(
+                    &crop,
+                    &*enc_session,
+                    &*dec_session,
+                    &tok_path,
+                    &rec_params,
+                ) {
+                    log::debug!(
+                        "Recognized formula at ({}, {}): {}",
+                        x,
+                        y,
+                        &result.text[..result.text.len().min(50)]
+                    );
                     let mut f = Formula::latex(result.text);
                     f.confidence = result.confidence;
                     blocks.push(Block::Formula(FormulaBlock {
                         formula: f,
-                        geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                        geometry: Some(Rect::new(
+                            x as f32,
+                            y as f32,
+                            w as f32,
+                            h as f32,
+                        )),
                         source: Some(SourceInfo::new()),
                     }));
                 }
@@ -116,6 +140,7 @@ impl Snipper {
         }
 
         // 3. Build Document AST
+        log::info!("Building Document AST with {} blocks", blocks.len());
         let doc = Document {
             metadata: Metadata::default(),
             pages: vec![Page {
@@ -137,6 +162,7 @@ impl Snipper {
 
     /// Export to LaTeX.
     pub fn to_latex(&self) -> Result<String, SnipperError> {
+        log::info!("Exporting to LaTeX");
         DocumentConverter::new(OutputFormat::Latex)
             .convert(&self.document)
             .map_err(|e| SnipperError::Conversion(e.to_string()))
@@ -144,6 +170,7 @@ impl Snipper {
 
     /// Export to Markdown.
     pub fn to_markdown(&self) -> Result<String, SnipperError> {
+        log::info!("Exporting to Markdown");
         DocumentConverter::new(OutputFormat::MarkdownBlock)
             .convert(&self.document)
             .map_err(|e| SnipperError::Conversion(e.to_string()))
@@ -151,6 +178,7 @@ impl Snipper {
 
     /// Export to Typst.
     pub fn to_typst(&self) -> Result<String, SnipperError> {
+        log::info!("Exporting to Typst");
         DocumentConverter::new(OutputFormat::Typst)
             .convert(&self.document)
             .map_err(|e| SnipperError::Conversion(e.to_string()))
@@ -158,6 +186,7 @@ impl Snipper {
 
     /// Export to HTML.
     pub fn to_html(&self) -> Result<String, SnipperError> {
+        log::info!("Exporting to HTML");
         DocumentConverter::new(OutputFormat::Html)
             .convert(&self.document)
             .map_err(|e| SnipperError::Conversion(e.to_string()))
@@ -165,6 +194,7 @@ impl Snipper {
 
     /// Export to MathML.
     pub fn to_mathml(&self) -> Result<String, SnipperError> {
+        log::info!("Exporting to MathML");
         DocumentConverter::new(OutputFormat::MathML)
             .convert(&self.document)
             .map_err(|e| SnipperError::Conversion(e.to_string()))
@@ -172,6 +202,7 @@ impl Snipper {
 
     /// Export to OMML (Office Math Markup Language).
     pub fn to_omml(&self) -> Result<String, SnipperError> {
+        log::info!("Exporting to OMML");
         DocumentConverter::new(OutputFormat::OMML)
             .convert(&self.document)
             .map_err(|e| SnipperError::Conversion(e.to_string()))
@@ -179,43 +210,21 @@ impl Snipper {
 
     /// Export to JSON.
     pub fn to_json(&self) -> Result<String, SnipperError> {
+        log::info!("Exporting to JSON");
         serde_json::to_string_pretty(&self.document)
             .map_err(|e| SnipperError::Conversion(e.to_string()))
     }
 
     /// Export to a specific format.
     pub fn to_format(&self, format: OutputFormat) -> Result<String, SnipperError> {
+        log::info!("Exporting to {:?}", format);
         DocumentConverter::new(format)
             .convert(&self.document)
             .map_err(|e| SnipperError::Conversion(e.to_string()))
     }
 }
 
-#[derive(Debug)]
-pub enum SnipperError {
-    Image(String),
-    Model(String),
-    Runtime(String),
-    Inference(String),
-    Conversion(String),
-}
-
-impl std::fmt::Display for SnipperError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SnipperError::Image(e) => write!(f, "Image error: {}", e),
-            SnipperError::Model(e) => write!(f, "Model error: {}", e),
-            SnipperError::Runtime(e) => write!(f, "Runtime error: {}", e),
-            SnipperError::Inference(e) => write!(f, "Inference error: {}", e),
-            SnipperError::Conversion(e) => write!(f, "Conversion error: {}", e),
-        }
-    }
-}
-
-impl std::error::Error for SnipperError {}
-
 fn find_models_dir() -> Result<PathBuf, SnipperError> {
-    // Try relative to executable first, then current dir
     let candidates = [
         PathBuf::from("models"),
         PathBuf::from("../models"),
@@ -227,6 +236,7 @@ fn find_models_dir() -> Result<PathBuf, SnipperError> {
             .join("formula-det/yolov8-mfd/mathcraft-mfd.onnx")
             .exists()
         {
+            log::info!("Found models at {:?}", path);
             return Ok(path.clone());
         }
     }

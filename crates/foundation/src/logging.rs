@@ -13,6 +13,8 @@ pub struct LogEntry {
     pub target: String,
     pub message: String,
     pub timestamp: std::time::SystemTime,
+    pub file: Option<String>,
+    pub line: Option<u32>,
 }
 
 impl CoreLogger {
@@ -25,6 +27,24 @@ impl CoreLogger {
 
     pub fn get_entries(&self) -> Vec<LogEntry> {
         self.entries.lock().unwrap().clone()
+    }
+
+    pub fn get_entries_by_level(&self, level: Level) -> Vec<LogEntry> {
+        self.entries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| e.level == level)
+            .cloned()
+            .collect()
+    }
+
+    pub fn get_errors(&self) -> Vec<LogEntry> {
+        self.get_entries_by_level(Level::Error)
+    }
+
+    pub fn get_warnings(&self) -> Vec<LogEntry> {
+        self.get_entries_by_level(Level::Warn)
     }
 
     pub fn clear(&self) {
@@ -44,6 +64,8 @@ impl Log for CoreLogger {
                 target: record.target().to_string(),
                 message: record.args().to_string(),
                 timestamp: std::time::SystemTime::now(),
+                file: record.file().map(|s| s.to_string()),
+                line: record.line(),
             };
             self.entries.lock().unwrap().push(entry);
         }
