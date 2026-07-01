@@ -6,6 +6,7 @@ use std::path::Path;
 
 const DECODER_START_ID: i64 = 2;
 const EOS_ID: i64 = 2;
+#[expect(dead_code)]
 const MAX_TOKENS: usize = 512;
 
 /// TrOCR tokenizer loaded from tokenizer.json.

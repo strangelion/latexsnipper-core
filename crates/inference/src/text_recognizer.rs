@@ -282,6 +282,7 @@ pub fn insert_spaces(text: &str) -> String {
 }
 
 #[derive(Clone, Copy)]
+#[allow(clippy::upper_case_acronyms)]
 enum CharType {
     Latin,
     CJK,

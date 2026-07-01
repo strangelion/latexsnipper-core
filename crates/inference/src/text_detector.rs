@@ -79,8 +79,8 @@ fn preprocess(image: &SnipperImage, params: &TextDetParams) -> (SnipperImage, u3
     let new_w = (w as f32 * scale).ceil() as u32;
     let new_h = (h as f32 * scale).ceil() as u32;
 
-    let new_w = (new_w + params.stride - 1) / params.stride * params.stride;
-    let new_h = (new_h + params.stride - 1) / params.stride * params.stride;
+    let new_w = new_w.div_ceil(params.stride) * params.stride;
+    let new_h = new_h.div_ceil(params.stride) * params.stride;
 
     let resized = latexsnipper_image::operations::resize(image, new_w, new_h);
     let padded = latexsnipper_image::operations::pad_to_stride(&resized, params.stride);

@@ -76,7 +76,7 @@ fn ink_mask(gray: &[f32], w: usize, h: usize) -> Vec<bool> {
     let p95_idx = (sorted.len() as f32 * 0.95) as usize;
     let background = sorted[p95_idx.min(sorted.len() - 1)];
     let threshold = background - 28.0;
-    let threshold = threshold.max(80.0).min(245.0);
+    let threshold = threshold.clamp(80.0, 245.0);
 
     let mut mask = vec![false; w * h];
     let border = 1.max(w.min(h) / 80);
