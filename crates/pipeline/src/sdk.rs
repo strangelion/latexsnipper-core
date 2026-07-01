@@ -35,8 +35,8 @@ impl Snipper {
         let path = path.as_ref();
         log::info!("Loading image from {:?}", path);
 
-        let img = decode(ImageSource::File(path))
-            .map_err(|e| SnipperError::Image(e.to_string()))?;
+        let img =
+            decode(ImageSource::File(path)).map_err(|e| SnipperError::Image(e.to_string()))?;
         let rgb = rgba_to_rgb(&img);
         log::info!("Image loaded: {}x{}", rgb.width(), rgb.height());
 
@@ -53,8 +53,9 @@ impl Snipper {
 
         // 1. Detect formulas
         log::info!("Detecting formulas...");
-        let det_config = latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
-            .map_err(|e| SnipperError::Model(e.to_string()))?;
+        let det_config =
+            latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
+                .map_err(|e| SnipperError::Model(e.to_string()))?;
 
         let det_params = DetectionParams::from_config(&det_config);
         let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
@@ -110,13 +111,9 @@ impl Snipper {
 
             if w >= 4 && h >= 4 {
                 let crop = crop_region(&img, x, y, w, h);
-                if let Ok(result) = recognize_formula(
-                    &crop,
-                    &*enc_session,
-                    &*dec_session,
-                    &tok_path,
-                    &rec_params,
-                ) {
+                if let Ok(result) =
+                    recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params)
+                {
                     log::debug!(
                         "Recognized formula at ({}, {}): {}",
                         x,
@@ -127,12 +124,7 @@ impl Snipper {
                     f.confidence = result.confidence;
                     blocks.push(Block::Formula(FormulaBlock {
                         formula: f,
-                        geometry: Some(Rect::new(
-                            x as f32,
-                            y as f32,
-                            w as f32,
-                            h as f32,
-                        )),
+                        geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                         source: Some(SourceInfo::new()),
                     }));
                 }

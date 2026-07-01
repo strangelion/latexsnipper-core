@@ -8,6 +8,7 @@ pub mod simple;
 
 pub use context::PipelineContext;
 pub use graph::PipelineGraph;
+pub use latexsnipper_foundation::SnipperError;
 pub use manifest::PipelineManifest;
 pub use node::{PipelineNode, TransformNode};
 pub use nodes::crop_node::CropNode;
@@ -17,7 +18,6 @@ pub use nodes::postprocess_node::PostprocessNode;
 pub use nodes::recognizer_node::{RecognizerNode, RecognizerType};
 pub use nodes::resize_node::ResizeNode;
 pub use sdk::Snipper;
-pub use latexsnipper_foundation::SnipperError;
 pub use simple::{
     MockCropper, MockDetector, MockRecognizer, PipelineContext as SimpleContext, SimplePipeline,
     Stage,
