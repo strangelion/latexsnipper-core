@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use latexsnipper_foundation::Result;
 
-use crate::node::PipelineNode;
 use crate::context::PipelineContext;
+use crate::node::PipelineNode;
 
 /// Post-processes recognition results (sort by reading order, merge, etc.).
 pub struct PostprocessNode {
@@ -11,13 +11,17 @@ pub struct PostprocessNode {
 
 impl PostprocessNode {
     pub fn new() -> Self {
-        Self { name: "postprocess".into() }
+        Self {
+            name: "postprocess".into(),
+        }
     }
 }
 
 #[async_trait]
 impl PipelineNode for PostprocessNode {
-    fn name(&self) -> &str { &self.name }
+    fn name(&self) -> &str {
+        &self.name
+    }
 
     async fn process(&self, _ctx: &mut PipelineContext) -> Result<()> {
         // Sort blocks by y-coordinate (reading order)

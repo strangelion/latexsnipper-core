@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::InferenceSession;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Cached ONNX session for reuse across pipeline nodes.
 pub struct CachedSession {
@@ -67,9 +67,12 @@ impl PipelineContext {
 
     /// Cache a session for reuse.
     pub fn cache_session(&mut self, key: impl Into<String>, session: Box<dyn InferenceSession>) {
-        self.sessions.insert(key.into(), CachedSession {
-            session: Arc::new(session),
-        });
+        self.sessions.insert(
+            key.into(),
+            CachedSession {
+                session: Arc::new(session),
+            },
+        );
     }
 
     /// Cancel the pipeline.

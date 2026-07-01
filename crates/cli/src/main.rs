@@ -1,13 +1,11 @@
 use clap::{Parser, Subcommand};
-use latexsnipper_mock::FakePipeline;
-use latexsnipper_image::SnipperImage;
-use latexsnipper_image::color::PixelFormat;
+use latexsnipper_pipeline::sdk::Snipper;
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 
 #[derive(Parser)]
 #[command(name = "snipper")]
-#[command(about = "LaTeXSnipper Core CLI")]
+#[command(about = "LaTeXSnipper Core CLI — Image to LaTeX/Markdown/Typst")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -15,14 +13,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Recognize content in an image
+    /// Recognize formulas in an image and export to format
     Recognize {
+        /// Input image path
         #[arg(short, long)]
         input: String,
-        #[arg(short, long, default_value = "formula")]
-        mode: String,
-        #[arg(long, default_value_t = true)]
-        mock: bool,
+
+        /// Output format: latex, markdown, typst, html, json
+        #[arg(short, long, default_value = "latex")]
+        format: String,
     },
 
     /// Parse LaTeX string to AST
@@ -41,74 +40,84 @@ enum Commands {
     Version,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     env_logger::init();
 
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Recognize { input, mode, mock } => {
-            println!("Input: {}", input);
-            println!("Mode: {}", mode);
-            println!("Mock: {}", mock);
+        Commands::Recognize { input, format } => {
+            eprintln!("Processing: {}", input);
 
-            if mock {
-                let pipeline = match mode.as_str() {
-                    "formula" => FakePipeline::formula("\\frac{a+b}{c}", 0.95),
-                    "text" => FakePipeline::text("Hello World", 0.92),
-                    "mixed" => FakePipeline::mixed("E=mc^2", "Given the equation", 0.9),
-                    _ => { eprintln!("Unknown mode: {}", mode); std::process::exit(1); }
-                };
-
-                let image = SnipperImage::new(100, 100, PixelFormat::Rgb, vec![128u8; 30000]);
-                let doc = pipeline.run(&image).expect("Pipeline failed");
-
-                println!("\nResult:");
-                for (i, page) in doc.pages.iter().enumerate() {
-                    println!("Page {}: {} blocks", i + 1, page.blocks.len());
-                    for (j, block) in page.blocks.iter().enumerate() {
-                        match block {
-                            latexsnipper_ast::Block::Formula(f) => {
-                                println!("  Block {}: Formula: {}", j + 1, f.formula.as_latex());
-                            }
-                            latexsnipper_ast::Block::Paragraph(p) => {
-                                let text: String = p.inlines.iter().filter_map(|l| {
-                                    if let latexsnipper_ast::Inline::Text(t) = l { Some(t.text.as_str()) } else { None }
-                                }).collect();
-                                println!("  Block {}: Text: {}", j + 1, text);
-                            }
-                            _ => println!("  Block {}: Other", j + 1),
-                        }
-                    }
+            let snipper = match Snipper::from_file(&input) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
                 }
+            };
 
-                let json = serde_json::to_string_pretty(&doc).expect("JSON failed");
-                println!("\nJSON ({} bytes):", json.len());
-            } else {
-                eprintln!("Real model mode not implemented yet");
+            eprintln!("Detected {} formulas", snipper.document().block_count());
+
+            let output = match format.as_str() {
+                "latex" | "tex" => snipper.to_latex(),
+                "markdown" | "md" => snipper.to_markdown(),
+                "typst" => snipper.to_typst(),
+                "html" => snipper.to_html(),
+                "mathml" => snipper.to_mathml(),
+                "omml" => snipper.to_omml(),
+                "json" => snipper.to_json(),
+                _ => {
+                    eprintln!("Unknown format: {}. Use: latex, markdown, typst, html, json", format);
+                    std::process::exit(1);
+                }
+            };
+
+            match output {
+                Ok(text) => println!("{}", text),
+                Err(e) => {
+                    eprintln!("Export error: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
 
         Commands::Parse { latex } => {
             let parser = LatexParser;
-            let doc = parser.parse(&latex).expect("Parse failed");
-            println!("Parsed: {} blocks", doc.block_count());
-            let json = serde_json::to_string_pretty(&doc).expect("JSON failed");
-            println!("{}", json);
+            match parser.parse(&latex) {
+                Ok(doc) => {
+                    println!("Parsed: {} blocks", doc.block_count());
+                    let json = serde_json::to_string_pretty(&doc).expect("JSON failed");
+                    println!("{}", json);
+                }
+                Err(e) => {
+                    eprintln!("Parse error: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
 
         Commands::Render { latex } => {
             let parser = LatexParser;
             let renderer = LatexRenderer;
-            let doc = parser.parse(&latex).expect("Parse failed");
-            let output = renderer.render(&doc).expect("Render failed");
-            println!("{}", output);
+            match parser.parse(&latex) {
+                Ok(doc) => match renderer.render(&doc) {
+                    Ok(output) => println!("{}", output),
+                    Err(e) => {
+                        eprintln!("Render error: {}", e);
+                        std::process::exit(1);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Parse error: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
 
         Commands::Version => {
             println!("snipper {}", env!("CARGO_PKG_VERSION"));
-            println!("LaTeXSnipper Core — Mock Runtime Mode");
+            println!("LaTeXSnipper Core — Real ONNX Runtime Mode");
         }
     }
 }

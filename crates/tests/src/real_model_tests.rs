@@ -8,7 +8,7 @@ use latexsnipper_inference::{recognize_formula, RecognitionParams};
 use std::path::PathBuf;
 
 fn models_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().join("test-models")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().join("models")
 }
 
 fn fixtures_dir() -> PathBuf {

@@ -2,22 +2,93 @@
 
 # LaTeXSnipper Core
 
-**A composable Rust engine for mathematical OCR, document understanding, and multi-format document processing.**
+**从图片到多格式文档的一站式解决方案**
 
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
-[![Status](https://img.shields.io/badge/Status-v1.0.0-brightgreen)]()
+[![Status](https://img.shields.io/badge/Status-Core%20Pipeline%20Working-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20WASM-lightgrey)]()
 
-**Build once. Run everywhere.**
-
-A single Rust core powering Desktop, Mobile, Office Add-ins and Web applications.
+**一行代码，图片变 LaTeX/Markdown/Typst**
 
 [![About](assets/About.png)]()
 
 [English](README.md) · [中文](README-CN.md)
 
 </div>
+
+---
+
+## 快速开始
+
+```rust
+use latexsnipper_pipeline::sdk::Snipper;
+
+// 一行完成：图片 → 检测 → 识别 → AST → 导出
+let snipper = Snipper::from_file("input.png")?;
+
+// 导出到任意格式
+let latex = snipper.to_latex()?;
+let markdown = snipper.to_markdown()?;
+let typst = snipper.to_typst()?;
+let html = snipper.to_html()?;
+let json = snipper.to_json()?;
+```
+
+### 输出示例
+
+**输入**: 包含公式的图片
+
+**输出 (LaTeX)**:
+```latex
+$$ E = m c ^ { 2 } $$
+
+$$ \int _ { 0 } ^ { \infty } e ^ { - x ^ { 2 } } d x = \frac { \sqrt { \pi } } { 2 } $$
+```
+
+**输出 (Markdown)**:
+```markdown
+$$ E = m c ^ { 2 } $$
+
+$$ \int _ { 0 } ^ { \infty } e ^ { - x ^ { 2 } } d x = \frac { \sqrt { \pi } } { 2 } $$
+```
+
+**输出 (Typst)**:
+```typst
+$ E = m c ^ { 2 } $
+
+$ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
+```
+
+---
+
+## 核心能力
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| **图片 → AST** | ✅ | YOLOv8 检测 + TrOCR 识别 |
+| **AST → LaTeX** | ✅ | 完整支持公式、表格、列表 |
+| **AST → Markdown** | ✅ | MathJax 兼容 |
+| **AST → Typst** | ✅ | 原生 Typst 语法 |
+| **AST → HTML** | ✅ | MathJax 渲染 |
+| **AST → MathML** | ✅ | Office 兼容 |
+| **AST → OMML** | ✅ | Word 兼容 |
+
+---
+
+## 为什么选择 LaTeXSnipper Core?
+
+**不是又一个 OCR 引擎。**
+
+LaTeXSnipper Core 的核心价值是 **统一文档 AST**：
+
+1. **任意输入** → 图片、剪贴板、Office、PDF
+2. **统一 AST** → Document / Block / Inline / Formula
+3. **任意输出** → LaTeX、Typst、Markdown、Office、Web
+
+OCR 只是其中一个输入源。未来 Office 插件、剪贴板监听、PDF 解析都会接入同一个 AST。
+
+> 拍一张数学题的照片，同时输出 LaTeX、Typst、Markdown 和 Word 兼容格式——而且是同一个 API。
 
 ---
 
@@ -59,32 +130,88 @@ Engine
 ![Pipeline](assets/pipeline.svg)
 
 ```
-Image → Preprocess → Detection → Crop → Recognition → Document AST → Output
-           │              │              │              │
-       letterbox       YOLOv8        TrOCR/CRNN     LaTeX/OMML
-        normalize       DBNet         Beam Search    MathML/Typst
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Recognition Pipeline                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐             │
+│   │  Decode   │───▶│Normalize │───▶│  Layout  │───▶│  Region  │             │
+│   │          │    │          │    │Detection │    │ Proposal │             │
+│   └──────────┘    └──────────┘    └──────────┘    └──────────┘             │
+│        │                                               │                    │
+│        │              ┌────────────────────────────────┘                    │
+│        │              │                                                     │
+│        │              ▼                                                     │
+│        │         ┌──────────────────────────────────────┐                  │
+│        │         │                                      │                  │
+│        │         │  ┌─────────────┐  ┌─────────────┐   │                  │
+│        │         │  │   Formula   │  │    Text     │   │                  │
+│        │         │  │ Recognition │  │ Recognition │   │                  │
+│        │         │  │  (TrOCR)    │  │  (CRNN)     │   │                  │
+│        │         │  └──────┬──────┘  └──────┬──────┘   │                  │
+│        │         │         │                │          │                  │
+│        │         │         └────────┬───────┘          │                  │
+│        │         │                  │                  │                  │
+│        │         └──────────────────┼──────────────────┘                  │
+│        │                            │                                     │
+│        │                            ▼                                     │
+│        │                     ┌──────────┐                                 │
+│        │                     │  Merge   │                                 │
+│        │                     └────┬─────┘                                 │
+│        │                          │                                       │
+│        │                          ▼                                       │
+│        │                  ┌──────────────┐                                │
+│        └─────────────────▶│ Document AST │                                │
+│                           └──────┬───────┘                                │
+│                                  │                                        │
+│                                  ▼                                        │
+│                           ┌──────────┐    ┌──────────┐                    │
+│                           │Conversion│───▶│  Export  │                    │
+│                           └──────────┘    └──────────┘                    │
+│                                  │              │                          │
+│                           LaTeX/OMML        SVG/Text/PDF                   │
+│                           MathML/Typst                                     │
+│                           Markdown/HTML                                    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Features
 
+### Stable
+
 | Capability | Status | Details |
 |-----------|--------|---------|
 | **AST** | ✅ | Document → Page → Block → Inline → Formula |
 | **Image** | ✅ | SnipperImage, ImageView, decode, resize, normalize |
-| **Inference** | ✅ | YOLOv8 detection, TrOCR recognition, CRNN+CTC |
-| **Pipeline** | ✅ | DAG Node Graph, YAML/JSON Manifest, async with cancellation |
 | **Conversion** | ✅ | 12 formats: LaTeX, OMML, MathML, Typst, Markdown, HTML |
-| **Export** | ✅ | SVG, Text, PDF generators |
-| **Runtime** | ✅ | ONNX Runtime (with session caching) + Stub |
-| **Model** | ✅ | Manifest, Config, SHA256 verification |
 | **Syntax** | ✅ | LaTeX/Typst/Markdown Parser + Renderer |
-| **Plugin** | ✅ | Plugin trait, Registry, Request/Response |
-| **Engine** | ✅ | JobQueue, Service trait, Request/Response Builder, Streaming API |
-| **FFI** | ✅ | Android JNI, iOS C FFI (OnnxRuntimeBackend) |
-| **WASM** | ✅ | parse/render/convert/recognize bindings |
-| **CLI** | ✅ | recognize/parse/render/version |
+| **Pipeline** | ✅ | DAG Node Graph, YAML/JSON Manifest, async with cancellation |
+
+### Experimental
+
+| Capability | Status | Details |
+|-----------|--------|---------|
+| **Inference** | 🚧 | YOLOv8 detection, TrOCR recognition, CRNN+CTC |
+| **Runtime** | 🚧 | ONNX Runtime (with session caching) + Stub |
+| **Engine** | 🚧 | JobQueue, Service trait, Request/Response Builder, Streaming API |
+| **Model** | 🚧 | Manifest, Config, SHA256 verification |
+| **Plugin** | 🚧 | Plugin trait, Registry, Request/Response |
+| **FFI** | 🚧 | Android JNI, iOS C FFI (OnnxRuntimeBackend) |
+| **WASM** | 🚧 | parse/render/convert/recognize bindings |
+| **CLI** | 🚧 | recognize/parse/render/version |
+| **Export** | 🚧 | SVG, Text, PDF generators |
+
+### Planned
+
+| Capability | Status | Details |
+|-----------|--------|---------|
+| **Table Recognition** | ○ | Table structure detection and parsing |
+| **Handwriting** | ○ | Handwritten text recognition |
+| **Formula Layout** | ○ | Complex formula layout analysis |
+| **Multi-page** | ○ | Multi-page document processing |
 
 ---
 
@@ -92,24 +219,24 @@ Image → Preprocess → Detection → Crop → Recognition → Document AST →
 
 ```
 crates/
-├── foundation/     Error, Result, Logger, Config, EventBus
-├── ast/            Document AST — single source of truth
-├── tensor/         Inference I/O tensors
-├── image/          Platform-independent image processing
-├── runtime/        RuntimeBackend + InferenceSession traits
-├── model/          Model manifest, config, management
-├── inference/      Detection + Recognition pipelines
-├── pipeline/       Node-based async pipeline
-├── syntax/         LaTeX/Typst/Markdown Parser + Renderer
-├── conversion/     AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
-├── export/         RenderTree → SVG/Text/PDF
-├── engine/         SnipperEngine + JobQueue + Service
-├── plugin/         Plugin API (Plugin trait, Registry)
-├── mock/           Fake implementations for testing
-├── ffi/            Android JNI + iOS C FFI
-├── wasm/           WebAssembly bindings
-├── cli/            CLI tool
-└── tests/          Integration tests (150+ tests)
+├── foundation/     ✅ Error, Result, Logger, Config, EventBus
+├── ast/            ✅ Document AST — single source of truth
+├── tensor/         ✅ Inference I/O tensors
+├── image/          ✅ Platform-independent image processing
+├── runtime/        🚧 RuntimeBackend + InferenceSession traits
+├── model/          🚧 Model manifest, config, management
+├── inference/      🚧 Detection + Recognition pipelines
+├── pipeline/       ✅ Node-based async pipeline
+├── syntax/         ✅ LaTeX/Typst/Markdown Parser + Renderer
+├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
+├── export/         🚧 RenderTree → SVG/Text/PDF
+├── engine/         🚧 SnipperEngine + JobQueue + Service
+├── plugin/         🚧 Plugin API (Plugin trait, Registry)
+├── mock/           ✅ Fake implementations for testing
+├── ffi/            🚧 Android JNI + iOS C FFI
+├── wasm/           🚧 WebAssembly bindings
+├── cli/            🚧 CLI tool
+└── tests/          ✅ Integration tests (150+ tests)
 ```
 
 ---
@@ -133,14 +260,37 @@ See [docs/getting-started.md](docs/getting-started.md) for details.
 
 ## Documentation
 
+### Architecture
+
 | Document | Description |
 |----------|-------------|
 | [architecture.md](docs/architecture.md) | Four-layer architecture overview |
-| [inference.md](docs/inference.md) | Detection + Recognition parameters |
-| [model.md](docs/model.md) | Model config, manifest, directory structure |
-| [conversion.md](docs/conversion.md) | 12 output formats |
-| [plugin.md](docs/plugin.md) | Plugin system |
+| [pipeline.md](docs/pipeline.md) | Recognition pipeline design |
+| [runtime.md](docs/runtime.md) | Runtime backend system |
+| [engine.md](docs/engine.md) | Engine and job queue |
+
+### Developer Guide
+
+| Document | Description |
+|----------|-------------|
 | [getting-started.md](docs/getting-started.md) | Developer guide |
+| [plugin.md](docs/plugin.md) | Plugin system |
+| [testing.md](docs/testing.md) | Testing strategies |
+
+### Reference
+
+| Document | Description |
+|----------|-------------|
+| [ast.md](docs/ast.md) | Document AST specification |
+| [syntax.md](docs/syntax.md) | LaTeX/Typst/Markdown parser |
+| [conversion.md](docs/conversion.md) | 12 output formats |
+| [conversion_guide.md](docs/conversion_guide.md) | Conversion guide with examples |
+
+### Roadmap
+
+| Document | Description |
+|----------|-------------|
+| [dual-track.md](docs/dual-track.md) | Development roadmap |
 
 ---
 

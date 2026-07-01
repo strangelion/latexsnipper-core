@@ -14,10 +14,7 @@ pub enum Operation {
         block: Block,
     },
     /// Remove a block.
-    RemoveBlock {
-        page: usize,
-        index: usize,
-    },
+    RemoveBlock { page: usize, index: usize },
     /// Replace a formula's content.
     ReplaceFormula {
         page: usize,
@@ -37,12 +34,10 @@ impl Operation {
     /// Create the inverse operation for undo.
     pub fn inverse(&self) -> Option<Operation> {
         match self {
-            Operation::InsertBlock { page, index, .. } => {
-                Some(Operation::RemoveBlock {
-                    page: *page,
-                    index: *index,
-                })
-            }
+            Operation::InsertBlock { page, index, .. } => Some(Operation::RemoveBlock {
+                page: *page,
+                index: *index,
+            }),
             Operation::RemoveBlock { .. } => None, // Need original block to undo
             Operation::ReplaceFormula { .. } => None, // Need original formula to undo
             Operation::ReplaceText { .. } => None, // Need original text to undo

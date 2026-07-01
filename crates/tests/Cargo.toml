@@ -20,6 +20,14 @@ path = "src/real_model_tests.rs"
 name = "contract_tests"
 path = "src/contract_tests.rs"
 
+[[test]]
+name = "pipeline_integration"
+path = "src/pipeline_integration.rs"
+
+[[test]]
+name = "pipeline_e2e"
+path = "src/pipeline_e2e.rs"
+
 [dependencies]
 latexsnipper-foundation = { path = "../foundation" }
 latexsnipper-ast = { path = "../ast" }

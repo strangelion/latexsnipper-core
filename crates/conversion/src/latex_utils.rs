@@ -1,4 +1,4 @@
-/// Shared LaTeX parsing utilities for all converters.
+//! Shared LaTeX parsing utilities for all converters.
 
 /// Parse LaTeX brace pairs: {content1}{content2} or content1}{content2}
 pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
@@ -9,13 +9,11 @@ pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
     for (i, b) in s.bytes().enumerate() {
         match b {
             b'{' => depth += 1,
-            b'}' => {
-                if depth > 0 {
-                    depth -= 1;
-                    if depth == 0 {
-                        first_end = Some(i);
-                        break;
-                    }
+            b'}' if depth > 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    first_end = Some(i);
+                    break;
                 }
             }
             _ => {}
@@ -35,7 +33,10 @@ pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
                 b'{' => d += 1,
                 b'}' => {
                     d -= 1;
-                    if d == 0 { close = Some(i); break; }
+                    if d == 0 {
+                        close = Some(i);
+                        break;
+                    }
                 }
                 _ => {}
             }

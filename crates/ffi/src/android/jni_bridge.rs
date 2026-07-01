@@ -45,13 +45,17 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeInit(
 }
 
 /// Recognize formula in an image.
+/// image_data: raw RGB pixel data
+/// width, height: image dimensions
 /// Returns a JSON string with the result.
 #[no_mangle]
 pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRecognizeFormula(
     image_data: *const u8,
     image_len: usize,
+    width: u32,
+    height: u32,
 ) -> *mut std::os::raw::c_char {
-    let response = recognize_sync(image_data, image_len, RecognizeMode::Formula);
+    let response = recognize_sync(image_data, image_len, width, height, RecognizeMode::Formula);
     match std::ffi::CString::new(response.to_json()) {
         Ok(cs) => cs.into_raw(),
         Err(_) => std::ptr::null_mut(),
@@ -63,8 +67,10 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRecognizeFormula
 pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRecognizeText(
     image_data: *const u8,
     image_len: usize,
+    width: u32,
+    height: u32,
 ) -> *mut std::os::raw::c_char {
-    let response = recognize_sync(image_data, image_len, RecognizeMode::Text);
+    let response = recognize_sync(image_data, image_len, width, height, RecognizeMode::Text);
     match std::ffi::CString::new(response.to_json()) {
         Ok(cs) => cs.into_raw(),
         Err(_) => std::ptr::null_mut(),
@@ -76,8 +82,10 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRecognizeText(
 pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRecognizeMixed(
     image_data: *const u8,
     image_len: usize,
+    width: u32,
+    height: u32,
 ) -> *mut std::os::raw::c_char {
-    let response = recognize_sync(image_data, image_len, RecognizeMode::Mixed);
+    let response = recognize_sync(image_data, image_len, width, height, RecognizeMode::Mixed);
     match std::ffi::CString::new(response.to_json()) {
         Ok(cs) => cs.into_raw(),
         Err(_) => std::ptr::null_mut(),
@@ -100,7 +108,13 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeFreeString(
     }
 }
 
-fn recognize_sync(image_data: *const u8, image_len: usize, mode: RecognizeMode) -> FfiResponse {
+fn recognize_sync(
+    image_data: *const u8,
+    image_len: usize,
+    width: u32,
+    height: u32,
+    mode: RecognizeMode,
+) -> FfiResponse {
     let engine = ENGINE.lock().unwrap();
     let engine = match engine.as_ref() {
         Some(e) => e,
@@ -111,16 +125,32 @@ fn recognize_sync(image_data: *const u8, image_len: usize, mode: RecognizeMode) 
     if image_data.is_null() || image_len == 0 || image_len > 100 * 1024 * 1024 {
         return FfiResponse::error("Invalid image data: null pointer, empty, or too large (>100MB)");
     }
-    let _data = unsafe { std::slice::from_raw_parts(image_data, image_len) };
+
+    // Validate dimensions
+    if width == 0 || height == 0 || width > 10000 || height > 10000 {
+        return FfiResponse::error("Invalid image dimensions");
+    }
+
+    // Validate expected data length (RGB = 3 bytes per pixel)
+    let expected_len = (width * height * 3) as usize;
+    if image_len < expected_len {
+        return FfiResponse::error("Image data too short for given dimensions");
+    }
+
+    let data = unsafe { std::slice::from_raw_parts(image_data, expected_len) };
+
+    // Create SnipperImage from actual pixel data
+    let image = latexsnipper_image::SnipperImage::new(
+        width,
+        height,
+        latexsnipper_image::color::PixelFormat::Rgb,
+        data.to_vec(),
+    );
 
     let start = std::time::Instant::now();
 
-    // For now, use tokio runtime to run async recognize
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let doc = match rt.block_on(engine.recognize(
-        latexsnipper_image::SnipperImage::new(100, 100, latexsnipper_image::color::PixelFormat::Rgb, vec![128u8; 30000]),
-        mode,
-    )) {
+    let doc = match rt.block_on(engine.recognize(image, mode)) {
         Ok(d) => d,
         Err(e) => return FfiResponse::error(&e.to_string()),
     };

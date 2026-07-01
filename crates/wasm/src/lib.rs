@@ -5,8 +5,6 @@ use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::typst::TypstRenderer;
 use latexsnipper_syntax::markdown::MarkdownRenderer;
 use latexsnipper_conversion::{Converter, LatexConverter, OmmlConverter, MathmlConverter, TypstConverter, MarkdownInlineConverter, MarkdownBlockConverter, HtmlConverter};
-use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-use latexsnipper_runtime::StubRuntime;
 
 /// Initialize the WASM module.
 #[wasm_bindgen]
@@ -85,42 +83,58 @@ pub fn available_formats() -> String {
     serde_json::to_string(&formats).unwrap_or_default()
 }
 
-/// Recognize content in image data (raw RGB bytes).
-/// Returns Document JSON string.
-/// mode: "formula", "text", or "mixed"
+/// Build a Document from JSON and export to the specified format.
+/// This is the main "AST → Export" function for WASM.
+///
+/// Usage:
+/// ```js
+/// const doc = { pages: [{ blocks: [{ type: "Formula", formula: { source: { format: "Latex", content: "E=mc^2" } } }] }] };
+/// const latex = convert_document(JSON.stringify(doc), "latex");
+/// ```
 #[wasm_bindgen]
-pub fn recognize(data: &[u8], width: u32, height: u32, mode: &str) -> Result<String, JsValue> {
-    use latexsnipper_image::SnipperImage;
-    use latexsnipper_image::color::PixelFormat;
+pub fn convert_from_json(doc_json: &str, format: &str) -> Result<String, JsValue> {
+    convert_document(doc_json, format)
+}
 
-    if data.len() != (width * height * 3) as usize {
-        return Err(JsValue::from_str("Data length doesn't match width*height*3"));
-    }
-
-    let image = SnipperImage::new(width, height, PixelFormat::Rgb, data.to_vec());
-
-    let recognize_mode = match mode {
-        "text" => RecognizeMode::Text,
-        "mixed" => RecognizeMode::Mixed,
-        _ => RecognizeMode::Formula,
+/// Create a Document with a formula and export to format.
+/// Convenience function for simple use cases.
+///
+/// Usage:
+/// ```js
+/// const latex = formula_to_document("E = mc^2", "latex");
+/// const md = formula_to_document("\\frac{a}{b}", "markdown_block");
+/// ```
+#[wasm_bindgen]
+pub fn formula_to_document(latex: &str, format: &str) -> Result<String, JsValue> {
+    let doc = Document {
+        metadata: latexsnipper_ast::Metadata::default(),
+        pages: vec![latexsnipper_ast::Page {
+            width: 800.0,
+            height: 600.0,
+            blocks: vec![latexsnipper_ast::Block::Formula(latexsnipper_ast::FormulaBlock {
+                formula: latexsnipper_ast::Formula::latex(latex),
+                geometry: None,
+                source: None,
+            })],
+            page_number: Some(1),
+        }],
+        id_gen: latexsnipper_ast::NodeIdGenerator::new(),
     };
 
-    let config = EngineConfig::default();
-    let runtime = Box::new(StubRuntime::new());
-    let engine = SnipperEngine::new(config, runtime);
-
-    // Note: WASM is single-threaded, so we use a basic tokio runtime
-    let rt = tokio::runtime::Runtime::new().map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let doc = rt.block_on(engine.recognize(image, recognize_mode))
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-    serde_json::to_string(&doc).map_err(|e| JsValue::from_str(&e.to_string()))
+    let doc_json = serde_json::to_string(&doc).map_err(err_to_js)?;
+    convert_document(&doc_json, format)
 }
 
 /// Check if the WASM module is working.
 #[wasm_bindgen]
 pub fn health_check() -> String {
     "ok".to_string()
+}
+
+/// Get module version.
+#[wasm_bindgen]
+pub fn version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 fn err_to_js<E: std::fmt::Display>(e: E) -> JsValue {

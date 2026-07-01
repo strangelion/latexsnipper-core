@@ -33,3 +33,41 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 log = "0.4"
+
+# Root package for examples and tests
+[package]
+name = "latexsnipper-core"
+version.workspace = true
+edition.workspace = true
+description = "LaTeXSnipper Core — Unified Document AST for multi-format export"
+
+[dependencies]
+latexsnipper-ast = { path = "crates/ast" }
+latexsnipper-conversion = { path = "crates/conversion" }
+latexsnipper-pipeline = { path = "crates/pipeline" }
+latexsnipper-runtime = { path = "crates/runtime" }
+latexsnipper-image = { path = "crates/image" }
+latexsnipper-inference = { path = "crates/inference" }
+latexsnipper-model = { path = "crates/model" }
+latexsnipper-foundation = { path = "crates/foundation" }
+serde_json.workspace = true
+
+[[example]]
+name = "ast_demo"
+path = "examples/ast_demo.rs"
+
+[[example]]
+name = "conversion_demo"
+path = "examples/conversion_demo.rs"
+
+[[example]]
+name = "sdk_demo"
+path = "examples/sdk_demo.rs"
+
+[[example]]
+name = "pipeline_demo"
+path = "examples/pipeline_demo.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

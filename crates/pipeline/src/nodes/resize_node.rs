@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 
-use crate::node::PipelineNode;
 use crate::context::PipelineContext;
+use crate::node::PipelineNode;
 
 /// Resizes the image in the pipeline context to a target size.
 pub struct ResizeNode {
@@ -22,7 +22,9 @@ impl ResizeNode {
 
 #[async_trait]
 impl PipelineNode for ResizeNode {
-    fn name(&self) -> &str { &self.name }
+    fn name(&self) -> &str {
+        &self.name
+    }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
         if let Some(ref image) = ctx.image {

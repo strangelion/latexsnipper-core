@@ -91,7 +91,7 @@ mod tests {
     fn test_tokenizer_load() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent().unwrap()
-            .join("../test-models/formula-rec/trocr-deit/tokenizer.json");
+            .join("../models/formula-rec/trocr-deit/tokenizer.json");
         
         if path.exists() {
             let tok = TrOCRTokenizer::load(&path).unwrap();
@@ -105,7 +105,7 @@ mod tests {
     fn test_bpe_space_prefix() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent().unwrap()
-            .join("../test-models/formula-rec/trocr-deit/tokenizer.json");
+            .join("../models/formula-rec/trocr-deit/tokenizer.json");
         
         if path.exists() {
             let tok = TrOCRTokenizer::load(&path).unwrap();

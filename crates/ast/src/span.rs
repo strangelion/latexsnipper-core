@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 pub struct NodeId(pub u64);
 
 impl NodeId {
-    pub fn new(id: u64) -> Self { Self(id) }
+    pub fn new(id: u64) -> Self {
+        Self(id)
+    }
 
     /// Generate the next ID from a counter.
     pub fn next(counter: &mut u64) -> Self {
@@ -35,7 +37,10 @@ impl Span {
 
     /// Create a span from a single position.
     pub fn single(pos: usize) -> Self {
-        Self { start: pos, end: pos }
+        Self {
+            start: pos,
+            end: pos,
+        }
     }
 
     /// Length of the span.
@@ -100,7 +105,9 @@ pub struct SourceInfo {
 }
 
 impl SourceInfo {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn with_node_id(mut self, id: NodeId) -> Self {
         self.node_id = Some(id);
@@ -129,7 +136,7 @@ impl NodeIdGenerator {
         Self { counter: 0 }
     }
 
-    pub fn next(&mut self) -> NodeId {
+    pub fn generate(&mut self) -> NodeId {
         NodeId::next(&mut self.counter)
     }
 }
@@ -172,9 +179,9 @@ mod tests {
     #[test]
     fn node_id_generator() {
         let mut gen = NodeIdGenerator::new();
-        let a = gen.next();
-        let b = gen.next();
-        let c = gen.next();
+        let a = gen.generate();
+        let b = gen.generate();
+        let c = gen.generate();
         assert_eq!(a, NodeId(0));
         assert_eq!(b, NodeId(1));
         assert_eq!(c, NodeId(2));

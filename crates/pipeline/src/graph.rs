@@ -1,8 +1,8 @@
-use latexsnipper_foundation::{SnipperError, Result};
+use latexsnipper_foundation::{Result, SnipperError};
 use log::info;
 
-use crate::node::PipelineNode;
 use crate::context::PipelineContext;
+use crate::node::PipelineNode;
 
 /// A node entry in the pipeline graph with its dependencies.
 struct NodeEntry {
@@ -54,7 +54,11 @@ impl PipelineGraph {
     /// Execute all nodes in topological order (respects dependencies).
     pub async fn run(&self, ctx: &mut PipelineContext) -> Result<()> {
         let order = self.topological_sort()?;
-        info!("Pipeline '{}' starting with {} nodes", self.name, order.len());
+        info!(
+            "Pipeline '{}' starting with {} nodes",
+            self.name,
+            order.len()
+        );
 
         for (i, name) in order.iter().enumerate() {
             if ctx.cancelled {
@@ -62,7 +66,9 @@ impl PipelineGraph {
                 break;
             }
 
-            let entry = self.entries.iter()
+            let entry = self
+                .entries
+                .iter()
                 .find(|e| &e.name == name)
                 .ok_or_else(|| SnipperError::Pipeline(format!("Node '{}' not found", name)))?;
 
@@ -82,7 +88,9 @@ impl PipelineGraph {
         // Initialize all nodes
         for entry in &self.entries {
             in_degree.entry(entry.name.clone()).or_insert(0);
-            dependents.entry(entry.name.clone()).or_insert_with(Vec::new);
+            dependents
+                .entry(entry.name.clone())
+                .or_insert_with(Vec::new);
         }
 
         // Count incoming edges
@@ -90,16 +98,21 @@ impl PipelineGraph {
             for dep in &entry.depends_on {
                 if !self.entries.iter().any(|e| &e.name == dep) {
                     return Err(SnipperError::Pipeline(format!(
-                        "Node '{}' depends on unknown node '{}'", entry.name, dep
+                        "Node '{}' depends on unknown node '{}'",
+                        entry.name, dep
                     )));
                 }
                 *in_degree.entry(entry.name.clone()).or_insert(0) += 1;
-                dependents.entry(dep.clone()).or_insert_with(Vec::new).push(entry.name.clone());
+                dependents
+                    .entry(dep.clone())
+                    .or_insert_with(Vec::new)
+                    .push(entry.name.clone());
             }
         }
 
         // Start with nodes that have no dependencies
-        let mut queue: Vec<String> = in_degree.iter()
+        let mut queue: Vec<String> = in_degree
+            .iter()
             .filter(|(_, &deg)| deg == 0)
             .map(|(name, _)| name.clone())
             .collect();
@@ -125,7 +138,7 @@ impl PipelineGraph {
 
         if result.len() != self.entries.len() {
             return Err(SnipperError::Pipeline(
-                "Circular dependency detected in pipeline graph".into()
+                "Circular dependency detected in pipeline graph".into(),
             ));
         }
 

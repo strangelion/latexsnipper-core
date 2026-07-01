@@ -1,5 +1,5 @@
+use latexsnipper_foundation::{Result, SnipperError};
 use serde::{Deserialize, Serialize};
-use latexsnipper_foundation::{SnipperError, Result};
 
 /// A declarative pipeline definition loaded from YAML/JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +44,8 @@ impl PipelineManifest {
 
     /// Validate the manifest (check for missing dependencies).
     pub fn validate(&self) -> Result<()> {
-        let names: std::collections::HashSet<&str> = self.nodes.iter().map(|n| n.name.as_str()).collect();
+        let names: std::collections::HashSet<&str> =
+            self.nodes.iter().map(|n| n.name.as_str()).collect();
 
         for node in &self.nodes {
             for dep in &node.depends_on {
@@ -65,7 +66,7 @@ impl PipelineManifest {
             if !visited.contains(&node.name) {
                 if self.has_cycle(&node.name, &mut visited, &mut stack) {
                     return Err(SnipperError::Pipeline(
-                        "Circular dependency detected in manifest".into()
+                        "Circular dependency detected in manifest".into(),
                     ));
                 }
             }
@@ -74,7 +75,12 @@ impl PipelineManifest {
         Ok(())
     }
 
-    fn has_cycle(&self, name: &str, visited: &mut std::collections::HashSet<String>, stack: &mut std::collections::HashSet<String>) -> bool {
+    fn has_cycle(
+        &self,
+        name: &str,
+        visited: &mut std::collections::HashSet<String>,
+        stack: &mut std::collections::HashSet<String>,
+    ) -> bool {
         if stack.contains(name) {
             return true;
         }

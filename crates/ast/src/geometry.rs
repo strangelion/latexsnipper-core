@@ -11,7 +11,12 @@ pub struct Rect {
 
 impl Rect {
     pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     pub fn right(&self) -> f32 {
@@ -42,7 +47,11 @@ impl Rect {
         let area_other = other.width * other.height;
         let union = area_self + area_other - intersection;
 
-        if union <= 0.0 { 0.0 } else { intersection / union }
+        if union <= 0.0 {
+            0.0
+        } else {
+            intersection / union
+        }
     }
 
     /// Check if this rect contains a point.
@@ -52,8 +61,10 @@ impl Rect {
 
     /// Check if this rect overlaps with another rect.
     pub fn overlaps(&self, other: &Rect) -> bool {
-        self.x < other.right() && self.right() > other.x
-            && self.y < other.bottom() && self.bottom() > other.y
+        self.x < other.right()
+            && self.right() > other.x
+            && self.y < other.bottom()
+            && self.bottom() > other.y
     }
 }
 

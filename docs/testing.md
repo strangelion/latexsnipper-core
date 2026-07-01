@@ -7,7 +7,7 @@
 ```
 crates/tests/src/
 ├── all_tests.rs          # 模块级单元测试
-├── real_model_tests.rs   # 真实模型端到端测试（需要 test-models/）
+├── real_model_tests.rs   # 真实模型端到端测试（需要 models/）
 ├── contract_tests.rs     # API 契约测试
 └── dual_track_tests.rs   # Mock vs ONNX 对照测试
 ```
@@ -47,7 +47,7 @@ cargo test --workspace
 # 统一测试
 cargo test -p latexsnipper-tests
 
-# 真实模型测试（需要 test-models/）
+# 真实模型测试（需要 models/）
 cargo test -p latexsnipper-tests --test real_model -- --nocapture
 
 # Dual-track 对照测试
@@ -71,5 +71,5 @@ cargo bench --bench recognition_bench -- --nocapture
 
 `.gitignore` 配置：
 - `target/` — 构建产物
-- `test-models/` — ONNX 模型文件
+- `models/` — ONNX 模型文件
 - `fixtures/*.typ` — Typst 源文件

@@ -21,7 +21,10 @@ pub struct TransformNode {
 }
 
 impl TransformNode {
-    pub fn new(name: impl Into<String>, transform: impl Fn(&mut PipelineContext) -> Result<()> + Send + Sync + 'static) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        transform: impl Fn(&mut PipelineContext) -> Result<()> + Send + Sync + 'static,
+    ) -> Self {
         Self {
             name: name.into(),
             transform: Box::new(transform),

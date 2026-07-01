@@ -163,7 +163,7 @@ fn cases_to_omml(content: &str) -> String {
     let rows = split_matrix_rows(content);
     let mut rows_xml = Vec::new();
     for row in &rows {
-        let left = row.get(0).map(|s| latex_to_omml(s.trim())).unwrap_or_default();
+        let left = row.first().map(|s| latex_to_omml(s.trim())).unwrap_or_default();
         let right = row.get(1).map(|s| latex_to_omml(s.trim())).unwrap_or_default();
         rows_xml.push(format!("  <m:r>\n    <m:e>{}</m:e>\n    <m:e>{}</m:e>\n  </m:r>", left, right));
     }

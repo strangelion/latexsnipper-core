@@ -1,7 +1,6 @@
 use crate::{Block, Document, Inline, Page};
 
 /// Visitor pattern for traversing and transforming Documents.
-/// Used by Renderers and Parsers.
 pub trait DocumentVisitor<T> {
     fn visit_document(&mut self, doc: &Document) -> T;
     fn visit_page(&mut self, page: &Page) -> T;
@@ -16,7 +15,9 @@ pub struct TextCollector {
 
 impl TextCollector {
     pub fn new() -> Self {
-        Self { text: String::new() }
+        Self {
+            text: String::new(),
+        }
     }
 }
 
@@ -41,13 +42,41 @@ impl DocumentVisitor<()> for TextCollector {
 
     fn visit_block(&mut self, block: &Block) {
         match block {
+            Block::Heading(h) => {
+                for inline in &h.inlines {
+                    self.visit_inline(inline);
+                }
+                self.text.push('\n');
+            }
             Block::Paragraph(p) => {
                 for inline in &p.inlines {
                     self.visit_inline(inline);
                 }
+                self.text.push('\n');
             }
             Block::Formula(f) => {
                 self.text.push_str(f.formula.as_latex());
+                self.text.push('\n');
+            }
+            Block::List(l) => {
+                for item in &l.items {
+                    for inline in &item.inlines {
+                        self.visit_inline(inline);
+                    }
+                    self.text.push('\n');
+                }
+            }
+            Block::Quote(q) => {
+                for b in &q.blocks {
+                    self.visit_block(b);
+                }
+            }
+            Block::Code(c) => {
+                self.text.push_str(&c.code);
+                self.text.push('\n');
+            }
+            Block::HorizontalRule(_) => {
+                self.text.push_str("---\n");
             }
             _ => {}
         }
@@ -63,5 +92,29 @@ impl DocumentVisitor<()> for TextCollector {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DocumentBuilder;
+
+    #[test]
+    fn text_collector_basic() {
+        let doc = DocumentBuilder::new()
+            .page(800.0, 600.0, |page| {
+                page.heading(1, "Title");
+                page.text_paragraph("Hello world");
+                page.formula("E = mc^2");
+            })
+            .build();
+
+        let mut collector = TextCollector::new();
+        collector.visit_document(&doc);
+
+        assert!(collector.text.contains("Title"));
+        assert!(collector.text.contains("Hello world"));
+        assert!(collector.text.contains("E = mc^2"));
     }
 }

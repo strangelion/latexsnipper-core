@@ -8,7 +8,7 @@ fn models_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent().unwrap()
         .parent().unwrap()
-        .join("test-models")
+        .join("models")
 }
 
 fn fixtures_dir() -> std::path::PathBuf {

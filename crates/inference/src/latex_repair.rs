@@ -370,11 +370,17 @@ fn find_scripted_atom_start(text: &str, script_index: usize) -> Option<usize> {
 }
 
 fn wrap_latex_delimiters(text: &str) -> String {
-    if text.starts_with("$$") || text.starts_with('$') {
-        return text.to_string();
+    // AST stores clean LaTeX without delimiters.
+    // Delimiters ($, $$) are added by conversion layer based on display_mode.
+    let text = text.trim();
+    // Strip existing delimiters if present
+    if text.starts_with("$$") && text.ends_with("$$") {
+        return text[2..text.len()-2].trim().to_string();
     }
-
-    format!("$$ {} $$", text.trim())
+    if text.starts_with('$') && text.ends_with('$') && !text.starts_with("$$") {
+        return text[1..text.len()-1].trim().to_string();
+    }
+    text.to_string()
 }
 
 #[cfg(test)]

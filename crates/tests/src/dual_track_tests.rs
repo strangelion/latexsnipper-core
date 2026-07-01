@@ -22,7 +22,7 @@ fn dual_runtime_initialization() {
 
     // ONNX runtime (may fail if ORT not available)
     let models_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap().parent().unwrap().join("test-models");
+        .parent().unwrap().parent().unwrap().join("models");
     if models_dir.exists() {
         if let Ok(ort_backend) = OnnxRuntimeBackend::new(models_dir) {
             let ort_engine = SnipperEngine::new(config, Box::new(ort_backend));

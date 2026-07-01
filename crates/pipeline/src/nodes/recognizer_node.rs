@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use latexsnipper_foundation::{SnipperError, Result};
 use latexsnipper_ast::*;
 use latexsnipper_image::operations;
-use latexsnipper_runtime::{RuntimeBackend, AccelerationMode, ModelHandle};
+use latexsnipper_runtime::{RuntimeBackend, AccelerationMode, ModelHandle, OnnxRuntimeBackend};
 use latexsnipper_inference::{RecognitionParams, TextRecParams, recognize_formula, recognize_text_with_keys, load_keys};
 use latexsnipper_inference::formula_lines::split_formula_line_groups;
 
@@ -33,6 +33,11 @@ impl RecognizerNode {
 
     pub fn text() -> Self {
         Self { name: "recognize_text".into(), recognizer_type: RecognizerType::Text }
+    }
+
+    fn create_backend(models: &std::path::Path) -> Result<OnnxRuntimeBackend> {
+        OnnxRuntimeBackend::new(models.to_path_buf())
+            .map_err(|e| SnipperError::Runtime(format!("Failed to create ONNX backend: {}", e)))
     }
 }
 
@@ -81,22 +86,21 @@ impl RecognizerNode {
         let tokenizer_path = rec_config.find_tokenizer_file(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
 
-        let runtime = latexsnipper_runtime::StubRuntime::new();
+        let backend = Self::create_backend(models)?;
         let enc_handle = ModelHandle::with_path("encoder", encoder_path);
         let dec_handle = ModelHandle::with_path("decoder", decoder_path);
-        
-        // Use cached sessions if available, otherwise create and cache
+
         let enc_session = if let Some(s) = ctx.get_session("formula_encoder") {
             s
         } else {
-            let s = runtime.create_session(&enc_handle, AccelerationMode::Cpu)?;
+            let s = backend.create_session(&enc_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("formula_encoder", s);
             ctx.get_session("formula_encoder").unwrap()
         };
         let dec_session = if let Some(s) = ctx.get_session("formula_decoder") {
             s
         } else {
-            let s = runtime.create_session(&dec_handle, AccelerationMode::Cpu)?;
+            let s = backend.create_session(&dec_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("formula_decoder", s);
             ctx.get_session("formula_decoder").unwrap()
         };
@@ -113,31 +117,26 @@ impl RecognizerNode {
 
                 if let Some(ref image) = ctx.image {
                     if w >= 4 && h >= 4 {
-                        let cropped = operations::crop(image, latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32));
-                        
-                        // Split formula into line groups (like LaTeXSnipper)
+                        let cropped = operations::crop(image, Rect::new(x as f32, y as f32, w as f32, h as f32));
                         let line_groups = split_formula_line_groups(&cropped);
-                        
+
                         if line_groups.is_empty() {
-                            // No line groups found, recognize as single formula
                             match recognize_formula(&cropped, &*enc_session, &*dec_session, &tokenizer_path, &params) {
                                 Ok(result) => {
                                     let mut f = Formula::latex(result.text);
                                     f.confidence = result.confidence;
                                     blocks.push(Block::Formula(FormulaBlock {
                                         formula: f,
-                                        geometry: Some(latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                                        geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                                         source: Some(SourceInfo::new()),
                                     }));
                                 }
                                 Err(e) => log::warn!("Formula rec failed: {}", e),
                             }
                         } else {
-                            // Recognize each line group and merge results
                             let mut all_results = Vec::new();
                             for group in &line_groups {
                                 for crop in &group.crops {
-                                    // Convert crop to SnipperImage
                                     let crop_img = latexsnipper_image::SnipperImage::new(
                                         crop.width,
                                         crop.height,
@@ -145,23 +144,19 @@ impl RecognizerNode {
                                         crop.pixels.clone(),
                                     );
                                     match recognize_formula(&crop_img, &*enc_session, &*dec_session, &tokenizer_path, &params) {
-                                        Ok(result) => {
-                                            all_results.push(result.text);
-                                        }
+                                        Ok(result) => all_results.push(result.text),
                                         Err(e) => log::warn!("Formula line rec failed: {}", e),
                                     }
                                 }
                             }
-                            
-                            // Merge results into single formula
+
                             if !all_results.is_empty() {
                                 let merged = all_results.join(" ");
-                                let avg_conf = 0.9; // Placeholder
                                 let mut f = Formula::latex(merged);
-                                f.confidence = avg_conf;
+                                f.confidence = 0.9;
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
-                                    geometry: Some(latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                                    geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                                     source: Some(SourceInfo::new()),
                                 }));
                             }
@@ -192,30 +187,23 @@ impl RecognizerNode {
 
         let rec_model = match select_text_rec_model(models) {
             Ok(m) => m,
-            Err(e) => {
-                log::warn!("Text rec model not found: {}", e);
-                return Ok(());
-            }
+            Err(e) => { log::warn!("Text rec model not found: {}", e); return Ok(()); }
         };
 
-        let runtime = latexsnipper_runtime::StubRuntime::new();
+        let backend = Self::create_backend(models)?;
         let handle = ModelHandle::with_path("text-rec", rec_model.model_path);
-        
-        // Use cached session if available
+
         let session = if let Some(s) = ctx.get_session("text_rec") {
             s
         } else {
-            let s = runtime.create_session(&handle, AccelerationMode::Cpu)?;
+            let s = backend.create_session(&handle, AccelerationMode::Cpu)?;
             ctx.cache_session("text_rec", s);
             ctx.get_session("text_rec").unwrap()
         };
 
         let params = TextRecParams::from_config(&rec_model.config);
-
-        // Get character list from model metadata (preferred) or file
-        // Model metadata already has blank at position 0, so first_char_id=0 for direct mapping
         let (keys, first_char_id) = if let Some(chars) = session.get_character_list() {
-            (chars, 0) // Model metadata: blank at 0, chars at 1..N, space at N+1
+            (chars, 0)
         } else {
             load_keys(&rec_model.keys_path).unwrap_or((Vec::new(), 1))
         };
@@ -231,19 +219,18 @@ impl RecognizerNode {
 
                 if let Some(ref image) = ctx.image {
                     if w >= 4 && h >= 4 {
-                        // Add vertical padding (20% of height) to improve recognition
                         let pad_y = (h as f32 * 0.2).max(4.0) as u32;
                         let crop_y = y.saturating_sub(pad_y);
                         let crop_h = h + pad_y * 2;
                         let crop_y_end = (crop_y + crop_h).min(image.height());
                         let final_h = crop_y_end - crop_y;
-                        let cropped = operations::crop(image, latexsnipper_ast::Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32));
+                        let cropped = operations::crop(image, Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32));
                         match recognize_text_with_keys(&cropped, &*session, &keys, first_char_id, &params) {
                             Ok(result) => {
                                 if !result.text.is_empty() {
                                     blocks.push(Block::Paragraph(ParagraphBlock {
                                         inlines: vec![Inline::Text(TextRun::new(result.text))],
-                                        geometry: Some(latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                                        geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                                         source: Some(SourceInfo::new()),
                                     }));
                                 }
@@ -272,7 +259,6 @@ fn load_config(models: &std::path::Path, category: &str) -> Result<latexsnipper_
 }
 
 fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
-    // v6 small preferred (20MB, faster) over medium (64MB)
     let candidates = [
         models.join("v6_models/PP-OCRv6_small_rec_infer"),
         models.join("v6_models/PP-OCRv6_medium_rec_infer"),
@@ -281,9 +267,7 @@ fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
 
     let mut unsupported = Vec::new();
     for dir in candidates {
-        if !dir.is_dir() {
-            continue;
-        }
+        if !dir.is_dir() { continue; }
 
         let config = match if dir.join("config.json").exists() {
             latexsnipper_model::ModelConfig::load(&dir)
@@ -291,10 +275,7 @@ fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
             latexsnipper_model::ModelConfig::from_paddle_inference_dir(&dir)
         } {
             Ok(config) => config,
-            Err(e) => {
-                unsupported.push(format!("{} cannot be parsed: {}", dir.display(), e));
-                continue;
-            }
+            Err(e) => { unsupported.push(format!("{} cannot be parsed: {}", dir.display(), e)); continue; }
         };
 
         let Some(model_path) = config.find_model_file(&dir) else {
@@ -305,20 +286,13 @@ fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
         let keys_path = config.find_tokenizer_file(&dir)
             .ok_or_else(|| SnipperError::Model(format!("Text keys not found in {}", dir.display())))?;
 
-        return Ok(TextRecModel {
-            config,
-            model_path,
-            keys_path,
-        });
+        return Ok(TextRecModel { config, model_path, keys_path });
     }
 
     if unsupported.is_empty() {
         Err(SnipperError::Model("No text recognition model directory found".into()))
     } else {
-        Err(SnipperError::Model(format!(
-            "No supported text recognition model found ({})",
-            unsupported.join("; ")
-        )))
+        Err(SnipperError::Model(format!("No supported text recognition model found ({})", unsupported.join("; "))))
     }
 }
 
@@ -329,10 +303,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_models_dir(name: &str) -> std::path::PathBuf {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
         std::env::temp_dir().join(format!("latexsnipper-{}-{}", name, stamp))
     }
 
@@ -388,4 +359,3 @@ mod tests {
         assert!(selected.keys_path.starts_with(&old));
     }
 }
-

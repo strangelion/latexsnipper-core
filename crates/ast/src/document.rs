@@ -59,7 +59,7 @@ impl Document {
 
     /// Generate the next unique NodeId.
     pub fn next_node_id(&mut self) -> crate::NodeId {
-        self.id_gen.next()
+        self.id_gen.generate()
     }
 
     /// Total number of blocks across all pages.
