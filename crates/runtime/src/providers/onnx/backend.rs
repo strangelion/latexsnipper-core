@@ -88,7 +88,7 @@ impl OnnxRuntimeBackend {
         }
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.filter_map(|e| e.ok()) {
-                if entry.path().extension().map_or(false, |ext| ext == "onnx") {
+                if entry.path().extension().is_some_and(|ext| ext == "onnx") {
                     return entry.path();
                 }
             }

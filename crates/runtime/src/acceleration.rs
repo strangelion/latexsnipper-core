@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Hardware acceleration mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum AccelerationMode {
     /// CPU-only inference.
@@ -9,11 +9,6 @@ pub enum AccelerationMode {
     /// GPU acceleration (NNAPI/CUDA/DML).
     Gpu,
     /// Auto-detect best available.
+    #[default]
     Auto,
-}
-
-impl Default for AccelerationMode {
-    fn default() -> Self {
-        Self::Auto
-    }
 }

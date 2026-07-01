@@ -1,5 +1,4 @@
 /// Platform detection and ONNX Runtime library selection.
-
 /// Detected platform type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
@@ -107,22 +106,20 @@ impl Platform {
     /// Check if GPU acceleration is available on this platform.
     pub fn detect_gpu() -> Acceleration {
         // Check for TensorRT (highest priority on NVIDIA)
-        if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
-            if std::env::var("TENSORRT_PATH").is_ok()
+        if (cfg!(target_os = "windows") || cfg!(target_os = "linux"))
+            && (std::env::var("TENSORRT_PATH").is_ok()
                 || std::path::Path::new("/usr/local/tensorrt").exists()
-                || std::path::Path::new("C:\\Program Files\\NVIDIA TensorRT").exists()
-            {
-                return Acceleration::Tensorrt;
-            }
+                || std::path::Path::new("C:\\Program Files\\NVIDIA TensorRT").exists())
+        {
+            return Acceleration::Tensorrt;
         }
 
         // Check for CUDA
-        if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
-            if std::env::var("CUDA_PATH").is_ok()
-                || std::path::Path::new("/usr/local/cuda").exists()
-            {
-                return Acceleration::Cuda12;
-            }
+        if (cfg!(target_os = "windows") || cfg!(target_os = "linux"))
+            && (std::env::var("CUDA_PATH").is_ok()
+                || std::path::Path::new("/usr/local/cuda").exists())
+        {
+            return Acceleration::Cuda12;
         }
 
         // Check for DirectML on Windows
