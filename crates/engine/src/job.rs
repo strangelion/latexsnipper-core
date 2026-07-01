@@ -53,6 +53,7 @@ impl JobQueue {
     }
 
     /// Get the next job to execute.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<Job> {
         self.pending.pop_front()
     }

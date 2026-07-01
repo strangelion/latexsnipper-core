@@ -88,9 +88,7 @@ impl PipelineGraph {
         // Initialize all nodes
         for entry in &self.entries {
             in_degree.entry(entry.name.clone()).or_insert(0);
-            dependents
-                .entry(entry.name.clone())
-                .or_default();
+            dependents.entry(entry.name.clone()).or_default();
         }
 
         // Count incoming edges

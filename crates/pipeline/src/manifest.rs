@@ -63,7 +63,8 @@ impl PipelineManifest {
         let mut stack = std::collections::HashSet::new();
 
         for node in &self.nodes {
-            if !visited.contains(&node.name) && self.has_cycle(&node.name, &mut visited, &mut stack) {
+            if !visited.contains(&node.name) && self.has_cycle(&node.name, &mut visited, &mut stack)
+            {
                 return Err(SnipperError::Pipeline(
                     "Circular dependency detected in manifest".into(),
                 ));
