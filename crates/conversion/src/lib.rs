@@ -7,18 +7,26 @@ pub mod latex_parser;
 pub mod latex_to_typst;
 pub mod latex_utils;
 pub mod markdown;
+pub mod markdown_parser;
 pub mod mathml;
+pub mod mathml_parser;
 pub mod omml;
+pub mod omml_parser;
 pub mod typst;
+pub mod typst_parser;
 
 pub use converter::Converter;
 pub use document_converter::{DocumentConverter, OutputFormat};
 pub use html::HtmlConverter;
 pub use latex::{LatexConverter, LatexDisplayConverter, LatexEquationConverter};
 pub use markdown::{MarkdownBlockConverter, MarkdownInlineConverter};
+pub use markdown_parser::parse_markdown_to_document;
 pub use mathml::{MathmlAttrConverter, MathmlConverter, MathmlMConverter, MathmlMmlConverter};
+pub use mathml_parser::parse_mathml_to_latex;
 pub use omml::OmmlConverter;
+pub use omml_parser::parse_omml_to_latex;
 pub use typst::TypstConverter;
+pub use typst_parser::parse_typst_to_latex;
 
 #[cfg(test)]
 mod tests {

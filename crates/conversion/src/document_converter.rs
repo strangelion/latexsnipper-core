@@ -1,4 +1,6 @@
-use latexsnipper_ast::Document;
+use latexsnipper_ast::{
+    Block, Document, Formula, FormulaBlock, FormulaSource, NodeIdGenerator, Page,
+};
 use latexsnipper_foundation::Result;
 
 use crate::converter::Converter;
@@ -93,6 +95,57 @@ impl DocumentConverter {
             results.push((format, output));
         }
         Ok(results)
+    }
+
+    /// Convert a raw LaTeX string to the target format.
+    /// Wraps the LaTeX into a minimal Document AST, then converts.
+    pub fn convert_latex_string(latex: &str, format: OutputFormat) -> Result<String> {
+        let doc = Document {
+            metadata: latexsnipper_ast::Metadata::default(),
+            pages: vec![Page {
+                width: 0.0,
+                height: 0.0,
+                blocks: vec![Block::Formula(FormulaBlock {
+                    formula: Formula {
+                        source: FormulaSource::Latex(latex.to_string()),
+                        display_mode: true,
+                        confidence: 1.0,
+                        source_info: None,
+                    },
+                    geometry: None,
+                    source: None,
+                })],
+                page_number: None,
+            }],
+            id_gen: NodeIdGenerator::new(),
+        };
+        DocumentConverter::new(format).convert(&doc)
+    }
+
+    /// Parse a MathML XML string, convert to LaTeX, then to the target format.
+    pub fn convert_mathml_string(mathml: &str, format: OutputFormat) -> Result<String> {
+        let latex = crate::mathml_parser::parse_mathml_to_latex(mathml)
+            .map_err(|e| latexsnipper_foundation::SnipperError::Conversion(e))?;
+        Self::convert_latex_string(&latex, format)
+    }
+
+    /// Parse an OMML XML string, convert to LaTeX, then to the target format.
+    pub fn convert_omml_string(omml: &str, format: OutputFormat) -> Result<String> {
+        let latex = crate::omml_parser::parse_omml_to_latex(omml)
+            .map_err(|e| latexsnipper_foundation::SnipperError::Conversion(e))?;
+        Self::convert_latex_string(&latex, format)
+    }
+
+    /// Parse a Typst math string, convert to LaTeX, then to the target format.
+    pub fn convert_typst_string(typst: &str, format: OutputFormat) -> Result<String> {
+        let latex = crate::typst_parser::parse_typst_to_latex(typst);
+        Self::convert_latex_string(&latex, format)
+    }
+
+    /// Parse a Markdown string (with $...$ and $$...$$ math) to the target format.
+    pub fn convert_markdown_string(md: &str, format: OutputFormat) -> Result<String> {
+        let doc = crate::markdown_parser::parse_markdown_to_document(md);
+        DocumentConverter::new(format).convert(&doc)
     }
 }
 

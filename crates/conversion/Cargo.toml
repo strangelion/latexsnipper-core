@@ -8,3 +8,5 @@ edition.workspace = true
 latexsnipper-foundation = { path = "../foundation" }
 latexsnipper-ast = { path = "../ast" }
 log.workspace = true
+quick-xml = "0.37"
+regex = "1"

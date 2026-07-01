@@ -56,6 +56,181 @@ fn convert_formula_to_omml(f: &Formula) -> String {
 fn latex_to_omml(latex: &str) -> String {
     let latex = latex.trim();
 
+    // \hat{x}, \vec{v}, \bar{x}, \dot{x}, \ddot{x}, \tilde{x}, \check{x}
+    if let Some(content) = latex.strip_prefix("\\hat{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0302}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+            latex_to_omml(inner)
+        );
+    }
+    if let Some(content) = latex.strip_prefix("\\vec{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{20D7}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+            latex_to_omml(inner)
+        );
+    }
+    if let Some(content) = latex.strip_prefix("\\bar{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0305}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+            latex_to_omml(inner)
+        );
+    }
+    if let Some(content) = latex.strip_prefix("\\dot{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0307}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+            latex_to_omml(inner)
+        );
+    }
+    if let Some(content) = latex.strip_prefix("\\ddot{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0308}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+            latex_to_omml(inner)
+        );
+    }
+    if let Some(content) = latex.strip_prefix("\\tilde{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0303}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+            latex_to_omml(inner)
+        );
+    }
+    if let Some(content) = latex.strip_prefix("\\check{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{030C}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+            latex_to_omml(inner)
+        );
+    }
+    if let Some(content) = latex.strip_prefix("\\breve{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0306}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+            latex_to_omml(inner)
+        );
+    }
+
+    // \text{...}
+    if let Some(content) = latex.strip_prefix("\\text{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!("<m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/><w:rStyle w:val=\"a\"/></w:rPr></m:rPr><m:t>{}</m:t></m:r>", xml_escape(inner));
+    }
+
+    // \left( ... \right)
+    if latex.starts_with("\\left") {
+        if let Some(content) = extract_delimited(latex) {
+            return content;
+        }
+    }
+
+    // \lim, \log, \sin, \cos, \tan, \ln, \exp
+    for func in &[
+        "\\lim", "\\log", "\\sin", "\\cos", "\\tan", "\\ln", "\\exp", "\\min", "\\max", "\\det",
+        "\\gcd", "\\sup", "\\inf", "\\limsup", "\\liminf",
+    ] {
+        if let Some(rest) = latex.strip_prefix(func) {
+            let fname = &func[1..];
+            if rest.is_empty() {
+                return format!(
+                    "<m:func>\n  <m:fName><m:r><m:t>{}</m:t></m:r></m:fName>\n  <m:e/>\n</m:func>",
+                    fname
+                );
+            }
+            if rest.starts_with('_') {
+                let sub_rest = &rest[1..];
+                if let Some((sub_base, sub_rest)) = split_brace_pair(sub_rest) {
+                    let sub = latex_to_omml(sub_base);
+                    if let Some((sup_base, _)) = sub_rest.split_once('^') {
+                        let sup = sup_base
+                            .strip_prefix('{')
+                            .unwrap_or(sup_base)
+                            .strip_suffix('}')
+                            .unwrap_or(sup_base);
+                        return format!("<m:sSubSup><m:e><m:func><m:fName><m:r><m:t>{}</m:t></m:r></m:fName><m:e/></m:func></m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>", fname, sub, latex_to_omml(sup));
+                    }
+                    return format!("<m:sSub><m:e><m:func><m:fName><m:r><m:t>{}</m:t></m:r></m:fName><m:e/></m:func></m:e><m:sub>{}</m:sub></m:sSub>", fname, sub);
+                }
+            }
+            return format!("<m:func>\n  <m:fName><m:r><m:t>{}</m:t></m:r></m:fName>\n  <m:e>{}</m:e>\n</m:func>", fname, latex_to_omml(rest));
+        }
+    }
+
+    // \operatorname{...}
+    if let Some(inner) = latex.strip_prefix("\\operatorname{") {
+        let name = inner.strip_suffix('}').unwrap_or(inner);
+        return wrap_mtext(&format!("{} ", name));
+    }
+
+    // \mathbb{...}, \mathcal{...}, \mathfrak{...}, \mathbf{...}, \mathrm{...}, \mathit{...}, \mathsf{...}, \mathtt{...}
+    for prefix in &[
+        "\\mathbb{",
+        "\\mathcal{",
+        "\\mathfrak{",
+        "\\mathbf{",
+        "\\mathrm{",
+        "\\mathit{",
+        "\\mathsf{",
+        "\\mathtt{",
+    ] {
+        if let Some(inner) = latex.strip_prefix(prefix) {
+            let content = inner.strip_suffix('}').unwrap_or(inner);
+            return wrap_mtext(content);
+        }
+    }
+
+    // \langle ... \rangle
+    if latex.starts_with("\\langle") || latex.starts_with("\\left\\langle") {
+        if let Some(inner) = latex.strip_prefix("\\left\\langle") {
+            if let Some(pos) = inner.find("\\right\\rangle") {
+                let content = &inner[..pos];
+                let d = latex_to_omml(content);
+                return format!(
+                    "<m:d>\n  <m:dPr><m:begChr m:val=\"\u{27E8}\"/><m:endChr m:val=\"\u{27E9}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+                    d
+                );
+            }
+        }
+        if let Some(inner) = latex.strip_prefix("\\langle") {
+            let content = inner.strip_suffix("\\rangle").unwrap_or(inner);
+            let content = content.strip_prefix(' ').unwrap_or(content);
+            return format!(
+                "<m:d>\n  <m:dPr><m:begChr m:val=\"\u{27E8}\"/><m:endChr m:val=\"\u{27E9}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+                latex_to_omml(content)
+            );
+        }
+    }
+
+    // \binom{n}{k}
+    if let Some(inner) = latex.strip_prefix("\\binom{") {
+        if let Some((n, k)) = split_brace_pair(inner) {
+            return format!(
+                "<m:d>\n  <m:dPr><m:begChr m:val=\"(\"/><m:endChr m:val=\")\"/></m:dPr>\n  <m:e><m:f>\n  <m:num>{}</m:num>\n  <m:den>{}</m:den>\n</m:f></m:e>\n</m:d>",
+                latex_to_omml(n),
+                latex_to_omml(k)
+            );
+        }
+    }
+
+    // \otimes, \oplus, \nabla, \partial — single symbols used as prefix
+    for cmd in &["\\otimes", "\\oplus", "\\nabla", "\\partial"] {
+        if let Some(rest) = latex.strip_prefix(cmd) {
+            let rest = rest.strip_prefix(' ').unwrap_or(rest);
+            if rest.is_empty() {
+                return wrap_mtext(map_omml_symbol(cmd).unwrap_or(cmd));
+            }
+            return format!(
+                "{}{}",
+                wrap_mtext(map_omml_symbol(cmd).unwrap_or(cmd)),
+                latex_to_omml(rest)
+            );
+        }
+    }
+
+    // \frac{...}{...}
     if let Some(inner) = latex.strip_prefix("\\frac{") {
         if let Some((num, den)) = split_brace_pair(inner) {
             return format!(
@@ -187,7 +362,117 @@ fn latex_to_omml(latex: &str) -> String {
 }
 
 fn wrap_mtext(text: &str) -> String {
-    format!("<m:r><m:t>{}</m:t></m:r>", xml_escape(text))
+    let escaped = text
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;");
+    format!("<m:r><m:t>{}</m:t></m:r>", escaped)
+}
+
+fn map_omml_symbol(latex: &str) -> Option<&str> {
+    match latex {
+        "\\otimes" | "\\otimes " => Some("\u{2297}"),
+        "\\oplus" | "\\oplus " => Some("\u{2295}"),
+        "\\odot" | "\\odot " => Some("\u{2299}"),
+        "\\nabla" | "\\nabla " => Some("\u{2207}"),
+        "\\partial" | "\\partial " => Some("\u{2202}"),
+        "\\infty" | "\\infty " => Some("\u{221E}"),
+        "\\pm" | "\\pm " => Some("\u{00B1}"),
+        "\\mp" | "\\mp " => Some("\u{2213}"),
+        "\\times" | "\\times " => Some("\u{00D7}"),
+        "\\div" | "\\div " => Some("\u{00F7}"),
+        "\\cdot" | "\\cdot " => Some("\u{22C5}"),
+        "\\leq" | "\\leq " | "\\le" | "\\le " => Some("\u{2264}"),
+        "\\geq" | "\\geq " | "\\ge" | "\\ge " => Some("\u{2265}"),
+        "\\neq" | "\\neq " | "\\ne" | "\\ne " => Some("\u{2260}"),
+        "\\approx" | "\\approx " => Some("\u{2248}"),
+        "\\equiv" | "\\equiv " => Some("\u{2261}"),
+        "\\sim" | "\\sim " => Some("\u{223C}"),
+        "\\cong" | "\\cong " => Some("\u{2245}"),
+        "\\propto" | "\\propto " => Some("\u{221D}"),
+        "\\in" | "\\in " => Some("\u{2208}"),
+        "\\notin" | "\\notin " | "\\not\\in" => Some("\u{2209}"),
+        "\\subset" | "\\subset " => Some("\u{2282}"),
+        "\\supset" | "\\supset " => Some("\u{2283}"),
+        "\\subseteq" | "\\subseteq " => Some("\u{2286}"),
+        "\\supseteq" | "\\supseteq " => Some("\u{2287}"),
+        "\\cup" | "\\cup " => Some("\u{222A}"),
+        "\\cap" | "\\cap " => Some("\u{2229}"),
+        "\\setminus" | "\\setminus " => Some("\u{2216}"),
+        "\\emptyset" | "\\emptyset " => Some("\u{2205}"),
+        "\\forall" | "\\forall " => Some("\u{2200}"),
+        "\\exists" | "\\exists " => Some("\u{2203}"),
+        "\\neg" | "\\neg " | "\\lnot" | "\\lnot " => Some("\u{00AC}"),
+        "\\wedge" | "\\wedge " => Some("\u{2227}"),
+        "\\vee" | "\\vee " => Some("\u{2228}"),
+        "\\rightarrow" | "\\rightarrow " | "\\to" | "\\to " => Some("\u{2192}"),
+        "\\leftarrow" | "\\leftarrow " => Some("\u{2190}"),
+        "\\leftrightarrow" | "\\leftrightarrow " => Some("\u{2194}"),
+        "\\Rightarrow" | "\\Rightarrow " => Some("\u{21D2}"),
+        "\\Leftarrow" | "\\Leftarrow " => Some("\u{21D0}"),
+        "\\Leftrightarrow" | "\\Leftrightarrow " => Some("\u{21D4}"),
+        "\\mapsto" | "\\mapsto " => Some("\u{21A6}"),
+        "\\uparrow" | "\\uparrow " => Some("\u{2191}"),
+        "\\downarrow" | "\\downarrow " => Some("\u{2193}"),
+        "\\circ" | "\\circ " => Some("\u{2218}"),
+        "\\star" | "\\star " => Some("\u{22C6}"),
+        "\\dagger" | "\\dagger " => Some("\u{2020}"),
+        "\\ddagger" | "\\ddagger " => Some("\u{2021}"),
+        "\\angle" | "\\angle " => Some("\u{2220}"),
+        "\\perp" | "\\perp " => Some("\u{22A5}"),
+        "\\parallel" | "\\parallel " | "\\| " => Some("\u{2225}"),
+        "\\mid" | "\\mid " => Some("\u{2223}"),
+        "\\therefore" | "\\therefore " => Some("\u{2234}"),
+        "\\because" | "\\because " => Some("\u{2235}"),
+        "\\wp" | "\\wp " => Some("\u{2118}"),
+        "\\Re" | "\\Re " => Some("\u{211C}"),
+        "\\Im" | "\\Im " => Some("\u{2111}"),
+        "\\aleph" | "\\aleph " => Some("\u{2135}"),
+        "\\hbar" | "\\hbar " => Some("\u{210F}"),
+        "\\ell" | "\\ell " => Some("\u{2113}"),
+        "\\prime" | "\\prime " => Some("\u{2032}"),
+        "\\ldots" | "\\ldots " | "\\dots" | "\\dots " => Some("\u{2026}"),
+        "\\cdots" | "\\cdots " => Some("\u{22EF}"),
+        "\\vdots" | "\\vdots " => Some("\u{22EE}"),
+        "\\ddots" | "\\ddots " => Some("\u{22F1}"),
+        _ => None,
+    }
+}
+
+fn extract_delimited(latex: &str) -> Option<String> {
+    let mut rest = latex;
+    let mut open = "(";
+    let mut close = ")";
+    if let Some(r) = latex.strip_prefix("\\left") {
+        if let Some(ch) = r.chars().next() {
+            open = match ch {
+                '[' => "[",
+                '{' | '|' => "|",
+                _ => "(",
+            };
+            close = match ch {
+                '[' => "]",
+                '|' => "|",
+                _ => ")",
+            };
+            rest = &r[ch.len_utf8()..];
+        }
+    } else {
+        return None;
+    }
+
+    // Find matching \right
+    let right_pattern = format!("\\right{}", close);
+    if let Some(pos) = rest.find(&right_pattern) {
+        let inner = &rest[..pos];
+        let d = latex_to_omml(inner);
+        return Some(format!(
+            "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+            xml_escape(open), xml_escape(close), d
+        ));
+    }
+    None
 }
 
 fn matrix_to_omml(content: &str, _tag: &str) -> String {

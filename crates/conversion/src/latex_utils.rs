@@ -1,22 +1,52 @@
 //! Shared LaTeX parsing utilities for all converters.
 
 /// Parse LaTeX brace pairs: {content1}{content2} or content1}{content2}
+/// Correctly handles nested commands like \frac{\frac{a}{b}}{c}.
 pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
     let s = s.trim();
+    let bytes = s.as_bytes();
+    let len = bytes.len();
     let mut depth = 0i32;
     let mut first_end = None;
+    let mut i = 0;
 
-    for (i, b) in s.bytes().enumerate() {
-        match b {
-            b'{' => depth += 1,
+    while i < len {
+        match bytes[i] {
+            b'{' => {
+                depth += 1;
+                i += 1;
+            }
             b'}' if depth > 0 => {
                 depth -= 1;
                 if depth == 0 {
                     first_end = Some(i);
                     break;
                 }
+                i += 1;
             }
-            _ => {}
+            b'\\' => {
+                // Skip LaTeX command name (e.g. \frac, \sqrt, \text)
+                i += 1;
+                while i < len && bytes[i].is_ascii_alphabetic() {
+                    i += 1;
+                }
+                // If followed by optional [args], skip them
+                if i < len && bytes[i] == b'[' {
+                    let mut d = 1i32;
+                    i += 1;
+                    while i < len && d > 0 {
+                        match bytes[i] {
+                            b'[' => d += 1,
+                            b']' => d -= 1,
+                            _ => {}
+                        }
+                        i += 1;
+                    }
+                }
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -24,7 +54,9 @@ pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
     let first = if s.starts_with('{') {
         &s[1..end]
     } else {
-        &s[..end]
+        // Skip leading non-brace content (e.g. \frac prefix from nested command)
+        let start = s.find('{').unwrap_or(0);
+        &s[start..end]
     };
     let rest = &s[end + 1..];
     let rest = rest.trim_start();
@@ -32,17 +64,32 @@ pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
     let second = if rest.starts_with('{') {
         let mut d = 0i32;
         let mut close = None;
-        for (i, b) in rest.bytes().enumerate() {
-            match b {
-                b'{' => d += 1,
+        let rb = rest.as_bytes();
+        let rlen = rb.len();
+        let mut j = 0;
+        while j < rlen {
+            match rb[j] {
+                b'{' => {
+                    d += 1;
+                    j += 1;
+                }
                 b'}' => {
                     d -= 1;
                     if d == 0 {
-                        close = Some(i);
+                        close = Some(j);
                         break;
                     }
+                    j += 1;
                 }
-                _ => {}
+                b'\\' => {
+                    j += 1;
+                    while j < rlen && rb[j].is_ascii_alphabetic() {
+                        j += 1;
+                    }
+                }
+                _ => {
+                    j += 1;
+                }
             }
         }
         let c = close?;
