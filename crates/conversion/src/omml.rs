@@ -140,8 +140,7 @@ fn latex_to_omml(latex: &str) -> String {
                     fname
                 );
             }
-            if rest.starts_with('_') {
-                let sub_rest = &rest[1..];
+            if let Some(sub_rest) = rest.strip_prefix('_') {
                 if let Some((sub_base, sub_rest)) = split_brace_pair(sub_rest) {
                     let sub = latex_to_omml(sub_base);
                     if let Some((sup_base, _)) = sub_rest.split_once('^') {

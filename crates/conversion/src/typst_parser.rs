@@ -437,7 +437,7 @@ fn convert_typst_expr(s: &str) -> String {
 
 fn split_typst_call_args(inner: &str) -> Option<(String, String)> {
     let mut depth = 0;
-    for (i, ch) in inner.chars().enumerate() {
+    for (i, ch) in inner.char_indices() {
         match ch {
             '(' => depth += 1,
             ')' => {
@@ -459,7 +459,7 @@ fn split_typst_call_args(inner: &str) -> Option<(String, String)> {
 
 fn split_typst_sqrt_args(inner: &str) -> Option<(String, String)> {
     let mut depth = 0;
-    for (i, ch) in inner.chars().enumerate() {
+    for (i, ch) in inner.char_indices() {
         match ch {
             '(' | '[' => depth += 1,
             ')' | ']' => {

@@ -90,7 +90,7 @@ fn extract_o_math(xml: &str) -> Option<String> {
 
 fn local(name: &[u8]) -> String {
     let s = String::from_utf8_lossy(name).to_string();
-    s.split(':').last().unwrap_or(&s).to_string()
+    s.split(':').next_back().unwrap_or(&s).to_string()
 }
 
 fn parse_inner(xml: &str) -> Result<String, String> {
@@ -187,10 +187,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
         "rad" => {
             let content = get_child(children, "e");
             let deg = get_child(children, "deg");
-            let has_radpr = children.iter().any(|(t, _)| t == "radPr");
-            if deg.is_empty() && has_radpr {
-                format!("\\sqrt{{{}}}", content)
-            } else if deg.is_empty() {
+            if deg.is_empty() {
                 format!("\\sqrt{{{}}}", content)
             } else {
                 format!("\\sqrt[{}]{{{}}}", deg, content)
@@ -293,26 +290,6 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
     }
 }
 
-const PROP_TAGS: &[&str] = &[
-    "fPr",
-    "rPr",
-    "radPr",
-    "naryPr",
-    "dPr",
-    "barPr",
-    "accPr",
-    "groupChrPr",
-    "sSubPr",
-    "sSupPr",
-    "sSubSupPr",
-    "eqArrPr",
-    "mPr",
-    "mcs",
-    "mc",
-    "ctrlPr",
-    "mathPr",
-];
-
 fn is_content_tag(t: &str) -> bool {
     matches!(t, "e" | "sub" | "sup" | "num" | "den" | "deg")
 }
@@ -352,12 +329,12 @@ fn get_child(children: &[(String, String)], tag: &str) -> String {
 
 fn map_nary(chr: &str) -> &str {
     match chr {
-        "\u{222B}" | "\u{222E}" | "\u{222B}" => "\\int",
+        "\u{222B}" | "\u{222E}" => "\\int",
         "\u{222C}" => "\\iint",
         "\u{222D}" => "\\iiint",
-        "\u{2211}" | "\u{2211}" => "\\sum",
-        "\u{220F}" | "\u{220F}" => "\\prod",
-        "\u{2210}" | "\u{2210}" => "\\coprod",
+        "\u{2211}" => "\\sum",
+        "\u{220F}" => "\\prod",
+        "\u{2210}" => "\\coprod",
         "\u{2202}" => "\\partial",
         "\u{2207}" => "\\nabla",
         _ => "\\int",

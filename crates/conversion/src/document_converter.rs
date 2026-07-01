@@ -125,14 +125,14 @@ impl DocumentConverter {
     /// Parse a MathML XML string, convert to LaTeX, then to the target format.
     pub fn convert_mathml_string(mathml: &str, format: OutputFormat) -> Result<String> {
         let latex = crate::mathml_parser::parse_mathml_to_latex(mathml)
-            .map_err(|e| latexsnipper_foundation::SnipperError::Conversion(e))?;
+            .map_err(latexsnipper_foundation::SnipperError::Conversion)?;
         Self::convert_latex_string(&latex, format)
     }
 
     /// Parse an OMML XML string, convert to LaTeX, then to the target format.
     pub fn convert_omml_string(omml: &str, format: OutputFormat) -> Result<String> {
         let latex = crate::omml_parser::parse_omml_to_latex(omml)
-            .map_err(|e| latexsnipper_foundation::SnipperError::Conversion(e))?;
+            .map_err(latexsnipper_foundation::SnipperError::Conversion)?;
         Self::convert_latex_string(&latex, format)
     }
 

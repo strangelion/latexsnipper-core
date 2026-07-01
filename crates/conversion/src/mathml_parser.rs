@@ -110,7 +110,7 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String]) -> String {
                 latex
             } else if is_greek(text) {
                 format!("\\{} ", text)
-            } else if text.len() == 1 && text.chars().next().map_or(false, |c| c.is_alphabetic()) {
+            } else if text.len() == 1 && text.chars().next().is_some_and(|c| c.is_alphabetic()) {
                 text.to_string()
             } else {
                 format!("\\mathrm{{{}}}", text)
@@ -420,8 +420,7 @@ fn map_operator(text: &str) -> String {
         "\u{2228}" => "\\vee ".to_string(),
         "\u{2234}" => "\\therefore ".to_string(),
         "\u{2235}" => "\\because ".to_string(),
-        "|" => "|".to_string(),
-        "(" | ")" | "[" | "]" | "{" | "}" | "|" | "||" => text.to_string(),
+        "(" | ")" | "[" | "]" | "{" | "}" | "||" => text.to_string(),
         _ => {
             if text.len() == 1 {
                 text.to_string()
