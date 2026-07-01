@@ -274,6 +274,23 @@ impl LatexParser {
                     args: vec![content],
                 })
             }
+            // Two-argument commands
+            "textcolor" | "colorbox" | "fcolorbox" => {
+                let arg1 = self.parse_single();
+                let arg2 = self.parse_single();
+                Some(LatexNode::Command {
+                    name: cmd,
+                    args: vec![arg1, arg2],
+                })
+            }
+            // Bold symbol
+            "boldsymbol" | "bm" => {
+                let content = self.parse_single();
+                Some(LatexNode::FontModifier {
+                    font: "boldsymbol".to_string(),
+                    content: Box::new(content),
+                })
+            }
             // Unknown command
             _ => Some(LatexNode::Command {
                 name: cmd,

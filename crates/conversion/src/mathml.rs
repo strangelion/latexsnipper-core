@@ -134,6 +134,69 @@ fn convert_formula_to_mathml(f: &Formula, _mode: &MathmlMode) -> String {
 fn latex_to_mathml(latex: &str) -> String {
     let latex = latex.trim();
 
+    // \textcolor{color}{content} → <mstyle mathcolor="color"><mrow>content</mrow></mstyle>
+    if let Some(content) = latex.strip_prefix("\\textcolor{") {
+        if let Some(close) = content.find('}') {
+            let color = &content[..close];
+            let rest = &content[close + 1..];
+            let inner = rest.strip_prefix('{').unwrap_or(rest).strip_suffix('}').unwrap_or(rest);
+            let hex = mathml_color_name(color.trim());
+            return format!(
+                "<mstyle mathcolor=\"{}\"><mrow>{}</mrow></mstyle>",
+                hex,
+                latex_to_mathml(inner)
+            );
+        }
+    }
+    if let Some(content) = latex.strip_prefix("\\color{") {
+        if let Some(close) = content.find('}') {
+            let color = &content[..close];
+            let hex = mathml_color_name(color.trim());
+            let rest = &content[close + 1..];
+            if rest.is_empty() {
+                return format!("<mstyle mathcolor=\"{}\"/>", hex);
+            }
+            return format!(
+                "<mstyle mathcolor=\"{}\"><mrow>{}</mrow></mstyle>",
+                hex,
+                latex_to_mathml(rest)
+            );
+        }
+    }
+
+    // \boldsymbol{...} → <mstyle fontweight="bold">
+    if let Some(content) = latex.strip_prefix("\\boldsymbol{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<mstyle fontweight=\"bold\"><mrow>{}</mrow></mstyle>",
+            latex_to_mathml(inner)
+        );
+    }
+    // \mathbf{...} → <mstyle fontweight="bold">
+    if let Some(content) = latex.strip_prefix("\\mathbf{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<mstyle fontweight=\"bold\"><mrow>{}</mrow></mstyle>",
+            latex_to_mathml(inner)
+        );
+    }
+    // \mathrm{...} → <mstyle fontfamily="serif">
+    if let Some(content) = latex.strip_prefix("\\mathrm{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<mstyle fontfamily=\"serif\"><mrow>{}</mrow></mstyle>",
+            latex_to_mathml(inner)
+        );
+    }
+    // \mathbb{...} → <mi mathvariant="double-struck">
+    if let Some(content) = latex.strip_prefix("\\mathbb{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!(
+            "<mi mathvariant=\"double-struck\">{}</mi>",
+            latex_to_mathml(inner)
+        );
+    }
+
     if let Some(inner) = latex.strip_prefix("\\frac{") {
         if let Some((num, den)) = split_brace_pair(inner) {
             return format!(
@@ -222,6 +285,25 @@ fn latex_to_mathml(latex: &str) -> String {
         format!("<mn>{}</mn>", latex)
     } else {
         format!("<mi>{}</mi>", xml_escape(latex))
+    }
+}
+
+fn mathml_color_name(name: &str) -> String {
+    match name.to_lowercase().as_str() {
+        "red" => "red".to_string(),
+        "green" => "green".to_string(),
+        "blue" => "blue".to_string(),
+        "yellow" => "yellow".to_string(),
+        "cyan" => "cyan".to_string(),
+        "magenta" | "fuchsia" => "magenta".to_string(),
+        "black" => "black".to_string(),
+        "white" => "white".to_string(),
+        "gray" | "grey" => "gray".to_string(),
+        "orange" => "orange".to_string(),
+        "purple" => "purple".to_string(),
+        s if s.starts_with('#') && s.len() == 7 => s.to_string(),
+        s if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) => format!("#{}", s),
+        _ => "black".to_string(),
     }
 }
 

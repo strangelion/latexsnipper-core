@@ -269,6 +269,32 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
                 String::new()
             }
         }
+        // Color
+        "textcolor" => {
+            if arg_str.len() >= 2 {
+                let color = arg_str[0].trim_matches('"');
+                let content = &arg_str[1];
+                format!("math.color({}, [{}])", color, content)
+            } else {
+                String::new()
+            }
+        }
+        "color" => {
+            if let Some(arg) = args.first() {
+                let color = latex_ast_to_typst(arg);
+                format!("math.color({})", color)
+            } else {
+                String::new()
+            }
+        }
+        // Bold variants (non-font-modifier path)
+        "boldsymbol" | "bm" => {
+            if let Some(arg) = args.first() {
+                format!("bold({})", latex_ast_to_typst(arg))
+            } else {
+                String::new()
+            }
+        }
         // Default: pass through as function call
         _ => {
             if arg_str.is_empty() {
