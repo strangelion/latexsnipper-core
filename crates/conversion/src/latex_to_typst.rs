@@ -106,8 +106,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             let cell_rows: Vec<String> = rows
                 .iter()
                 .map(|row| {
-                    let cells: Vec<String> =
-                        row.iter().map(latex_ast_to_typst).collect();
+                    let cells: Vec<String> = row.iter().map(latex_ast_to_typst).collect();
                     cells.join(", ")
                 })
                 .collect();

@@ -136,8 +136,8 @@ pub fn rgb_to_bgr(image: &SnipperImage) -> SnipperImage {
 pub fn pad_to_stride(image: &SnipperImage, stride: u32) -> SnipperImage {
     let w = image.width();
     let h = image.height();
-    let new_w = (w + stride - 1) / stride * stride;
-    let new_h = (h + stride - 1) / stride * stride;
+    let new_w = w.div_ceil(stride) * stride;
+    let new_h = h.div_ceil(stride) * stride;
     if new_w == w && new_h == h {
         return image.clone();
     }
