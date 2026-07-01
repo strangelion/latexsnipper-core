@@ -17,6 +17,7 @@ pub trait PipelineNode: Send + Sync {
 /// A node that transforms the document in the context.
 pub struct TransformNode {
     name: String,
+    #[allow(clippy::type_complexity)]
     transform: Box<dyn Fn(&mut PipelineContext) -> Result<()> + Send + Sync>,
 }
 

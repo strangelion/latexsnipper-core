@@ -17,6 +17,12 @@ impl PostprocessNode {
     }
 }
 
+impl Default for PostprocessNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl PipelineNode for PostprocessNode {
     fn name(&self) -> &str {

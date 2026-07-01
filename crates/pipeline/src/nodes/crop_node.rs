@@ -18,8 +18,10 @@ impl CropNode {
             _min_size: min_size,
         }
     }
+}
 
-    pub fn default() -> Self {
+impl Default for CropNode {
+    fn default() -> Self {
         Self::new(4)
     }
 }

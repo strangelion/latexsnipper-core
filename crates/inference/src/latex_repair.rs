@@ -192,7 +192,11 @@ fn environments_balanced(text: &str) -> bool {
                         continue;
                     }
                 }
-            } else if i + 4 <= len && &bytes[i..i + 4] == b"\\end" && i + 5 < len && bytes[i + 4] == b'{' {
+            } else if i + 4 <= len
+                && &bytes[i..i + 4] == b"\\end"
+                && i + 5 < len
+                && bytes[i + 4] == b'{'
+            {
                 let start = i + 5;
                 let mut j = start;
                 while j < len && bytes[j] != b'}' {
@@ -223,10 +227,16 @@ fn left_right_unbalanced(text: &str) -> bool {
 
     let mut i = 0;
     while i < len {
-        if i + 5 <= len && &bytes[i..i + 5] == b"\\left" && (i + 5 >= len || !bytes[i + 5].is_ascii_alphabetic()) {
+        if i + 5 <= len
+            && &bytes[i..i + 5] == b"\\left"
+            && (i + 5 >= len || !bytes[i + 5].is_ascii_alphabetic())
+        {
             left_count += 1;
         }
-        if i + 6 <= len && &bytes[i..i + 6] == b"\\right" && (i + 6 >= len || !bytes[i + 6].is_ascii_alphabetic()) {
+        if i + 6 <= len
+            && &bytes[i..i + 6] == b"\\right"
+            && (i + 6 >= len || !bytes[i + 6].is_ascii_alphabetic())
+        {
             right_count += 1;
         }
         i += 1;
@@ -270,11 +280,17 @@ fn make_left_right_render_safe(text: &str) -> String {
     let mut i = 0;
 
     while i < len {
-        if i + 5 <= len && &bytes[i..i + 5] == b"\\left" && (i + 5 >= len || !bytes[i + 5].is_ascii_alphabetic()) {
+        if i + 5 <= len
+            && &bytes[i..i + 5] == b"\\left"
+            && (i + 5 >= len || !bytes[i + 5].is_ascii_alphabetic())
+        {
             i += 5;
             continue;
         }
-        if i + 6 <= len && &bytes[i..i + 6] == b"\\right" && (i + 6 >= len || !bytes[i + 6].is_ascii_alphabetic()) {
+        if i + 6 <= len
+            && &bytes[i..i + 6] == b"\\right"
+            && (i + 6 >= len || !bytes[i + 6].is_ascii_alphabetic())
+        {
             i += 6;
             continue;
         }

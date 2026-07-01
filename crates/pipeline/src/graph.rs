@@ -90,7 +90,7 @@ impl PipelineGraph {
             in_degree.entry(entry.name.clone()).or_insert(0);
             dependents
                 .entry(entry.name.clone())
-                .or_insert_with(Vec::new);
+                .or_default();
         }
 
         // Count incoming edges
@@ -105,7 +105,7 @@ impl PipelineGraph {
                 *in_degree.entry(entry.name.clone()).or_insert(0) += 1;
                 dependents
                     .entry(dep.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(entry.name.clone());
             }
         }
