@@ -40,6 +40,7 @@ pub trait Plugin: Send + Sync {
 pub struct TransformPlugin {
     name: String,
     version: String,
+    #[allow(clippy::type_complexity)]
     transform: Box<dyn Fn(&mut Document) -> Result<()> + Send + Sync>,
 }
 

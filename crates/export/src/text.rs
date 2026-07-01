@@ -23,9 +23,7 @@ impl Generator for TextGenerator {
                             for inline in inlines {
                                 match inline {
                                     RenderNode::Text(text) => parts.push(text.clone()),
-                                    RenderNode::Formula { latex, .. } => {
-                                        parts.push(latex.clone())
-                                    }
+                                    RenderNode::Formula { latex, .. } => parts.push(latex.clone()),
                                     _ => {}
                                 }
                             }
