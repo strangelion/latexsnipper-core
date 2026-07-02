@@ -88,14 +88,12 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Operator(name) => {
-            // Check if it has arguments (like \lim_{x→0})
-            // For now, render as text with proper formatting
             match name.as_str() {
                 "sum" | "prod" | "coprod" | "int" | "iint" | "iiint" | "oint"
                 | "bigcup" | "bigcap" => {
                     if let Some(sym) = map_large_op(&format!("\\{}", name)) {
                         format!(
-                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:e/></m:nary>",
+                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr></m:nary>",
                             sym
                         )
                     } else {
@@ -152,8 +150,8 @@ fn ast_to_omml(node: &LatexNode) -> String {
                         let cmd = format!("\\{}", name);
                         let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                         return format!(
-                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup><m:e/></m:nary>",
-                            sym, ast_to_omml(sub), ast_to_omml(exp)
+                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup></m:nary>",
+                            sym, flat_text_run(sub), flat_text_run(exp)
                         );
                     }
                 }
@@ -164,8 +162,8 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let cmd = format!("\\{}", name);
                     let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                     return format!(
-                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup><m:e/></m:nary>",
-                        sym, ast_to_omml(exp)
+                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup></m:nary>",
+                        sym, flat_text_run(exp)
                     );
                 }
             }
@@ -177,14 +175,14 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Subscript { base, sub } => {
-            // Check if base is an Operator (e.g. \sum_{i=1}, \lim_{x→0})
+            // Check if base is an Operator (e.g. \sum_{i=1})
             if let LatexNode::Operator(name) = base.as_ref() {
                 if is_large_op(name) {
                     let cmd = format!("\\{}", name);
                     let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                     return format!(
-                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:e/></m:nary>",
-                        sym, ast_to_omml(sub)
+                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub></m:nary>",
+                        sym, flat_text_run(sub)
                     );
                 }
                 // Non-large operators like \lim → use m:func with sub
@@ -350,7 +348,46 @@ fn ast_to_omml(node: &LatexNode) -> String {
 // ── Helper functions ──
 
 fn is_large_op(name: &str) -> bool {
-    matches!(name, "sum" | "prod" | "coprod" | "int" | "iint" | "iiint" | "oint" | "bigcup" | "bigcap")
+    matches!(
+        name,
+        "sum" | "prod" | "coprod" | "int" | "iint" | "iiint" | "oint" | "bigcup" | "bigcap"
+    )
+}
+
+/// Extract plain text from an AST node for use in nary sub/sup positions.
+/// Flattens nested structures to simple text runs.
+fn flatten_to_text(node: &LatexNode) -> String {
+    match node {
+        LatexNode::Text(s) => s.clone(),
+        LatexNode::Greek(name) => map_greek_unicode(name).to_string(),
+        LatexNode::Symbol(name) => {
+            let key = format!("\\{}", name);
+            map_symbol_unicode(&key)
+                .or_else(|| map_omml_symbol(&key))
+                .unwrap_or(name)
+                .to_string()
+        }
+        LatexNode::Group(nodes) => nodes.iter().map(flatten_to_text).collect(),
+        LatexNode::Sequence(nodes) => nodes.iter().map(flatten_to_text).collect(),
+        LatexNode::Subscript { base, sub } => {
+            format!("{}{}", flatten_to_text(base), flatten_to_text(sub))
+        }
+        LatexNode::Superscript { base, exp } => {
+            format!("{}{}", flatten_to_text(base), flatten_to_text(exp))
+        }
+        LatexNode::Math { content, .. } => content.iter().map(flatten_to_text).collect(),
+        _ => String::new(),
+    }
+}
+
+/// Render nary sub/sup content as flat text runs (avoids nested math in Word)
+fn flat_text_run(node: &LatexNode) -> String {
+    let text = flatten_to_text(node);
+    if text.is_empty() {
+        String::new()
+    } else {
+        wrap_mtext(&text)
+    }
 }
 
 fn wrap_mtext(text: &str) -> String {
