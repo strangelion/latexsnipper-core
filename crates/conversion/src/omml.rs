@@ -93,7 +93,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 | "bigcup" | "bigcap" => {
                     if let Some(sym) = map_large_op(&format!("\\{}", name)) {
                         format!(
-                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr></m:nary>",
+                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:e/></m:nary>",
                             sym
                         )
                     } else {
@@ -150,7 +150,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                         let cmd = format!("\\{}", name);
                         let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                         return format!(
-                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup></m:nary>",
+                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup><m:e/></m:nary>",
                             sym, flat_text_run(sub), flat_text_run(exp)
                         );
                     }
@@ -162,7 +162,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let cmd = format!("\\{}", name);
                     let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                     return format!(
-                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup></m:nary>",
+                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup><m:e/></m:nary>",
                         sym, flat_text_run(exp)
                     );
                 }
@@ -181,7 +181,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let cmd = format!("\\{}", name);
                     let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                     return format!(
-                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub></m:nary>",
+                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:e/></m:nary>",
                         sym, flat_text_run(sub)
                     );
                 }
