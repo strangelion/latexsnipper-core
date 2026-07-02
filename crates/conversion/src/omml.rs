@@ -367,10 +367,28 @@ fn map_greek_unicode(name: &str) -> &str {
 }
 
 fn wrap_with_color(omml_content: &str, hex: &str) -> String {
-    format!(
-        "<m:r><m:rPr><w:rPr><w:color w:val=\"{}\"/></w:rPr></m:rPr>{}</m:r>",
-        hex, omml_content
-    )
+    let color_tag = format!("<w:color w:val=\"{}\"/>", hex);
+    if omml_content.contains(&color_tag) {
+        return omml_content.to_string();
+    }
+
+    let mut result = omml_content.to_string();
+
+    // For <m:r><m:rPr>...<m:t> patterns: inject color into <w:rPr>
+    // This handles runs that already have properties
+    result = result.replace("<w:rPr>", &format!("<w:rPr>{}", color_tag));
+
+    // For bare <m:r><m:t> without <m:rPr>: add color run properties
+    result = result.replace(
+        "<m:r><m:t>",
+        &format!("<m:r><m:rPr><w:rPr>{}</w:rPr></m:rPr><m:t>", color_tag),
+    );
+
+    // For <m:r><m:rPr>...<w:rPr>...<m:t> where rPr exists but no w:rPr wrapper
+    // Handle the pattern from fix_omml that adds <m:rPr><w:rPr> already
+    // The above replacements should cover most cases
+
+    result
 }
 
 fn wrap_with_bold(omml_content: &str) -> String {
