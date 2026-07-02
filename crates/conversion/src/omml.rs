@@ -2,6 +2,8 @@ use latexsnipper_ast::{Block, Document, Formula, FormulaSource, Inline};
 use latexsnipper_foundation::Result;
 
 use crate::converter::Converter;
+use crate::latex_ast::LatexNode;
+use crate::latex_parser::parse_latex;
 use crate::latex_utils::*;
 
 pub struct OmmlConverter;
@@ -53,359 +55,251 @@ fn convert_formula_to_omml(f: &Formula) -> String {
     }
 }
 
-fn latex_to_omml(latex: &str) -> String {
-    let latex = latex.trim();
+/// Convert a LaTeX string to OMML by parsing to AST first, then walking the AST.
+pub fn latex_to_omml(latex: &str) -> String {
+    let ast = parse_latex(latex);
+    let omml = ast_to_omml(&ast);
+    fix_omml(&omml)
+}
 
-    // \textcolor{...}{...}
-    if let Some(content) = latex.strip_prefix("\\textcolor{") {
-        // Parse: color}{content}
-        if let Some(close_brace) = content.find('}') {
-            let color = &content[..close_brace];
-            let rest = &content[close_brace + 1..];
-            // rest should start with '{' for the content block
-            let inner = rest
-                .strip_prefix('{')
-                .unwrap_or(rest)
-                .strip_suffix('}')
-                .unwrap_or(rest);
-            let hex = color_name_to_hex(color.trim());
-            let rendered = latex_to_omml(inner);
-            return wrap_with_color(&rendered, &hex);
-        }
-    }
-    if let Some(content) = latex.strip_prefix("\\color{") {
-        // \color{blue} applies to rest of expression; extract color name
-        if let Some(close) = content.find('}') {
-            let color = &content[..close];
-            let hex = color_name_to_hex(color.trim());
-            let rest = &content[close + 1..];
-            if rest.is_empty() {
-                return wrap_with_color(&wrap_mtext(color), &hex);
+/// Walk the AST and generate OMML XML.
+fn ast_to_omml(node: &LatexNode) -> String {
+    match node {
+        LatexNode::Text(s) => {
+            if s.is_empty() {
+                return String::new();
             }
-            // Apply color to the rest of the expression
-            let rendered = latex_to_omml(rest);
-            return wrap_with_color(&rendered, &hex);
+            wrap_mtext(s)
         }
-    }
 
-    // \mathbf{...} — bold
-    if let Some(content) = latex.strip_prefix("\\mathbf{") {
-        if let Some(inner) = extract_brace_content(content) {
-            let rendered = latex_to_omml(inner);
-            return wrap_with_bold(&rendered);
+        LatexNode::Greek(name) => {
+            let sym = map_greek_unicode(name);
+            wrap_mtext(sym)
         }
-    }
-    // \boldsymbol{...} — bold
-    if let Some(content) = latex.strip_prefix("\\boldsymbol{") {
-        if let Some(inner) = extract_brace_content(content) {
-            let rendered = latex_to_omml(inner);
-            return wrap_with_bold(&rendered);
-        }
-    }
 
-    // \hat{x}, \vec{v}, \bar{x}, \dot{x}, \ddot{x}, \tilde{x}, \check{x}
-    if let Some(content) = latex.strip_prefix("\\hat{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!(
-            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0302}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
-            latex_to_omml(inner)
-        );
-    }
-    if let Some(content) = latex.strip_prefix("\\vec{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!(
-            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{20D7}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
-            latex_to_omml(inner)
-        );
-    }
-    if let Some(content) = latex.strip_prefix("\\bar{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!(
-            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0305}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
-            latex_to_omml(inner)
-        );
-    }
-    if let Some(content) = latex.strip_prefix("\\dot{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!(
-            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0307}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
-            latex_to_omml(inner)
-        );
-    }
-    if let Some(content) = latex.strip_prefix("\\ddot{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!(
-            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0308}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
-            latex_to_omml(inner)
-        );
-    }
-    if let Some(content) = latex.strip_prefix("\\tilde{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!(
-            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0303}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
-            latex_to_omml(inner)
-        );
-    }
-    if let Some(content) = latex.strip_prefix("\\check{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!(
-            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{030C}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
-            latex_to_omml(inner)
-        );
-    }
-    if let Some(content) = latex.strip_prefix("\\breve{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!(
-            "<m:acc>\n  <m:accPr><m:chr m:val=\"\u{0306}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
-            latex_to_omml(inner)
-        );
-    }
-
-    // \text{...}
-    if let Some(content) = latex.strip_prefix("\\text{") {
-        let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!("<m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/><w:rStyle w:val=\"a\"/></w:rPr></m:rPr><m:t>{}</m:t></m:r>", xml_escape(inner));
-    }
-
-    // \left( ... \right)
-    if latex.starts_with("\\left") {
-        if let Some(content) = extract_delimited(latex) {
-            return content;
-        }
-    }
-
-    // \lim, \log, \sin, \cos, \tan, \ln, \exp
-    for func in &[
-        "\\lim", "\\log", "\\sin", "\\cos", "\\tan", "\\ln", "\\exp", "\\min", "\\max", "\\det",
-        "\\gcd", "\\sup", "\\inf", "\\limsup", "\\liminf",
-    ] {
-        if let Some(rest) = latex.strip_prefix(func) {
-            let fname = &func[1..];
-            if rest.is_empty() {
-                return format!(
-                    "<m:func>\n  <m:fName><m:r><m:t>{}</m:t></m:r></m:fName>\n  <m:e/>\n</m:func>",
-                    fname
-                );
+        LatexNode::Symbol(name) => {
+            if let Some(sym) = map_symbol_unicode(&format!("\\{}", name)) {
+                wrap_mtext(sym)
+            } else if let Some(sym) = map_omml_symbol(&format!("\\{}", name)) {
+                wrap_mtext(sym)
+            } else {
+                wrap_mtext(name)
             }
-            if let Some(sub_rest) = rest.strip_prefix('_') {
-                if let Some((sub_base, sub_rest)) = split_brace_pair(sub_rest) {
-                    let sub = latex_to_omml(sub_base);
-                    if let Some((sup_base, _)) = sub_rest.split_once('^') {
-                        let sup = sup_base
-                            .strip_prefix('{')
-                            .unwrap_or(sup_base)
-                            .strip_suffix('}')
-                            .unwrap_or(sup_base);
-                        return format!("<m:sSubSup><m:e><m:func><m:fName><m:r><m:t>{}</m:t></m:r></m:fName><m:e/></m:func></m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>", fname, sub, latex_to_omml(sup));
+        }
+
+        LatexNode::Operator(name) => {
+            // Check if it has arguments (like \lim_{x→0})
+            // For now, render as text with proper formatting
+            match name.as_str() {
+                "sum" | "prod" | "coprod" | "int" | "iint" | "iiint" | "oint"
+                | "bigcup" | "bigcap" => {
+                    if let Some(sym) = map_large_op(&format!("\\{}", name)) {
+                        format!(
+                            "<m:nary>\n  <m:naryPr><m:chr m:val=\"{}\"/></m:naryPr>\n</m:nary>",
+                            sym
+                        )
+                    } else {
+                        wrap_mtext(name)
                     }
-                    return format!("<m:sSub><m:e><m:func><m:fName><m:r><m:t>{}</m:t></m:r></m:fName><m:e/></m:func></m:e><m:sub>{}</m:sub></m:sSub>", fname, sub);
                 }
-            }
-            return format!("<m:func>\n  <m:fName><m:r><m:t>{}</m:t></m:r></m:fName>\n  <m:e>{}</m:e>\n</m:func>", fname, latex_to_omml(rest));
-        }
-    }
-
-    // \operatorname{...}
-    if let Some(inner) = latex.strip_prefix("\\operatorname{") {
-        let name = inner.strip_suffix('}').unwrap_or(inner);
-        return wrap_mtext(&format!("{} ", name));
-    }
-
-    // \mathbb{...}, \mathcal{...}, \mathfrak{...}, \mathbf{...}, \mathrm{...}, \mathit{...}, \mathsf{...}, \mathtt{...}
-    for prefix in &[
-        "\\mathbb{",
-        "\\mathcal{",
-        "\\mathfrak{",
-        "\\mathbf{",
-        "\\mathrm{",
-        "\\mathit{",
-        "\\mathsf{",
-        "\\mathtt{",
-    ] {
-        if let Some(inner) = latex.strip_prefix(prefix) {
-            let content = inner.strip_suffix('}').unwrap_or(inner);
-            return wrap_mtext(content);
-        }
-    }
-
-    // \langle ... \rangle
-    if latex.starts_with("\\langle") || latex.starts_with("\\left\\langle") {
-        if let Some(inner) = latex.strip_prefix("\\left\\langle") {
-            if let Some(pos) = inner.find("\\right\\rangle") {
-                let content = &inner[..pos];
-                let d = latex_to_omml(content);
-                return format!(
-                    "<m:d>\n  <m:dPr><m:begChr m:val=\"\u{27E8}\"/><m:endChr m:val=\"\u{27E9}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
-                    d
-                );
-            }
-        }
-        if let Some(inner) = latex.strip_prefix("\\langle") {
-            let content = inner.strip_suffix("\\rangle").unwrap_or(inner);
-            let content = content.strip_prefix(' ').unwrap_or(content);
-            return format!(
-                "<m:d>\n  <m:dPr><m:begChr m:val=\"\u{27E8}\"/><m:endChr m:val=\"\u{27E9}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
-                latex_to_omml(content)
-            );
-        }
-    }
-
-    // \binom{n}{k}
-    if let Some(inner) = latex.strip_prefix("\\binom{") {
-        if let Some((n, k)) = split_brace_pair(inner) {
-            return format!(
-                "<m:d>\n  <m:dPr><m:begChr m:val=\"(\"/><m:endChr m:val=\")\"/></m:dPr>\n  <m:e><m:f>\n  <m:num>{}</m:num>\n  <m:den>{}</m:den>\n</m:f></m:e>\n</m:d>",
-                latex_to_omml(n),
-                latex_to_omml(k)
-            );
-        }
-    }
-
-    // \otimes, \oplus, \nabla, \partial — single symbols used as prefix
-    for cmd in &["\\otimes", "\\oplus", "\\nabla", "\\partial"] {
-        if let Some(rest) = latex.strip_prefix(cmd) {
-            let rest = rest.strip_prefix(' ').unwrap_or(rest);
-            if rest.is_empty() {
-                return wrap_mtext(map_omml_symbol(cmd).unwrap_or(cmd));
-            }
-            return format!(
-                "{}{}",
-                wrap_mtext(map_omml_symbol(cmd).unwrap_or(cmd)),
-                latex_to_omml(rest)
-            );
-        }
-    }
-
-    // \frac{...}{...}
-    if let Some(inner) = latex.strip_prefix("\\frac") {
-        if let Some((num, den)) = split_brace_pair(inner) {
-            return format!(
-                "<m:f>\n  <m:num>{}</m:num>\n  <m:den>{}</m:den>\n</m:f>",
-                latex_to_omml(num),
-                latex_to_omml(den)
-            );
-        }
-    }
-
-    if let Some(inner) = latex.strip_prefix("\\sqrt{") {
-        let content = inner.strip_suffix('}').unwrap_or(inner);
-        return format!("<m:rad>\n  <m:radPr><m:degHide m:val=\"1\"/></m:radPr>\n  <m:deg/>\n  <m:e>{}</m:e>\n</m:rad>",
-            latex_to_omml(content));
-    }
-
-    if let Some(inner) = latex.strip_prefix("\\sqrt[") {
-        if let Some((degree, rest)) = inner.split_once(']') {
-            let content = rest
-                .strip_prefix('{')
-                .unwrap_or(rest)
-                .strip_suffix('}')
-                .unwrap_or(rest);
-            return format!(
-                "<m:rad>\n  <m:deg>{}</m:deg>\n  <m:e>{}</m:e>\n</m:rad>",
-                latex_to_omml(degree),
-                latex_to_omml(content)
-            );
-        }
-    }
-
-    if let Some(inner) = latex.strip_prefix("\\overbrace{") {
-        if let Some((content, rest)) = split_brace_pair(inner) {
-            let label = rest
-                .trim_start()
-                .strip_prefix("^{")
-                .unwrap_or("")
-                .strip_suffix('}')
-                .unwrap_or("");
-            return format!(
-                "<m:bar>\n  <m:barPr><m:pos m:val=\"top\"/></m:barPr>\n  <m:e>{}</m:e>\n</m:bar>",
-                if label.is_empty() {
-                    latex_to_omml(content)
-                } else {
+                _ => {
+                    // Functions like \lim, \log, \sin, etc.
                     format!(
-                        "<m:sSup><m:e>{}</m:e><m:sup><m:r><m:t>{}</m:t></m:r></m:sup></m:sSup>",
-                        latex_to_omml(content),
-                        label
+                        "<m:func>\n  <m:fName><m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/></w:rPr></m:rPr><m:t>{}</m:t></m:r></m:fName>\n  <m:e/>\n</m:func>",
+                        name
                     )
                 }
-            );
+            }
+        }
+
+        LatexNode::Relation(name) => {
+            if let Some(sym) = map_symbol_unicode(&format!("\\{}", name)) {
+                wrap_mtext(sym)
+            } else if let Some(sym) = map_omml_symbol(&format!("\\{}", name)) {
+                wrap_mtext(sym)
+            } else {
+                wrap_mtext(name)
+            }
+        }
+
+        LatexNode::Fraction { num, den } => {
+            format!(
+                "<m:f>\n  <m:num>{}</m:num>\n  <m:den>{}</m:den>\n</m:f>",
+                ast_to_omml(num),
+                ast_to_omml(den)
+            )
+        }
+
+        LatexNode::SquareRoot { index, content } => {
+            match index {
+                Some(idx) => format!(
+                    "<m:rad>\n  <m:radPr/>\n  <m:deg>{}</m:deg>\n  <m:e>{}</m:e>\n</m:rad>",
+                    ast_to_omml(idx),
+                    ast_to_omml(content)
+                ),
+                None => format!(
+                    "<m:rad>\n  <m:radPr><m:degHide m:val=\"1\"/></m:radPr>\n  <m:deg/>\n  <m:e>{}</m:e>\n</m:rad>",
+                    ast_to_omml(content)
+                ),
+            }
+        }
+
+        LatexNode::Superscript { base, exp } => {
+            format!(
+                "<m:sSup>\n  <m:e>{}</m:e>\n  <m:sup>{}</m:sup>\n</m:sSup>",
+                ast_to_omml(base),
+                ast_to_omml(exp)
+            )
+        }
+
+        LatexNode::Subscript { base, sub } => {
+            format!(
+                "<m:sSub>\n  <m:e>{}</m:e>\n  <m:sub>{}</m:sub>\n</m:sSub>",
+                ast_to_omml(base),
+                ast_to_omml(sub)
+            )
+        }
+
+        LatexNode::Accent { chr, content } => {
+            format!(
+                "<m:acc>\n  <m:accPr><m:chr m:val=\"{}\"/></m:accPr>\n  <m:e>{}</m:e>\n</m:acc>",
+                chr,
+                ast_to_omml(content)
+            )
+        }
+
+        LatexNode::FontModifier { font, content } => {
+            let inner = ast_to_omml(content);
+            match font.as_str() {
+                "mathbf" | "boldsymbol" | "bm" => wrap_with_bold(&inner),
+                "mathbb" => wrap_mtext(&extract_text_from_omml(&inner)),
+                "mathcal" | "mathfrak" | "mathit" | "mathsf" | "mathtt" | "mathrm" | "mathnormal" => {
+                    // For these, just render the content with appropriate font
+                    inner
+                }
+                _ => inner,
+            }
+        }
+
+        LatexNode::OperatorName { args, .. } => {
+            // \operatorname{Spec} — render as upright text
+            let name = args.first().map(|a| extract_text_from_omml(&ast_to_omml(a))).unwrap_or_default();
+            format!(
+                "<m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/></w:rPr></m:rPr><m:t>{} </m:t></m:r>",
+                xml_escape(&name)
+            )
+        }
+
+        LatexNode::Overbrace { content, label } => {
+            let inner = ast_to_omml(content);
+            match label {
+                Some(lbl) => format!(
+                    "<m:bar>\n  <m:barPr><m:pos m:val=\"top\"/></m:barPr>\n  <m:e><m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup></m:e>\n</m:bar>",
+                    inner,
+                    ast_to_omml(lbl)
+                ),
+                None => format!(
+                    "<m:bar>\n  <m:barPr><m:pos m:val=\"top\"/></m:barPr>\n  <m:e>{}</m:e>\n</m:bar>",
+                    inner
+                ),
+            }
+        }
+
+        LatexNode::Underbrace { content, label } => {
+            let inner = ast_to_omml(content);
+            match label {
+                Some(lbl) => format!(
+                    "<m:bar>\n  <m:barPr><m:pos m:val=\"bottom\"/></m:barPr>\n  <m:e><m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub></m:e>\n</m:bar>",
+                    inner,
+                    ast_to_omml(lbl)
+                ),
+                None => format!(
+                    "<m:bar>\n  <m:barPr><m:pos m:val=\"bottom\"/></m:barPr>\n  <m:e>{}</m:e>\n</m:bar>",
+                    inner
+                ),
+            }
+        }
+
+        LatexNode::Delimited { left, content, right } => {
+            let content_xml: Vec<String> = content.iter().map(|n| ast_to_omml(n)).collect();
+            format!(
+                "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+                xml_escape(left),
+                xml_escape(right),
+                content_xml.join("\n  <m:e>")
+            )
+        }
+
+        LatexNode::Matrix { env, rows } => {
+            matrix_to_omml(rows, env)
+        }
+
+        LatexNode::Cases(rows) => {
+            cases_to_omml(rows)
+        }
+
+        LatexNode::Command { name, args } => {
+            match name.as_str() {
+                "binom" if args.len() == 2 => {
+                    format!(
+                        "<m:d>\n  <m:dPr><m:begChr m:val=\"(\"/><m:endChr m:val=\")\"/></m:dPr>\n  <m:e><m:f>\n  <m:num>{}</m:num>\n  <m:den>{}</m:den>\n</m:f></m:e>\n</m:d>",
+                        ast_to_omml(&args[0]),
+                        ast_to_omml(&args[1])
+                    )
+                }
+                "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" => {
+                    let text = extract_text_from_args(args);
+                    format!(
+                        "<m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/><w:rStyle w:val=\"a\"/></w:rPr></m:rPr><m:t>{}</m:t></m:r>",
+                        xml_escape(&text)
+                    )
+                }
+                "textcolor" if args.len() >= 2 => {
+                    let color_name = extract_text_from_omml(&ast_to_omml(&args[0]));
+                    let hex = color_name_to_hex(&color_name);
+                    let inner = ast_to_omml(&args[1]);
+                    wrap_with_color(&inner, &hex)
+                }
+                "color" if args.len() >= 2 => {
+                    let color_name = extract_text_from_omml(&ast_to_omml(&args[0]));
+                    let hex = color_name_to_hex(&color_name);
+                    let inner = ast_to_omml(&args[1]);
+                    wrap_with_color(&inner, &hex)
+                }
+                "colorbox" if args.len() >= 2 => {
+                    let inner = ast_to_omml(&args[1]);
+                    inner
+                }
+                "phantom" => {
+                    let text = extract_text_from_args(args);
+                    format!("<m:r><m:t>{}</m:t></m:r>", " ".repeat(text.len()))
+                }
+                _ => {
+                    // Unknown command — render arguments as sequence
+                    let parts: Vec<String> = args.iter().map(|a| ast_to_omml(a)).collect();
+                    parts.join("")
+                }
+            }
+        }
+
+        LatexNode::Group(nodes) => {
+            let parts: Vec<String> = nodes.iter().map(|n| ast_to_omml(n)).collect();
+            parts.join("")
+        }
+
+        LatexNode::Math { content, .. } => {
+            let parts: Vec<String> = content.iter().map(|n| ast_to_omml(n)).collect();
+            parts.join("")
+        }
+
+        LatexNode::Sequence(nodes) => {
+            let parts: Vec<String> = nodes.iter().map(|n| ast_to_omml(n)).collect();
+            parts.join("")
         }
     }
-
-    if let Some(inner) = latex.strip_prefix("\\underbrace{") {
-        if let Some((content, rest)) = split_brace_pair(inner) {
-            let label = rest
-                .trim_start()
-                .strip_prefix("_{")
-                .unwrap_or("")
-                .strip_suffix('}')
-                .unwrap_or("");
-            return format!("<m:bar>\n  <m:barPr><m:pos m:val=\"bottom\"/></m:barPr>\n  <m:e>{}</m:e>\n</m:bar>",
-                if label.is_empty() { latex_to_omml(content) }
-                else { format!("<m:sSub><m:e>{}</m:e><m:sub><m:r><m:t>{}</m:t></m:r></m:sub></m:sSub>",
-                    latex_to_omml(content), label) });
-        }
-    }
-
-    // Matrix environments
-    if let Some(inner) = extract_env(latex, "matrix") {
-        return matrix_to_omml(inner, "m:m");
-    }
-    if let Some(inner) = extract_env(latex, "pmatrix") {
-        return matrix_to_omml_parens(inner, "(", ")");
-    }
-    if let Some(inner) = extract_env(latex, "bmatrix") {
-        return matrix_to_omml_parens(inner, "[", "]");
-    }
-    if let Some(inner) = extract_env(latex, "vmatrix") {
-        return matrix_to_omml_parens(inner, "|", "|");
-    }
-    if let Some(inner) = extract_env(latex, "cases") {
-        return cases_to_omml(inner);
-    }
-    if let Some(inner) = extract_env(latex, "aligned") {
-        return aligned_to_omml(inner);
-    }
-
-    // Array environment (similar to matrix but with column alignment)
-    if let Some(inner) = extract_env(latex, "array") {
-        return matrix_to_omml(inner, "m:m");
-    }
-
-    // \phantom — zero-width placeholder
-    if let Some(inner) = latex.strip_prefix("\\phantom{") {
-        let content = inner.strip_suffix('}').unwrap_or(inner);
-        return format!("<m:r><m:t>{}</m:t></m:r>", " ".repeat(content.len()));
-    }
-
-    if let Some((base, sup)) = split_superscript(latex) {
-        return format!(
-            "<m:sSup>\n  <m:e>{}</m:e>\n  <m:sup>{}</m:sup>\n</m:sSup>",
-            latex_to_omml(base),
-            latex_to_omml(sup)
-        );
-    }
-
-    if let Some((base, sub)) = split_subscript(latex) {
-        return format!(
-            "<m:sSub>\n  <m:e>{}</m:e>\n  <m:sub>{}</m:sub>\n</m:sSub>",
-            latex_to_omml(base),
-            latex_to_omml(sub)
-        );
-    }
-
-    if let Some(sym) = map_large_op(latex) {
-        return format!(
-            "<m:nary>\n  <m:naryPr><m:chr m:val=\"{}\"/></m:naryPr>\n</m:nary>",
-            sym
-        );
-    }
-
-    if let Some(sym) = map_symbol_unicode(latex) {
-        return format!("<m:r><m:t>{}</m:t></m:r>", sym);
-    }
-
-    wrap_mtext(latex)
 }
+
+// ── Helper functions ──
 
 fn wrap_mtext(text: &str) -> String {
     let escaped = text
@@ -414,6 +308,140 @@ fn wrap_mtext(text: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;");
     format!("<m:r><m:t>{}</m:t></m:r>", escaped)
+}
+
+fn map_greek_unicode(name: &str) -> &str {
+    match name {
+        "alpha" => "α",
+        "beta" => "β",
+        "gamma" => "γ",
+        "delta" => "δ",
+        "epsilon" | "varepsilon" => "ε",
+        "zeta" => "ζ",
+        "eta" => "η",
+        "theta" | "vartheta" => "θ",
+        "iota" => "ι",
+        "kappa" | "varkappa" => "κ",
+        "lambda" => "λ",
+        "mu" => "μ",
+        "nu" => "ν",
+        "xi" => "ξ",
+        "pi" | "varpi" => "π",
+        "rho" | "varrho" => "ρ",
+        "sigma" | "varsigma" => "σ",
+        "tau" => "τ",
+        "upsilon" => "υ",
+        "phi" | "varphi" => "φ",
+        "chi" => "χ",
+        "psi" => "ψ",
+        "omega" => "ω",
+        "digamma" => "ϝ",
+        "omicron" => "ο",
+        "sampi" | "Sampi" => "Ϡ",
+        "backepsilon" => "∍",
+        "varDelta" => "𝛥",
+        "varGamma" => "𝛤",
+        "varLambda" => "𝛬",
+        "varPi" => "𝛱",
+        "varTheta" => "𝛩",
+        "Gamma" => "Γ",
+        "Delta" => "Δ",
+        "Theta" => "Θ",
+        "Lambda" => "Λ",
+        "Xi" => "Ξ",
+        "Pi" => "Π",
+        "Sigma" => "Σ",
+        "Upsilon" => "Υ",
+        "Phi" => "Φ",
+        "Psi" => "Ψ",
+        "Omega" => "Ω",
+        _ => name,
+    }
+}
+
+fn wrap_with_color(omml_content: &str, hex: &str) -> String {
+    format!(
+        "<m:r><m:rPr><w:rPr><w:color w:val=\"{}\"/></w:rPr></m:rPr>{}</m:r>",
+        hex, omml_content
+    )
+}
+
+fn wrap_with_bold(omml_content: &str) -> String {
+    format!(
+        "<m:r><m:rPr><w:rPr><w:b/></w:rPr></m:rPr>{}</m:r>",
+        omml_content
+    )
+}
+
+/// Extract plain text from an OMML fragment.
+fn extract_text_from_omml(omml: &str) -> String {
+    let mut result = String::new();
+    let mut in_t = false;
+    let mut chars = omml.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '<' {
+            let tag: String = chars.by_ref().take_while(|&c| c != '>').collect();
+            if tag == "m:t" || tag.starts_with("m:t ") {
+                in_t = true;
+            } else if tag == "/m:t" || tag.starts_with("/m:t") {
+                in_t = false;
+            }
+        } else if in_t {
+            result.push(ch);
+        }
+    }
+    result
+}
+
+/// Extract text from a list of AST args.
+fn extract_text_from_args(args: &[LatexNode]) -> String {
+    args.iter().map(|a| extract_text_from_omml(&ast_to_omml(a))).collect()
+}
+
+fn matrix_to_omml(rows: &[Vec<LatexNode>], env: &str) -> String {
+    let (open, close) = match env {
+        "pmatrix" => ("(", ")"),
+        "bmatrix" => ("[", "]"),
+        "Bmatrix" => ("{", "}"),
+        "vmatrix" => ("|", "|"),
+        "Vmatrix" => ("‖", "‖"),
+        _ => ("", ""),
+    };
+
+    let mut cells_xml = Vec::new();
+    for row in rows {
+        let cell_xml: Vec<String> = row.iter().map(|cell| {
+            format!("  <m:e>{}</m:e>", ast_to_omml(cell))
+        }).collect();
+        cells_xml.push(format!("  <m:r>\n{}\n  </m:r>", cell_xml.join("\n")));
+    }
+
+    if open.is_empty() && close.is_empty() {
+        format!("<m:mRow>\n{}\n</m:mRow>", cells_xml.join("\n"))
+    } else {
+        format!(
+            "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n{}\n</m:d>",
+            xml_escape(open),
+            xml_escape(close),
+            cells_xml.join("\n")
+        )
+    }
+}
+
+fn cases_to_omml(rows: &[Vec<LatexNode>]) -> String {
+    let mut rows_xml = Vec::new();
+    for row in rows {
+        let left = row.first().map(|s| ast_to_omml(s)).unwrap_or_default();
+        let right = row.get(1).map(|s| ast_to_omml(s)).unwrap_or_default();
+        rows_xml.push(format!(
+            "  <m:r>\n    <m:e>{}</m:e>\n    <m:e>{}</m:e>\n  </m:r>",
+            left, right
+        ));
+    }
+    format!(
+        "<m:d>\n  <m:dPr><m:begChr m:val=\"{{\"/><m:endChr m:val=\"}}\"/></m:dPr>\n{}\n</m:d>",
+        rows_xml.join("\n")
+    )
 }
 
 fn map_omml_symbol(latex: &str) -> Option<&str> {
@@ -486,156 +514,364 @@ fn map_omml_symbol(latex: &str) -> Option<&str> {
     }
 }
 
-fn extract_delimited(latex: &str) -> Option<String> {
-    let mut rest = latex;
-    let mut open = "(";
-    let mut close = ")";
-    if let Some(r) = latex.strip_prefix("\\left") {
-        if let Some(ch) = r.chars().next() {
-            open = match ch {
-                '[' => "[",
-                '{' | '|' => "|",
-                _ => "(",
-            };
-            close = match ch {
-                '[' => "]",
-                '|' => "|",
-                _ => ")",
-            };
-            rest = &r[ch.len_utf8()..];
+    fn color_name_to_hex(name: &str) -> String {
+        match name.to_lowercase().as_str() {
+            "red" => "FF0000".to_string(),
+            "green" => "00FF00".to_string(),
+            "blue" => "0000FF".to_string(),
+            "yellow" => "FFFF00".to_string(),
+            "cyan" => "00FFFF".to_string(),
+            "magenta" | "fuchsia" => "FF00FF".to_string(),
+            "black" => "000000".to_string(),
+            "white" => "FFFFFF".to_string(),
+            "gray" | "grey" => "808080".to_string(),
+            "orange" => "FFA500".to_string(),
+            "purple" => "800080".to_string(),
+            "pink" => "FFC0CB".to_string(),
+            "brown" => "A52A2A".to_string(),
+            "darkgreen" | "dark green" => "006400".to_string(),
+            "darkblue" | "dark blue" => "00008B".to_string(),
+            "lightblue" | "light blue" => "ADD8E6".to_string(),
+            "lightgray" | "light grey" => "D3D3D3".to_string(),
+            s if s.starts_with('#') && s.len() == 7 => s[1..].to_uppercase(),
+            s if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) => s.to_uppercase(),
+            _ => "000000".to_string(),
         }
-    } else {
-        return None;
     }
 
-    // Find matching \right
-    let right_pattern = format!("\\right{}", close);
-    if let Some(pos) = rest.find(&right_pattern) {
-        let inner = &rest[..pos];
-        let d = latex_to_omml(inner);
-        return Some(format!(
-            "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
-            xml_escape(open), xml_escape(close), d
-        ));
+/// Post-process OMML to fix common issues.
+fn fix_omml(omml: &str) -> String {
+    let mut s = omml.to_string();
+
+    // Remove XML declaration if present
+    if let Some(pos) = s.find("<?xml") {
+        if let Some(end) = s[pos..].find("?>") {
+            s.replace_range(..pos + end + 2, "");
+        }
     }
-    None
-}
 
-fn matrix_to_omml(content: &str, _tag: &str) -> String {
-    let rows = split_matrix_rows(content);
-    let mut result = String::from("<m:mRow>\n");
-    for row in &rows {
-        let cells: Vec<String> = row
-            .iter()
-            .map(|cell| format!("  <m:e>{}</m:e>", latex_to_omml(cell.trim())))
-            .collect();
-        result.push_str(&format!("  <m:r>\n{}\n  </m:r>\n", cells.join("\n")));
+    // Fix empty <m:t/>
+    s = s.replace("<m:t/>", "<m:t> </m:t>");
+
+    // Fix XSLT tag typos
+    s = s.replace("<m:eqAr>", "<m:eqArr>");
+    s = s.replace("</m:eqAr>", "</m:eqArr>");
+
+    // Remove mml namespace prefix remnants
+    s = s.replace(" xmlns:mml=\"http://www.w3.org/1998/Math/MathML\"", "");
+
+    // If OMML only has bare <m:r><m:t>text</m:r> without any math structure,
+    // add italic formatting and Cambria Math font
+    if !s.contains("<m:f>") && !s.contains("<m:sSup>") && !s.contains("<m:sSub>")
+       && !s.contains("<m:nary>") && !s.contains("<m:eqArr>") && !s.contains("<m:d>")
+       && !s.contains("<m:rad>") && !s.contains("<m:acc>") && !s.contains("<m:func>")
+       && !s.contains("<m:bar>") && !s.contains("<m:mRow>") {
+        s = s.replace(
+            "<m:r><m:t>",
+            "<m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/><w:i/></w:rPr></m:rPr><m:t>",
+        );
     }
-    result.push_str("</m:mRow>");
-    result
+
+    s.trim().to_string()
 }
 
-fn matrix_to_omml_parens(content: &str, open: &str, close: &str) -> String {
-    let rows = split_matrix_rows(content);
-    let mut cells_xml = Vec::new();
-    for row in &rows {
-        let cell_xml: Vec<String> = row
-            .iter()
-            .map(|cell| format!("  <m:e>{}</m:e>", latex_to_omml(cell.trim())))
-            .collect();
-        cells_xml.push(format!("  <m:r>\n{}\n  </m:r>", cell_xml.join("\n")));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_text() {
+        let result = latex_to_omml("hello");
+        assert!(result.contains("<m:t>hello</m:t>"), "got: {}", result);
+        assert!(result.contains("Cambria Math"), "got: {}", result);
     }
-    format!(
-        "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n{}\n</m:d>",
-        xml_escape(open),
-        xml_escape(close),
-        cells_xml.join("\n")
-    )
-}
 
-fn cases_to_omml(content: &str) -> String {
-    let rows = split_matrix_rows(content);
-    let mut rows_xml = Vec::new();
-    for row in &rows {
-        let left = row
-            .first()
-            .map(|s| latex_to_omml(s.trim()))
-            .unwrap_or_default();
-        let right = row
-            .get(1)
-            .map(|s| latex_to_omml(s.trim()))
-            .unwrap_or_default();
-        rows_xml.push(format!(
-            "  <m:r>\n    <m:e>{}</m:e>\n    <m:e>{}</m:e>\n  </m:r>",
-            left, right
-        ));
+    #[test]
+    fn test_greek_letter() {
+        let result = latex_to_omml("\\alpha");
+        assert!(result.contains("<m:t>α</m:t>"), "got: {}", result);
     }
-    format!(
-        "<m:d>\n  <m:dPr><m:begChr m:val=\"{{\"/><m:endChr m:val=\"}}\"/></m:dPr>\n{}\n</m:d>",
-        rows_xml.join("\n")
-    )
-}
 
-fn aligned_to_omml(content: &str) -> String {
-    let rows = split_matrix_rows(content);
-    let mut rows_xml = Vec::new();
-    for row in &rows {
-        let cells: Vec<String> = row
-            .iter()
-            .map(|cell| format!("  <m:e>{}</m:e>", latex_to_omml(cell.trim())))
-            .collect();
-        rows_xml.push(format!("  <m:r>\n{}\n  </m:r>", cells.join("\n")));
+    #[test]
+    fn test_fraction() {
+        let result = latex_to_omml("\\frac{a}{b}");
+        assert!(result.contains("<m:f>"), "got: {}", result);
+        assert!(result.contains("<m:num>"), "got: {}", result);
+        assert!(result.contains("<m:den>"), "got: {}", result);
     }
-    format!("<m:mRow>\n{}\n</m:mRow>", rows_xml.join("\n"))
-}
 
-// ── Color / Font helpers ──────────────────────────────────────
-
-fn color_name_to_hex(name: &str) -> String {
-    match name.to_lowercase().as_str() {
-        "red" => "FF0000".to_string(),
-        "green" => "00FF00".to_string(),
-        "blue" => "0000FF".to_string(),
-        "yellow" => "FFFF00".to_string(),
-        "cyan" => "00FFFF".to_string(),
-        "magenta" | "fuchsia" => "FF00FF".to_string(),
-        "black" => "000000".to_string(),
-        "white" => "FFFFFF".to_string(),
-        "gray" | "grey" => "808080".to_string(),
-        "orange" => "FFA500".to_string(),
-        "purple" => "800080".to_string(),
-        "pink" => "FFC0CB".to_string(),
-        "brown" => "A52A2A".to_string(),
-        "darkgreen" | "dark green" => "006400".to_string(),
-        "darkblue" | "dark blue" => "00008B".to_string(),
-        "lightblue" | "light blue" => "ADD8E6".to_string(),
-        "lightgray" | "light grey" => "D3D3D3".to_string(),
-        s if s.starts_with('#') && s.len() == 7 => s[1..].to_string(),
-        s if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) => s.to_string(),
-        _ => "000000".to_string(),
+    #[test]
+    fn test_superscript() {
+        let result = latex_to_omml("x^{2}");
+        assert!(result.contains("<m:sSup>"), "got: {}", result);
     }
-}
 
-fn wrap_with_color(omml_content: &str, hex: &str) -> String {
-    format!(
-        "<m:r><m:rPr><w:rPr><w:color w:val=\"{}\"/></w:rPr></m:rPr>{}</m:r>",
-        hex, omml_content
-    )
-}
+    #[test]
+    fn test_subscript() {
+        let result = latex_to_omml("a_{i}");
+        assert!(result.contains("<m:sSub>"), "got: {}", result);
+    }
 
-fn wrap_with_bold(omml_content: &str) -> String {
-    format!(
-        "<m:r><m:rPr><w:rPr><w:b/></w:rPr></m:rPr>{}</m:r>",
-        omml_content
-    )
-}
+    #[test]
+    fn test_sqrt() {
+        let result = latex_to_omml("\\sqrt{x}");
+        assert!(result.contains("<m:rad>"), "got: {}", result);
+    }
 
-/// Extract content inside the first `{...}` block.
-/// For input "content}rest", returns Some("content").
-fn extract_brace_content(s: &str) -> Option<&str> {
-    if let Some(close) = s.find('}') {
-        Some(&s[..close])
-    } else {
-        None
+    #[test]
+    fn test_operatorname() {
+        let result = latex_to_omml("\\operatorname{Spec}");
+        assert!(result.contains("Spec"), "got: {}", result);
+        assert!(result.contains("<m:r>"), "got: {}", result);
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        // E=mc^2\operatorname{Spec}(4{})
+        let result = latex_to_omml("E=mc^2\\operatorname{Spec}(4{})");
+        assert!(result.contains("<m:sSup>"), "should have superscript: {}", result);
+        assert!(result.contains("Spec"), "should have Spec: {}", result);
+        // The (4{}) is treated as text after the operator name
+        assert!(result.contains("<m:t>(4"), "should have (4: {}", result);
+    }
+
+    #[test]
+    fn test_function_with_limit() {
+        let result = latex_to_omml("\\lim_{x \\to 0}");
+        assert!(result.contains("<m:func>"), "should have func: {}", result);
+        assert!(result.contains("<m:sSub>"), "should have subscript: {}", result);
+    }
+
+    #[test]
+    fn test_nabla() {
+        let result = latex_to_omml("\\nabla f");
+        assert!(result.contains("∇"), "should have nabla: {}", result);
+    }
+
+    #[test]
+    fn test_hat() {
+        let result = latex_to_omml("\\hat{x}");
+        assert!(result.contains("<m:acc>"), "should have accent: {}", result);
+    }
+
+    #[test]
+    fn test_delimited() {
+        let result = latex_to_omml("\\left( \\frac{a}{b} \\right)");
+        assert!(result.contains("<m:d>"), "should have delimiter: {}", result);
+        assert!(result.contains("<m:f>"), "should have fraction: {}", result);
+    }
+
+    #[test]
+    fn test_matrix() {
+        let result = latex_to_omml("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}");
+        assert!(result.contains("<m:d>"), "should have delimiter for pmatrix: {}", result);
+    }
+
+    #[test]
+    fn test_cases() {
+        let result = latex_to_omml("\\begin{cases}x&x>0\\\\0&x\\leq 0\\end{cases}");
+        assert!(result.contains("<m:d>"), "should have delimiter for cases: {}", result);
+    }
+
+    #[test]
+    fn test_color() {
+        let result = latex_to_omml("\\textcolor{red}{x}");
+        assert!(result.contains("FF0000"), "should have red color: {}", result);
+    }
+
+    // ═══ Comprehensive: Greek Letters ═══
+
+    #[test]
+    fn all_greek_lowercase() {
+        let result = latex_to_omml("\\alpha \\beta \\gamma \\delta \\epsilon \\zeta \\eta \\theta \\iota \\kappa \\lambda \\mu \\nu \\xi \\pi \\rho \\sigma \\tau \\upsilon \\phi \\chi \\psi \\omega");
+        for (cmd, sym) in &[("alpha","α"),("beta","β"),("gamma","γ"),("delta","δ"),("epsilon","ε"),("theta","θ"),("pi","π"),("sigma","σ"),("omega","ω")] {
+            assert!(result.contains(sym), "{} missing: {}", cmd, result);
+        }
+    }
+
+    #[test]
+    fn uppercase_greek() {
+        let result = latex_to_omml("\\Gamma \\Delta \\Theta \\Lambda \\Xi \\Pi \\Sigma \\Phi \\Psi \\Omega");
+        for sym in &["Γ","Δ","Θ","Λ","Ξ","Π","Σ","Φ","Ψ","Ω"] {
+            assert!(result.contains(sym), "{} missing: {}", sym, result);
+        }
+    }
+
+    // ═══ Comprehensive: Relation Symbols ═══
+
+    #[test]
+    fn relation_symbols() {
+        let result = latex_to_omml("\\leq \\geq \\neq \\approx \\equiv \\sim \\propto \\cong");
+        for (cmd, sym) in &[("leq","≤"),("geq","≥"),("neq","≠"),("approx","≈"),("equiv","≡"),("sim","∼"),("propto","∝"),("cong","≅")] {
+            assert!(result.contains(sym), "{} missing: {}", cmd, result);
+        }
+    }
+
+    // ═══ Comprehensive: Set Theory ═══
+
+    #[test]
+    fn set_theory() {
+        let result = latex_to_omml("\\in \\notin \\subset \\supset \\cup \\cap \\emptyset \\forall \\exists \\neg");
+        for (cmd, sym) in &[("in","∈"),("notin","∉"),("subset","⊂"),("supset","⊃"),("cup","∪"),("cap","∩"),("emptyset","∅"),("forall","∀"),("exists","∃"),("neg","¬")] {
+            assert!(result.contains(sym), "{} missing: {}", cmd, result);
+        }
+    }
+
+    // ═══ Comprehensive: Arrows ═══
+
+    #[test]
+    fn arrows() {
+        let result = latex_to_omml("\\rightarrow \\leftarrow \\leftrightarrow \\Rightarrow \\Leftarrow \\Leftrightarrow \\mapsto");
+        for (cmd, sym) in &[("rightarrow","→"),("leftarrow","←"),("leftrightarrow","↔"),("Rightarrow","⇒"),("Leftarrow","⇐"),("Leftrightarrow","⇔"),("mapsto","↦")] {
+            assert!(result.contains(sym), "{} missing: {}", cmd, result);
+        }
+    }
+
+    // ═══ Comprehensive: Operators ═══
+
+    #[test]
+    fn arithmetic_operators() {
+        let result = latex_to_omml("\\pm \\mp \\times \\div \\cdot \\circ \\oplus \\otimes");
+        for (cmd, sym) in &[("pm","±"),("mp","∓"),("times","×"),("div","÷"),("cdot","·"),("circ","∘"),("oplus","⊕"),("otimes","⊗")] {
+            assert!(result.contains(sym), "{} missing: {}", cmd, result);
+        }
+    }
+
+    #[test]
+    fn calculus_symbols() {
+        let result = latex_to_omml("\\partial \\nabla \\infty \\ell \\hbar \\aleph");
+        for (cmd, sym) in &[("partial","∂"),("nabla","∇"),("infty","∞"),("ell","ℓ"),("hbar","ℏ"),("aleph","ℵ")] {
+            assert!(result.contains(sym), "{} missing: {}", cmd, result);
+        }
+    }
+
+    #[test]
+    fn dot_symbols() {
+        let result = latex_to_omml("\\ldots \\cdots \\vdots \\ddots");
+        for (cmd, sym) in &[("ldots","…"),("cdots","⋯"),("vdots","⋮"),("ddots","⋱")] {
+            assert!(result.contains(sym), "{} missing: {}", cmd, result);
+        }
+    }
+
+    // ═══ Comprehensive: Colored Text ═══
+
+    #[test]
+    fn textcolor_red() {
+        let r = latex_to_omml("\\textcolor{red}{x}");
+        assert!(r.contains("FF0000"), "red missing: {}", r);
+    }
+
+    #[test]
+    fn textcolor_blue() {
+        let r = latex_to_omml("\\textcolor{blue}{y}");
+        assert!(r.contains("0000FF"), "blue missing: {}", r);
+    }
+
+    #[test]
+    fn textcolor_hex() {
+        let r = latex_to_omml("\\textcolor{#FF8800}{z}");
+        assert!(r.contains("FF8800"), "hex color missing: {}", r);
+    }
+
+    #[test]
+    fn color_green() {
+        let r = latex_to_omml("\\color{green}x+y");
+        assert!(r.contains("00FF00"), "green missing: {}", r);
+    }
+
+    #[test]
+    fn nested_color_and_frac() {
+        let r = latex_to_omml("\\textcolor{red}{\\frac{a}{b}}");
+        assert!(r.contains("FF0000"), "color missing: {}", r);
+        assert!(r.contains("<m:f>"), "fraction missing: {}", r);
+    }
+
+    // ═══ Comprehensive: Font Styles ═══
+
+    #[test]
+    fn mathbf_bold() {
+        let r = latex_to_omml("\\mathbf{x}");
+        assert!(r.contains("<w:b/>"), "bold missing: {}", r);
+    }
+
+    #[test]
+    fn boldsymbol() {
+        let r = latex_to_omml("\\boldsymbol{\\alpha}");
+        assert!(r.contains("<w:b/>"), "bold missing: {}", r);
+        assert!(r.contains("α"), "alpha missing: {}", r);
+    }
+
+    #[test]
+    fn text_command() {
+        let r = latex_to_omml("\\text{Hello}");
+        assert!(r.contains("Hello"), "text missing: {}", r);
+        assert!(r.contains("Cambria Math"), "font missing: {}", r);
+    }
+
+    #[test]
+    fn operatorname_upright() {
+        let r = latex_to_omml("\\operatorname{Spec}");
+        assert!(r.contains("Spec"), "Spec missing: {}", r);
+        assert!(r.contains("Cambria Math"), "font missing: {}", r);
+    }
+
+    // ═══ Comprehensive: Complex Formulas ═══
+
+    #[test]
+    fn quadratic_formula() {
+        let r = latex_to_omml("x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}");
+        assert!(r.contains("<m:f>"), "fraction: {}", r);
+        assert!(r.contains("<m:rad>"), "sqrt: {}", r);
+        assert!(r.contains("<m:sSup>"), "superscript: {}", r);
+        assert!(r.contains("±"), "pm: {}", r);
+    }
+
+    #[test]
+    fn euler_identity() {
+        let r = latex_to_omml("e^{i\\pi} + 1 = 0");
+        assert!(r.contains("<m:sSup>"), "superscript: {}", r);
+        assert!(r.contains("π"), "pi: {}", r);
+    }
+
+    #[test]
+    fn limit_formula() {
+        let r = latex_to_omml("\\lim_{x \\to 0} \\frac{\\sin x}{x}");
+        assert!(r.contains("<m:func>"), "function: {}", r);
+        assert!(r.contains("<m:sSub>"), "subscript: {}", r);
+        assert!(r.contains("<m:f>"), "fraction: {}", r);
+        assert!(r.contains("→"), "arrow: {}", r);
+    }
+
+    #[test]
+    fn integral_formula() {
+        let r = latex_to_omml("\\int_{0}^{\\infty} e^{-x^2} dx");
+        assert!(r.contains("<m:nary>"), "nary: {}", r);
+        assert!(r.contains("∫"), "integral: {}", r);
+        assert!(r.contains("∞"), "infinity: {}", r);
+    }
+
+    #[test]
+    fn accent_chain() {
+        let r = latex_to_omml("\\hat{x} + \\vec{v} + \\bar{y} + \\dot{z} + \\tilde{w}");
+        assert!(r.contains("<m:acc>"), "accent: {}", r);
+        assert!(r.matches("<m:acc>").count() >= 5, "5 accents: {}", r);
+    }
+
+    #[test]
+    fn mixed_color_and_symbols() {
+        let r = latex_to_omml("\\textcolor{blue}{\\alpha} + \\beta^{2} = \\gamma");
+        assert!(r.contains("0000FF"), "blue: {}", r);
+        assert!(r.contains("α"), "alpha: {}", r);
+        assert!(r.contains("<m:sSup>"), "superscript: {}", r);
+        assert!(r.contains("β"), "beta: {}", r);
+        assert!(r.contains("γ"), "gamma: {}", r);
+    }
+
+    #[test]
+    fn user_formula_spec() {
+        let r = latex_to_omml("E=mc^2\\operatorname{Spec}(4{})");
+        assert!(r.contains("<m:sSup>"), "superscript: {}", r);
+        assert!(r.contains("Spec"), "Spec: {}", r);
+        assert!(r.contains("<m:t>"), "text runs: {}", r);
     }
 }

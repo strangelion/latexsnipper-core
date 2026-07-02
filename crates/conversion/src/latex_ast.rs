@@ -60,6 +60,26 @@ pub enum LatexNode {
     },
     /// Cases: \begin{cases} ... \end{cases}
     Cases(Vec<Vec<LatexNode>>),
+    /// Accent: \hat{x}, \vec{v}, \bar{x}, etc.
+    Accent {
+        chr: String,
+        content: Box<LatexNode>,
+    },
+    /// Operator name: \operatorname{Spec}
+    OperatorName {
+        name: String,
+        args: Vec<LatexNode>,
+    },
+    /// Overbrace: \overbrace{content}^{label}
+    Overbrace {
+        content: Box<LatexNode>,
+        label: Option<Box<LatexNode>>,
+    },
+    /// Underbrace: \underbrace{content}_{label}
+    Underbrace {
+        content: Box<LatexNode>,
+        label: Option<Box<LatexNode>>,
+    },
     /// List of nodes
     Sequence(Vec<LatexNode>),
 }

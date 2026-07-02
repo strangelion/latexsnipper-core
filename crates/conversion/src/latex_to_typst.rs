@@ -128,6 +128,26 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             let arg_str: Vec<String> = args.iter().map(latex_ast_to_typst).collect();
             convert_command(name, &arg_str, args)
         }
+        // New node types — delegate to text representation
+        LatexNode::Accent { content, .. } => format!("accent({})", latex_ast_to_typst(content)),
+        LatexNode::OperatorName { args, .. } => {
+            let text: String = args.iter().map(latex_ast_to_typst).collect();
+            format!("\"{}\"", text)
+        }
+        LatexNode::Overbrace { content, label } => {
+            let inner = latex_ast_to_typst(content);
+            match label {
+                Some(lbl) => format!("overbrace({}, {})", inner, latex_ast_to_typst(lbl)),
+                None => format!("overbrace({})", inner),
+            }
+        }
+        LatexNode::Underbrace { content, label } => {
+            let inner = latex_ast_to_typst(content);
+            match label {
+                Some(lbl) => format!("underbrace({}, {})", inner, latex_ast_to_typst(lbl)),
+                None => format!("underbrace({})", inner),
+            }
+        }
     }
 }
 
