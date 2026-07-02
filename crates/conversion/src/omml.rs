@@ -221,12 +221,12 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Delimited { left, content, right } => {
-            let content_xml: Vec<String> = content.iter().map(|n| ast_to_omml(n)).collect();
+            let content_xml: Vec<String> = content.iter().map(ast_to_omml).collect();
             format!(
                 "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
                 xml_escape(left),
                 xml_escape(right),
-                content_xml.join("\n  <m:e>")
+                content_xml.join("")
             )
         }
 
@@ -267,8 +267,15 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     wrap_with_color(&inner, &hex)
                 }
                 "colorbox" if args.len() >= 2 => {
-                    let inner = ast_to_omml(&args[1]);
-                    inner
+                    ast_to_omml(&args[1])
+                }
+                "tiny" | "scriptsize" | "footnotesize" | "small" | "normalsize" | "large"
+                | "Large" | "LARGE" | "huge" | "Huge" => {
+                    if let Some(arg) = args.first() {
+                        wrap_with_size(&ast_to_omml(arg), latex_size_to_half_points(name))
+                    } else {
+                        String::new()
+                    }
                 }
                 "phantom" => {
                     let text = extract_text_from_args(args);
@@ -276,24 +283,24 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 }
                 _ => {
                     // Unknown command — render arguments as sequence
-                    let parts: Vec<String> = args.iter().map(|a| ast_to_omml(a)).collect();
+                    let parts: Vec<String> = args.iter().map(ast_to_omml).collect();
                     parts.join("")
                 }
             }
         }
 
         LatexNode::Group(nodes) => {
-            let parts: Vec<String> = nodes.iter().map(|n| ast_to_omml(n)).collect();
+            let parts: Vec<String> = nodes.iter().map(ast_to_omml).collect();
             parts.join("")
         }
 
         LatexNode::Math { content, .. } => {
-            let parts: Vec<String> = content.iter().map(|n| ast_to_omml(n)).collect();
+            let parts: Vec<String> = content.iter().map(ast_to_omml).collect();
             parts.join("")
         }
 
         LatexNode::Sequence(nodes) => {
-            let parts: Vec<String> = nodes.iter().map(|n| ast_to_omml(n)).collect();
+            let parts: Vec<String> = nodes.iter().map(ast_to_omml).collect();
             parts.join("")
         }
     }
@@ -373,6 +380,29 @@ fn wrap_with_bold(omml_content: &str) -> String {
     )
 }
 
+fn wrap_with_size(omml_content: &str, half_points: u16) -> String {
+    format!(
+        "<m:r><m:rPr><w:rPr><w:sz w:val=\"{}\"/></w:rPr></m:rPr>{}</m:r>",
+        half_points, omml_content
+    )
+}
+
+fn latex_size_to_half_points(name: &str) -> u16 {
+    match name {
+        "tiny" => 10,
+        "scriptsize" => 14,
+        "footnotesize" => 16,
+        "small" => 18,
+        "normalsize" => 20,
+        "large" => 24,
+        "Large" => 29,
+        "LARGE" => 35,
+        "huge" => 41,
+        "Huge" => 50,
+        _ => 20,
+    }
+}
+
 /// Extract plain text from an OMML fragment.
 fn extract_text_from_omml(omml: &str) -> String {
     let mut result = String::new();
@@ -395,7 +425,9 @@ fn extract_text_from_omml(omml: &str) -> String {
 
 /// Extract text from a list of AST args.
 fn extract_text_from_args(args: &[LatexNode]) -> String {
-    args.iter().map(|a| extract_text_from_omml(&ast_to_omml(a))).collect()
+    args.iter()
+        .map(|a| extract_text_from_omml(&ast_to_omml(a)))
+        .collect()
 }
 
 fn matrix_to_omml(rows: &[Vec<LatexNode>], env: &str) -> String {
@@ -410,9 +442,10 @@ fn matrix_to_omml(rows: &[Vec<LatexNode>], env: &str) -> String {
 
     let mut cells_xml = Vec::new();
     for row in rows {
-        let cell_xml: Vec<String> = row.iter().map(|cell| {
-            format!("  <m:e>{}</m:e>", ast_to_omml(cell))
-        }).collect();
+        let cell_xml: Vec<String> = row
+            .iter()
+            .map(|cell| format!("  <m:e>{}</m:e>", ast_to_omml(cell)))
+            .collect();
         cells_xml.push(format!("  <m:r>\n{}\n  </m:r>", cell_xml.join("\n")));
     }
 
@@ -431,8 +464,8 @@ fn matrix_to_omml(rows: &[Vec<LatexNode>], env: &str) -> String {
 fn cases_to_omml(rows: &[Vec<LatexNode>]) -> String {
     let mut rows_xml = Vec::new();
     for row in rows {
-        let left = row.first().map(|s| ast_to_omml(s)).unwrap_or_default();
-        let right = row.get(1).map(|s| ast_to_omml(s)).unwrap_or_default();
+        let left = row.first().map(ast_to_omml).unwrap_or_default();
+        let right = row.get(1).map(ast_to_omml).unwrap_or_default();
         rows_xml.push(format!(
             "  <m:r>\n    <m:e>{}</m:e>\n    <m:e>{}</m:e>\n  </m:r>",
             left, right
@@ -514,30 +547,30 @@ fn map_omml_symbol(latex: &str) -> Option<&str> {
     }
 }
 
-    fn color_name_to_hex(name: &str) -> String {
-        match name.to_lowercase().as_str() {
-            "red" => "FF0000".to_string(),
-            "green" => "00FF00".to_string(),
-            "blue" => "0000FF".to_string(),
-            "yellow" => "FFFF00".to_string(),
-            "cyan" => "00FFFF".to_string(),
-            "magenta" | "fuchsia" => "FF00FF".to_string(),
-            "black" => "000000".to_string(),
-            "white" => "FFFFFF".to_string(),
-            "gray" | "grey" => "808080".to_string(),
-            "orange" => "FFA500".to_string(),
-            "purple" => "800080".to_string(),
-            "pink" => "FFC0CB".to_string(),
-            "brown" => "A52A2A".to_string(),
-            "darkgreen" | "dark green" => "006400".to_string(),
-            "darkblue" | "dark blue" => "00008B".to_string(),
-            "lightblue" | "light blue" => "ADD8E6".to_string(),
-            "lightgray" | "light grey" => "D3D3D3".to_string(),
-            s if s.starts_with('#') && s.len() == 7 => s[1..].to_uppercase(),
-            s if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) => s.to_uppercase(),
-            _ => "000000".to_string(),
-        }
+fn color_name_to_hex(name: &str) -> String {
+    match name.to_lowercase().as_str() {
+        "red" => "FF0000".to_string(),
+        "green" => "00FF00".to_string(),
+        "blue" => "0000FF".to_string(),
+        "yellow" => "FFFF00".to_string(),
+        "cyan" => "00FFFF".to_string(),
+        "magenta" | "fuchsia" => "FF00FF".to_string(),
+        "black" => "000000".to_string(),
+        "white" => "FFFFFF".to_string(),
+        "gray" | "grey" => "808080".to_string(),
+        "orange" => "FFA500".to_string(),
+        "purple" => "800080".to_string(),
+        "pink" => "FFC0CB".to_string(),
+        "brown" => "A52A2A".to_string(),
+        "darkgreen" | "dark green" => "006400".to_string(),
+        "darkblue" | "dark blue" => "00008B".to_string(),
+        "lightblue" | "light blue" => "ADD8E6".to_string(),
+        "lightgray" | "light grey" => "D3D3D3".to_string(),
+        s if s.starts_with('#') && s.len() == 7 => s[1..].to_uppercase(),
+        s if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) => s.to_uppercase(),
+        _ => "000000".to_string(),
     }
+}
 
 /// Post-process OMML to fix common issues.
 fn fix_omml(omml: &str) -> String {
@@ -562,10 +595,18 @@ fn fix_omml(omml: &str) -> String {
 
     // If OMML only has bare <m:r><m:t>text</m:r> without any math structure,
     // add italic formatting and Cambria Math font
-    if !s.contains("<m:f>") && !s.contains("<m:sSup>") && !s.contains("<m:sSub>")
-       && !s.contains("<m:nary>") && !s.contains("<m:eqArr>") && !s.contains("<m:d>")
-       && !s.contains("<m:rad>") && !s.contains("<m:acc>") && !s.contains("<m:func>")
-       && !s.contains("<m:bar>") && !s.contains("<m:mRow>") {
+    if !s.contains("<m:f>")
+        && !s.contains("<m:sSup>")
+        && !s.contains("<m:sSub>")
+        && !s.contains("<m:nary>")
+        && !s.contains("<m:eqArr>")
+        && !s.contains("<m:d>")
+        && !s.contains("<m:rad>")
+        && !s.contains("<m:acc>")
+        && !s.contains("<m:func>")
+        && !s.contains("<m:bar>")
+        && !s.contains("<m:mRow>")
+    {
         s = s.replace(
             "<m:r><m:t>",
             "<m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/><w:i/></w:rPr></m:rPr><m:t>",
@@ -629,7 +670,11 @@ mod tests {
     fn test_complex_expression() {
         // E=mc^2\operatorname{Spec}(4{})
         let result = latex_to_omml("E=mc^2\\operatorname{Spec}(4{})");
-        assert!(result.contains("<m:sSup>"), "should have superscript: {}", result);
+        assert!(
+            result.contains("<m:sSup>"),
+            "should have superscript: {}",
+            result
+        );
         assert!(result.contains("Spec"), "should have Spec: {}", result);
         // The (4{}) is treated as text after the operator name
         assert!(result.contains("<m:t>(4"), "should have (4: {}", result);
@@ -639,7 +684,11 @@ mod tests {
     fn test_function_with_limit() {
         let result = latex_to_omml("\\lim_{x \\to 0}");
         assert!(result.contains("<m:func>"), "should have func: {}", result);
-        assert!(result.contains("<m:sSub>"), "should have subscript: {}", result);
+        assert!(
+            result.contains("<m:sSub>"),
+            "should have subscript: {}",
+            result
+        );
     }
 
     #[test]
@@ -657,26 +706,42 @@ mod tests {
     #[test]
     fn test_delimited() {
         let result = latex_to_omml("\\left( \\frac{a}{b} \\right)");
-        assert!(result.contains("<m:d>"), "should have delimiter: {}", result);
+        assert!(
+            result.contains("<m:d>"),
+            "should have delimiter: {}",
+            result
+        );
         assert!(result.contains("<m:f>"), "should have fraction: {}", result);
     }
 
     #[test]
     fn test_matrix() {
         let result = latex_to_omml("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}");
-        assert!(result.contains("<m:d>"), "should have delimiter for pmatrix: {}", result);
+        assert!(
+            result.contains("<m:d>"),
+            "should have delimiter for pmatrix: {}",
+            result
+        );
     }
 
     #[test]
     fn test_cases() {
         let result = latex_to_omml("\\begin{cases}x&x>0\\\\0&x\\leq 0\\end{cases}");
-        assert!(result.contains("<m:d>"), "should have delimiter for cases: {}", result);
+        assert!(
+            result.contains("<m:d>"),
+            "should have delimiter for cases: {}",
+            result
+        );
     }
 
     #[test]
     fn test_color() {
         let result = latex_to_omml("\\textcolor{red}{x}");
-        assert!(result.contains("FF0000"), "should have red color: {}", result);
+        assert!(
+            result.contains("FF0000"),
+            "should have red color: {}",
+            result
+        );
     }
 
     // ═══ Comprehensive: Greek Letters ═══
@@ -684,15 +749,26 @@ mod tests {
     #[test]
     fn all_greek_lowercase() {
         let result = latex_to_omml("\\alpha \\beta \\gamma \\delta \\epsilon \\zeta \\eta \\theta \\iota \\kappa \\lambda \\mu \\nu \\xi \\pi \\rho \\sigma \\tau \\upsilon \\phi \\chi \\psi \\omega");
-        for (cmd, sym) in &[("alpha","α"),("beta","β"),("gamma","γ"),("delta","δ"),("epsilon","ε"),("theta","θ"),("pi","π"),("sigma","σ"),("omega","ω")] {
+        for (cmd, sym) in &[
+            ("alpha", "α"),
+            ("beta", "β"),
+            ("gamma", "γ"),
+            ("delta", "δ"),
+            ("epsilon", "ε"),
+            ("theta", "θ"),
+            ("pi", "π"),
+            ("sigma", "σ"),
+            ("omega", "ω"),
+        ] {
             assert!(result.contains(sym), "{} missing: {}", cmd, result);
         }
     }
 
     #[test]
     fn uppercase_greek() {
-        let result = latex_to_omml("\\Gamma \\Delta \\Theta \\Lambda \\Xi \\Pi \\Sigma \\Phi \\Psi \\Omega");
-        for sym in &["Γ","Δ","Θ","Λ","Ξ","Π","Σ","Φ","Ψ","Ω"] {
+        let result =
+            latex_to_omml("\\Gamma \\Delta \\Theta \\Lambda \\Xi \\Pi \\Sigma \\Phi \\Psi \\Omega");
+        for sym in &["Γ", "Δ", "Θ", "Λ", "Ξ", "Π", "Σ", "Φ", "Ψ", "Ω"] {
             assert!(result.contains(sym), "{} missing: {}", sym, result);
         }
     }
@@ -702,7 +778,16 @@ mod tests {
     #[test]
     fn relation_symbols() {
         let result = latex_to_omml("\\leq \\geq \\neq \\approx \\equiv \\sim \\propto \\cong");
-        for (cmd, sym) in &[("leq","≤"),("geq","≥"),("neq","≠"),("approx","≈"),("equiv","≡"),("sim","∼"),("propto","∝"),("cong","≅")] {
+        for (cmd, sym) in &[
+            ("leq", "≤"),
+            ("geq", "≥"),
+            ("neq", "≠"),
+            ("approx", "≈"),
+            ("equiv", "≡"),
+            ("sim", "∼"),
+            ("propto", "∝"),
+            ("cong", "≅"),
+        ] {
             assert!(result.contains(sym), "{} missing: {}", cmd, result);
         }
     }
@@ -711,8 +796,21 @@ mod tests {
 
     #[test]
     fn set_theory() {
-        let result = latex_to_omml("\\in \\notin \\subset \\supset \\cup \\cap \\emptyset \\forall \\exists \\neg");
-        for (cmd, sym) in &[("in","∈"),("notin","∉"),("subset","⊂"),("supset","⊃"),("cup","∪"),("cap","∩"),("emptyset","∅"),("forall","∀"),("exists","∃"),("neg","¬")] {
+        let result = latex_to_omml(
+            "\\in \\notin \\subset \\supset \\cup \\cap \\emptyset \\forall \\exists \\neg",
+        );
+        for (cmd, sym) in &[
+            ("in", "∈"),
+            ("notin", "∉"),
+            ("subset", "⊂"),
+            ("supset", "⊃"),
+            ("cup", "∪"),
+            ("cap", "∩"),
+            ("emptyset", "∅"),
+            ("forall", "∀"),
+            ("exists", "∃"),
+            ("neg", "¬"),
+        ] {
             assert!(result.contains(sym), "{} missing: {}", cmd, result);
         }
     }
@@ -722,7 +820,15 @@ mod tests {
     #[test]
     fn arrows() {
         let result = latex_to_omml("\\rightarrow \\leftarrow \\leftrightarrow \\Rightarrow \\Leftarrow \\Leftrightarrow \\mapsto");
-        for (cmd, sym) in &[("rightarrow","→"),("leftarrow","←"),("leftrightarrow","↔"),("Rightarrow","⇒"),("Leftarrow","⇐"),("Leftrightarrow","⇔"),("mapsto","↦")] {
+        for (cmd, sym) in &[
+            ("rightarrow", "→"),
+            ("leftarrow", "←"),
+            ("leftrightarrow", "↔"),
+            ("Rightarrow", "⇒"),
+            ("Leftarrow", "⇐"),
+            ("Leftrightarrow", "⇔"),
+            ("mapsto", "↦"),
+        ] {
             assert!(result.contains(sym), "{} missing: {}", cmd, result);
         }
     }
@@ -732,7 +838,16 @@ mod tests {
     #[test]
     fn arithmetic_operators() {
         let result = latex_to_omml("\\pm \\mp \\times \\div \\cdot \\circ \\oplus \\otimes");
-        for (cmd, sym) in &[("pm","±"),("mp","∓"),("times","×"),("div","÷"),("cdot","·"),("circ","∘"),("oplus","⊕"),("otimes","⊗")] {
+        for (cmd, sym) in &[
+            ("pm", "±"),
+            ("mp", "∓"),
+            ("times", "×"),
+            ("div", "÷"),
+            ("cdot", "·"),
+            ("circ", "∘"),
+            ("oplus", "⊕"),
+            ("otimes", "⊗"),
+        ] {
             assert!(result.contains(sym), "{} missing: {}", cmd, result);
         }
     }
@@ -740,7 +855,14 @@ mod tests {
     #[test]
     fn calculus_symbols() {
         let result = latex_to_omml("\\partial \\nabla \\infty \\ell \\hbar \\aleph");
-        for (cmd, sym) in &[("partial","∂"),("nabla","∇"),("infty","∞"),("ell","ℓ"),("hbar","ℏ"),("aleph","ℵ")] {
+        for (cmd, sym) in &[
+            ("partial", "∂"),
+            ("nabla", "∇"),
+            ("infty", "∞"),
+            ("ell", "ℓ"),
+            ("hbar", "ℏ"),
+            ("aleph", "ℵ"),
+        ] {
             assert!(result.contains(sym), "{} missing: {}", cmd, result);
         }
     }
@@ -748,7 +870,12 @@ mod tests {
     #[test]
     fn dot_symbols() {
         let result = latex_to_omml("\\ldots \\cdots \\vdots \\ddots");
-        for (cmd, sym) in &[("ldots","…"),("cdots","⋯"),("vdots","⋮"),("ddots","⋱")] {
+        for (cmd, sym) in &[
+            ("ldots", "…"),
+            ("cdots", "⋯"),
+            ("vdots", "⋮"),
+            ("ddots", "⋱"),
+        ] {
             assert!(result.contains(sym), "{} missing: {}", cmd, result);
         }
     }

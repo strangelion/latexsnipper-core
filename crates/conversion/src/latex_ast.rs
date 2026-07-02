@@ -66,10 +66,7 @@ pub enum LatexNode {
         content: Box<LatexNode>,
     },
     /// Operator name: \operatorname{Spec}
-    OperatorName {
-        name: String,
-        args: Vec<LatexNode>,
-    },
+    OperatorName { name: String, args: Vec<LatexNode> },
     /// Overbrace: \overbrace{content}^{label}
     Overbrace {
         content: Box<LatexNode>,

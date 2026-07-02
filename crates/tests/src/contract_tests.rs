@@ -100,7 +100,7 @@ fn conversion_handles_complex_latex_environments() {
         .convert(&phantom)
         .unwrap()
         .contains("<mpadded"));
-    assert!(TypstConverter.convert(&matrix).unwrap().contains("matrix"));
+    assert!(TypstConverter.convert(&matrix).unwrap().contains("mat("));
 }
 
 #[tokio::test]

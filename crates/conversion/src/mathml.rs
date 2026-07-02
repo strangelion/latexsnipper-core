@@ -134,6 +134,10 @@ fn convert_formula_to_mathml(f: &Formula, _mode: &MathmlMode) -> String {
 fn latex_to_mathml(latex: &str) -> String {
     let latex = latex.trim();
 
+    if let Some(rendered) = render_styled_sequence(latex) {
+        return rendered;
+    }
+
     // \textcolor{color}{content} → <mstyle mathcolor="color"><mrow>content</mrow></mstyle>
     if let Some(content) = latex.strip_prefix("\\textcolor{") {
         if let Some(close) = content.find('}') {
@@ -289,6 +293,186 @@ fn latex_to_mathml(latex: &str) -> String {
         format!("<mn>{}</mn>", latex)
     } else {
         format!("<mi>{}</mi>", xml_escape(latex))
+    }
+}
+
+fn render_styled_sequence(latex: &str) -> Option<String> {
+    let mut output = String::new();
+    let mut plain = String::new();
+    let chars: Vec<char> = latex.chars().collect();
+    let mut pos = 0usize;
+    let mut found_style = false;
+
+    while pos < chars.len() {
+        if chars[pos] != '\\' {
+            plain.push(chars[pos]);
+            pos += 1;
+            continue;
+        }
+
+        let cmd_start = pos + 1;
+        let mut cmd_end = cmd_start;
+        while cmd_end < chars.len() && chars[cmd_end].is_ascii_alphabetic() {
+            cmd_end += 1;
+        }
+        let command: String = chars[cmd_start..cmd_end].iter().collect();
+
+        match command.as_str() {
+            "textcolor" => {
+                let Some((color, after_color)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                let Some((inner, after_inner)) = read_braced_group(&chars, after_color) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&format!(
+                    "<mstyle mathcolor=\"{}\"><mrow>{}</mrow></mstyle>",
+                    mathml_color_name(color.trim()),
+                    latex_to_mathml(&inner)
+                ));
+                pos = after_inner;
+                found_style = true;
+            }
+            "mathbf" | "boldsymbol" => {
+                let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&format!(
+                    "<mstyle fontweight=\"bold\"><mrow>{}</mrow></mstyle>",
+                    latex_to_mathml(&inner)
+                ));
+                pos = after_inner;
+                found_style = true;
+            }
+            "mathit" => {
+                let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&format!(
+                    "<mstyle fontstyle=\"italic\"><mrow>{}</mrow></mstyle>",
+                    latex_to_mathml(&inner)
+                ));
+                pos = after_inner;
+                found_style = true;
+            }
+            "mathrm" => {
+                let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&format!(
+                    "<mstyle fontfamily=\"serif\"><mrow>{}</mrow></mstyle>",
+                    latex_to_mathml(&inner)
+                ));
+                pos = after_inner;
+                found_style = true;
+            }
+            "mathbb" => {
+                let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&format!(
+                    "<mstyle mathvariant=\"double-struck\"><mrow>{}</mrow></mstyle>",
+                    latex_to_mathml(&inner)
+                ));
+                pos = after_inner;
+                found_style = true;
+            }
+            "tiny" | "scriptsize" | "footnotesize" | "small" | "normalsize" | "large" | "Large"
+            | "LARGE" | "huge" | "Huge" => {
+                let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&format!(
+                    "<mstyle mathsize=\"{}\"><mrow>{}</mrow></mstyle>",
+                    latex_size_to_mathml(command.as_str()),
+                    latex_to_mathml(&inner)
+                ));
+                pos = after_inner;
+                found_style = true;
+            }
+            _ => {
+                plain.push(chars[pos]);
+                pos += 1;
+            }
+        }
+    }
+
+    if !found_style {
+        return None;
+    }
+    flush_mathml_plain(&mut output, &mut plain);
+    Some(output)
+}
+
+fn read_braced_group(chars: &[char], mut pos: usize) -> Option<(String, usize)> {
+    while pos < chars.len() && chars[pos].is_whitespace() {
+        pos += 1;
+    }
+    if pos >= chars.len() || chars[pos] != '{' {
+        return None;
+    }
+
+    let mut depth = 1i32;
+    let start = pos + 1;
+    pos += 1;
+    while pos < chars.len() {
+        match chars[pos] {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    let value = chars[start..pos].iter().collect();
+                    return Some((value, pos + 1));
+                }
+            }
+            _ => {}
+        }
+        pos += 1;
+    }
+    None
+}
+
+fn flush_mathml_plain(output: &mut String, plain: &mut String) {
+    let text = plain.trim();
+    if !text.is_empty() {
+        output.push_str(&latex_to_mathml(text));
+    }
+    plain.clear();
+}
+
+fn latex_size_to_mathml(name: &str) -> &str {
+    match name {
+        "tiny" => "50%",
+        "scriptsize" => "70%",
+        "footnotesize" => "80%",
+        "small" => "90%",
+        "normalsize" => "100%",
+        "large" => "120%",
+        "Large" => "144%",
+        "LARGE" => "173%",
+        "huge" => "207%",
+        "Huge" => "249%",
+        _ => "100%",
     }
 }
 

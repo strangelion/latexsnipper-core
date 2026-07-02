@@ -129,7 +129,21 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             convert_command(name, &arg_str, args)
         }
         // New node types — delegate to text representation
-        LatexNode::Accent { content, .. } => format!("accent({})", latex_ast_to_typst(content)),
+        LatexNode::Accent { chr, content } => {
+            let inner = latex_ast_to_typst(content);
+            match chr.as_str() {
+                "\u{0302}" | "\u{02C6}" => format!("hat({})", inner),
+                "\u{0304}" | "\u{02C9}" | "\u{0305}" | "\u{2015}" => {
+                    format!("overline({})", inner)
+                }
+                "\u{0307}" => format!("dot({})", inner),
+                "\u{0308}" => format!("dot.double({})", inner),
+                "\u{030C}" | "\u{02C7}" => format!("check({})", inner),
+                "\u{0303}" | "\u{02DC}" => format!("tilde({})", inner),
+                "\u{20D7}" => format!("vec({})", inner),
+                _ => format!("accent({})", inner),
+            }
+        }
         LatexNode::OperatorName { args, .. } => {
             let text: String = args.iter().map(latex_ast_to_typst).collect();
             format!("\"{}\"", text)
@@ -307,6 +321,15 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
                 String::new()
             }
         }
+        "tiny" | "scriptsize" | "footnotesize" | "small" | "normalsize" | "large" | "Large"
+        | "LARGE" | "huge" | "Huge" => {
+            if let Some(arg) = args.first() {
+                let size = latex_size_to_typst(name);
+                format!("text(size: {})[{}]", size, latex_ast_to_typst(arg))
+            } else {
+                name.to_string()
+            }
+        }
         // Bold variants (non-font-modifier path)
         "boldsymbol" | "bm" => {
             if let Some(arg) = args.first() {
@@ -323,6 +346,22 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
                 format!("{}({})", name, arg_str.join(", "))
             }
         }
+    }
+}
+
+fn latex_size_to_typst(name: &str) -> &str {
+    match name {
+        "tiny" => "0.5em",
+        "scriptsize" => "0.7em",
+        "footnotesize" => "0.8em",
+        "small" => "0.9em",
+        "normalsize" => "1em",
+        "large" => "1.2em",
+        "Large" => "1.44em",
+        "LARGE" => "1.73em",
+        "huge" => "2.07em",
+        "Huge" => "2.49em",
+        _ => "1em",
     }
 }
 

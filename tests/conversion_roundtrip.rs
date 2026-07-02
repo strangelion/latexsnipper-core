@@ -84,26 +84,6 @@ const FORMULAS: &[(&str, &str)] = &[
     ("dot_product", r"\vec{a} \cdot \vec{b}"),
 ];
 
-fn latex_to_doc(latex: &str) -> latexsnipper_ast::Document {
-    DocumentConverter::convert_latex_string(latex, OutputFormat::Latex).unwrap();
-    // Build a minimal doc with one formula block
-    use latexsnipper_ast::*;
-    Document {
-        metadata: Metadata::default(),
-        pages: vec![Page {
-            width: 0.0,
-            height: 0.0,
-            blocks: vec![Block::Formula(FormulaBlock {
-                formula: Formula::latex(latex),
-                geometry: None,
-                source: None,
-            })],
-            page_number: None,
-        }],
-        id_gen: NodeIdGenerator::new(),
-    }
-}
-
 fn convert_via(latex: &str, input_fmt: &str, output_fmt: OutputFormat) -> String {
     match input_fmt {
         "latex" => DocumentConverter::convert_latex_string(latex, output_fmt).unwrap(),
@@ -347,8 +327,8 @@ fn typst_symbol_preservation() {
         (r"\sqrt{x}", "sqrt(x)"),
         (r"\sqrt[3]{x}", "root(3, x)"),
         (r"\binom{n}{k}", "binom(n, k)"),
-        (r"\hat{x}", "hat x"),
-        (r"\vec{v}", "vec v"),
+        (r"\hat{x}", "hat(x)"),
+        (r"\vec{v}", "vec(v)"),
         (r"\sum", "sum"),
         (r"\int", "integral"),
     ];
@@ -369,4 +349,93 @@ fn typst_symbol_preservation() {
             failures.join("\n")
         );
     }
+}
+
+#[test]
+fn inline_style_preservation() {
+    let latex = r"a+\textcolor{red}{x}+\mathbf{y}+\mathbb{R}+\Large{z}";
+
+    let mathml = DocumentConverter::convert_latex_string(latex, OutputFormat::MathML).unwrap();
+    assert!(
+        mathml.contains("mathcolor=\"red\""),
+        "MathML lost inline color: {}",
+        mathml
+    );
+    assert!(
+        mathml.contains("fontweight=\"bold\""),
+        "MathML lost inline bold font: {}",
+        mathml
+    );
+    assert!(
+        mathml.contains("mathvariant=\"double-struck\""),
+        "MathML lost inline blackboard font: {}",
+        mathml
+    );
+    assert!(
+        mathml.contains("mathsize=\"144%\""),
+        "MathML lost inline font size: {}",
+        mathml
+    );
+
+    let omml = DocumentConverter::convert_latex_string(latex, OutputFormat::OMML).unwrap();
+    assert!(omml.contains("FF0000"), "OMML lost inline color: {}", omml);
+    assert!(omml.contains("<w:b/>"), "OMML lost inline bold: {}", omml);
+    assert!(
+        omml.contains("<w:sz w:val=\"29\"/>"),
+        "OMML lost inline font size: {}",
+        omml
+    );
+
+    let typst = DocumentConverter::convert_latex_string(latex, OutputFormat::Typst).unwrap();
+    assert!(
+        typst.contains("math.color(red"),
+        "Typst lost inline color: {}",
+        typst
+    );
+    assert!(
+        typst.contains("bold(y)"),
+        "Typst lost inline bold: {}",
+        typst
+    );
+    assert!(
+        typst.contains("bb(R)"),
+        "Typst lost inline blackboard font: {}",
+        typst
+    );
+    assert!(
+        typst.contains("text(size: 1.44em)[z]"),
+        "Typst lost inline font size: {}",
+        typst
+    );
+
+    let latex_from_mathml =
+        DocumentConverter::convert_mathml_string(&mathml, OutputFormat::Latex).unwrap();
+    assert!(
+        latex_from_mathml.contains("\\textcolor{red}{x}"),
+        "MathML roundtrip lost inline color: {}",
+        latex_from_mathml
+    );
+    assert!(
+        latex_from_mathml.contains("\\mathbf{y}"),
+        "MathML roundtrip lost inline bold: {}",
+        latex_from_mathml
+    );
+
+    let latex_from_omml =
+        DocumentConverter::convert_omml_string(&omml, OutputFormat::Latex).unwrap();
+    assert!(
+        latex_from_omml.contains("\\textcolor{FF0000}{") && latex_from_omml.contains("\\mathit{x}"),
+        "OMML roundtrip lost inline color: {}",
+        latex_from_omml
+    );
+    assert!(
+        latex_from_omml.contains("\\mathbf{") && latex_from_omml.contains("\\mathit{y}"),
+        "OMML roundtrip lost inline bold: {}",
+        latex_from_omml
+    );
+    assert!(
+        latex_from_omml.contains("\\Large{") && latex_from_omml.contains("\\mathit{z}"),
+        "OMML roundtrip lost inline font size: {}",
+        latex_from_omml
+    );
 }

@@ -50,11 +50,16 @@ fn decode_entities(xml: &str) -> String {
 }
 
 fn extract_o_math(xml: &str) -> Option<String> {
-    let decoded = if xml.contains("&lt;") || xml.contains("&#") {
-        decode_entities(xml)
-    } else {
-        xml.to_string()
-    };
+    find_o_math_fragment(xml).or_else(|| {
+        if xml.contains("&lt;") || xml.contains("&#") {
+            find_o_math_fragment(&decode_entities(xml))
+        } else {
+            None
+        }
+    })
+}
+
+fn find_o_math_fragment(xml: &str) -> Option<String> {
     for pat in &[
         r"<m:oMathPara[\s>]",
         r"<m:oMath[\s>]",
@@ -64,7 +69,7 @@ fn extract_o_math(xml: &str) -> Option<String> {
         r"<oMath[\s>]",
     ] {
         if let Ok(re) = regex::Regex::new(pat) {
-            if let Some(m) = re.find(&decoded) {
+            if let Some(m) = re.find(xml) {
                 let start = m.start();
                 let tag = m
                     .as_str()
@@ -72,9 +77,9 @@ fn extract_o_math(xml: &str) -> Option<String> {
                     .trim_end_matches('>')
                     .trim_end_matches(' ');
                 let close = format!("</{}>", &tag[1..]);
-                if let Some(end) = decoded[start..].find(&close) {
+                if let Some(end) = xml[start..].find(&close) {
                     let end = start + end + close.len();
-                    let mut result = decoded[start..end].to_string();
+                    let mut result = xml[start..end].to_string();
                     if !result.contains("xmlns:m=") {
                         if let Some(gt) = result.find('>') {
                             result.insert_str(gt, r#" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math""#);
@@ -156,10 +161,11 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .collect::<Vec<_>>()
             .join(""),
         "r" => {
-            // Extract run properties (color, bold, italic) from rPr
+            // Extract run properties from rPr and apply them to all nested run content.
             let mut color = String::new();
             let mut bold = false;
             let mut italic = false;
+            let mut size = String::new();
             for (tag, val) in children {
                 if tag == "rPr" {
                     for part in val.split(',') {
@@ -172,12 +178,15 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                         if part == "i=1" {
                             italic = true;
                         }
+                        if let Some(s) = part.strip_prefix("sz=") {
+                            size = s.to_string();
+                        }
                     }
                 }
             }
             let text: String = children
                 .iter()
-                .filter(|(t, _)| t == "t")
+                .filter(|(t, _)| t != "rPr")
                 .map(|(_, v)| v.as_str())
                 .collect::<Vec<_>>()
                 .concat();
@@ -190,6 +199,9 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
             if italic {
                 result = format!("\\mathit{{{}}}", result);
+            }
+            if !size.is_empty() {
+                result = format!("\\{}{{{}}}", half_points_to_latex_size(&size), result);
             }
             result
         }
@@ -328,6 +340,9 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 if tag == "i" || tag == "w:i" {
                     parts.push("i=1".to_string());
                 }
+                if tag == "sz" || tag == "w:sz" {
+                    parts.push(format!("sz={}", val));
+                }
                 // Handle nested w:rPr inside rPr
                 if (tag == "w:rPr" || tag == "rPr") && !val.is_empty() {
                     for part in val.split(',') {
@@ -344,6 +359,24 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .map(|(_, v)| v.clone())
             .collect::<Vec<_>>()
             .join(""),
+    }
+}
+
+fn half_points_to_latex_size(value: &str) -> &'static str {
+    let Ok(size) = value.parse::<u16>() else {
+        return "normalsize";
+    };
+    match size {
+        0..=12 => "tiny",
+        13..=15 => "scriptsize",
+        16..=17 => "footnotesize",
+        18..=19 => "small",
+        20..=23 => "normalsize",
+        24..=28 => "large",
+        29..=34 => "Large",
+        35..=40 => "LARGE",
+        41..=49 => "huge",
+        _ => "Huge",
     }
 }
 

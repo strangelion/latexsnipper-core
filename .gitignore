@@ -34,5 +34,8 @@ release_models/
 # Test artifacts
 *.pdb
 
+# Local agent learnings
+.learnings/
+
 # Documentation build
 docs/book/

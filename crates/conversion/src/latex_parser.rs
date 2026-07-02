@@ -104,9 +104,7 @@ impl LatexParser {
                     sub: Box::new(sub),
                 })
             }
-            _ => {
-                self.parse_text()
-            }
+            _ => self.parse_text(),
         }
     }
 
@@ -120,20 +118,25 @@ impl LatexParser {
                 self.pos += 1;
                 let content = self.parse_until('}');
                 if content.len() == 1 {
-                    content.into_iter().next().unwrap_or(LatexNode::Text(String::new()))
+                    content
+                        .into_iter()
+                        .next()
+                        .unwrap_or(LatexNode::Text(String::new()))
                 } else {
                     LatexNode::Group(content)
                 }
             }
             '\\' => {
                 self.pos += 1;
-                self.parse_command().unwrap_or(LatexNode::Text(String::new()))
+                self.parse_command()
+                    .unwrap_or(LatexNode::Text(String::new()))
             }
             _ => {
                 let start = self.pos;
                 while self.pos < self.chars.len() {
                     match self.chars[self.pos] {
-                        '\\' | '{' | '}' | '$' | '^' | '_' | ' ' | '(' | ')' | '[' | ']' | ':' | ',' | ';' => break,
+                        '\\' | '{' | '}' | '$' | '^' | '_' | ' ' | '(' | ')' | '[' | ']' | ':'
+                        | ',' | ';' => break,
                         _ => self.pos += 1,
                     }
                 }
@@ -192,13 +195,10 @@ impl LatexParser {
             "alpha" | "beta" | "gamma" | "delta" | "epsilon" | "varepsilon" | "zeta" | "eta"
             | "theta" | "vartheta" | "iota" | "kappa" | "varkappa" | "lambda" | "mu" | "nu"
             | "xi" | "pi" | "varpi" | "rho" | "varrho" | "sigma" | "varsigma" | "tau"
-            | "upsilon" | "phi" | "varphi" | "chi" | "psi" | "omega"
-            | "digamma" | "omicron" | "sampi" | "Sampi" | "backepsilon"
-            | "varDelta" | "varGamma" | "varLambda" | "varPi" | "varTheta"
-            | "Gamma" | "Delta" | "Theta" | "Lambda" | "Xi" | "Pi"
-            | "Sigma" | "Upsilon" | "Phi" | "Psi" | "Omega" => {
-                Some(LatexNode::Greek(cmd))
-            }
+            | "upsilon" | "phi" | "varphi" | "chi" | "psi" | "omega" | "digamma" | "omicron"
+            | "sampi" | "Sampi" | "backepsilon" | "varDelta" | "varGamma" | "varLambda"
+            | "varPi" | "varTheta" | "Gamma" | "Delta" | "Theta" | "Lambda" | "Xi" | "Pi"
+            | "Sigma" | "Upsilon" | "Phi" | "Psi" | "Omega" => Some(LatexNode::Greek(cmd)),
             // Operators
             "int" | "iint" | "iiint" | "oint" | "sum" | "prod" | "coprod" | "lim" | "limsup"
             | "liminf" | "max" | "min" | "sup" | "inf" => Some(LatexNode::Operator(cmd)),
@@ -212,12 +212,10 @@ impl LatexParser {
             | "oplus" | "otimes" | "odot" | "lfloor" | "rfloor" | "lceil" | "rceil" | "langle"
             | "rangle" | "lvert" | "rvert" | "lVert" | "rVert" | "quad" | "qquad" | "ldots"
             | "cdots" | "vdots" | "ddots" | "hbar" | "ell" | "prime" | "perp" | "parallel"
-            | "mid" | "therefore" | "because" | "wp" | "Re" | "Im" | "aleph" | "beth"
-            | "gimel" | "daleth" | "to" | "rightarrow" | "leftarrow" | "leftrightarrow"
-            | "Rightarrow" | "Leftarrow" | "Leftrightarrow" | "mapsto" | "uparrow"
-            | "downarrow" | "nearrow" | "searrow" | "swarrow" | "nwarrow" => {
-                Some(LatexNode::Symbol(cmd))
-            }
+            | "mid" | "therefore" | "because" | "wp" | "Re" | "Im" | "aleph" | "beth" | "gimel"
+            | "daleth" | "to" | "rightarrow" | "leftarrow" | "leftrightarrow" | "Rightarrow"
+            | "Leftarrow" | "Leftrightarrow" | "mapsto" | "uparrow" | "downarrow" | "nearrow"
+            | "searrow" | "swarrow" | "nwarrow" => Some(LatexNode::Symbol(cmd)),
             // Fraction
             "frac" => {
                 let num = self.parse_single();
@@ -295,7 +293,11 @@ impl LatexParser {
             // Font modifiers
             "mathbb" | "mathbf" | "mathit" | "mathsf" | "mathtt" | "mathcal" | "mathfrak"
             | "mathrm" | "mathnormal" | "boldsymbol" | "bm" => {
-                let font = if cmd == "bm" { "boldsymbol".to_string() } else { cmd };
+                let font = if cmd == "bm" {
+                    "boldsymbol".to_string()
+                } else {
+                    cmd
+                };
                 let content = self.parse_single();
                 Some(LatexNode::FontModifier {
                     font,
@@ -318,6 +320,15 @@ impl LatexParser {
                     name: cmd,
                     args: vec![content],
                 })
+            }
+            "tiny" | "scriptsize" | "footnotesize" | "small" | "normalsize" | "large" | "Large"
+            | "LARGE" | "huge" | "Huge" => {
+                let args = if self.pos < self.chars.len() && self.chars[self.pos] == '{' {
+                    vec![self.parse_single()]
+                } else {
+                    Vec::new()
+                };
+                Some(LatexNode::Command { name: cmd, args })
             }
             // Two-argument commands
             "textcolor" | "colorbox" | "fcolorbox" | "color" => {
@@ -357,13 +368,9 @@ impl LatexParser {
                 })
             }
             // Matrix environments
-            "begin" => {
-                self.parse_environment()
-            }
+            "begin" => self.parse_environment(),
             // \left ... \right
-            "left" => {
-                self.parse_delimited()
-            }
+            "left" => self.parse_delimited(),
             // Unknown command — store as Command node
             _ => Some(LatexNode::Command {
                 name: cmd,
@@ -379,9 +386,17 @@ impl LatexParser {
             return None;
         }
         self.pos += 1;
-        let env_name: String = self.parse_until('}').iter().map(|n| {
-            if let LatexNode::Text(s) = n { s.clone() } else { String::new() }
-        }).collect();
+        let env_name: String = self
+            .parse_until('}')
+            .iter()
+            .map(|n| {
+                if let LatexNode::Text(s) = n {
+                    s.clone()
+                } else {
+                    String::new()
+                }
+            })
+            .collect();
 
         let content = self.parse_until_begin_end(&env_name);
 
@@ -389,7 +404,10 @@ impl LatexParser {
             "matrix" | "pmatrix" | "bmatrix" | "Bmatrix" | "vmatrix" | "Vmatrix"
             | "smallmatrix" => {
                 let rows = Self::parse_matrix_content(&content);
-                Some(LatexNode::Matrix { env: env_name, rows })
+                Some(LatexNode::Matrix {
+                    env: env_name,
+                    rows,
+                })
             }
             "cases" => {
                 let rows = Self::parse_matrix_content(&content);
@@ -397,11 +415,17 @@ impl LatexParser {
             }
             "aligned" | "align" | "gather" => {
                 let rows = Self::parse_matrix_content(&content);
-                Some(LatexNode::Matrix { env: env_name, rows })
+                Some(LatexNode::Matrix {
+                    env: env_name,
+                    rows,
+                })
             }
             "array" => {
                 let rows = Self::parse_matrix_content(&content);
-                Some(LatexNode::Matrix { env: env_name, rows })
+                Some(LatexNode::Matrix {
+                    env: env_name,
+                    rows,
+                })
             }
             _ => {
                 // Unknown environment — treat content as a group
@@ -446,20 +470,18 @@ impl LatexParser {
 
         // Parse content until \right{right_char}
         let mut content_str = String::new();
-        let mut depth = 0i32;
         while self.pos < self.chars.len() {
             if self.pos + 5 < self.chars.len() {
                 let remaining: String = self.chars[self.pos..].iter().take(6).collect();
                 if remaining.starts_with("\\right") {
                     let after_right = &self.chars[self.pos + 6..];
-                    if !after_right.is_empty() && after_right[0] == right.chars().next().unwrap_or(')') {
+                    if !after_right.is_empty()
+                        && after_right[0] == right.chars().next().unwrap_or(')')
+                    {
                         self.pos += 7; // skip \rightX
                         break;
                     }
                 }
-            }
-            if self.chars[self.pos] == '\\' && self.pos + 1 < self.chars.len() && self.chars[self.pos + 1] == 'l' {
-                depth += 1;
             }
             content_str.push(self.chars[self.pos]);
             self.pos += 1;
@@ -470,7 +492,11 @@ impl LatexParser {
 
         Some(LatexNode::Delimited {
             left,
-            content: if let LatexNode::Sequence(nodes) = content_nodes { nodes } else { vec![content_nodes] },
+            content: if let LatexNode::Sequence(nodes) = content_nodes {
+                nodes
+            } else {
+                vec![content_nodes]
+            },
             right: right.to_string(),
         })
     }
@@ -493,11 +519,12 @@ impl LatexParser {
                     depth += 1;
                 } else if sub.starts_with("\\end{") {
                     // Only decrement if it matches our environment
-                    let after_end: String = self.chars[self.pos + 5..].iter().take(env_name.len() + 1).collect();
-                    if after_end.starts_with(&*env_name) && after_end.ends_with('}') {
-                        if depth > 0 {
-                            depth -= 1;
-                        }
+                    let after_end: String = self.chars[self.pos + 5..]
+                        .iter()
+                        .take(env_name.len() + 1)
+                        .collect();
+                    if after_end.starts_with(env_name) && after_end.ends_with('}') && depth > 0 {
+                        depth -= 1;
                     }
                 }
             }
@@ -515,10 +542,13 @@ impl LatexParser {
             if row_str.is_empty() || row_str == "\\" {
                 continue;
             }
-            let cells: Vec<LatexNode> = row_str.split('&').map(|cell| {
-                let mut parser = LatexParser::new(cell.trim());
-                parser.parse()
-            }).collect();
+            let cells: Vec<LatexNode> = row_str
+                .split('&')
+                .map(|cell| {
+                    let mut parser = LatexParser::new(cell.trim());
+                    parser.parse()
+                })
+                .collect();
             if !cells.is_empty() {
                 rows.push(cells);
             }
