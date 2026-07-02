@@ -95,7 +95,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 | "bigcup" | "bigcap" => {
                     if let Some(sym) = map_large_op(&format!("\\{}", name)) {
                         format!(
-                            "<m:nary>\n  <m:naryPr><m:chr m:val=\"{}\"/></m:naryPr>\n</m:nary>",
+                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:e/></m:nary>",
                             sym
                         )
                     } else {
@@ -145,16 +145,57 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Superscript { base, exp } => {
+            // Check if base is a Subscript wrapping an Operator (e.g. \sum_{i=1}^{n})
+            if let LatexNode::Subscript { base: inner_base, sub } = base.as_ref() {
+                if let LatexNode::Operator(name) = inner_base.as_ref() {
+                    if is_large_op(name) {
+                        let cmd = format!("\\{}", name);
+                        let sym = map_large_op(&cmd).unwrap_or(name.as_str());
+                        return format!(
+                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup><m:e/></m:nary>",
+                            sym, ast_to_omml(sub), ast_to_omml(exp)
+                        );
+                    }
+                }
+            }
+            // Check if base is a bare Operator (e.g. \sum^{n})
+            if let LatexNode::Operator(name) = base.as_ref() {
+                if is_large_op(name) {
+                    let cmd = format!("\\{}", name);
+                    let sym = map_large_op(&cmd).unwrap_or(name.as_str());
+                    return format!(
+                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup><m:e/></m:nary>",
+                        sym, ast_to_omml(exp)
+                    );
+                }
+            }
             format!(
-                "<m:sSup>\n  <m:e>{}</m:e>\n  <m:sup>{}</m:sup>\n</m:sSup>",
+                "<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>",
                 ast_to_omml(base),
                 ast_to_omml(exp)
             )
         }
 
         LatexNode::Subscript { base, sub } => {
+            // Check if base is an Operator (e.g. \sum_{i=1}, \lim_{x→0})
+            if let LatexNode::Operator(name) = base.as_ref() {
+                if is_large_op(name) {
+                    let cmd = format!("\\{}", name);
+                    let sym = map_large_op(&cmd).unwrap_or(name.as_str());
+                    return format!(
+                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:e/></m:nary>",
+                        sym, ast_to_omml(sub)
+                    );
+                }
+                // Non-large operators like \lim → use m:func with sub
+                let inner = ast_to_omml(base);
+                return format!(
+                    "<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>",
+                    inner, ast_to_omml(sub)
+                );
+            }
             format!(
-                "<m:sSub>\n  <m:e>{}</m:e>\n  <m:sub>{}</m:sub>\n</m:sSub>",
+                "<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>",
                 ast_to_omml(base),
                 ast_to_omml(sub)
             )
@@ -307,6 +348,10 @@ fn ast_to_omml(node: &LatexNode) -> String {
 }
 
 // ── Helper functions ──
+
+fn is_large_op(name: &str) -> bool {
+    matches!(name, "sum" | "prod" | "coprod" | "int" | "iint" | "iiint" | "oint" | "bigcup" | "bigcap")
+}
 
 fn wrap_mtext(text: &str) -> String {
     let escaped = text
@@ -633,6 +678,49 @@ fn fix_omml(omml: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_integral_encoding() {
+        // Test that ∫ is correctly encoded as 3-byte UTF-8
+        let result = latex_to_omml("\\int");
+        eprintln!("integral OMML: {}", result);
+        // Find the chr val and check encoding
+        if let Some(idx) = result.find("m:val=\"") {
+            let start = idx + "m:val=\"".len();
+            // Find the closing quote using byte position
+            let rest = &result[start..];
+            if let Some(end) = rest.find('"') {
+                let val = &rest[..end];
+                let bytes = val.as_bytes();
+                eprintln!("chr val bytes: {:?}", bytes);
+                assert_eq!(bytes, &[0xE2, 0x88, 0xAB], "∫ should be 3 UTF-8 bytes");
+            }
+        }
+    }
+
+    #[test]
+    fn debug_sum_limits() {
+        let result = latex_to_omml("\\sum_{i=1}^{n} x_i");
+        eprintln!("=== sum with limits ===\n{}", result);
+    }
+
+    #[test]
+    fn debug_lim_limits() {
+        let result = latex_to_omml("\\lim_{x \\to 0} f(x)");
+        eprintln!("=== lim with limits ===\n{}", result);
+    }
+
+    #[test]
+    fn debug_integral_limits() {
+        let result = latex_to_omml("\\int_{0}^{1} x\\,dx");
+        eprintln!("=== integral with limits ===\n{}", result);
+    }
+
+    #[test]
+    fn debug_arrow_limits() {
+        let result = latex_to_omml("x \\to^{a}_{b}");
+        eprintln!("=== arrow with limits ===\n{}", result);
+    }
 
     #[test]
     fn test_simple_text() {

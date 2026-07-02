@@ -177,7 +177,9 @@ impl LatexParser {
             let ch = self.chars[self.pos];
             self.pos += 1;
             return match ch {
-                ' ' | ',' | ';' | ':' | '!' => Some(LatexNode::Text(ch.to_string())),
+                // \, \; \: are thin/medium spaces, not punctuation
+                ',' | ';' | ':' => Some(LatexNode::Text(" ".to_string())),
+                ' ' | '!' => Some(LatexNode::Text(ch.to_string())),
                 '(' | ')' | '[' | ']' => Some(LatexNode::Text(ch.to_string())),
                 _ => Some(LatexNode::Text(ch.to_string())),
             };
