@@ -374,19 +374,15 @@ fn wrap_with_color(omml_content: &str, hex: &str) -> String {
 
     let mut result = omml_content.to_string();
 
-    // For <m:r><m:rPr>...<m:t> patterns: inject color into <w:rPr>
-    // This handles runs that already have properties
+    // Inject color into existing <w:rPr> blocks
     result = result.replace("<w:rPr>", &format!("<w:rPr>{}", color_tag));
 
-    // For bare <m:r><m:t> without <m:rPr>: add color run properties
-    result = result.replace(
-        "<m:r><m:t>",
-        &format!("<m:r><m:rPr><w:rPr>{}</w:rPr></m:rPr><m:t>", color_tag),
+    // For bare <m:r><m:t> without any <m:rPr>, add italic + color + font
+    let bare_run_replacement = format!(
+        "<m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/><w:i/>{}</w:rPr></m:rPr><m:t>",
+        color_tag
     );
-
-    // For <m:r><m:rPr>...<w:rPr>...<m:t> where rPr exists but no w:rPr wrapper
-    // Handle the pattern from fix_omml that adds <m:rPr><w:rPr> already
-    // The above replacements should cover most cases
+    result = result.replace("<m:r><m:t>", &bare_run_replacement);
 
     result
 }

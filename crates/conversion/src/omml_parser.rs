@@ -191,17 +191,17 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 .collect::<Vec<_>>()
                 .concat();
             let mut result = text;
-            if !color.is_empty() {
-                result = format!("\\textcolor{{{}}}{{{}}}", color, result);
+            if italic {
+                result = format!("\\mathit{{{}}}", result);
             }
             if bold {
                 result = format!("\\mathbf{{{}}}", result);
             }
-            if italic {
-                result = format!("\\mathit{{{}}}", result);
-            }
             if !size.is_empty() {
                 result = format!("\\{}{{{}}}", half_points_to_latex_size(&size), result);
+            }
+            if !color.is_empty() {
+                result = format!("\\textcolor{{{}}}{{{}}}", color, result);
             }
             result
         }
