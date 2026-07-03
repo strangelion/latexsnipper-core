@@ -58,8 +58,7 @@ fn fix_number_letter_confusions(text: &str) -> String {
                 Some(next) => next.is_ascii_digit() || *next == '.' || *next == ',',
                 None => false,
             };
-            let prev_is_numeric =
-                prev_char.is_some_and(|p| p.is_ascii_digit() || p == '.');
+            let prev_is_numeric = prev_char.is_some_and(|p| p.is_ascii_digit() || p == '.');
             if next_is_numeric || prev_is_numeric {
                 output.push('0');
             } else {
@@ -83,8 +82,7 @@ fn fix_number_letter_confusions(text: &str) -> String {
                 Some(next) => next.is_ascii_digit() || *next == '.' || *next == ',',
                 None => false,
             };
-            let prev_is_numeric =
-                prev_char.is_some_and(|p| p.is_ascii_digit() || p == '.');
+            let prev_is_numeric = prev_char.is_some_and(|p| p.is_ascii_digit() || p == '.');
             if next_is_numeric || prev_is_numeric {
                 output.push('5');
             } else {
