@@ -8,7 +8,17 @@ const SUPPORTED_FORMATS: &str = "latex, markdown, typst, html, mathml, omml, jso
 
 #[derive(Parser)]
 #[command(name = "snipper")]
-#[command(about = "LaTeXSnipper Core CLI — Image to LaTeX/Markdown/Typst")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(about = "LaTeXSnipper Core -- Image to LaTeX/Markdown/Typst converter")]
+#[command(long_about = "LaTeXSnipper Core CLI\n\n\
+    A command-line tool for recognizing mathematical formulas in images\n\
+    and converting them to various formats (LaTeX, Markdown, Typst, HTML, MathML, OMML).\n\n\
+    USAGE:\n    \
+    snipper recognize -i image.png -f latex\n    \
+    snipper recognize -i image.png -f markdown -o output.md\n    \
+    snipper parse -l '\\frac{a}{b}'\n    \
+    snipper render -l '\\frac{a}{b}'\n\n\
+    For more information, run 'snipper <command> --help'.")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -16,37 +26,102 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Recognize formulas in an image and export to format
+    /// Recognize formulas in an image and export to a format
+    #[command(long_about = "Recognize mathematical formulas in an image.\n\n\
+        Detects formulas (and optionally text) in the input image,\n\
+        then exports the recognized content to the specified format.\n\n\
+        EXAMPLES:\n    \
+        snipper rec -i scan.png -f latex\n    \
+        snipper recognize -i photo.jpg -f mathml -o output.xml\n    \
+        snipper rec -i page.png -f markdown -o notes.md\n\n\
+        SUPPORTED FORMATS:\n    \
+        latex      - LaTeX source code (default)\n    \
+        markdown   - Markdown with inline math\n    \
+        typst      - Typst markup\n    \
+        html       - HTML with MathJax\n    \
+        mathml     - MathML XML\n    \
+        omml       - Office MathML (Word)\n    \
+        json       - Full AST as JSON")]
     Recognize {
-        /// Input image path
-        #[arg(short, long)]
+        /// Input image path (png, jpg, pdf, bmp, tiff)
+        #[arg(short = 'i', long)]
         input: String,
 
-        /// Output format: latex, markdown, typst, html, json
-        #[arg(short, long, default_value = "latex")]
+        /// Output format (default: latex)
+        #[arg(short = 'f', long, default_value = "latex")]
         format: String,
 
-        /// Output file path (e.g., output.tex, output.typ). If omitted, prints to stdout.
-        #[arg(short, long)]
+        /// Output file path. If omitted, prints to stdout.
+        #[arg(short = 'o', long)]
         output: Option<String>,
     },
 
-    /// Parse LaTeX string to AST
+    /// Shorthand for 'recognize'
+    #[command(visible_alias = "rec")]
+    Rec {
+        /// Input image path
+        #[arg(short = 'i', long)]
+        input: String,
+
+        /// Output format (default: latex)
+        #[arg(short = 'f', long, default_value = "latex")]
+        format: String,
+
+        /// Output file path. If omitted, prints to stdout.
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+    },
+
+    /// Parse a LaTeX string to AST (JSON)
+    #[command(long_about = "Parse a LaTeX string into an Abstract Syntax Tree.\n\n\
+        Outputs the full AST as formatted JSON, useful for debugging\n\
+        and understanding how LaTeXSnipper parses formulas.\n\n\
+        EXAMPLES:\n    \
+        snipper parse -l '\\frac{a}{b}'\n    \
+        snipper parse -l 'E = mc^2'")]
     Parse {
-        #[arg(short, long)]
+        /// LaTeX string to parse
+        #[arg(short = 'l', long)]
         latex: String,
     },
 
-    /// Render AST to LaTeX
+    /// Render a LaTeX string back to LaTeX (roundtrip test)
+    #[command(
+        long_about = "Render a LaTeX string by parsing it to AST and back.\n\n\
+        Useful for testing roundtrip fidelity -- the output should be\n\
+        semantically equivalent to the input, though formatting may differ.\n\n\
+        EXAMPLES:\n    \
+        snipper render -l '\\frac{a}{b}'\n    \
+        snipper render -l 'x^2 + y^2 = r^2'"
+    )]
     Render {
-        #[arg(short, long)]
+        /// LaTeX string to render
+        #[arg(short = 'l', long)]
         latex: String,
     },
 
-    /// Show version info
+    /// Show version, build info, and system details
+    #[command(long_about = "Show detailed version and build information.\n\n\
+        Includes version number, build target, and runtime mode.\n\
+        Use '-v' or '--version' as a flag on the root command for brief output.")]
     Version,
 
-    /// Guess the LaTeX formula (hidden minigame)
+    /// Play the LaTeX Math Rendering Challenge (minigame)
+    #[command(long_about = "Launch the LaTeX Math Rendering Challenge.\n\n\
+        A terminal mini-game where you see ASCII math art and must type\n\
+        the correct LaTeX code. Features 3 difficulty levels, streak\n\
+        bonuses, speed bonuses, and a hint system.\n\n\
+        GAME COMMANDS:\n    \
+        quit   - exit the game\n    \
+        hint   - reveal next character (-50 pts)\n    \
+        skip   - skip current question (-100 pts)\n    \
+        answer - reveal the answer (0 pts)\n\n\
+        SCORING:\n    \
+        Base: 100 pts per correct answer\n    \
+        Streak: +50 pts per consecutive correct answer\n    \
+        Speed: up to +50 pts for fast answers\n    \
+        Hint penalty: -50 pts per hint\n    \
+        Skip penalty: -100 pts")]
     Play,
 }
 
@@ -133,6 +208,11 @@ fn main() {
 
     match cli.command {
         Commands::Recognize {
+            input,
+            format,
+            output,
+        }
+        | Commands::Rec {
             input,
             format,
             output,
@@ -226,7 +306,7 @@ fn main() {
             println!("snipper {}", env!("CARGO_PKG_VERSION"));
             println!("LaTeXSnipper Core -- Real ONNX Runtime Mode");
             println!();
-            println!("[Easter Egg] Try 'snipper play' for a hidden mini-game!");
+            println!("Try 'snipper play' for a hidden mini-game!");
         }
 
         Commands::Play => play_game(),
@@ -234,84 +314,592 @@ fn main() {
 }
 
 fn play_game() {
-    println!("========================================");
-    println!(" LaTeX Formula Guessing Game");
-    println!("========================================");
-    println!("Guess the LaTeX command from the description!");
-    println!("Type 'quit' to exit, 'hint' for a hint.");
-    println!();
+    use std::time::Instant;
 
-    let puzzles = [
-        ("Greek letter for wavelength", "\\lambda"),
-        ("Sum of a series (summation symbol)", "\\sum"),
-        ("Definite integral symbol", "\\int"),
-        ("Square root of x", "\\sqrt{x}"),
-        ("Fraction a over b", "\\frac{a}{b}"),
-        ("Infinity symbol", "\\infty"),
-        ("Partial derivative symbol", "\\partial"),
-        ("Pi (circumference / diameter)", "\\pi"),
-        ("Right arrow", "\\rightarrow"),
-        ("Nabla (gradient operator)", "\\nabla"),
+    // ========================================================================
+    // Puzzle Pool: (ascii_art, answer, hint, difficulty)
+    // difficulty: 1=beginner, 2=intermediate, 3=advanced
+    // ========================================================================
+    struct Puzzle {
+        art: &'static str,
+        answer: &'static str,
+        hint: &'static str,
+        difficulty: u8,
+    }
+
+    let all_puzzles: Vec<Puzzle> = vec![
+        // --- Difficulty 1: Beginner ---
+        Puzzle {
+            art: "  x",
+            answer: "x",
+            hint: "just the letter x",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  a + b",
+            answer: "a+b",
+            hint: "a plus b",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  42",
+            answer: "42",
+            hint: "the number 42",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  E = mc^2",
+            answer: "E=mc^2",
+            hint: "E equals mc squared",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  a^2",
+            answer: "a^2",
+            hint: "a superscript 2",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  x_i",
+            answer: "x_i",
+            hint: "x subscript i",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\pi",
+            answer: "\\pi",
+            hint: "Greek letter pi",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\alpha",
+            answer: "\\alpha",
+            hint: "first Greek letter",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\beta",
+            answer: "\\beta",
+            hint: "second Greek letter",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\gamma",
+            answer: "\\gamma",
+            hint: "third Greek letter",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\infty",
+            answer: "\\infty",
+            hint: "infinity symbol",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\pm",
+            answer: "\\pm",
+            hint: "plus-minus sign",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\times",
+            answer: "\\times",
+            hint: "multiplication sign",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\leq",
+            answer: "\\leq",
+            hint: "less than or equal",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\geq",
+            answer: "\\geq",
+            hint: "greater than or equal",
+            difficulty: 1,
+        },
+        Puzzle {
+            art: "  \\neq",
+            answer: "\\neq",
+            hint: "not equal sign",
+            difficulty: 1,
+        },
+        // --- Difficulty 2: Intermediate ---
+        Puzzle {
+            art: "  a / b\n  ---",
+            answer: "\\frac{a}{b}",
+            hint: "fraction a over b",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  ___\n / 25",
+            answer: "\\sqrt{25}",
+            hint: "square root of 25",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  ___\n / a+b",
+            answer: "\\sqrt{a+b}",
+            hint: "square root of sum",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  n\n  \\ Sigma\n  i=1",
+            answer: "\\sum_{i=1}^{n}",
+            hint: "sum from i=1 to n",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  b\n  \\ Integral\n  a",
+            answer: "\\int_{a}^{b}",
+            hint: "definite integral a to b",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  \\rightarrow",
+            answer: "\\rightarrow",
+            hint: "right arrow",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  \\leftarrow",
+            answer: "\\leftarrow",
+            hint: "left arrow",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  \\theta",
+            answer: "\\theta",
+            hint: "Greek letter theta",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  \\lambda",
+            answer: "\\lambda",
+            hint: "wavelength symbol",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  \\sigma",
+            answer: "\\sigma",
+            hint: "standard deviation",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  \\omega",
+            answer: "\\omega",
+            hint: "angular frequency",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  \\nabla",
+            answer: "\\nabla",
+            hint: "del operator",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  \\partial",
+            answer: "\\partial",
+            hint: "partial derivative",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  a \\cdot b",
+            answer: "a \\cdot b",
+            hint: "dot product notation",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  x \\in R",
+            answer: "x \\in \\mathbb{R}",
+            hint: "x is in reals (use mathbb)",
+            difficulty: 2,
+        },
+        Puzzle {
+            art: "  A \\cup B",
+            answer: "A \\cup B",
+            hint: "A union B",
+            difficulty: 2,
+        },
+        // --- Difficulty 3: Advanced ---
+        Puzzle {
+            art: "    n\n    \\ Sigma   k^2\n    k=1",
+            answer: "\\sum_{k=1}^{n} k^2",
+            hint: "sum of squares",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "       ___\n      / a\n     / ---\n    /  b",
+            answer: "\\sqrt{\\frac{a}{b}}",
+            hint: "square root of fraction",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  d/dx [ f(x) ]",
+            answer: "\\frac{d}{dx} [ f(x) ]",
+            hint: "derivative notation",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  lim\n  x->0  sin(x)/x",
+            answer: "\\lim_{x \\to 0} \\frac{\\sin(x)}{x}",
+            hint: "famous limit",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "    n\n    \\ Prod   i\n    i=1",
+            answer: "\\prod_{i=1}^{n} i",
+            hint: "product notation",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  e^{i\\pi} + 1 = 0",
+            answer: "e^{i\\pi} + 1 = 0",
+            hint: "Euler's identity",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  | \\psi > ",
+            answer: "|\\psi\\rangle",
+            hint: "ket notation (bra-ket)",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  < \\phi | \\psi >",
+            answer: "\\langle \\phi | \\psi \\rangle",
+            hint: "inner product (bra-ket)",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  A^T",
+            answer: "A^T",
+            hint: "matrix transpose",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  det(A)",
+            answer: "\\det(A)",
+            hint: "matrix determinant",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  \\forall x \\in X",
+            answer: "\\forall x \\in X",
+            hint: "for all x in X",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  \\exists x",
+            answer: "\\exists x",
+            hint: "there exists x",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  \\oint E \\cdot dl",
+            answer: "\\oint \\mathbf{E} \\cdot d\\mathbf{l}",
+            hint: "line integral (closed)",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  \\binom{n}{k}",
+            answer: "\\binom{n}{k}",
+            hint: "binomial coefficient",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  a \\equiv b (mod n)",
+            answer: "a \\equiv b \\pmod{n}",
+            hint: "modular congruence",
+            difficulty: 3,
+        },
+        Puzzle {
+            art: "  \\int_0^\\infty e^{-x} dx",
+            answer: "\\int_0^{\\infty} e^{-x} dx",
+            hint: "improper integral",
+            difficulty: 3,
+        },
     ];
 
-    let mut score = 0;
-    let mut total = 0;
+    // ========================================================================
+    // Title Screen
+    // ========================================================================
+    println!();
+    println!("  ╔══════════════════════════════════════════════════╗");
+    println!("  ║       LaTeX Math Rendering Challenge             ║");
+    println!("  ╠══════════════════════════════════════════════════╣");
+    println!("  ║  See the math art below. Type the LaTeX code!    ║");
+    println!("  ║                                                  ║");
+    println!("  ║  Commands:                                       ║");
+    println!("  ║    quit   - exit game                            ║");
+    println!("  ║    hint   - reveal next character (-50 pts)      ║");
+    println!("  ║    skip   - skip question (-100 pts)             ║");
+    println!("  ║    answer - reveal answer (0 pts)                ║");
+    println!("  ║                                                  ║");
+    println!("  ║  Scoring:                                        ║");
+    println!("  ║    Base: 100 pts    Streak bonus: +50 per combo  ║");
+    println!("  ║    Speed bonus: up to +50 pts for fast answers   ║");
+    println!("  ╚══════════════════════════════════════════════════╝");
+    println!();
 
-    for (desc, answer) in &puzzles {
-        total += 1;
-        print!("[{}/{}] {} > ", total, puzzles.len(), desc);
-        io::stdout().flush().unwrap();
+    // ========================================================================
+    // Difficulty Selection
+    // ========================================================================
+    println!("  Select difficulty:");
+    println!("    1) Beginner   - basic symbols and simple expressions");
+    println!("    2) Intermediate - fractions, roots, sums");
+    println!("    3) Advanced   - calculus, linear algebra, logic");
+    println!("    4) Mixed      - all difficulties shuffled");
+    print!("  Choice [1/2/3/4] > ");
+    io::stdout().flush().unwrap();
 
-        let mut guess = String::new();
-        io::stdin().read_line(&mut guess).unwrap();
+    let mut diff_input = String::new();
+    io::stdin().read_line(&mut diff_input).unwrap();
+    let difficulty = match diff_input.trim() {
+        "1" => 1u8,
+        "2" => 2,
+        "3" => 3,
+        _ => 4, // mixed
+    };
 
-        let trimmed = guess.trim().to_lowercase();
-        if trimmed == "quit" {
-            println!();
-            println!("Thanks for playing! Score: {}/{}", score, total - 1);
-            return;
-        }
+    // Filter and shuffle puzzles
+    let mut puzzles: Vec<&Puzzle> = if difficulty == 4 {
+        all_puzzles.iter().collect()
+    } else {
+        all_puzzles
+            .iter()
+            .filter(|p| p.difficulty == difficulty)
+            .collect()
+    };
 
-        if trimmed == "hint" {
-            let hint_end = 4.min(answer.len());
-            println!("  (Hint: starts with '{}')", &answer[..hint_end]);
-            print!("  Try again > ");
-            io::stdout().flush().unwrap();
-            guess.clear();
-            io::stdin().read_line(&mut guess).unwrap();
-            let trimmed = guess.trim().to_lowercase();
-            if trimmed == "quit" {
-                println!();
-                println!("Thanks for playing! Score: {}/{}", score, total - 1);
-                return;
-            }
-            if trimmed == *answer {
-                println!("  Correct! (+1)");
-                score += 1;
-                continue;
-            } else {
-                println!("  Wrong! Answer: {}", answer);
-                continue;
-            }
-        }
-
-        if trimmed == *answer {
-            println!("  Correct! (+1)");
-            score += 1;
-        } else {
-            println!("  Wrong! Answer: {}", answer);
-        }
+    // Simple seeded shuffle using Fisher-Yates with a basic PRNG
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let mut rng_state = seed;
+    for i in (1..puzzles.len()).rev() {
+        rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let j = (rng_state >> 33) as usize % (i + 1);
+        puzzles.swap(i, j);
     }
+
+    let total_rounds = puzzles.len().min(15); // Cap at 15 rounds
+    let puzzles = &puzzles[..total_rounds];
+
+    // ========================================================================
+    // Game Loop
+    // ========================================================================
+    let mut score: i64 = 0;
+    let mut streak: u32 = 0;
+    let mut correct: u32 = 0;
+    let mut hints_used: u32 = 0;
+    let game_start = Instant::now();
 
     println!();
-    println!("========================================");
-    println!(" Game Over! Final score: {}/{}", score, total);
-    println!("========================================");
-    if score == total {
-        println!(" Perfect! You're a LaTeX master!");
-    } else if score >= total / 2 {
-        println!(" Not bad, keep practicing!");
-    } else {
-        println!(" Time to brush up on your LaTeX!");
+    println!("  Starting {} rounds. Good luck!", total_rounds);
+    println!();
+
+    for (round, puzzle) in puzzles.iter().enumerate() {
+        let round_num = round + 1;
+        let diff_label = match puzzle.difficulty {
+            1 => "Beginner",
+            2 => "Intermediate",
+            _ => "Advanced",
+        };
+
+        // Header
+        println!(
+            "  ┌─ Round {}/{} ─────────────────────────────────",
+            round_num, total_rounds
+        );
+        println!("  │ Difficulty: {}", diff_label);
+        if streak >= 3 {
+            println!("  │ Streak: {}x (+{} bonus)", streak, streak * 50);
+        }
+        println!("  │");
+        println!("  │  What is the LaTeX for this?");
+
+        // Render ASCII art
+        for line in puzzle.art.lines() {
+            println!("  │    {}", line);
+        }
+        println!("  │");
+
+        // Hint tracking
+        let mut revealed_hint = false;
+        let mut hint_chars = 0usize;
+
+        // Input loop for this round
+        let round_start = Instant::now();
+        let mut answered = false;
+
+        while !answered {
+            print!("  └─> ");
+            io::stdout().flush().unwrap();
+
+            let mut guess = String::new();
+            io::stdin().read_line(&mut guess).unwrap();
+            let trimmed = guess.trim();
+
+            match trimmed {
+                "quit" | "q" | "exit" => {
+                    println!();
+                    print_final_stats(score, correct, total_rounds as u32, hints_used, &game_start);
+                    return;
+                }
+                "hint" | "h" => {
+                    if hint_chars < puzzle.answer.len() {
+                        hint_chars += 1;
+                        revealed_hint = true;
+                        let partial: String = puzzle.answer.chars().take(hint_chars).collect();
+                        let penalty = 50;
+                        score -= penalty;
+                        hints_used += 1;
+                        println!("  [HINT] (cost: -{} pts): {}", penalty, partial);
+                        println!("  [HINT] Full hint: {}", puzzle.hint);
+                    } else {
+                        println!(
+                            "  [HINT] No more characters to reveal. Full hint: {}",
+                            puzzle.hint
+                        );
+                    }
+                    continue;
+                }
+                "skip" | "s" => {
+                    score -= 100;
+                    streak = 0;
+                    println!("  [SKIP] Skipped (-100 pts). Answer was: {}", puzzle.answer);
+                    println!();
+                    break;
+                }
+                "answer" | "a" => {
+                    println!("  [ANSWER] {}", puzzle.answer);
+                    streak = 0;
+                    println!();
+                    break;
+                }
+                _ => {}
+            }
+
+            // Normalize: remove backslash for comparison flexibility
+            let normalize = |s: &str| -> String {
+                s.chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect::<String>()
+                    .to_lowercase()
+            };
+
+            let guess_norm = normalize(trimmed);
+            let answer_norm = normalize(puzzle.answer);
+
+            if guess_norm == answer_norm {
+                // Correct!
+                let elapsed = round_start.elapsed().as_secs();
+                let speed_bonus: i64 = if elapsed <= 3 {
+                    50
+                } else if elapsed <= 8 {
+                    30
+                } else if elapsed <= 15 {
+                    10
+                } else {
+                    0
+                };
+                streak += 1;
+                let streak_bonus = (streak.saturating_sub(1)) as i64 * 50;
+                let base = 100i64;
+                let total_pts = base + streak_bonus + speed_bonus;
+                score += total_pts;
+                correct += 1;
+
+                println!();
+                println!(
+                    "  [CORRECT] +{} pts (base:{} streak:{} speed:{})",
+                    total_pts, base, streak_bonus, speed_bonus
+                );
+                if streak >= 3 {
+                    println!("  [STREAK] {}x streak! Keep it going!", streak);
+                }
+                println!();
+                answered = true;
+            } else {
+                // Check Levenshtein for near-miss
+                let dist = levenshtein_distance(&guess_norm, &answer_norm);
+                if dist <= 2 && !guess_norm.is_empty() {
+                    println!("  [CLOSE] But not quite. (edit distance: {})", dist);
+                } else if revealed_hint {
+                    println!("  [WRONG] Try again or type 'skip'.");
+                } else {
+                    println!("  [WRONG] Try again, or type 'hint' for help.");
+                }
+            }
+        }
     }
+
+    // ========================================================================
+    // Final Stats
+    // ========================================================================
+    print_final_stats(score, correct, total_rounds as u32, hints_used, &game_start);
+}
+
+fn print_final_stats(
+    score: i64,
+    correct: u32,
+    total: u32,
+    hints_used: u32,
+    start: &std::time::Instant,
+) {
+    let elapsed = start.elapsed();
+    let mins = elapsed.as_secs() / 60;
+    let secs = elapsed.as_secs() % 60;
+    let accuracy = if total > 0 {
+        (correct as f64 / total as f64 * 100.0) as u32
+    } else {
+        0
+    };
+
+    let rank = match score {
+        s if s >= 2000 => "Grandmaster",
+        s if s >= 1500 => "LaTeX Wizard",
+        s if s >= 1000 => "Math Artist",
+        s if s >= 500 => "Formula Apprentice",
+        s if s >= 200 => "Symbol Explorer",
+        _ => "Keep Practicing!",
+    };
+
+    println!("  ╔══════════════════════════════════════════════════╗");
+    println!("  ║              Game Over!                          ║");
+    println!("  ╠══════════════════════════════════════════════════╣");
+    println!(
+        "  ║  Score:       {:>6} pts                          ║",
+        score
+    );
+    println!(
+        "  ║  Correct:     {}/{} ({:>3}%)                      ║",
+        correct, total, accuracy
+    );
+    println!(
+        "  ║  Hints used:  {:>6}                               ║",
+        hints_used
+    );
+    println!(
+        "  ║  Time:        {:>2}:{:02}                               ║",
+        mins, secs
+    );
+    println!("  ║  Rank:        {:<34} ║", rank);
+    println!("  ╚══════════════════════════════════════════════════╝");
+    println!();
+
+    // ASCII art based on score
+    if score >= 1500 {
+        println!("       *  *  *  *  *");
+        println!("      *  LA TEX  *");
+        println!("       *  MASTER *");
+        println!("        * * * * *");
+    } else if score >= 500 {
+        println!("      \\frac{{success}}{{practice}} = \\infty");
+    } else {
+        println!("      Keep going! \\int practice \\, dx = mastery");
+    }
+    println!();
 }

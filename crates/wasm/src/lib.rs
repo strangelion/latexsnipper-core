@@ -3,17 +3,126 @@ use latexsnipper_conversion::{
     Converter, HtmlConverter, LatexConverter, MarkdownBlockConverter, MarkdownInlineConverter,
     MathmlConverter, OmmlConverter, TypstConverter,
 };
+use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
+use latexsnipper_image::PixelFormat;
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::markdown::MarkdownRenderer;
 use latexsnipper_syntax::typst::TypstRenderer;
 use latexsnipper_syntax::{Parser as _, Renderer as _};
+use latexsnipper_tract::TractBackend;
 use wasm_bindgen::prelude::*;
+
+mod model_store;
 
 /// Initialize the WASM module.
 #[wasm_bindgen]
 pub fn init() {
     log::info!("LaTeXSnipper WASM initialized");
 }
+
+// ============================================================================
+// Model Management
+// ============================================================================
+
+/// Load a model from bytes (fetched by JS).
+///
+/// Models are stored by name and can be retrieved later for inference.
+/// Call this after fetching model files with `fetch()` in JavaScript.
+#[wasm_bindgen]
+pub fn load_model(name: &str, bytes: &[u8]) {
+    model_store::store_model(name, bytes.to_vec());
+}
+
+/// Check if a model is loaded.
+#[wasm_bindgen]
+pub fn is_model_loaded(name: &str) -> bool {
+    model_store::has_model(name)
+}
+
+/// Get list of loaded model names as a JSON array string.
+#[wasm_bindgen]
+pub fn loaded_models() -> String {
+    let models = model_store::list_models();
+    serde_json::to_string(&models).unwrap_or_default()
+}
+
+// ============================================================================
+// Image Recognition
+// ============================================================================
+
+/// Recognize an image and return the result as Document JSON.
+///
+/// # Arguments
+/// * `width` - Image width in pixels
+/// * `height` - Image height in pixels
+/// * `pixels` - Raw pixel data (RGBA format, 4 bytes per pixel)
+/// * `mode` - Recognition mode: "formula", "text", "mixed", "handwriting", "table"
+///
+/// # Returns
+/// JSON string containing the recognized Document.
+///
+/// # Example (JavaScript)
+/// ```js
+/// const imageData = canvas.getImageData(0, 0, w, h);
+/// const docJson = recognize(w, h, new Uint8Array(imageData.data.buffer), "formula");
+/// const latex = convert_document(docJson, "latex");
+/// ```
+#[wasm_bindgen]
+pub fn recognize(width: u32, height: u32, pixels: &[u8], mode: &str) -> Result<String, JsValue> {
+    // Create image from RGBA pixels
+    let expected_len = (width * height * 4) as usize;
+    if pixels.len() != expected_len {
+        return Err(JsValue::from_str(&format!(
+            "Pixel data length mismatch: expected {} bytes, got {}",
+            expected_len,
+            pixels.len()
+        )));
+    }
+
+    let image =
+        latexsnipper_image::SnipperImage::new(width, height, PixelFormat::Rgba, pixels.to_vec());
+    let recognize_mode = parse_mode(mode)?;
+
+    // Create engine config (models_dir is not used in WASM, models come from store)
+    let config = EngineConfig::with_models_dir(std::path::PathBuf::from("/dev/null"));
+    let engine = SnipperEngine::new(config, Box::new(TractBackend::new(None)));
+
+    // Run recognition in tokio runtime
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(err_to_js)?;
+
+    let doc = rt
+        .block_on(engine.recognize(image, recognize_mode))
+        .map_err(err_to_js)?;
+
+    serde_json::to_string(&doc).map_err(err_to_js)
+}
+
+/// Recognize an image from a Uint8Array of pixel data.
+///
+/// This is a convenience wrapper that takes the mode as a string.
+#[wasm_bindgen]
+pub fn recognize_formula(width: u32, height: u32, pixels: &[u8]) -> Result<String, JsValue> {
+    recognize(width, height, pixels, "formula")
+}
+
+/// Recognize text in an image.
+#[wasm_bindgen]
+pub fn recognize_text(width: u32, height: u32, pixels: &[u8]) -> Result<String, JsValue> {
+    recognize(width, height, pixels, "text")
+}
+
+/// Recognize mixed content (formulas + text) in an image.
+#[wasm_bindgen]
+pub fn recognize_mixed(width: u32, height: u32, pixels: &[u8]) -> Result<String, JsValue> {
+    recognize(width, height, pixels, "mixed")
+}
+
+// ============================================================================
+// Existing AST/Conversion APIs (unchanged)
+// ============================================================================
 
 /// Parse a LaTeX string and return the Document as a JS object.
 #[wasm_bindgen]
@@ -94,13 +203,7 @@ pub fn available_formats() -> String {
 }
 
 /// Build a Document from JSON and export to the specified format.
-/// This is the main "AST → Export" function for WASM.
-///
-/// Usage:
-/// ```js
-/// const doc = { pages: [{ blocks: [{ type: "Formula", formula: { source: { format: "Latex", content: "E=mc^2" } } }] }] };
-/// const latex = convert_document(JSON.stringify(doc), "latex");
-/// ```
+/// This is the main "AST -> Export" function for WASM.
 #[wasm_bindgen]
 pub fn convert_from_json(doc_json: &str, format: &str) -> Result<String, JsValue> {
     convert_document(doc_json, format)
@@ -108,12 +211,6 @@ pub fn convert_from_json(doc_json: &str, format: &str) -> Result<String, JsValue
 
 /// Create a Document with a formula and export to format.
 /// Convenience function for simple use cases.
-///
-/// Usage:
-/// ```js
-/// const latex = formula_to_document("E = mc^2", "latex");
-/// const md = formula_to_document("\\frac{a}{b}", "markdown_block");
-/// ```
 #[wasm_bindgen]
 pub fn formula_to_document(latex: &str, format: &str) -> Result<String, JsValue> {
     let doc = Document {
@@ -147,6 +244,25 @@ pub fn health_check() -> String {
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+fn parse_mode(mode: &str) -> Result<RecognizeMode, JsValue> {
+    match mode.to_lowercase().as_str() {
+        "formula" | "f" => Ok(RecognizeMode::Formula),
+        "text" | "t" => Ok(RecognizeMode::Text),
+        "mixed" | "m" => Ok(RecognizeMode::Mixed),
+        "handwriting" | "hw" => Ok(RecognizeMode::Handwriting),
+        "table" | "tbl" => Ok(RecognizeMode::Table),
+        "formula_layout" | "fl" => Ok(RecognizeMode::FormulaLayout),
+        _ => Err(JsValue::from_str(&format!(
+            "Unknown recognition mode: '{}'. Use 'formula', 'text', 'mixed', 'handwriting', or 'table'.",
+            mode
+        ))),
+    }
 }
 
 fn err_to_js<E: std::fmt::Display>(e: E) -> JsValue {

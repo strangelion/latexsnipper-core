@@ -20,6 +20,7 @@ members = [
     "crates/wasm",
     "crates/cli",
     "crates/tests",
+    "crates/tract",
 ]
 
 [workspace.package]

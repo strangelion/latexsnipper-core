@@ -1,0 +1,14 @@
+[package]
+name = "latexsnipper-tract"
+description = "Tract-based ONNX RuntimeBackend — WASM-compatible"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-runtime = { path = "../runtime" }
+latexsnipper-tensor = { path = "../tensor" }
+tract-onnx = "0.21"
+tract-core = "0.21"
+ndarray = "0.16"
+log.workspace = true

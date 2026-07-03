@@ -1,6 +1,6 @@
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
-use latexsnipper_runtime::InferenceSession;
+use latexsnipper_runtime::{InferenceSession, RuntimeBackend};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -26,6 +26,8 @@ pub struct PipelineContext {
     pub cancelled: bool,
     /// Models directory path.
     pub models_dir: Option<std::path::PathBuf>,
+    /// Runtime backend for inference sessions (injected by engine).
+    pub backend: Option<Arc<dyn RuntimeBackend>>,
     /// Cached ONNX sessions for reuse across nodes.
     pub sessions: HashMap<String, CachedSession>,
 }
@@ -40,6 +42,7 @@ impl PipelineContext {
             metadata: HashMap::new(),
             cancelled: false,
             models_dir: None,
+            backend: None,
             sessions: HashMap::new(),
         }
     }

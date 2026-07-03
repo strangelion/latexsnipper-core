@@ -1,7 +1,7 @@
 use log::info;
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use latexsnipper_ast::*;
 use latexsnipper_foundation::Result;
@@ -24,7 +24,7 @@ struct CachedSession {
 /// Engine only assembles PipelineGraph and runs it — all logic lives in Nodes.
 pub struct SnipperEngine {
     config: EngineConfig,
-    runtime: Box<dyn RuntimeBackend>,
+    runtime: Arc<dyn RuntimeBackend>,
     model_manager: ModelManager,
     job_queue: JobQueue,
     _sessions: Mutex<HashMap<String, CachedSession>>,
@@ -48,7 +48,7 @@ impl SnipperEngine {
         let model_manager = ModelManager::new(config.models_dir.clone());
         Self {
             config,
-            runtime,
+            runtime: Arc::from(runtime),
             model_manager,
             job_queue: JobQueue::new(),
             _sessions: Mutex::new(HashMap::new()),
@@ -290,6 +290,7 @@ impl SnipperEngine {
         let graph = self.build_pipeline(mode);
         let mut ctx = PipelineContext::with_image(image);
         ctx.models_dir = Some(self.config.models_dir.clone());
+        ctx.backend = Some(self.runtime.clone());
 
         graph.run(&mut ctx).await?;
 

@@ -10,6 +10,8 @@ pub struct ModelHandle {
     variant: String,
     #[serde(skip)]
     model_path: Option<PathBuf>,
+    #[serde(skip)]
+    model_bytes: Option<Vec<u8>>,
 }
 
 impl ModelHandle {
@@ -23,6 +25,7 @@ impl ModelHandle {
             category: category.into(),
             variant: variant.into(),
             model_path: None,
+            model_bytes: None,
         }
     }
 
@@ -38,6 +41,18 @@ impl ModelHandle {
             category: file_stem.clone(),
             variant: file_stem,
             model_path: Some(path),
+            model_bytes: None,
+        }
+    }
+
+    /// Create with model bytes loaded in memory (for WASM byte-based loading).
+    pub fn with_bytes(id: impl Into<String>, bytes: Vec<u8>) -> Self {
+        Self {
+            id: id.into(),
+            category: String::new(),
+            variant: String::new(),
+            model_path: None,
+            model_bytes: Some(bytes),
         }
     }
 
@@ -52,6 +67,9 @@ impl ModelHandle {
     }
     pub fn model_path(&self) -> Option<&Path> {
         self.model_path.as_deref()
+    }
+    pub fn model_bytes(&self) -> Option<&[u8]> {
+        self.model_bytes.as_deref()
     }
 }
 

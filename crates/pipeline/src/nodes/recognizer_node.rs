@@ -6,7 +6,8 @@ use latexsnipper_inference::formula_lines::split_formula_line_groups;
 use latexsnipper_inference::{
     load_keys, recognize_formula, recognize_text_with_keys, RecognitionParams, TextRecParams,
 };
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
+use std::sync::Arc;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -43,9 +44,10 @@ impl RecognizerNode {
         }
     }
 
-    fn create_backend(models: &std::path::Path) -> Result<OnnxRuntimeBackend> {
-        OnnxRuntimeBackend::new(models.to_path_buf())
-            .map_err(|e| SnipperError::Runtime(format!("Failed to create ONNX backend: {}", e)))
+    fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
+        ctx.backend
+            .clone()
+            .ok_or_else(|| SnipperError::Runtime("No backend configured".into()))
     }
 }
 
@@ -108,7 +110,7 @@ impl RecognizerNode {
             .find_tokenizer_file(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
 
-        let backend = Self::create_backend(models)?;
+        let backend = Self::get_backend(ctx)?;
         let enc_handle = ModelHandle::with_path("encoder", encoder_path);
         let dec_handle = ModelHandle::with_path("decoder", decoder_path);
 
@@ -247,7 +249,7 @@ impl RecognizerNode {
             }
         };
 
-        let backend = Self::create_backend(models)?;
+        let backend = Self::get_backend(ctx)?;
         let handle = ModelHandle::with_path("text-rec", rec_model.model_path);
 
         let session = if let Some(s) = ctx.get_session("text_rec") {

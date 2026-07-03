@@ -5,7 +5,8 @@ use latexsnipper_inference::{
     filter_handwriting_detections, filter_table_detections, group_formula_detections,
     DetectionParams, HandwritingDetParams, TableDetParams, TextDetParams,
 };
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
+use std::sync::Arc;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -81,10 +82,10 @@ impl PipelineNode for DetectorNode {
 }
 
 impl DetectorNode {
-    /// Create an ONNX runtime backend for the given models directory.
-    fn create_backend(models: &std::path::Path) -> Result<OnnxRuntimeBackend> {
-        OnnxRuntimeBackend::new(models.to_path_buf())
-            .map_err(|e| SnipperError::Runtime(format!("Failed to create ONNX backend: {}", e)))
+    fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
+        ctx.backend
+            .clone()
+            .ok_or_else(|| SnipperError::Runtime("No backend configured".into()))
     }
 
     async fn detect_formulas(
@@ -107,8 +108,8 @@ impl DetectorNode {
             .ok_or_else(|| SnipperError::Model("Formula detection model not found".into()))?;
         let det_handle = ModelHandle::with_path("formula-det", det_model_path);
 
-        // Use real ONNX backend if available, fallback to stub
-        let backend = Self::create_backend(models)?;
+        // Use backend from context (injected by engine)
+        let backend = Self::get_backend(ctx)?;
         let session = if let Some(s) = ctx.get_session("formula_det") {
             s
         } else {
@@ -176,8 +177,8 @@ impl DetectorNode {
 
         let det_handle = ModelHandle::with_path("text-det", det_model_path);
 
-        // Use real ONNX backend
-        let backend = Self::create_backend(models)?;
+        // Use backend from context
+        let backend = Self::get_backend(ctx)?;
         let session = if let Some(s) = ctx.get_session("text_det") {
             s
         } else {
@@ -233,7 +234,7 @@ impl DetectorNode {
             .ok_or_else(|| SnipperError::Model("Handwriting detection model not found".into()))?;
         let det_handle = ModelHandle::with_path("handwriting-det", det_model_path);
 
-        let backend = Self::create_backend(models)?;
+        let backend = Self::get_backend(ctx)?;
         let session = if let Some(s) = ctx.get_session("handwriting_det") {
             s
         } else {
@@ -293,7 +294,7 @@ impl DetectorNode {
             .ok_or_else(|| SnipperError::Model("Table detection model not found".into()))?;
         let det_handle = ModelHandle::with_path("table-det", det_model_path);
 
-        let backend = Self::create_backend(models)?;
+        let backend = Self::get_backend(ctx)?;
         let session = if let Some(s) = ctx.get_session("table_det") {
             s
         } else {

@@ -8,7 +8,7 @@ use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, load_keys,
     recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams, TextRecParams,
 };
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -38,9 +38,10 @@ impl TableRecognizerNode {
         }
     }
 
-    fn create_backend(models: &std::path::Path) -> Result<OnnxRuntimeBackend> {
-        OnnxRuntimeBackend::new(models.to_path_buf())
-            .map_err(|e| SnipperError::Runtime(format!("Failed to create ONNX backend: {}", e)))
+    fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
+        ctx.backend
+            .clone()
+            .ok_or_else(|| SnipperError::Runtime("No backend configured".into()))
     }
 }
 
@@ -99,10 +100,10 @@ impl TableRecognizerNode {
         let mut table_blocks = Vec::new();
 
         // Load models ONCE (with ctx session caching) for all tables
-        let backend = Self::create_backend(models)?;
-        let formula_det_session = self.load_formula_det_session(ctx, &backend, models)?;
-        let formula_rec_session = self.load_formula_rec_session(ctx, &backend, models)?;
-        let text_rec_session = self.load_text_rec_session(ctx, &backend, models)?;
+        let backend = Self::get_backend(ctx)?;
+        let formula_det_session = self.load_formula_det_session(ctx, &*backend, models)?;
+        let formula_rec_session = self.load_formula_rec_session(ctx, &*backend, models)?;
+        let text_rec_session = self.load_text_rec_session(ctx, &*backend, models)?;
 
         for structure_val in &structures_array {
             if let Some(table_block) = self
