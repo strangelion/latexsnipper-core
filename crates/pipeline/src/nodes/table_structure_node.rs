@@ -121,7 +121,7 @@ impl PipelineNode for TableStructureNode {
                 let h = rect_val.get("h").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
 
                 let table_rect = Rect::new(x, y, w, h);
-                let cropped = operations::crop(&image, table_rect.clone());
+                let cropped = operations::crop(&image, table_rect);
 
                 let grid = if let Some(ref sess) = backend_session {
                     recognize_table_structure(&cropped, &self.backend, Some(&**sess))?

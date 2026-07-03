@@ -223,10 +223,7 @@ fn looks_like_formula(text: &str) -> bool {
     }
 
     // Dense notation without spaces: "3x+2=5" or "a+b"
-    let has_dense_math =
-        text.len() >= 3 && !text.contains(' ') && (text.contains('+') || text.contains('='));
-
-    has_dense_math
+    text.len() >= 3 && !text.contains(' ') && (text.contains('+') || text.contains('='))
 }
 
 #[cfg(test)]

@@ -13,6 +13,10 @@ use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, Ru
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 
+type InferenceArc = Arc<Box<dyn latexsnipper_runtime::InferenceSession>>;
+type FormulaRecSession = (InferenceArc, InferenceArc, std::path::PathBuf);
+type TextRecSession = (InferenceArc, std::path::PathBuf);
+
 /// Recognizes content in table cells.
 ///
 /// For each cell in the parsed table structure, this node:
@@ -128,16 +132,9 @@ impl TableRecognizerNode {
         &self,
         image: latexsnipper_image::SnipperImage,
         structure_val: &serde_json::Value,
-        formula_det_session: &Option<Arc<Box<dyn latexsnipper_runtime::InferenceSession>>>,
-        formula_rec_session: &Option<(
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            std::path::PathBuf,
-        )>,
-        text_rec_session: &Option<(
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            std::path::PathBuf,
-        )>,
+        formula_det_session: &Option<InferenceArc>,
+        formula_rec_session: &Option<FormulaRecSession>,
+        text_rec_session: &Option<TextRecSession>,
     ) -> Result<Option<Block>> {
         let table_rect = structure_val
             .get("rect")
@@ -185,15 +182,15 @@ impl TableRecognizerNode {
                 .and_then(|c| c.as_u64())
                 .unwrap_or(1) as u32;
 
-            let cell_rect = cell_val.get("rect").and_then(|r| {
+            let cell_rect = cell_val.get("rect").map(|r| {
                 let x = r.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
                 let y = r.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
                 let w = r.get("w").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
                 let h = r.get("h").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                Some(Rect::new(x, y, w, h))
+                Rect::new(x, y, w, h)
             });
 
-            let geometry = cell_rect.clone();
+            let geometry = cell_rect;
             let source = Some(SourceInfo::new());
 
             // Recognize cell content
@@ -270,13 +267,7 @@ impl TableRecognizerNode {
         ctx: &mut PipelineContext,
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
-    ) -> Result<
-        Option<(
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            std::path::PathBuf,
-        )>,
-    > {
+    ) -> Result<Option<FormulaRecSession>> {
         let enc_path = models.join("formula-rec/trocr-deit/encoder_model.onnx");
         let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
         let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
@@ -314,12 +305,7 @@ impl TableRecognizerNode {
         ctx: &mut PipelineContext,
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
-    ) -> Result<
-        Option<(
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            std::path::PathBuf,
-        )>,
-    > {
+    ) -> Result<Option<TextRecSession>> {
         // Check cache
         if let Some(s) = ctx.get_session("text_rec") {
             let keys_path = self.find_text_rec_keys(models);
@@ -367,16 +353,9 @@ impl TableRecognizerNode {
         &self,
         image: &latexsnipper_image::SnipperImage,
         rect: &Rect,
-        formula_det: &Option<Arc<Box<dyn latexsnipper_runtime::InferenceSession>>>,
-        formula_rec: &Option<(
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            std::path::PathBuf,
-        )>,
-        text_rec: &Option<(
-            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
-            std::path::PathBuf,
-        )>,
+        formula_det: &Option<InferenceArc>,
+        formula_rec: &Option<FormulaRecSession>,
+        text_rec: &Option<TextRecSession>,
     ) -> Vec<Inline> {
         let w = rect.width as u32;
         let h = rect.height as u32;
@@ -385,7 +364,7 @@ impl TableRecognizerNode {
             return vec![];
         }
 
-        let cropped = operations::crop(image, rect.clone());
+        let cropped = operations::crop(image, *rect);
 
         // Try formula detection first
         if let Some(ref det_session) = formula_det {
