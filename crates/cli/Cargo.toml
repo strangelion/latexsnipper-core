@@ -3,6 +3,7 @@ name = "latexsnipper-cli"
 description = "CLI tool — snipper recognize/export"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [[bin]]
 name = "snipper"

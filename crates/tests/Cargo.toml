@@ -3,6 +3,7 @@ name = "latexsnipper-tests"
 description = "Unified test suite for all latexsnipper crates"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [[test]]
 name = "all_tests"

@@ -3,6 +3,7 @@ name = "latexsnipper-plugin"
 description = "Plugin API — extend Core capabilities with standard interfaces"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 latexsnipper-foundation = { path = "../foundation" }

@@ -130,20 +130,20 @@ Engine
 ![Pipeline](assets/pipeline.svg)
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          Recognition Pipeline                               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐             │
-│   │  Decode   │───▶│Normalize │───▶│  Layout  │───▶│  Region  │             │
-│   │          │    │          │    │Detection │    │ Proposal │             │
-│   └──────────┘    └──────────┘    └──────────┘    └──────────┘             │
-│        │                                               │                    │
-│        │              ┌────────────────────────────────┘                    │
-│        │              │                                                     │
-│        │              ▼                                                     │
-│        │         ┌──────────────────────────────────────┐                  │
-│        │         │                                      │                  │
+┌───────────────────────────────────────────────────────────────────────────┐
+│                        Recognition Pipeline                               │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐             │
+│  │  Decode  │──▶│Normalize │──▶│  Layout  │──▶│  Region  │             │
+│  │          │    │          │    │Detection │    │ Proposal │             │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘             │
+│        │                                             │                    │
+│        │            ┌────────────────────────────────┘                    │
+│        │            │                                                     │
+│        │            ▼                                                     │
+│        │         ┌─────────────────────────────────────┐                  │
+│        │         │                                     │                  │
 │        │         │  ┌─────────────┐  ┌─────────────┐   │                  │
 │        │         │  │   Formula   │  │    Text     │   │                  │
 │        │         │  │ Recognition │  │ Recognition │   │                  │
@@ -161,19 +161,19 @@ Engine
 │        │                          │                                       │
 │        │                          ▼                                       │
 │        │                  ┌──────────────┐                                │
-│        └─────────────────▶│ Document AST │                                │
+│        └────────────────▶│ Document AST │                                │
 │                           └──────┬───────┘                                │
 │                                  │                                        │
 │                                  ▼                                        │
 │                           ┌──────────┐    ┌──────────┐                    │
-│                           │Conversion│───▶│  Export  │                    │
+│                           │Conversion│──▶│  Export  │                    │
 │                           └──────────┘    └──────────┘                    │
-│                                  │              │                          │
-│                           LaTeX/OMML        SVG/Text/PDF                   │
-│                           MathML/Typst                                     │
-│                           Markdown/HTML                                    │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+│                                 │              │                          │
+│                          LaTeX/OMML        SVG/Text/PDF                   │
+│                          MathML/Typst                                     │
+│                          Markdown/HTML                                    │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -201,8 +201,8 @@ Engine
 | **Plugin** | ✅ | Plugin trait, Registry, TransformPlugin |
 | **FFI** | ✅ | Android JNI + iOS C FFI |
 | **WASM** | ✅ | Full parse/render/convert/recognize bindings |
-| **CLI** | ✅ | recognize/parse/render/version commands |
-| **Export** | 🟡 | SVG/Text available, PDF basic implementation |
+| **CLI** | ✅ | recognize/parse/render/version commands, file export (`-o output.tex`), format hints |
+| **Export** | ✅ | SVG/Text/PDF with printpdf, headings, tables, lists, code, formulas, page selection |
 
 ### Planned
 
@@ -229,7 +229,7 @@ crates/
 ├── pipeline/       ✅ Node-based async pipeline
 ├── syntax/         ✅ LaTeX/Typst/Markdown Parser + Renderer
 ├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
-├── export/         🟡 RenderTree → SVG/Text/PDF (PDF basic impl)
+├── export/         ✅ RenderTree → SVG/Text/PDF (printpdf), page selection
 ├── engine/         ✅ SnipperEngine + JobQueue + Service
 ├── plugin/         ✅ Plugin trait, Registry
 ├── mock/           ✅ Fake implementations for testing
@@ -243,12 +243,38 @@ crates/
 
 ## Getting Started
 
-```bash
-# Build
-cargo build
+### Install CLI
 
-# Run CLI
-cargo run -p latexsnipper-cli -- parse --latex '$\frac{a+b}{c}$'
+```bash
+# From crates.io
+cargo install latexsnipper-cli
+
+# Or build from source
+cargo build --release -p latexsnipper-cli
+```
+
+### Use as Library
+
+```toml
+[dependencies]
+latexsnipper-pipeline = "1.0"
+```
+
+```rust
+use latexsnipper_pipeline::sdk::Snipper;
+
+let snipper = Snipper::from_file("input.png")?;
+let latex = snipper.to_latex()?;
+```
+
+### Run Examples
+
+```bash
+# Parse LaTeX
+snipper parse --latex '$\frac{a+b}{c}$'
+
+# Recognize from image
+snipper recognize -i image.png -f latex -o output.tex
 
 # Run all tests
 cargo test --workspace

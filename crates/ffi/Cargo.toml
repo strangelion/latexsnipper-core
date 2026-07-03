@@ -3,6 +3,7 @@ name = "latexsnipper-ffi"
 description = "FFI bindings — Android JNI, iOS C FFI"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 latexsnipper-foundation = { path = "../foundation" }

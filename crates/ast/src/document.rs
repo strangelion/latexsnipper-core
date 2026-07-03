@@ -81,6 +81,57 @@ impl Document {
     pub fn get_page_mut(&mut self, index: usize) -> Option<&mut Page> {
         self.pages.get_mut(index)
     }
+
+    /// Filter pages by 0-based indices, returning a new Document.
+    pub fn filter_pages(&self, indices: &[usize]) -> Self {
+        let pages: Vec<Page> = indices
+            .iter()
+            .filter_map(|&i| self.pages.get(i).cloned())
+            .collect();
+        Self {
+            metadata: self.metadata.clone(),
+            pages,
+            id_gen: NodeIdGenerator::new(),
+        }
+    }
+
+    /// Filter pages by 1-based page numbers, returning a new Document.
+    pub fn filter_page_numbers(&self, numbers: &[u32]) -> Self {
+        let pages: Vec<Page> = self
+            .pages
+            .iter()
+            .filter(|p| p.page_number.map(|n| numbers.contains(&n)).unwrap_or(false))
+            .cloned()
+            .collect();
+        Self {
+            metadata: self.metadata.clone(),
+            pages,
+            id_gen: NodeIdGenerator::new(),
+        }
+    }
+
+    /// Parse a page range string like "1-3,5,8-10" into sorted 1-based page numbers.
+    pub fn parse_page_range(range: &str) -> Vec<u32> {
+        let mut result = Vec::new();
+        for part in range.split(',') {
+            let part = part.trim();
+            if let Some((start_str, end_str)) = part.split_once('-') {
+                if let (Ok(start), Ok(end)) = (
+                    start_str.trim().parse::<u32>(),
+                    end_str.trim().parse::<u32>(),
+                ) {
+                    for n in start..=end {
+                        result.push(n);
+                    }
+                }
+            } else if let Ok(n) = part.parse::<u32>() {
+                result.push(n);
+            }
+        }
+        result.sort();
+        result.dedup();
+        result
+    }
 }
 
 impl Default for Document {

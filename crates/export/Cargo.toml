@@ -12,6 +12,7 @@ serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 thiserror.workspace = true
+printpdf = { version = "0.7", features = ["embedded_images"] }
 
 [dev-dependencies]
 latexsnipper-mock = { path = "../mock" }

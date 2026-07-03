@@ -3,6 +3,7 @@ name = "latexsnipper-wasm"
 description = "WebAssembly bindings — run Core in browsers"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -70,6 +70,56 @@ pub trait Converter {
 | `TypstConverter` | `typst` | `.typ` | Typst |
 | `HtmlConverter` | `html` | `.html` | HTML + MathJax |
 
+## DocumentConverter
+
+统一转换入口，支持所有格式和页面选择。
+
+```rust
+impl DocumentConverter {
+    pub fn new(format: OutputFormat) -> Self;
+
+    /// 转换整个文档
+    pub fn convert(&self, doc: &Document) -> Result<String>;
+
+    /// 转换指定页面（0-based 索引）
+    pub fn convert_pages(&self, doc: &Document, pages: &[usize]) -> Result<String>;
+
+    /// 转换所有格式
+    pub fn convert_all(doc: &Document) -> Result<Vec<(OutputFormat, String)>>;
+
+    /// 从 LaTeX 字符串转换
+    pub fn convert_latex_string(latex: &str, format: OutputFormat) -> Result<String>;
+
+    /// 从 MathML 字符串转换
+    pub fn convert_mathml_string(mathml: &str, format: OutputFormat) -> Result<String>;
+
+    /// 从 OMML 字符串转换
+    pub fn convert_omml_string(omml: &str, format: OutputFormat) -> Result<String>;
+
+    /// 从 Typst 字符串转换
+    pub fn convert_typst_string(typst: &str, format: OutputFormat) -> Result<String>;
+
+    /// 从 Markdown 字符串转换
+    pub fn convert_markdown_string(md: &str, format: OutputFormat) -> Result<String>;
+}
+```
+
+### 使用示例
+
+```rust
+use latexsnipper_conversion::{DocumentConverter, OutputFormat};
+
+// 转换整个文档
+let latex = DocumentConverter::new(OutputFormat::Latex).convert(&doc)?;
+
+// 只转换第 1、3 页（0-based）
+let pages = DocumentConverter::new(OutputFormat::Typst)
+    .convert_pages(&doc, &[0, 2])?;
+
+// 转换所有格式
+let all = DocumentConverter::convert_all(&doc)?;
+```
+
 ## 与 Syntax Crate 的区别
 
 | | Syntax | Conversion |

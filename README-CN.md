@@ -56,7 +56,7 @@ LaTeXSnipper Core 采用严格的**四层架构**：
 ```
 Engine
   ├── Conversion (LaTeX/OMML/MathML/Typst/Markdown/HTML)
-  ├── Export (SVG/Text)
+  ├── Export (SVG/Text/PDF)
   ├── Syntax (解析器 + 渲染器)
   ├── Pipeline (节点图)
   │     ├── Inference (检测 + 识别)
@@ -105,8 +105,8 @@ Engine
 | **插件** | ✅ | Plugin trait、Registry |
 | **FFI** | ✅ | Android JNI、iOS C FFI |
 | **WASM** | ✅ | parse/render/convert/recognize 绑定 |
-| **CLI** | ✅ | recognize/parse/render/version |
-| **导出** | 🟡 | SVG/Text 可用，PDF 为基础实现 |
+| **CLI** | ✅ | recognize/parse/render/version，文件导出 (`-o output.tex`)，格式提示 |
+| **导出** | ✅ | SVG/Text/PDF（printpdf），标题/表格/列表/代码/公式/页面选择 |
 
 ### 规划中
 
@@ -133,7 +133,7 @@ crates/
 ├── pipeline/       ✅ 节点化异步流水线
 ├── syntax/         ✅ LaTeX/Typst/Markdown 解析器 + 渲染器
 ├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
-├── export/         🟡 RenderTree → SVG/Text/PDF（PDF 为基础实现）
+├── export/         ✅ RenderTree → SVG/Text/PDF（printpdf），页面选择
 ├── engine/         ✅ SnipperEngine + JobQueue + Service
 ├── plugin/         ✅ Plugin trait、Registry
 ├── mock/           ✅ 测试用 Fake 实现
@@ -147,12 +147,38 @@ crates/
 
 ## 快速开始
 
-```bash
-# 构建
-cargo build
+### 安装 CLI
 
-# 运行 CLI
-cargo run -p latexsnipper-cli -- parse --latex '$\frac{a+b}{c}$'
+```bash
+# 从 crates.io 安装
+cargo install latexsnipper-cli
+
+# 或从源码构建
+cargo build --release -p latexsnipper-cli
+```
+
+### 作为库使用
+
+```toml
+[dependencies]
+latexsnipper-pipeline = "1.0"
+```
+
+```rust
+use latexsnipper_pipeline::sdk::Snipper;
+
+let snipper = Snipper::from_file("input.png")?;
+let latex = snipper.to_latex()?;
+```
+
+### 运行示例
+
+```bash
+# 解析 LaTeX
+snipper parse --latex '$\frac{a+b}{c}$'
+
+# 从图片识别
+snipper recognize -i image.png -f latex -o output.tex
 
 # 运行全部测试
 cargo test --workspace

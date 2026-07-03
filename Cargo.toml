@@ -27,6 +27,11 @@ version = "1.0.0"
 edition = "2021"
 license = "AGPL-3.0"
 repository = "https://github.com/strangelion/latexsnipper-core"
+homepage = "https://github.com/strangelion/latexsnipper-core"
+documentation = "https://github.com/strangelion/latexsnipper-core/tree/main/docs"
+readme = "README.md"
+keywords = ["ocr", "latex", "math", "formula", "typst"]
+categories = ["command-line-utilities", "mathematics", "parser-implementations"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -50,6 +55,7 @@ latexsnipper-image = { path = "crates/image" }
 latexsnipper-inference = { path = "crates/inference" }
 latexsnipper-model = { path = "crates/model" }
 latexsnipper-foundation = { path = "crates/foundation" }
+latexsnipper-export = { path = "crates/export" }
 serde_json.workspace = true
 
 [[example]]
@@ -67,6 +73,10 @@ path = "examples/sdk_demo.rs"
 [[example]]
 name = "pipeline_demo"
 path = "examples/pipeline_demo.rs"
+
+[[example]]
+name = "pdf_export"
+path = "examples/pdf_export.rs"
 
 [[test]]
 name = "integration"

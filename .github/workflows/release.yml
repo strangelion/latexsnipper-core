@@ -4,63 +4,239 @@ on:
   push:
     tags:
       - 'v*'
+      - 'models-v*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'cli'
+        type: choice
+        options:
+          - cli
+          - models
+          - all
+      version:
+        description: 'Custom version tag (optional, overrides git tag)'
+        required: false
+        type: string
 
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  build:
-    name: Build ${{ matrix.target }}
+  # ============================================================
+  # Job 1: Build CLI binaries
+  # ============================================================
+  build-cli:
+    name: Build CLI (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref_name, 'v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_type != 'models')
     strategy:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-          - target: x86_64-apple-darwin
-            os: macos-latest
+            artifact: snipper-linux-amd64
           - target: aarch64-apple-darwin
             os: macos-latest
+            artifact: snipper-macos-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            artifact: snipper-windows-amd64.exe
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          key: cli-${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release -p latexsnipper-cli --target ${{ matrix.target }}
 
       - name: Package (Unix)
-        if: matrix.os != 'windows-latest'
+        if: runner.os != 'Windows'
         run: |
-          tar czf latexsnipper-core-${{ github.ref_name }}-${{ matrix.target }}.tar.gz \
-            -C target/${{ matrix.target }}/release \
-            latexsnipper-cli
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../${{ matrix.artifact }}.tar.gz snipper
+          cd ../../..
 
       - name: Package (Windows)
-        if: matrix.os == 'windows-latest'
+        if: runner.os == 'Windows'
         run: |
-          Compress-Archive -Path target/${{ matrix.target }}/release/latexsnipper-cli.exe `
-            -DestinationPath latexsnipper-core-${{ github.ref_name }}-${{ matrix.target }}.zip
+          Compress-Archive -Path target/${{ matrix.target }}/release/snipper.exe `
+            -DestinationPath ${{ matrix.artifact }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: latexsnipper-core-${{ matrix.target }}
-          path: latexsnipper-core-*
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.*
 
-  release:
-    name: Create Release
-    needs: build
+  # ============================================================
+  # Job 2: Test SDK
+  # ============================================================
+  test-sdk:
+    name: Test SDK
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref_name, 'v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_type != 'models')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: sdk
+
+      - name: Test
+        run: cargo test --workspace
+
+  # ============================================================
+  # Job 3: Publish to crates.io
+  # ============================================================
+  publish-crates:
+    name: Publish to crates.io
+    needs: test-sdk
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref_name, 'v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_type != 'models')
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish foundation
+        run: cargo publish -p latexsnipper-foundation
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish ast
+        run: cargo publish -p latexsnipper-ast
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish tensor
+        run: cargo publish -p latexsnipper-tensor
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish image
+        run: cargo publish -p latexsnipper-image
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish syntax
+        run: cargo publish -p latexsnipper-syntax
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish conversion
+        run: cargo publish -p latexsnipper-conversion
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish export
+        run: cargo publish -p latexsnipper-export
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish model
+        run: cargo publish -p latexsnipper-model
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish runtime
+        run: cargo publish -p latexsnipper-runtime
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish inference
+        run: cargo publish -p latexsnipper-inference
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish pipeline
+        run: cargo publish -p latexsnipper-pipeline
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish engine
+        run: cargo publish -p latexsnipper-engine
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ============================================================
+  # Job 4: Package models (from repo, not download)
+  # ============================================================
+  package-models:
+    name: Package Models
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref_name, 'models-v')) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.release_type == 'models' || inputs.release_type == 'all'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get version from manifest
+        id: manifest
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('models/model-manifest.json'))['version'])")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Model version: $VERSION"
+
+      - name: Package models directory
+        run: |
+          # Create tar.gz from models/ directory (already in repo)
+          VERSION="${{ steps.manifest.outputs.version }}"
+          tar czf latexsnipper-models-v${VERSION}.tar.gz models/
+
+          echo "Package created:"
+          ls -lh latexsnipper-models-*.tar.gz
+
+          echo "Contents:"
+          tar tzf latexsnipper-models-*.tar.gz | head -20
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: models
+          path: latexsnipper-models-*.tar.gz
+
+  # ============================================================
+  # Job 5: Create CLI Release
+  # ============================================================
+  release-cli:
+    name: Release CLI
+    needs: [build-cli, test-sdk]
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref_name, 'v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_type != 'models')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -68,7 +244,105 @@ jobs:
           path: artifacts
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "Release ${{ steps.version.outputs.version }}"
           generate_release_notes: true
-          files: artifacts/**/*
+          body: |
+            ## Install
+
+            ### From crates.io
+
+            ```bash
+            cargo install latexsnipper-cli
+            ```
+
+            ### From Binary
+
+            Download the archive for your platform and extract it.
+
+            ### As Library
+
+            ```toml
+            [dependencies]
+            latexsnipper-pipeline = "${{ steps.version.outputs.version }}"
+            ```
+
+            ## Usage
+
+            ```bash
+            # Parse LaTeX
+            snipper parse --latex '$\frac{a+b}{c}$'
+
+            # Recognize from image and export to file
+            snipper recognize -i image.png -f latex -o output.tex
+
+            # See all options
+            snipper --help
+            ```
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # Job 6: Create Model Release
+  # ============================================================
+  release-models:
+    name: Release Models
+    needs: package-models
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref_name, 'models-v')) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.release_type == 'models' || inputs.release_type == 'all'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('models/model-manifest.json'))['version'])")
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "models-v${{ steps.version.outputs.version }}"
+          name: "Models v${{ steps.version.outputs.version }}"
+          body: |
+            ## LaTeXSnipper Core Models v${{ steps.version.outputs.version }}
+
+            ### Quick Start
+
+            ```bash
+            curl -LO https://github.com/strangelion/latexsnipper-core/releases/download/models-v${{ steps.version.outputs.version }}/latexsnipper-models-v${{ steps.version.outputs.version }}.tar.gz
+            tar xzf latexsnipper-models-v${{ steps.version.outputs.version }}.tar.gz
+            ```
+
+            ### Model Directory Structure
+
+            ```
+            models/
+            ├── model-manifest.json          # Manifest with mirrors
+            ├── formula-det/yolov8-mfd/      # Formula detection (66MB)
+            ├── formula-rec/trocr-deit/      # Formula recognition (104MB)
+            ├── text-det/v6-small/           # Text detection (7MB)
+            └── text-rec/v6-small/           # Text recognition (64MB)
+            ```
+
+            ### Mirrors
+
+            See `model-manifest.json` for mirror URLs (for regions with restricted access).
+          files: artifacts/**/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

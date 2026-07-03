@@ -87,6 +87,12 @@ impl DocumentConverter {
         converter.convert(doc)
     }
 
+    /// Convert specific pages (0-based indices) of a Document.
+    pub fn convert_pages(&self, doc: &Document, pages: &[usize]) -> Result<String> {
+        let filtered = doc.filter_pages(pages);
+        self.convert(&filtered)
+    }
+
     pub fn convert_all(doc: &Document) -> Result<Vec<(OutputFormat, String)>> {
         let mut results = Vec::new();
         for &format in OutputFormat::all() {

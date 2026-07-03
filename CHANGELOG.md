@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Export
+- PDF generator using printpdf 0.7 (replaces minimal hand-rolled PDF)
+- Support for all document elements: headings, tables, lists, code, quotes, horizontal rules
+- Page selection API: `filter_pages()`, `filter_page_numbers()`, `parse_page_range()`
+- `DocumentConverter::convert_pages()` for partial document export
+
+### CLI
+- Added `--output` / `-o` flag for file export (e.g., `-o output.tex`, `-o output.typ`)
+- Format auto-detection from file extension
+- Helpful error messages with format suggestions (Levenshtein distance)
+- Hint to use `-h` for help on invalid input
+
+### AST
+- Added `Document::filter_pages()` — filter by 0-based indices
+- Added `Document::filter_page_numbers()` — filter by 1-based page numbers
+- Added `Document::parse_page_range()` — parse "1-3,5,8-10" strings
+
 ### Architecture
 - Stabilized four-layer architecture (Platform → Adapter → Core → Runtime)
 - Established crate boundaries and module dependencies

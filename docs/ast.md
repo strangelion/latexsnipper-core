@@ -50,6 +50,21 @@ pub struct Document {
 // methods: new(), block_count(), all_blocks()
 ```
 
+#### 页面过滤方法
+
+```rust
+impl Document {
+    /// 按 0-based 索引过滤页面
+    pub fn filter_pages(&self, indices: &[usize]) -> Document;
+
+    /// 按 1-based 页码过滤
+    pub fn filter_page_numbers(&self, numbers: &[u32]) -> Document;
+
+    /// 解析页面范围字符串 "1-3,5,8-10" → [1,2,3,5,8,9,10]
+    pub fn parse_page_range(range: &str) -> Vec<u32>;
+}
+```
+
 ### Page
 
 ```rust
@@ -65,10 +80,15 @@ pub struct Page {
 
 ```rust
 pub enum Block {
+    Heading(HeadingBlock),
     Paragraph(ParagraphBlock),
     Formula(FormulaBlock),
     Table(TableBlock),
     Figure(FigureBlock),
+    List(ListBlock),
+    Quote(QuoteBlock),
+    Code(CodeBlock),
+    HorizontalRule(HorizontalRuleBlock),
 }
 ```
 
