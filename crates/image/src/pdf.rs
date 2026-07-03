@@ -29,7 +29,7 @@ pub fn get_pdf_page_info(source: PdfSource) -> Result<Vec<PdfPageInfo>> {
 
     for (idx, &page_id) in page_ids.iter().enumerate() {
         if let Ok(page_obj) = doc.dereference(&lopdf::Object::Reference((page_id, 0))) {
-            if let Ok(media_box) = extract_media_box(&page_obj.1) {
+            if let Ok(media_box) = extract_media_box(page_obj.1) {
                 pages.push(PdfPageInfo {
                     page_number: (idx + 1) as u32,
                     width: media_box[2] - media_box[0],
@@ -42,7 +42,7 @@ pub fn get_pdf_page_info(source: PdfSource) -> Result<Vec<PdfPageInfo>> {
     // lopdf::get_pages returns BTreeMap<ObjectId, PageNumber> keyed by
     // internal object IDs, not page order. Sort by page_number to ensure
     // canonical PDF page ordering.
-    pages.sort_by(|a, b| a.page_number.cmp(&b.page_number));
+    pages.sort_by_key(|a| a.page_number);
 
     Ok(pages)
 }
@@ -98,7 +98,7 @@ fn load_document(source: PdfSource) -> Result<lopdf::Document> {
 fn extract_media_box(page_obj: &lopdf::Object) -> Result<[f32; 4]> {
     match page_obj {
         lopdf::Object::Dictionary(dict) => {
-            if let Ok(mediabox) = dict.get(b"MediaBox") {
+            if let Ok(lopdf::Object::Array(arr)) = dict.get(b"MediaBox") {
                 if let lopdf::Object::Array(arr) = mediabox {
                     if arr.len() < 4 {
                         return Err(SnipperError::Image(
