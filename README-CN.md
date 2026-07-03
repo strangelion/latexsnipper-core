@@ -206,6 +206,33 @@ cargo test --workspace
 
 ---
 
+## 模型
+
+LaTeXSnipper Core 使用 ONNX 模型进行公式检测/识别和文本检测/识别。
+
+### 支持的模型
+
+| 模型 | 大小 | 用途 |
+|------|------|------|
+| YOLOv8-MFD | ~66 MB | 公式检测 |
+| TrOCR | ~104 MB | 公式识别（编码器+解码器） |
+| PP-OCRv6 Det | ~7-32 MB | 文本检测（small/medium 版本） |
+| PP-OCRv6 Rec | ~64 MB | 文本识别（18708 字符：中/英/数学/希腊） |
+
+### 模型目录结构
+
+```
+models/
+├── formula-det/yolov8-mfd/     # 公式检测
+├── formula-rec/trocr-deit/     # 公式识别
+├── text-det/v6-small/          # 文本检测（轻量版）
+└── text-rec/v6-small/          # 文本识别
+```
+
+> 注意：`test-models/` 目录包含正在测试的模型，请勿修改。
+
+---
+
 ## 相关项目
 
 - [LaTeXSnipper Mobile](https://github.com/strangelion/LaTeXSnipper_mobile) — Android 应用
