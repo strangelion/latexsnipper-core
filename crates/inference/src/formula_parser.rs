@@ -1,6 +1,5 @@
 use latexsnipper_ast::{
-    categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory,
-    SymbolInfo,
+    categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory, SymbolInfo,
 };
 use latexsnipper_foundation::Result;
 
@@ -17,10 +16,7 @@ pub fn parse_formula_latex(latex: &str) -> Result<FormulaLayout> {
     let root = parser.parse()?;
     let symbol_count = count_symbols(&root);
 
-    Ok(FormulaLayout {
-        root,
-        symbol_count,
-    })
+    Ok(FormulaLayout { root, symbol_count })
 }
 
 /// Internal parser state.
@@ -186,14 +182,16 @@ impl FormulaParser {
 
             // Functions with optional limits
             "sum" | "prod" | "int" | "iint" | "iiint" | "oint" => {
-                let node = self.parse_command_with_subsup(
-                    FormulaNode::Symbol(SymbolInfo::new(&format!("\\{}", cmd), SymbolCategory::Operator))
-                );
+                let node = self.parse_command_with_subsup(FormulaNode::Symbol(SymbolInfo::new(
+                    &format!("\\{}", cmd),
+                    SymbolCategory::Operator,
+                )));
                 Ok(node)
             }
 
             // Functions
-            "sin" | "cos" | "tan" | "lim" | "log" | "ln" | "exp" | "det" | "gcd" | "min" | "max" | "sup" | "inf" => {
+            "sin" | "cos" | "tan" | "lim" | "log" | "ln" | "exp" | "det" | "gcd" | "min"
+            | "max" | "sup" | "inf" => {
                 let cmd_node = FormulaNode::Command(CommandInfo::new(&cmd));
                 let cmd_node = self.parse_command_with_subsup(cmd_node);
                 Ok(cmd_node)
@@ -217,60 +215,213 @@ impl FormulaParser {
             }
 
             // Greek letters
-            "alpha" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\alpha", SymbolCategory::Greek))),
-            "beta" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\beta", SymbolCategory::Greek))),
-            "gamma" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\gamma", SymbolCategory::Greek))),
-            "delta" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\delta", SymbolCategory::Greek))),
-            "epsilon" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\epsilon", SymbolCategory::Greek))),
-            "zeta" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\zeta", SymbolCategory::Greek))),
-            "eta" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\eta", SymbolCategory::Greek))),
-            "theta" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\theta", SymbolCategory::Greek))),
-            "iota" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\iota", SymbolCategory::Greek))),
-            "kappa" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\kappa", SymbolCategory::Greek))),
-            "lambda" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\lambda", SymbolCategory::Greek))),
-            "mu" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\mu", SymbolCategory::Greek))),
-            "nu" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\nu", SymbolCategory::Greek))),
-            "xi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\xi", SymbolCategory::Greek))),
-            "pi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\pi", SymbolCategory::Greek))),
-            "rho" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\rho", SymbolCategory::Greek))),
-            "sigma" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\sigma", SymbolCategory::Greek))),
-            "tau" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\tau", SymbolCategory::Greek))),
-            "upsilon" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\upsilon", SymbolCategory::Greek))),
-            "phi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\phi", SymbolCategory::Greek))),
-            "chi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\chi", SymbolCategory::Greek))),
-            "psi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\psi", SymbolCategory::Greek))),
-            "omega" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\omega", SymbolCategory::Greek))),
-            "Alpha" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Alpha", SymbolCategory::Greek))),
-            "Beta" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Beta", SymbolCategory::Greek))),
-            "Gamma" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Gamma", SymbolCategory::Greek))),
-            "Delta" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Delta", SymbolCategory::Greek))),
-            "Theta" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Theta", SymbolCategory::Greek))),
-            "Lambda" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Lambda", SymbolCategory::Greek))),
-            "Xi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Xi", SymbolCategory::Greek))),
-            "Pi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Pi", SymbolCategory::Greek))),
-            "Sigma" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Sigma", SymbolCategory::Greek))),
-            "Phi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Phi", SymbolCategory::Greek))),
-            "Psi" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Psi", SymbolCategory::Greek))),
-            "Omega" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Omega", SymbolCategory::Greek))),
+            "alpha" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\alpha",
+                SymbolCategory::Greek,
+            ))),
+            "beta" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\beta",
+                SymbolCategory::Greek,
+            ))),
+            "gamma" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\gamma",
+                SymbolCategory::Greek,
+            ))),
+            "delta" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\delta",
+                SymbolCategory::Greek,
+            ))),
+            "epsilon" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\epsilon",
+                SymbolCategory::Greek,
+            ))),
+            "zeta" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\zeta",
+                SymbolCategory::Greek,
+            ))),
+            "eta" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\eta",
+                SymbolCategory::Greek,
+            ))),
+            "theta" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\theta",
+                SymbolCategory::Greek,
+            ))),
+            "iota" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\iota",
+                SymbolCategory::Greek,
+            ))),
+            "kappa" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\kappa",
+                SymbolCategory::Greek,
+            ))),
+            "lambda" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\lambda",
+                SymbolCategory::Greek,
+            ))),
+            "mu" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\mu",
+                SymbolCategory::Greek,
+            ))),
+            "nu" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\nu",
+                SymbolCategory::Greek,
+            ))),
+            "xi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\xi",
+                SymbolCategory::Greek,
+            ))),
+            "pi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\pi",
+                SymbolCategory::Greek,
+            ))),
+            "rho" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\rho",
+                SymbolCategory::Greek,
+            ))),
+            "sigma" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\sigma",
+                SymbolCategory::Greek,
+            ))),
+            "tau" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\tau",
+                SymbolCategory::Greek,
+            ))),
+            "upsilon" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\upsilon",
+                SymbolCategory::Greek,
+            ))),
+            "phi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\phi",
+                SymbolCategory::Greek,
+            ))),
+            "chi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\chi",
+                SymbolCategory::Greek,
+            ))),
+            "psi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\psi",
+                SymbolCategory::Greek,
+            ))),
+            "omega" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\omega",
+                SymbolCategory::Greek,
+            ))),
+            "Alpha" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Alpha",
+                SymbolCategory::Greek,
+            ))),
+            "Beta" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Beta",
+                SymbolCategory::Greek,
+            ))),
+            "Gamma" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Gamma",
+                SymbolCategory::Greek,
+            ))),
+            "Delta" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Delta",
+                SymbolCategory::Greek,
+            ))),
+            "Theta" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Theta",
+                SymbolCategory::Greek,
+            ))),
+            "Lambda" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Lambda",
+                SymbolCategory::Greek,
+            ))),
+            "Xi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Xi",
+                SymbolCategory::Greek,
+            ))),
+            "Pi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Pi",
+                SymbolCategory::Greek,
+            ))),
+            "Sigma" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Sigma",
+                SymbolCategory::Greek,
+            ))),
+            "Phi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Phi",
+                SymbolCategory::Greek,
+            ))),
+            "Psi" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Psi",
+                SymbolCategory::Greek,
+            ))),
+            "Omega" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Omega",
+                SymbolCategory::Greek,
+            ))),
 
-            "infty" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\infty", SymbolCategory::Constant))),
-            "neq" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\neq", SymbolCategory::Relation))),
-            "leq" | "le" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\leq", SymbolCategory::Relation))),
-            "geq" | "ge" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\geq", SymbolCategory::Relation))),
-            "approx" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\approx", SymbolCategory::Relation))),
-            "equiv" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\equiv", SymbolCategory::Relation))),
-            "times" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\times", SymbolCategory::Operator))),
-            "cdot" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\cdot", SymbolCategory::Operator))),
-            "pm" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\pm", SymbolCategory::Operator))),
-            "mp" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\mp", SymbolCategory::Operator))),
+            "infty" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\infty",
+                SymbolCategory::Constant,
+            ))),
+            "neq" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\neq",
+                SymbolCategory::Relation,
+            ))),
+            "leq" | "le" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\leq",
+                SymbolCategory::Relation,
+            ))),
+            "geq" | "ge" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\geq",
+                SymbolCategory::Relation,
+            ))),
+            "approx" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\approx",
+                SymbolCategory::Relation,
+            ))),
+            "equiv" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\equiv",
+                SymbolCategory::Relation,
+            ))),
+            "times" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\times",
+                SymbolCategory::Operator,
+            ))),
+            "cdot" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\cdot",
+                SymbolCategory::Operator,
+            ))),
+            "pm" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\pm",
+                SymbolCategory::Operator,
+            ))),
+            "mp" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\mp",
+                SymbolCategory::Operator,
+            ))),
 
             // Arrows
-            "rightarrow" | "to" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\rightarrow", SymbolCategory::Arrow))),
-            "leftarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\leftarrow", SymbolCategory::Arrow))),
-            "leftrightarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\leftrightarrow", SymbolCategory::Arrow))),
-            "Rightarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Rightarrow", SymbolCategory::Arrow))),
-            "Leftarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Leftarrow", SymbolCategory::Arrow))),
-            "Leftrightarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new("\\Leftrightarrow", SymbolCategory::Arrow))),
+            "rightarrow" | "to" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\rightarrow",
+                SymbolCategory::Arrow,
+            ))),
+            "leftarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\leftarrow",
+                SymbolCategory::Arrow,
+            ))),
+            "leftrightarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\leftrightarrow",
+                SymbolCategory::Arrow,
+            ))),
+            "Rightarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Rightarrow",
+                SymbolCategory::Arrow,
+            ))),
+            "Leftarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Leftarrow",
+                SymbolCategory::Arrow,
+            ))),
+            "Leftrightarrow" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                "\\Leftrightarrow",
+                SymbolCategory::Arrow,
+            ))),
 
             // Unknown command - try to parse as simple command with optional args
             _ => {
@@ -445,13 +596,12 @@ fn count_symbols(node: &FormulaNode) -> usize {
         FormulaNode::Symbol(_) => 1,
         FormulaNode::Command(cmd) => 1 + cmd.args.iter().map(count_symbols).sum::<usize>(),
         FormulaNode::Group(nodes) => nodes.iter().map(count_symbols).sum(),
-        FormulaNode::Environment(env) => {
-            env.content
-                .iter()
-                .flat_map(|row| row.iter())
-                .map(count_symbols)
-                .sum()
-        }
+        FormulaNode::Environment(env) => env
+            .content
+            .iter()
+            .flat_map(|row| row.iter())
+            .map(count_symbols)
+            .sum(),
         FormulaNode::Superscript { base, exp } => count_symbols(base) + count_symbols(exp),
         FormulaNode::Subscript { base, sub } => count_symbols(base) + count_symbols(sub),
         FormulaNode::Fraction { num, den } => count_symbols(num) + count_symbols(den),
@@ -539,12 +689,10 @@ mod tests {
         let layout = parse_formula_latex("\\sqrt{x}").unwrap();
         assert_eq!(layout.symbol_count, 1);
         match &layout.root {
-            FormulaNode::SquareRoot { content } => {
-                match content.as_ref() {
-                    FormulaNode::Symbol(s) => assert_eq!(s.latex, "x"),
-                    _ => panic!("Expected Symbol"),
-                }
-            }
+            FormulaNode::SquareRoot { content } => match content.as_ref() {
+                FormulaNode::Symbol(s) => assert_eq!(s.latex, "x"),
+                _ => panic!("Expected Symbol"),
+            },
             _ => panic!("Expected SquareRoot"),
         }
     }

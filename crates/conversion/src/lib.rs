@@ -470,7 +470,10 @@ mod tests {
             ("\\prod_{i=1}^{\\infty} b_i", "product with limits"),
             ("\\lim_{x \\to 0} \\sin x", "limit with arrow"),
             ("\\left(\\frac{a}{b}\\right)", "delimited fraction"),
-            ("\\left[\\frac{x^{2}}{y_{n}}\\right]", "delimited bracket nested"),
+            (
+                "\\left[\\frac{x^{2}}{y_{n}}\\right]",
+                "delimited bracket nested",
+            ),
             ("\\hat{x} + \\bar{y}", "accents"),
             ("\\operatorname{Spec}(A)", "operatorname"),
         ];
@@ -502,9 +505,7 @@ mod tests {
 
             // LaTeX → OMML
             let result_omml = DocumentConverter::convert_latex_string(latex, OutputFormat::OMML)
-                .unwrap_or_else(|e| {
-                    panic!("LaTeX→OMML failed for {} ({}): {}", desc, latex, e)
-                });
+                .unwrap_or_else(|e| panic!("LaTeX→OMML failed for {} ({}): {}", desc, latex, e));
             let has_math_structure = result_omml.contains("<m:f>")
                 || result_omml.contains("<m:sSup>")
                 || result_omml.contains("<m:sSub>")
@@ -520,9 +521,7 @@ mod tests {
             assert!(
                 has_math_structure,
                 "LaTeX→OMML missing math structure for {} ({}): {}",
-                desc,
-                latex,
-                result_omml
+                desc, latex, result_omml
             );
 
             // LaTeX → Markdown
@@ -541,9 +540,7 @@ mod tests {
 
             // LaTeX → HTML
             let result_html = DocumentConverter::convert_latex_string(latex, OutputFormat::Html)
-                .unwrap_or_else(|e| {
-                    panic!("LaTeX→HTML failed for {} ({}): {}", desc, latex, e)
-                });
+                .unwrap_or_else(|e| panic!("LaTeX→HTML failed for {} ({}): {}", desc, latex, e));
             assert!(
                 result_html.contains("MathJax") || result_html.contains("math"),
                 "LaTeX→HTML missing math for {} ({}): {}",
@@ -574,9 +571,7 @@ mod tests {
             assert!(!latex.is_empty(), "OMML→LaTeX empty for {}", desc);
 
             let back = DocumentConverter::convert_latex_string(&latex, OutputFormat::OMML)
-                .unwrap_or_else(|e| {
-                    panic!("LaTeX→OMML roundtrip failed for {}: {}", desc, e)
-                });
+                .unwrap_or_else(|e| panic!("LaTeX→OMML roundtrip failed for {}: {}", desc, e));
             assert!(
                 back.contains("<m:f>") || back.contains("<m:sSup>") || back.contains("<m:r>"),
                 "Roundtrip lost math structure for {}: {}",

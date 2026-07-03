@@ -8,8 +8,8 @@ use latexsnipper_ast::*;
 use latexsnipper_image::operations;
 use latexsnipper_image::ImageSource;
 use latexsnipper_inference::{
-    load_keys, recognize_table_structure, recognize_table_transformer,
-    recognize_text_with_keys, TextRecParams,
+    load_keys, recognize_table_structure, recognize_table_transformer, recognize_text_with_keys,
+    TextRecParams,
 };
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 
@@ -26,11 +26,19 @@ fn struct_backend_path(models: &std::path::Path, backend: &str) -> Option<std::p
     match backend {
         "tatr" => {
             let p = models.join("table-struct/tatr-structure/model.onnx");
-            if p.exists() { Some(p) } else { None }
+            if p.exists() {
+                Some(p)
+            } else {
+                None
+            }
         }
         "slanet" => {
             let p = models.join("table-struct/slanet-plus/model.onnx");
-            if p.exists() { Some(p) } else { None }
+            if p.exists() {
+                Some(p)
+            } else {
+                None
+            }
         }
         _ => None,
     }
@@ -70,8 +78,16 @@ fn full_pipeline() {
             aa.partial_cmp(&bb).unwrap_or(std::cmp::Ordering::Equal)
         }) {
             Some(d) => {
-                let r = Rect::new(d.bbox[0], d.bbox[1], d.bbox[2] - d.bbox[0], d.bbox[3] - d.bbox[1]);
-                eprintln!("Table: ({:.0},{:.0},{:.0},{:.0})", r.x, r.y, r.width, r.height);
+                let r = Rect::new(
+                    d.bbox[0],
+                    d.bbox[1],
+                    d.bbox[2] - d.bbox[0],
+                    d.bbox[3] - d.bbox[1],
+                );
+                eprintln!(
+                    "Table: ({:.0},{:.0},{:.0},{:.0})",
+                    r.x, r.y, r.width, r.height
+                );
                 r
             }
             None => {
@@ -81,7 +97,11 @@ fn full_pipeline() {
         }
     };
     let table_image = operations::crop(&image, table_rect.clone());
-    eprintln!("Table crop: {}x{}", table_image.width(), table_image.height());
+    eprintln!(
+        "Table crop: {}x{}",
+        table_image.width(),
+        table_image.height()
+    );
 
     // 2. Table structure recognition
     let grid = if let Some(ref model_path) = struct_path {
@@ -101,7 +121,9 @@ fn full_pipeline() {
 
     // 3. Text recognition per cell
     let tr_handle = ModelHandle::with_path("text-rec", tr_path);
-    let tr_session = backend.create_session(&tr_handle, AccelerationMode::Cpu).unwrap();
+    let tr_session = backend
+        .create_session(&tr_handle, AccelerationMode::Cpu)
+        .unwrap();
     let (keys, first_char_id) = if let Some(chars) = tr_session.get_character_list() {
         (chars, 1)
     } else {
@@ -120,10 +142,18 @@ fn full_pipeline() {
         let cy = (cell.rect.y - pad).max(0.0);
         let cw = (cell.rect.width + pad * 2.0).min(table_image.width() as f32 - cx);
         let ch = (cell.rect.height + pad * 2.0).min(table_image.height() as f32 - cy);
-        if cw < 4.0 || ch < 4.0 { continue; }
+        if cw < 4.0 || ch < 4.0 {
+            continue;
+        }
 
         let cropped = operations::crop(&table_image, Rect::new(cx, cy, cw, ch));
-        let text = match recognize_text_with_keys(&cropped, &*tr_session, &keys, first_char_id, &tr_params) {
+        let text = match recognize_text_with_keys(
+            &cropped,
+            &*tr_session,
+            &keys,
+            first_char_id,
+            &tr_params,
+        ) {
             Ok(r) if !r.text.trim().is_empty() => r.text,
             _ => String::new(),
         };
@@ -132,17 +162,30 @@ fn full_pipeline() {
         }
     }
 
-    eprintln!("\n=== Recognized Table ({}x{}) ===", max_row + 1, max_col + 1);
+    eprintln!(
+        "\n=== Recognized Table ({}x{}) ===",
+        max_row + 1,
+        max_col + 1
+    );
     for (ri, row) in table_rows.iter().enumerate() {
-        let cells: Vec<&str> = row.iter().map(|s| if s.is_empty() { "?" } else { s }).collect();
+        let cells: Vec<&str> = row
+            .iter()
+            .map(|s| if s.is_empty() { "?" } else { s })
+            .collect();
         eprintln!("  Row {}: {}", ri, cells.join(" | "));
     }
 
-    let merged: Vec<_> = grid.iter().filter(|c| c.rowspan > 1 || c.colspan > 1).collect();
+    let merged: Vec<_> = grid
+        .iter()
+        .filter(|c| c.rowspan > 1 || c.colspan > 1)
+        .collect();
     if !merged.is_empty() {
         eprintln!("\n  Merged cells:");
         for c in &merged {
-            eprintln!("    ({},{}) rowspan={} colspan={}", c.row, c.col, c.rowspan, c.colspan);
+            eprintln!(
+                "    ({},{}) rowspan={} colspan={}",
+                c.row, c.col, c.rowspan, c.colspan
+            );
         }
     }
 

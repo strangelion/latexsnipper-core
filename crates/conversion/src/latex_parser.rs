@@ -311,13 +311,20 @@ impl LatexParser {
             }
             // Arrow with text: \xrightarrow{text} or \xrightarrow[below]{above}
             "xrightarrow" | "xleftarrow" => {
-                let dir = if cmd == "xrightarrow" { "rightarrow" } else { "leftarrow" };
+                let dir = if cmd == "xrightarrow" {
+                    "rightarrow"
+                } else {
+                    "leftarrow"
+                };
                 // Check for optional argument [below]
                 let (below, above) = if self.pos < self.chars.len() && self.chars[self.pos] == '[' {
                     self.pos += 1;
                     let below_node = self.parse_until(']');
                     let below_content = if below_node.len() == 1 {
-                        below_node.into_iter().next().unwrap_or(LatexNode::Text(String::new()))
+                        below_node
+                            .into_iter()
+                            .next()
+                            .unwrap_or(LatexNode::Text(String::new()))
                     } else {
                         LatexNode::Group(below_node)
                     };
@@ -372,9 +379,15 @@ impl LatexParser {
                     let mut depth = 0i32;
                     while self.pos < self.chars.len() {
                         match self.chars[self.pos] {
-                            '{' => { depth += 1; }
-                            '}' if depth == 0 => { break; }
-                            '}' => { depth -= 1; }
+                            '{' => {
+                                depth += 1;
+                            }
+                            '}' if depth == 0 => {
+                                break;
+                            }
+                            '}' => {
+                                depth -= 1;
+                            }
                             _ => {}
                         }
                         self.pos += 1;
@@ -532,10 +545,7 @@ impl LatexParser {
         let mut right_char = '\0';
         while self.pos < self.chars.len() {
             if self.pos + 5 < self.chars.len() {
-                let next_six: String = self.chars[self.pos..]
-                    .iter()
-                    .take(6)
-                    .collect();
+                let next_six: String = self.chars[self.pos..].iter().take(6).collect();
                 if next_six.starts_with("\\right") {
                     let after = if self.pos + 6 < self.chars.len() {
                         self.chars[self.pos + 6]
@@ -561,13 +571,13 @@ impl LatexParser {
             '{' => "}",
             '}' => "{",
             '|' => "|",
-            '.' => ".", // invisible
+            '.' => ".",  // invisible
             '\0' => ".", // default
             c => {
                 // For any other character (like \rangle), represent it
                 let s = c.to_string();
                 Box::leak(s.into_boxed_str())
-            },
+            }
         };
 
         let mut parser = LatexParser::new(&content_str);

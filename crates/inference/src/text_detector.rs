@@ -63,7 +63,10 @@ pub fn detect_text(
     let boxes = postprocess(prob_map, &map_shape, orig_w, orig_h, scale, params)?;
 
     // Debug
-    let above_thresh: usize = prob_map.iter().filter(|&&v| v > params.det_threshold).count();
+    let above_thresh: usize = prob_map
+        .iter()
+        .filter(|&&v| v > params.det_threshold)
+        .count();
     eprintln!(
         "text-det debug: input={}x{}, output shape={:?}, prob_map len={}, above_threshold={}, boxes={}",
         processed.width(), processed.height(), map_shape, prob_map.len(), above_thresh, boxes.len()
@@ -120,7 +123,10 @@ fn postprocess(
     // Debug
     eprintln!(
         "text-det postprocess: map={}x{}, binary ones={}, contours={}",
-        map_w, map_h, binary.iter().filter(|&&b| b == 1).count(), contours.len()
+        map_w,
+        map_h,
+        binary.iter().filter(|&&b| b == 1).count(),
+        contours.len()
     );
 
     let mut boxes = Vec::new();
@@ -196,10 +202,18 @@ fn find_contours(binary: &[u8], width: usize, height: usize) -> Vec<Vec<(i32, i3
 
                 while let Some((cx, cy)) = queue.pop_front() {
                     points.push((cx as i32, cy as i32));
-                    if cx < min_x { min_x = cx; }
-                    if cy < min_y { min_y = cy; }
-                    if cx > max_x { max_x = cx; }
-                    if cy > max_y { max_y = cy; }
+                    if cx < min_x {
+                        min_x = cx;
+                    }
+                    if cy < min_y {
+                        min_y = cy;
+                    }
+                    if cx > max_x {
+                        max_x = cx;
+                    }
+                    if cy > max_y {
+                        max_y = cy;
+                    }
 
                     // 4-connected neighbors
                     for &(dx, dy) in &[(0i32, 1i32), (1, 0), (0, -1), (-1, 0)] {

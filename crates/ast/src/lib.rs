@@ -11,15 +11,14 @@ pub mod span;
 pub mod visitor;
 
 pub use block::{
-    Block, CodeBlock, FigureBlock, FormulaBlock, HeadingBlock, HorizontalRuleBlock, ListBlock,
-    ListItem, ParagraphBlock, QuoteBlock, TableBlock, TableCell, HandwritingBlock,
+    Block, CodeBlock, FigureBlock, FormulaBlock, HandwritingBlock, HeadingBlock,
+    HorizontalRuleBlock, ListBlock, ListItem, ParagraphBlock, QuoteBlock, TableBlock, TableCell,
 };
 pub use builder::DocumentBuilder;
 pub use document::{Document, Page};
 pub use formula::{Formula, FormulaSource};
 pub use formula_layout::{
-    categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory,
-    SymbolInfo,
+    categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory, SymbolInfo,
 };
 pub use geometry::{Point, Rect, Size};
 pub use inline::{ImageInline, Inline, TextRun};

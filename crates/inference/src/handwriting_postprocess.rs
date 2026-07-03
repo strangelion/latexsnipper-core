@@ -38,14 +38,9 @@ pub fn postprocess_handwriting(text: &str) -> String {
 /// TrOCR and similar handwriting models often confuse visually similar
 /// characters that have different meanings in LaTeX formulas.
 fn fix_number_letter_confusions(text: &str) -> String {
-    let result = text.to_string();
-
-    // Only apply heuristics outside of LaTeX commands (inside \commands{} is different)
-    // Common confusions when handwriting is interpreted as LaTeX:
-    // "O" (letter O) when "0" (zero) was intended — only in numeric contexts
-    let result_str = result.clone();
-    let mut output = String::with_capacity(result_str.len());
-    let mut chars = result_str.chars().peekable();
+    let mut output = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut prev_char: Option<char> = None;
 
     while let Some(ch) = chars.next() {
         if ch == '\\' {
@@ -59,46 +54,46 @@ fn fix_number_letter_confusions(text: &str) -> String {
                 }
             }
         } else if ch == 'O' || ch == 'o' {
-            // 'O' → '0' confusion: only when followed by digits or as standalone
-            match chars.peek() {
-                Some(next) if next.is_ascii_digit() || *next == '.' || *next == ',' => {
-                    output.push('0');
-                }
-                _ => output.push(ch),
+            // 'O' → '0' confusion: when followed by digits, period, or
+            // when surrounded by digits (e.g. "O7", "10O", "O 7")
+            let next_is_numeric = match chars.peek() {
+                Some(next) => next.is_ascii_digit() || *next == '.' || *next == ',',
+                None => false,
+            };
+            let prev_is_numeric = prev_char.map_or(false, |p| p.is_ascii_digit() || p == '.');
+            if next_is_numeric || prev_is_numeric {
+                output.push('0');
+            } else {
+                output.push(ch);
             }
         } else if ch == 'l' {
-            // lowercase 'l' → '1' confusion: only in numeric positions
-            match chars.peek() {
-                Some(&next) if next.is_ascii_digit() || next == '.' || next == '/' => {
-                    output.push('1');
-                }
-                _ => {
-                    // Check if preceded by a digit (a continuation)
-                    if output.ends_with(|c: char| c.is_ascii_digit()) {
-                        output.push('1');
-                    } else {
-                        output.push('l');
-                    }
-                }
+            // lowercase 'l' → '1' confusion: in numeric positions
+            let next_is_numeric = match chars.peek() {
+                Some(next) => next.is_ascii_digit() || *next == '.' || *next == '/',
+                None => false,
+            };
+            let prev_is_numeric = prev_char.map_or(false, |p| p.is_ascii_digit());
+            if next_is_numeric || prev_is_numeric {
+                output.push('1');
+            } else {
+                output.push('l');
             }
         } else if ch == 'S' {
             // 'S' → '5' confusion: only in numeric contexts
-            match chars.peek() {
-                Some(next) if next.is_ascii_digit() || *next == '.' => {
-                    output.push('5');
-                }
-                _ => {
-                    if let Some(prev) = output.chars().last() {
-                        if prev.is_ascii_digit() || prev == '.' { output.push('5'); }
-                        else { output.push('S'); }
-                    } else {
-                        output.push('S');
-                    }
-                }
+            let next_is_numeric = match chars.peek() {
+                Some(next) => next.is_ascii_digit() || *next == '.' || *next == ',',
+                None => false,
+            };
+            let prev_is_numeric = prev_char.map_or(false, |p| p.is_ascii_digit() || p == '.');
+            if next_is_numeric || prev_is_numeric {
+                output.push('5');
+            } else {
+                output.push('S');
             }
         } else {
             output.push(ch);
         }
+        prev_char = Some(ch);
     }
 
     output

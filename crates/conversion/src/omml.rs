@@ -752,8 +752,12 @@ fn color_name_to_hex(name: &str) -> String {
         "lightblue" | "light blue" => "ADD8E6".to_string(),
         "lightgray" | "light grey" => "D3D3D3".to_string(),
         s if s.starts_with('#') && s.len() == 7 => s[1..].to_uppercase(),
-        s if s.len() == 6 && !s.chars().any(|c| c.is_ascii_alphabetic())
-            && s.chars().all(|c| c.is_ascii_hexdigit()) => s.to_uppercase(),
+        s if s.len() == 6
+            && !s.chars().any(|c| c.is_ascii_alphabetic())
+            && s.chars().all(|c| c.is_ascii_hexdigit()) =>
+        {
+            s.to_uppercase()
+        }
         _ => "000000".to_string(),
     }
 }
@@ -1287,8 +1291,12 @@ mod tests {
         for latex in inputs {
             let ast = parse_latex(latex);
             let omml = ast_to_omml(&ast);
-            assert!(!omml.contains("<m:e/>"),
-                "nary with self-closing <m:e/> (Word box!) for {}: {}", latex, omml);
+            assert!(
+                !omml.contains("<m:e/>"),
+                "nary with self-closing <m:e/> (Word box!) for {}: {}",
+                latex,
+                omml
+            );
         }
     }
 

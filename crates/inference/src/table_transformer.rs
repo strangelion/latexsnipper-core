@@ -32,20 +32,20 @@ pub struct TableTransformerDetection {
 
 /// Structure recognition labels (7 classes including no_object at index 0).
 pub const TABLE_STRUCTURE_LABELS: &[&str] = &[
-    "no_object",          // 0
-    "table",              // 1
-    "table column",       // 2
-    "table row",          // 3
-    "table column header",// 4
+    "no_object",                  // 0
+    "table",                      // 1
+    "table column",               // 2
+    "table row",                  // 3
+    "table column header",        // 4
     "table projected row header", // 5
-    "table spanning cell",// 6
+    "table spanning cell",        // 6
 ];
 
 /// Detection labels (3 classes including no_object at index 0).
 pub const TABLE_DETECTION_LABELS: &[&str] = &[
-    "no_object",      // 0
-    "table",          // 1
-    "table rotated",  // 2
+    "no_object",     // 0
+    "table",         // 1
+    "table rotated", // 2
 ];
 
 /// Run a Table Transformer model (detection or structure) and return detections.
@@ -82,7 +82,9 @@ pub fn recognize_table_transformer(
     let outputs = session.run(&[input])?;
 
     if outputs.len() < 2 {
-        return Err(SnipperError::Inference("TableTransformer expected 2 outputs".into()));
+        return Err(SnipperError::Inference(
+            "TableTransformer expected 2 outputs".into(),
+        ));
     }
 
     let logits = outputs[0]
@@ -93,8 +95,16 @@ pub fn recognize_table_transformer(
         .ok_or_else(|| SnipperError::Inference("pred_boxes not float32".into()))?;
 
     let logits_shape = outputs[0].shape();
-    let num_queries = if logits_shape.len() >= 2 { logits_shape[1] } else { 0 };
-    let num_classes = if logits_shape.len() >= 3 { logits_shape[2] } else { 0 };
+    let num_queries = if logits_shape.len() >= 2 {
+        logits_shape[1]
+    } else {
+        0
+    };
+    let num_classes = if logits_shape.len() >= 3 {
+        logits_shape[2]
+    } else {
+        0
+    };
 
     if num_queries == 0 || num_classes == 0 {
         return Err(SnipperError::Inference("Invalid logits shape".into()));
@@ -108,7 +118,9 @@ pub fn recognize_table_transformer(
     }
     eprintln!(
         "TATR DEBUG: logits_shape={:?}, total_logits={}, total_boxes={}",
-        logits_shape, logits.len(), pred_boxes.len()
+        logits_shape,
+        logits.len(),
+        pred_boxes.len()
     );
 
     for q in 0..num_queries {
@@ -175,7 +187,11 @@ pub fn recognize_table_transformer(
     }
 
     // Sort by score, deduplicate by IoU within same class
-    filtered.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    filtered.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut keep = Vec::new();
     for det in filtered {
@@ -188,7 +204,11 @@ pub fn recognize_table_transformer(
     }
 
     // Sort by y-coordinate for reading order
-    keep.sort_by(|a, b| a.bbox[1].partial_cmp(&b.bbox[1]).unwrap_or(std::cmp::Ordering::Equal));
+    keep.sort_by(|a, b| {
+        a.bbox[1]
+            .partial_cmp(&b.bbox[1])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Scale to pixel coordinates
     for det in &mut keep {
@@ -212,7 +232,11 @@ fn compute_iou(a: &[f32; 4], b: &[f32; 4]) -> f32 {
     let area_b = (b[2] - b[0]) * (b[3] - b[1]);
     let union = area_a + area_b - inter;
 
-    if union > 0.0 { inter / union } else { 0.0 }
+    if union > 0.0 {
+        inter / union
+    } else {
+        0.0
+    }
 }
 
 // GridCell is now in types.rs
@@ -234,13 +258,16 @@ pub fn build_grid_from_detections(
     img_w: f32,
     img_h: f32,
 ) -> Vec<GridCell> {
-    let mut row_dets: Vec<&TableTransformerDetection> = detections.iter().filter(|d| d.class_id == 3).collect();
+    let mut row_dets: Vec<&TableTransformerDetection> =
+        detections.iter().filter(|d| d.class_id == 3).collect();
     row_dets.sort_by(|a, b| a.bbox[1].partial_cmp(&b.bbox[1]).unwrap());
 
-    let mut col_dets: Vec<&TableTransformerDetection> = detections.iter().filter(|d| d.class_id == 2).collect();
+    let mut col_dets: Vec<&TableTransformerDetection> =
+        detections.iter().filter(|d| d.class_id == 2).collect();
     col_dets.sort_by(|a, b| a.bbox[0].partial_cmp(&b.bbox[0]).unwrap());
 
-    let spanning: Vec<&TableTransformerDetection> = detections.iter().filter(|d| d.class_id == 6).collect();
+    let spanning: Vec<&TableTransformerDetection> =
+        detections.iter().filter(|d| d.class_id == 6).collect();
 
     let mut y_edges: Vec<f32> = Vec::new();
     let mut x_edges: Vec<f32> = Vec::new();
@@ -312,7 +339,10 @@ pub fn build_grid_from_detections(
             let h = y2 - y1;
             if w > 2.0 && h > 2.0 {
                 grid_cells.push(GridCell {
-                    row: r, col: c, rowspan: 1, colspan: 1,
+                    row: r,
+                    col: c,
+                    rowspan: 1,
+                    colspan: 1,
                     rect: Rect::new(x1, y1, w, h),
                 });
             }
@@ -333,13 +363,17 @@ pub fn build_grid_from_detections(
 
         for r in 0..num_rows {
             if sy1 < y_edges[r + 1] && sy2 > y_edges[r] {
-                if start_row.is_none() { start_row = Some(r); }
+                if start_row.is_none() {
+                    start_row = Some(r);
+                }
                 end_row = r;
             }
         }
         for c in 0..num_cols {
             if sx1 < x_edges[c + 1] && sx2 > x_edges[c] {
-                if start_col.is_none() { start_col = Some(c); }
+                if start_col.is_none() {
+                    start_col = Some(c);
+                }
                 end_col = c;
             }
         }
@@ -363,7 +397,10 @@ pub fn build_grid_from_detections(
                     }
                 }
                 extra_cells.push(GridCell {
-                    row: sr, col: sc, rowspan: rspan as u32, colspan: cspan as u32,
+                    row: sr,
+                    col: sc,
+                    rowspan: rspan as u32,
+                    colspan: cspan as u32,
                     rect: Rect::new(sx1, sy1, sx2 - sx1, sy2 - sy1),
                 });
             }
@@ -374,21 +411,31 @@ pub fn build_grid_from_detections(
     cells.extend(extra_cells.clone());
 
     for (idx, gc) in grid_cells.iter().enumerate() {
-        if skip_indices.contains(&idx) { continue; }
+        if skip_indices.contains(&idx) {
+            continue;
+        }
         let cx = gc.rect.x + gc.rect.width / 2.0;
         let cy = gc.rect.y + gc.rect.height / 2.0;
         let inside_span = extra_cells.iter().any(|ec| {
-            cx >= ec.rect.x && cx <= ec.rect.x + ec.rect.width
-                && cy >= ec.rect.y && cy <= ec.rect.y + ec.rect.height
+            cx >= ec.rect.x
+                && cx <= ec.rect.x + ec.rect.width
+                && cy >= ec.rect.y
+                && cy <= ec.rect.y + ec.rect.height
         });
-        if inside_span { continue; }
+        if inside_span {
+            continue;
+        }
         cells.push(gc.clone());
     }
 
     cells
 }
 
-fn build_fallback_grid(detections: &[TableTransformerDetection], img_w: f32, img_h: f32) -> Vec<GridCell> {
+fn build_fallback_grid(
+    detections: &[TableTransformerDetection],
+    img_w: f32,
+    img_h: f32,
+) -> Vec<GridCell> {
     let content: Vec<&TableTransformerDetection> = detections
         .iter()
         .filter(|d| d.class_id != 0 && d.class_id != 1 && d.score > 0.3)
@@ -396,40 +443,69 @@ fn build_fallback_grid(detections: &[TableTransformerDetection], img_w: f32, img
 
     if content.is_empty() {
         return vec![GridCell {
-            row: 0, col: 0, rowspan: 1, colspan: 1,
+            row: 0,
+            col: 0,
+            rowspan: 1,
+            colspan: 1,
             rect: Rect::new(0.0, 0.0, img_w, img_h),
         }];
     }
 
-    let span_only: Vec<&&TableTransformerDetection> = content.iter().filter(|d| d.class_id == 6).collect();
+    let span_only: Vec<&&TableTransformerDetection> =
+        content.iter().filter(|d| d.class_id == 6).collect();
     if !span_only.is_empty() {
-        let mut cells: Vec<GridCell> = span_only.iter().enumerate().map(|(i, d)| {
-            GridCell {
-                row: i, col: 0, rowspan: 1, colspan: 1,
-                rect: Rect::new(d.bbox[0], d.bbox[1], d.bbox[2] - d.bbox[0], d.bbox[3] - d.bbox[1]),
-            }
-        }).collect();
+        let mut cells: Vec<GridCell> = span_only
+            .iter()
+            .enumerate()
+            .map(|(i, d)| GridCell {
+                row: i,
+                col: 0,
+                rowspan: 1,
+                colspan: 1,
+                rect: Rect::new(
+                    d.bbox[0],
+                    d.bbox[1],
+                    d.bbox[2] - d.bbox[0],
+                    d.bbox[3] - d.bbox[1],
+                ),
+            })
+            .collect();
         cells.sort_by(|a, b| a.rect.y.partial_cmp(&b.rect.y).unwrap());
         return cells;
     }
 
     let mut sorted = content.clone();
     sorted.sort_by(|a, b| {
-        a.bbox[1].partial_cmp(&b.bbox[1]).unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.bbox[0].partial_cmp(&b.bbox[0]).unwrap_or(std::cmp::Ordering::Equal))
+        a.bbox[1]
+            .partial_cmp(&b.bbox[1])
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(
+                a.bbox[0]
+                    .partial_cmp(&b.bbox[0])
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
     });
 
     let mut rows: Vec<Vec<&TableTransformerDetection>> = Vec::new();
     for &det in &sorted {
         let det_cy = (det.bbox[1] + det.bbox[3]) / 2.0;
         let placed = rows.iter_mut().find(|row| {
-            let row_cy = row.iter().map(|d| (d.bbox[1] + d.bbox[3]) / 2.0).sum::<f32>() / row.len() as f32;
+            let row_cy = row
+                .iter()
+                .map(|d| (d.bbox[1] + d.bbox[3]) / 2.0)
+                .sum::<f32>()
+                / row.len() as f32;
             (det_cy - row_cy).abs() < 10.0
         });
-        if let Some(row) = placed { row.push(det); }
-        else { rows.push(vec![det]); }
+        if let Some(row) = placed {
+            row.push(det);
+        } else {
+            rows.push(vec![det]);
+        }
     }
-    for row in &mut rows { row.sort_by(|a, b| a.bbox[0].partial_cmp(&b.bbox[0]).unwrap()); }
+    for row in &mut rows {
+        row.sort_by(|a, b| a.bbox[0].partial_cmp(&b.bbox[0]).unwrap());
+    }
 
     let mut cells = Vec::new();
     for (ri, row) in rows.iter().enumerate() {
@@ -437,7 +513,13 @@ fn build_fallback_grid(detections: &[TableTransformerDetection], img_w: f32, img
             let w = det.bbox[2] - det.bbox[0];
             let h = det.bbox[3] - det.bbox[1];
             if w > 2.0 && h > 2.0 {
-                cells.push(GridCell { row: ri, col: ci, rowspan: 1, colspan: 1, rect: Rect::new(det.bbox[0], det.bbox[1], w, h) });
+                cells.push(GridCell {
+                    row: ri,
+                    col: ci,
+                    rowspan: 1,
+                    colspan: 1,
+                    rect: Rect::new(det.bbox[0], det.bbox[1], w, h),
+                });
             }
         }
     }
@@ -467,7 +549,11 @@ mod tests {
         let a = [0.0, 0.0, 1.0, 1.0];
         let b = [0.5, 0.5, 1.5, 1.5];
         let iou = compute_iou(&a, &b);
-        assert!((iou - 1.0 / 7.0).abs() < 0.01, "IoU should be ~0.143, got {}", iou);
+        assert!(
+            (iou - 1.0 / 7.0).abs() < 0.01,
+            "IoU should be ~0.143, got {}",
+            iou
+        );
     }
 
     #[test]

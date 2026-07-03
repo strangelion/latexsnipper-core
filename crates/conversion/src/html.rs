@@ -281,27 +281,30 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
 }
 
 fn render_cell_content(inlines: &[Inline]) -> String {
-    let parts: Vec<String> = inlines.iter().map(|i| match i {
-        Inline::Text(t) => {
-            let mut text = xml_escape(&t.text);
-            if t.bold == Some(true) {
-                text = format!("<strong>{}</strong>", text);
+    let parts: Vec<String> = inlines
+        .iter()
+        .map(|i| match i {
+            Inline::Text(t) => {
+                let mut text = xml_escape(&t.text);
+                if t.bold == Some(true) {
+                    text = format!("<strong>{}</strong>", text);
+                }
+                if t.italic == Some(true) {
+                    text = format!("<em>{}</em>", text);
+                }
+                text
             }
-            if t.italic == Some(true) {
-                text = format!("<em>{}</em>", text);
+            Inline::Formula(f) => {
+                let content = convert_formula_to_html(f);
+                if f.display_mode {
+                    format!("$$\n{}\n$$", content)
+                } else {
+                    format!("${}$", content)
+                }
             }
-            text
-        }
-        Inline::Formula(f) => {
-            let content = convert_formula_to_html(f);
-            if f.display_mode {
-                format!("$$\n{}\n$$", content)
-            } else {
-                format!("${}$", content)
-            }
-        }
-        Inline::Image(_) => "<img src=\"image.png\" alt=\"image\">".to_string(),
-    }).collect();
+            Inline::Image(_) => "<img src=\"image.png\" alt=\"image\">".to_string(),
+        })
+        .collect();
     parts.join(" ")
 }
 

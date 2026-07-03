@@ -138,7 +138,7 @@ impl std::fmt::Display for LatexNode {
                         // Only add space if not adjacent to a previous symbol/operator
                         // that would make the spacing wrong (e.g. E=mc^2 should not become E = m c ^ 2)
                         let prev_str = format!("{}", n);
-                        let prev_text = format!("{}", &nodes[i-1]);
+                        let prev_text = format!("{}", &nodes[i - 1]);
                         // Don't add space:
                         // - before superscript/subscript
                         // - between single chars that form a contiguous token
@@ -160,7 +160,9 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Group(nodes) => {
                 write!(f, "{{")?;
                 for (i, n) in nodes.iter().enumerate() {
-                    if i > 0 { write!(f, " ")?; }
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
                     write!(f, "{}", n)?;
                 }
                 write!(f, "}}")
@@ -178,8 +180,14 @@ impl std::fmt::Display for LatexNode {
                 write!(f, "{{{}}}_{{{}}}", base, sub)
             }
             LatexNode::Fraction { num, den } => write!(f, "\\frac{{{}}}{{{}}}", num, den),
-            LatexNode::SquareRoot { index: Some(idx), content } => write!(f, "\\sqrt[{}]{{{}}}", idx, content),
-            LatexNode::SquareRoot { index: None, content } => write!(f, "\\sqrt{{{}}}", content),
+            LatexNode::SquareRoot {
+                index: Some(idx),
+                content,
+            } => write!(f, "\\sqrt[{}]{{{}}}", idx, content),
+            LatexNode::SquareRoot {
+                index: None,
+                content,
+            } => write!(f, "\\sqrt{{{}}}", content),
             LatexNode::Operator(op) => write!(f, "\\{}", op),
             LatexNode::Relation(rel) => write!(f, "\\{}", rel),
             LatexNode::Greek(g) => write!(f, "\\{}", g),
@@ -191,16 +199,38 @@ impl std::fmt::Display for LatexNode {
                 }
                 Ok(())
             }
-            LatexNode::Math { content, display: false } => {
-                let s: String = content.iter().map(|n| format!("{}", n)).collect::<Vec<_>>().join(" ");
+            LatexNode::Math {
+                content,
+                display: false,
+            } => {
+                let s: String = content
+                    .iter()
+                    .map(|n| format!("{}", n))
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 write!(f, "${}$", s)
             }
-            LatexNode::Math { content, display: true } => {
-                let s: String = content.iter().map(|n| format!("{}", n)).collect::<Vec<_>>().join(" ");
+            LatexNode::Math {
+                content,
+                display: true,
+            } => {
+                let s: String = content
+                    .iter()
+                    .map(|n| format!("{}", n))
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 write!(f, "$${}$$", s)
             }
-            LatexNode::Delimited { left, content, right } => {
-                let s: String = content.iter().map(|n| format!("{}", n)).collect::<Vec<_>>().join(" ");
+            LatexNode::Delimited {
+                left,
+                content,
+                right,
+            } => {
+                let s: String = content
+                    .iter()
+                    .map(|n| format!("{}", n))
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 write!(f, "\\left{}{}\\right{}", left, s, right)
             }
             LatexNode::FontModifier { font, content } => write!(f, "\\{}{{{}}}", font, content),
@@ -224,16 +254,28 @@ impl std::fmt::Display for LatexNode {
                 let s: String = args.iter().map(|n| format!("{}", n)).collect();
                 write!(f, "\\operatorname{{{}}}", s)
             }
-            LatexNode::Overbrace { content, label: Some(l) } => {
+            LatexNode::Overbrace {
+                content,
+                label: Some(l),
+            } => {
                 write!(f, "\\overbrace{{{}}}^{{{}}}", content, l)
             }
-            LatexNode::Overbrace { content, label: None } => {
+            LatexNode::Overbrace {
+                content,
+                label: None,
+            } => {
                 write!(f, "\\overbrace{{{}}}", content)
             }
-            LatexNode::Underbrace { content, label: Some(l) } => {
+            LatexNode::Underbrace {
+                content,
+                label: Some(l),
+            } => {
                 write!(f, "\\underbrace{{{}}}_{{{}}}", content, l)
             }
-            LatexNode::Underbrace { content, label: None } => {
+            LatexNode::Underbrace {
+                content,
+                label: None,
+            } => {
                 write!(f, "\\underbrace{{{}}}", content)
             }
             LatexNode::Overset { top, base } => {
@@ -242,8 +284,16 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Underset { bottom, base } => {
                 write!(f, "\\underset{{{}}}{{{}}}", bottom, base)
             }
-            LatexNode::XArrow { direction, above, below } => {
-                let cmd = if direction == "rightarrow" { "xrightarrow" } else { "xleftarrow" };
+            LatexNode::XArrow {
+                direction,
+                above,
+                below,
+            } => {
+                let cmd = if direction == "rightarrow" {
+                    "xrightarrow"
+                } else {
+                    "xleftarrow"
+                };
                 match (above, below) {
                     (Some(a), Some(b)) => write!(f, "\\{}[{}]{{{}}}", cmd, b, a),
                     (Some(a), None) => write!(f, "\\{}{{{}}}", cmd, a),

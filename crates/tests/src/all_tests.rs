@@ -412,42 +412,40 @@ mod conversion_tests {
     use latexsnipper_conversion::*;
 
     /// Shared test document fixture — built once per test file, reused by all tests.
-    static TEST_DOC: once_cell::sync::Lazy<Document> = once_cell::sync::Lazy::new(|| {
-        Document {
-            metadata: latexsnipper_ast::Metadata::default(),
-            pages: vec![Page {
-                width: 800.0,
-                height: 600.0,
-                blocks: vec![
-                    Block::Paragraph(ParagraphBlock {
-                        inlines: vec![Inline::Text(TextRun::new("Given "))],
-                        geometry: None,
-                        source: None,
-                    }),
-                    Block::Formula(FormulaBlock {
-                        formula: {
-                            let mut f = Formula::latex("E=mc^2");
-                            f.display_mode = false;
-                            f.confidence = 0.95;
-                            f
-                        },
-                        geometry: None,
-                        source: None,
-                    }),
-                    Block::Formula(FormulaBlock {
-                        formula: {
-                            let mut f = Formula::latex("\\frac{a+b}{c}");
-                            f.confidence = 0.92;
-                            f
-                        },
-                        geometry: None,
-                        source: None,
-                    }),
-                ],
-                page_number: Some(1),
-            }],
-            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
-        }
+    static TEST_DOC: once_cell::sync::Lazy<Document> = once_cell::sync::Lazy::new(|| Document {
+        metadata: latexsnipper_ast::Metadata::default(),
+        pages: vec![Page {
+            width: 800.0,
+            height: 600.0,
+            blocks: vec![
+                Block::Paragraph(ParagraphBlock {
+                    inlines: vec![Inline::Text(TextRun::new("Given "))],
+                    geometry: None,
+                    source: None,
+                }),
+                Block::Formula(FormulaBlock {
+                    formula: {
+                        let mut f = Formula::latex("E=mc^2");
+                        f.display_mode = false;
+                        f.confidence = 0.95;
+                        f
+                    },
+                    geometry: None,
+                    source: None,
+                }),
+                Block::Formula(FormulaBlock {
+                    formula: {
+                        let mut f = Formula::latex("\\frac{a+b}{c}");
+                        f.confidence = 0.92;
+                        f
+                    },
+                    geometry: None,
+                    source: None,
+                }),
+            ],
+            page_number: Some(1),
+        }],
+        id_gen: latexsnipper_ast::NodeIdGenerator::new(),
     });
 
     #[test]
@@ -597,7 +595,9 @@ mod conversion_tests {
             assert!(
                 out_mathml.contains("<math"),
                 "LaTeX→MathML missing <math> for {} ({}): {}",
-                desc, latex, out_mathml
+                desc,
+                latex,
+                out_mathml
             );
 
             // LaTeX → OMML
@@ -622,12 +622,15 @@ mod conversion_tests {
             }
 
             // LaTeX → Markdown
-            let out_md = DocumentConverter::convert_latex_string(latex, OutputFormat::MarkdownBlock)
-                .unwrap_or_else(|e| panic!("LaTeX→Markdown failed for {}: {}", desc, e));
+            let out_md =
+                DocumentConverter::convert_latex_string(latex, OutputFormat::MarkdownBlock)
+                    .unwrap_or_else(|e| panic!("LaTeX→Markdown failed for {}: {}", desc, e));
             assert!(
                 out_md.contains("$") || out_md.contains("\\("),
                 "LaTeX→Markdown missing delimiters for {} ({}): {}",
-                desc, latex, out_md
+                desc,
+                latex,
+                out_md
             );
 
             // LaTeX → HTML
@@ -636,7 +639,9 @@ mod conversion_tests {
             assert!(
                 out_html.contains("MathJax") || out_html.contains("math"),
                 "LaTeX→HTML missing math for {} ({}): {}",
-                desc, latex, out_html
+                desc,
+                latex,
+                out_html
             );
         }
     }
@@ -656,14 +661,17 @@ mod conversion_tests {
             assert!(
                 omml.contains(omml_structure),
                 "OMML missing {} for {}: {}",
-                omml_structure, latex, omml
+                omml_structure,
+                latex,
+                omml
             );
             let back = DocumentConverter::convert_omml_string(&omml, OutputFormat::Latex)
                 .unwrap_or_else(|e| panic!("OMML→LaTeX failed for {}: {}", latex, e));
             assert!(
                 back.contains("frac") || back.contains("^") || back.contains("_"),
                 "OMML→LaTeX lost structure for {}: {}",
-                latex, back
+                latex,
+                back
             );
         }
     }
@@ -682,14 +690,17 @@ mod conversion_tests {
             assert!(
                 mathml.contains(tag),
                 "MathML missing <{}> for {}: {}",
-                tag, latex, mathml
+                tag,
+                latex,
+                mathml
             );
             let back = DocumentConverter::convert_mathml_string(&mathml, OutputFormat::Latex)
                 .unwrap_or_else(|e| panic!("MathML→LaTeX failed for {}: {}", latex, e));
             assert!(
                 back.contains("frac") || back.contains("^") || back.contains("_"),
                 "MathML→LaTeX lost structure for {}: {}",
-                latex, back
+                latex,
+                back
             );
         }
     }

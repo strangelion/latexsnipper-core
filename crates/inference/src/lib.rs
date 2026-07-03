@@ -26,15 +26,15 @@ pub use handwriting_detector::{
 };
 pub use handwriting_postprocess::postprocess_handwriting;
 pub use latex_repair::{has_severe_latex_issue, latex_quality_flags, repair_latex};
-pub use table_transformer::{
-    build_grid_from_detections, recognize_table_transformer, TableTransformerDetection,
-    TABLE_DETECTION_LABELS, TABLE_STRUCTURE_LABELS,
-};
 pub use symbol_detector::{detect_symbols, SymbolDetParams, SymbolDetection};
 pub use table_detector::{detect_tables, filter_table_detections, TableDetParams};
 pub use table_structure::{
-    parse_table_structure, recognize_structure_slanet, recognize_table_structure,
-    CellInfo, ColInfo, RowInfo, TableStructure,
+    parse_table_structure, recognize_structure_slanet, recognize_table_structure, CellInfo,
+    ColInfo, RowInfo, TableStructure,
+};
+pub use table_transformer::{
+    build_grid_from_detections, recognize_table_transformer, TableTransformerDetection,
+    TABLE_DETECTION_LABELS, TABLE_STRUCTURE_LABELS,
 };
 pub use text_detector::{detect_text, TextDetParams};
 pub use text_recognizer::{load_keys, recognize_text, recognize_text_with_keys, TextRecParams};

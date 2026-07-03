@@ -97,24 +97,24 @@ pub enum TableStructBackend {
 /// Note: With merge_no_span_structure=True (default), `<td>` is replaced by `<td></td>`.
 /// The vocabulary size is 50 tokens matching the model output.
 const SLANET_STRUCTURE_DICT: &[&str] = &[
-    "<thead>",       // 0
-    "</thead>",      // 1
-    "<tbody>",       // 2
-    "</tbody>",      // 3
-    "<tr>",          // 4
-    "</tr>",         // 5
-    "<td></td>",     // 6 (merged with merge_no_span_structure)
-    "<td",           // 7
-    ">",             // 8
-    "</td>",         // 9
-    " colspan=\"2\"", // 10
-    " colspan=\"3\"", // 11
-    " colspan=\"4\"", // 12
-    " colspan=\"5\"", // 13
-    " colspan=\"6\"", // 14
-    " colspan=\"7\"", // 15
-    " colspan=\"8\"", // 16
-    " colspan=\"9\"", // 17
+    "<thead>",         // 0
+    "</thead>",        // 1
+    "<tbody>",         // 2
+    "</tbody>",        // 3
+    "<tr>",            // 4
+    "</tr>",           // 5
+    "<td></td>",       // 6 (merged with merge_no_span_structure)
+    "<td",             // 7
+    ">",               // 8
+    "</td>",           // 9
+    " colspan=\"2\"",  // 10
+    " colspan=\"3\"",  // 11
+    " colspan=\"4\"",  // 12
+    " colspan=\"5\"",  // 13
+    " colspan=\"6\"",  // 14
+    " colspan=\"7\"",  // 15
+    " colspan=\"8\"",  // 16
+    " colspan=\"9\"",  // 17
     " colspan=\"10\"", // 18
     " colspan=\"11\"", // 19
     " colspan=\"12\"", // 20
@@ -126,14 +126,14 @@ const SLANET_STRUCTURE_DICT: &[&str] = &[
     " colspan=\"18\"", // 26
     " colspan=\"19\"", // 27
     " colspan=\"20\"", // 28
-    " rowspan=\"2\"", // 29
-    " rowspan=\"3\"", // 30
-    " rowspan=\"4\"", // 31
-    " rowspan=\"5\"", // 32
-    " rowspan=\"6\"", // 33
-    " rowspan=\"7\"", // 34
-    " rowspan=\"8\"", // 35
-    " rowspan=\"9\"", // 36
+    " rowspan=\"2\"",  // 29
+    " rowspan=\"3\"",  // 30
+    " rowspan=\"4\"",  // 31
+    " rowspan=\"5\"",  // 32
+    " rowspan=\"6\"",  // 33
+    " rowspan=\"7\"",  // 34
+    " rowspan=\"8\"",  // 35
+    " rowspan=\"9\"",  // 36
     " rowspan=\"10\"", // 37
     " rowspan=\"11\"", // 38
     " rowspan=\"12\"", // 39
@@ -145,8 +145,8 @@ const SLANET_STRUCTURE_DICT: &[&str] = &[
     " rowspan=\"18\"", // 45
     " rowspan=\"19\"", // 46
     " rowspan=\"20\"", // 47
-    "sos",           // 48 (start of sequence)
-    "eos",           // 49 (end of sequence)
+    "sos",             // 48 (start of sequence)
+    "eos",             // 49 (end of sequence)
 ];
 
 /// Preprocess image for SLANet inference.
@@ -163,11 +163,7 @@ pub fn preprocess_for_slanet(image: &SnipperImage) -> Result<(Vec<f32>, [f32; 4]
     let resize_h = (h * ratio + 0.5) as usize;
 
     // Resize image
-    let resized = latexsnipper_image::operations::resize(
-        image,
-        resize_w as u32,
-        resize_h as u32,
-    );
+    let resized = latexsnipper_image::operations::resize(image, resize_w as u32, resize_h as u32);
 
     // Normalize with ImageNet stats
     let mean = [0.485, 0.456, 0.406];
@@ -216,11 +212,7 @@ pub fn recognize_structure_slanet(
 
     let (padded, shape_info) = preprocess_for_slanet(image)?;
 
-    let input = Tensor::float32(
-        "x",
-        vec![1, 3, 488, 488],
-        padded,
-    );
+    let input = Tensor::float32("x", vec![1, 3, 488, 488], padded);
 
     let outputs = session.run(&[input])?;
     if outputs.len() < 2 {
@@ -234,7 +226,8 @@ pub fn recognize_structure_slanet(
         .as_f32_slice()
         .ok_or_else(|| SnipperError::Inference("structure_logits not float32".into()))?;
 
-    let structure = decode_slanet_output(cell_coords, structure_logits, &shape_info, orig_w, orig_h)?;
+    let structure =
+        decode_slanet_output(cell_coords, structure_logits, &shape_info, orig_w, orig_h)?;
 
     // Convert TableStructure -> Vec<GridCell>
     let grid_cells: Vec<GridCell> = structure
@@ -396,10 +389,7 @@ pub fn decode_slanet_output(
 }
 
 /// Parse structure tokens and cell bboxes into CellInfo list.
-fn parse_structure_to_cells(
-    tokens: &[(&str, f32)],
-    bboxes: &[Rect],
-) -> Vec<CellInfo> {
+fn parse_structure_to_cells(tokens: &[(&str, f32)], bboxes: &[Rect]) -> Vec<CellInfo> {
     let mut cells = Vec::new();
     let mut current_row = 0;
     let mut current_col = 0;
@@ -513,10 +503,7 @@ fn build_col_info(cells: &[CellInfo]) -> Vec<ColInfo> {
 ///
 /// Current implementation uses projection-based line detection (Layer 2 fallback).
 /// For production, use SLANet_plus or TATR structure recognition.
-pub fn parse_table_structure(
-    image: &SnipperImage,
-    table_rect: &Rect,
-) -> Result<TableStructure> {
+pub fn parse_table_structure(image: &SnipperImage, table_rect: &Rect) -> Result<TableStructure> {
     // Extract the table region from the image
     let table_image = extract_table_region(image, table_rect)?;
 
@@ -761,13 +748,19 @@ fn to_grayscale(pixels: &[u8], width: usize, height: usize, format: PixelFormat)
     let b_off: usize;
     match format {
         PixelFormat::Rgb | PixelFormat::Rgba => {
-            r_off = 0; g_off = 1; b_off = 2;
+            r_off = 0;
+            g_off = 1;
+            b_off = 2;
         }
         PixelFormat::Bgr | PixelFormat::Bgra => {
-            r_off = 2; g_off = 1; b_off = 0;
+            r_off = 2;
+            g_off = 1;
+            b_off = 0;
         }
         _ => {
-            r_off = 0; g_off = 1; b_off = 2;
+            r_off = 0;
+            g_off = 1;
+            b_off = 2;
         }
     }
 
@@ -813,12 +806,28 @@ mod tests {
     #[test]
     fn test_generate_cells() {
         let rows = vec![
-            RowInfo { y_start: 0.0, y_end: 50.0, height: 50.0 },
-            RowInfo { y_start: 50.0, y_end: 100.0, height: 50.0 },
+            RowInfo {
+                y_start: 0.0,
+                y_end: 50.0,
+                height: 50.0,
+            },
+            RowInfo {
+                y_start: 50.0,
+                y_end: 100.0,
+                height: 50.0,
+            },
         ];
         let cols = vec![
-            ColInfo { x_start: 0.0, x_end: 100.0, width: 100.0 },
-            ColInfo { x_start: 100.0, x_end: 200.0, width: 100.0 },
+            ColInfo {
+                x_start: 0.0,
+                x_end: 100.0,
+                width: 100.0,
+            },
+            ColInfo {
+                x_start: 100.0,
+                x_end: 200.0,
+                width: 100.0,
+            },
         ];
 
         let cells = generate_cells(&rows, &cols);

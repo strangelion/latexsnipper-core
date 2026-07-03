@@ -176,22 +176,35 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 latex_ast_to_typst(base)
             )
         }
-        LatexNode::XArrow { direction, above, below } => {
-            let arrow = if direction == "rightarrow" { "arrow.r" } else { "arrow.l" };
+        LatexNode::XArrow {
+            direction,
+            above,
+            below,
+        } => {
+            let arrow = if direction == "rightarrow" {
+                "arrow.r"
+            } else {
+                "arrow.l"
+            };
             match (above, below) {
                 (Some(a), Some(b)) => {
                     let a_str = latex_ast_to_typst(a);
                     let b_str = latex_ast_to_typst(b);
                     // Typst: arrow.r^("above")_("below")
-                    format!("{}^{}_({})", arrow, format!("\"{}\"", a_str), format!("\"{}\"", b_str))
+                    format!(
+                        "{}^{}_({})",
+                        arrow,
+                        format_args!("\"{}\"", a_str),
+                        format_args!("\"{}\"", b_str)
+                    )
                 }
                 (Some(a), None) => {
                     let a_str = latex_ast_to_typst(a);
-                    format!("{}^{}", arrow, format!("\"{}\"", a_str))
+                    format!("{}^{}", arrow, format_args!("\"{}\"", a_str))
                 }
                 (None, Some(b)) => {
                     let b_str = latex_ast_to_typst(b);
-                    format!("{}_{}", arrow, format!("\"{}\"", b_str))
+                    format!("{}_{}", arrow, format_args!("\"{}\"", b_str))
                 }
                 (None, None) => arrow.to_string(),
             }
@@ -833,7 +846,9 @@ mod tests {
 
     #[test]
     fn test_complex_nested_expression() {
-        let result = latex_ast_to_typst(&parse_latex("\\frac{x^{2} + y^{2}}{z_{n}} + \\sqrt[3]{\\frac{a}{b}}"));
+        let result = latex_ast_to_typst(&parse_latex(
+            "\\frac{x^{2} + y^{2}}{z_{n}} + \\sqrt[3]{\\frac{a}{b}}",
+        ));
         assert!(result.contains("frac"));
         assert!(result.contains("root"));
     }

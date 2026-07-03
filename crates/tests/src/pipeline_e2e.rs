@@ -601,7 +601,6 @@ fn test_mixed_pipeline_e2e() {
                     boxes.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
                     println!("3. Detected {} text regions", boxes.len());
 
-
                     // Recognize text
                     if let Some(text_rec) = text_rec_path {
                         let rec_handle = ModelHandle::with_path("text-rec", text_rec.to_path_buf());

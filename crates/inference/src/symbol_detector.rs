@@ -48,16 +48,9 @@ pub fn detect_symbols(
     params: &SymbolDetParams,
 ) -> Result<Vec<SymbolDetection>> {
     // Preprocess image
-    let resized = latexsnipper_image::operations::resize(
-        image,
-        params.target_size,
-        params.target_size,
-    );
-    let pixels = latexsnipper_image::operations::normalize(
-        &resized,
-        &params.mean,
-        &params.std,
-    );
+    let resized =
+        latexsnipper_image::operations::resize(image, params.target_size, params.target_size);
+    let pixels = latexsnipper_image::operations::normalize(&resized, &params.mean, &params.std);
 
     let input = Tensor::float32(
         "images",
@@ -114,10 +107,22 @@ fn parse_detections(
             if base + 5 >= data.len() {
                 break;
             }
-            (data[base], data[base + 1], data[base + 2], data[base + 3], data[base + 4])
+            (
+                data[base],
+                data[base + 1],
+                data[base + 2],
+                data[base + 3],
+                data[base + 4],
+            )
         } else {
             let n = num_detections;
-            (data[i], data[n + i], data[2 * n + i], data[3 * n + i], data[4 * n + i])
+            (
+                data[i],
+                data[n + i],
+                data[2 * n + i],
+                data[3 * n + i],
+                data[4 * n + i],
+            )
         };
 
         if conf < params.conf_threshold {

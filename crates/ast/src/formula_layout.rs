@@ -193,30 +193,23 @@ impl EnvInfo {
 pub fn categorize_symbol(latex: &str) -> SymbolCategory {
     match latex {
         "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => SymbolCategory::Number,
-        "+" | "-" | "*" | "/" | "\\times" | "\\cdot" | "\\pm" | "\\mp" => {
-            SymbolCategory::Operator
-        }
+        "+" | "-" | "*" | "/" | "\\times" | "\\cdot" | "\\pm" | "\\mp" => SymbolCategory::Operator,
         "=" | "<" | ">" | "\\leq" | "\\geq" | "\\neq" | "\\approx" | "\\equiv" => {
             SymbolCategory::Relation
         }
-        "\\rightarrow" | "\\leftarrow" | "\\leftrightarrow" | "\\Rightarrow"
-        | "\\Leftarrow" | "\\Leftrightarrow" => SymbolCategory::Arrow,
+        "\\rightarrow" | "\\leftarrow" | "\\leftrightarrow" | "\\Rightarrow" | "\\Leftarrow"
+        | "\\Leftrightarrow" => SymbolCategory::Arrow,
         "\\alpha" | "\\beta" | "\\gamma" | "\\delta" | "\\epsilon" | "\\zeta" | "\\eta"
-        | "\\theta" | "\\iota" | "\\kappa" | "\\lambda" | "\\mu" | "\\nu" | "\\xi"
-        | "\\pi" | "\\rho" | "\\sigma" | "\\tau" | "\\upsilon" | "\\phi" | "\\chi"
-        | "\\psi" | "\\omega" | "\\Alpha" | "\\Beta" | "\\Gamma" | "\\Delta"
-        | "\\Theta" | "\\Lambda" | "\\Xi" | "\\Pi" | "\\Sigma" | "\\Phi" | "\\Psi"
-        | "\\Omega" => SymbolCategory::Greek,
+        | "\\theta" | "\\iota" | "\\kappa" | "\\lambda" | "\\mu" | "\\nu" | "\\xi" | "\\pi"
+        | "\\rho" | "\\sigma" | "\\tau" | "\\upsilon" | "\\phi" | "\\chi" | "\\psi" | "\\omega"
+        | "\\Alpha" | "\\Beta" | "\\Gamma" | "\\Delta" | "\\Theta" | "\\Lambda" | "\\Xi"
+        | "\\Pi" | "\\Sigma" | "\\Phi" | "\\Psi" | "\\Omega" => SymbolCategory::Greek,
         "\\hat" | "\\bar" | "\\tilde" | "\\vec" | "\\dot" | "\\ddot" | "\\widehat"
         | "\\widetilde" | "\\overline" => SymbolCategory::Accent,
-        "(" | ")" | "[" | "]" | "\\{" | "\\}" | "\\left(" | "\\right)" | "\\left["
-        | "\\right]" | "\\left\\{" | "\\right\\}" | "\\langle" | "\\rangle" => {
-            SymbolCategory::Delimiter
-        }
-        "\\sin" | "\\cos" | "\\tan" | "\\log" | "\\ln" | "\\exp" | "\\lim"
-        | "\\max" | "\\min" | "\\sup" | "\\inf" | "\\det" | "\\gcd" => {
-            SymbolCategory::Function
-        }
+        "(" | ")" | "[" | "]" | "\\{" | "\\}" | "\\left(" | "\\right)" | "\\left[" | "\\right]"
+        | "\\left\\{" | "\\right\\}" | "\\langle" | "\\rangle" => SymbolCategory::Delimiter,
+        "\\sin" | "\\cos" | "\\tan" | "\\log" | "\\ln" | "\\exp" | "\\lim" | "\\max" | "\\min"
+        | "\\sup" | "\\inf" | "\\det" | "\\gcd" => SymbolCategory::Function,
         _ => {
             // Check if it's a single letter
             if latex.len() == 1 && latex.chars().next().unwrap().is_alphabetic() {
@@ -250,8 +243,7 @@ mod tests {
 
     #[test]
     fn test_symbol_info() {
-        let sym = SymbolInfo::new("x", SymbolCategory::Letter)
-            .with_confidence(0.95);
+        let sym = SymbolInfo::new("x", SymbolCategory::Letter).with_confidence(0.95);
         assert_eq!(sym.latex, "x");
         assert_eq!(sym.category, SymbolCategory::Letter);
         assert_eq!(sym.confidence, 0.95);

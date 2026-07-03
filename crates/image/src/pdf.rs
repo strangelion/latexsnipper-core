@@ -95,7 +95,6 @@ fn load_document(source: PdfSource) -> Result<lopdf::Document> {
     }
 }
 
-
 fn extract_media_box(page_obj: &lopdf::Object) -> Result<[f32; 4]> {
     match page_obj {
         lopdf::Object::Dictionary(dict) => {
@@ -152,10 +151,7 @@ mod tests {
 
     #[test]
     fn test_decode_pdf_returns_error() {
-        let result = decode_pdf(
-            PdfSource::Memory(b"%PDF-1.4 trash"),
-            300,
-        );
+        let result = decode_pdf(PdfSource::Memory(b"%PDF-1.4 trash"), 300);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("not yet implemented"));
@@ -163,11 +159,7 @@ mod tests {
 
     #[test]
     fn test_decode_pdf_page_returns_error() {
-        let result = decode_pdf_page(
-            PdfSource::Memory(b"%PDF-1.4 trash"),
-            1,
-            300,
-        );
+        let result = decode_pdf_page(PdfSource::Memory(b"%PDF-1.4 trash"), 1, 300);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("not yet implemented"));

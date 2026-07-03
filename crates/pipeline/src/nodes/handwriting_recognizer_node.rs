@@ -197,29 +197,40 @@ impl HandwritingRecognizerNode {
 }
 
 /// Check if text looks like a mathematical formula.
+///
+/// Heuristic: strong indicator = `\\frac`/`\\sqrt` → always formula;
+/// otherwise count structural operators (`\\`, `^`, `_`, `=`).
+/// Parentheses and + - alone are NOT formula indicators
+/// (common in natural language: "a (b)", "item 1-2").
 fn looks_like_formula(text: &str) -> bool {
-    let formula_indicators = [
-        "\\",  // LaTeX commands
+    // Strongest signal: unambiguous LaTeX commands
+    if text.contains("\\frac") || text.contains("\\sqrt") {
+        return true;
+    }
+
+    // Structural math indicators (rare in natural language)
+    let strong_indicators = [
+        "\\",  // Backslash commands
         "^",   // Superscript
         "_",   // Subscript
-        "{",   // Grouping
-        "}",   // Grouping
         "=",   // Equations
-        "+",   // Operations
-        "-",   // Operations
-        "(",   // Parentheses
-        ")",   // Parentheses
-        "[",   // Brackets
-        "]",   // Brackets
     ];
 
-    let indicator_count = formula_indicators
+    let strong_count = strong_indicators
         .iter()
         .filter(|&&ind| text.contains(ind))
         .count();
 
-    // If more than 2 formula indicators, likely a formula
-    indicator_count >= 2
+    if strong_count >= 2 {
+        return true;
+    }
+
+    // Dense notation without spaces: "3x+2=5" or "a+b"
+    let has_dense_math = text.len() >= 3
+        && !text.contains(' ')
+        && (text.contains('+') || text.contains('='));
+
+    has_dense_math
 }
 
 #[cfg(test)]
@@ -233,5 +244,9 @@ mod tests {
         assert!(looks_like_formula("x^2 + y^2 = z^2"));
         assert!(!looks_like_formula("Hello World"));
         assert!(!looks_like_formula("This is text"));
+        // Parentheses alone should NOT flag as formula
+        assert!(!looks_like_formula("This is a test (with explanation)"));
+        // Dense math notation
+        assert!(looks_like_formula("3x+2=5"));
     }
 }

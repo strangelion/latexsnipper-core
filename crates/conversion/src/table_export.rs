@@ -35,18 +35,19 @@ impl TableExporter {
 
     /// Export table to Word-compatible HTML (mso- namespace styles for Word rendering).
     pub fn to_word_html(table: &TableBlock) -> String {
-        let mut parts = Vec::new();
-        parts.push(r#"<html xmlns:o="urn:schemas-microsoft-com:office:office"
+        let mut parts = vec![
+            r#"<html xmlns:o="urn:schemas-microsoft-com:office:office"
 xmlns:w="urn:schemas-microsoft-com:office:word"
-xmlns="http://www.w3.org/TR/REC-html40">"#.to_string());
-        parts.push("<head>".to_string());
-        parts.push("<style>".to_string());
-        parts.push("table { border-collapse: collapse; }".to_string());
-        parts.push("th, td { border: 1pt solid black; padding: 4pt; }".to_string());
-        parts.push("th { font-weight: bold; background-color: #f0f0f0; }".to_string());
-        parts.push("</style>".to_string());
-        parts.push("</head>".to_string());
-        parts.push("<body>".to_string());
+xmlns="http://www.w3.org/TR/REC-html40">"#.to_string(),
+            "<head>".to_string(),
+            "<style>".to_string(),
+            "table { border-collapse: collapse; }".to_string(),
+            "th, td { border: 1pt solid black; padding: 4pt; }".to_string(),
+            "th { font-weight: bold; background-color: #f0f0f0; }".to_string(),
+            "</style>".to_string(),
+            "</head>".to_string(),
+            "<body>".to_string(),
+        ];
 
         parts.push(
             r#"<table style="border-collapse: collapse; mso-displayed-decimal-separator: \.; mso-displayed-thousand-separator: \,;">"#.to_string(),

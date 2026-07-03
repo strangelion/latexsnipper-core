@@ -97,9 +97,7 @@ impl SnipperEngine {
                 graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
             }
             RecognizeMode::Handwriting => {
-                graph.add_node(Box::new(
-                    latexsnipper_pipeline::DetectorNode::handwriting(),
-                ));
+                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::handwriting()));
                 graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
                 graph.add_node(Box::new(
                     latexsnipper_pipeline::HandwritingRecognizerNode::new(),
@@ -108,21 +106,15 @@ impl SnipperEngine {
             }
             RecognizeMode::Table => {
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::table()));
-                graph.add_node(Box::new(
-                    latexsnipper_pipeline::TableStructureNode::new(),
-                ));
-                graph.add_node(Box::new(
-                    latexsnipper_pipeline::TableRecognizerNode::new(),
-                ));
+                graph.add_node(Box::new(latexsnipper_pipeline::TableStructureNode::new()));
+                graph.add_node(Box::new(latexsnipper_pipeline::TableRecognizerNode::new()));
                 graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
             }
             RecognizeMode::FormulaLayout => {
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
                 graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
                 graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::formula()));
-                graph.add_node(Box::new(
-                    latexsnipper_pipeline::FormulaLayoutNode::new(),
-                ));
+                graph.add_node(Box::new(latexsnipper_pipeline::FormulaLayoutNode::new()));
                 graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
             }
         }
@@ -154,33 +146,29 @@ impl SnipperEngine {
                 for page in &doc.pages {
                     for block in &page.blocks {
                         let text = match block {
-                            Block::Formula(f) => {
-                                f.formula.as_latex().to_string()
-                            }
-                            Block::Paragraph(p) => {
-                                p.inlines
-                                    .iter()
-                                    .filter_map(|i| {
-                                        if let Inline::Text(t) = i {
-                                            Some(t.text.as_str())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect::<String>()
-                            }
-                            Block::Heading(h) => {
-                                h.inlines
-                                    .iter()
-                                    .filter_map(|i| {
-                                        if let Inline::Text(t) = i {
-                                            Some(t.text.as_str())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect::<String>()
-                            }
+                            Block::Formula(f) => f.formula.as_latex().to_string(),
+                            Block::Paragraph(p) => p
+                                .inlines
+                                .iter()
+                                .filter_map(|i| {
+                                    if let Inline::Text(t) = i {
+                                        Some(t.text.as_str())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<String>(),
+                            Block::Heading(h) => h
+                                .inlines
+                                .iter()
+                                .filter_map(|i| {
+                                    if let Inline::Text(t) = i {
+                                        Some(t.text.as_str())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<String>(),
                             Block::Table(t) => {
                                 let mut buf = String::new();
                                 for row in &t.rows {
@@ -197,64 +185,63 @@ impl SnipperEngine {
                                 }
                                 buf
                             }
-                            Block::Handwriting(hw) => {
-                                hw.inlines
-                                    .iter()
-                                    .filter_map(|i| {
-                                        if let Inline::Text(t) = i {
-                                            Some(t.text.as_str())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect::<String>()
-                            }
+                            Block::Handwriting(hw) => hw
+                                .inlines
+                                .iter()
+                                .filter_map(|i| {
+                                    if let Inline::Text(t) = i {
+                                        Some(t.text.as_str())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<String>(),
                             Block::Code(c) => c.code.clone(),
                             Block::Figure(f) => f.caption.clone().unwrap_or_default(),
-                            Block::List(l) => {
-                                l.items
-                                    .iter()
-                                    .filter_map(|item| {
-                                        let t: String = item
-                                            .inlines
+                            Block::List(l) => l
+                                .items
+                                .iter()
+                                .filter_map(|item| {
+                                    let t: String = item
+                                        .inlines
+                                        .iter()
+                                        .filter_map(|i| {
+                                            if let Inline::Text(txt) = i {
+                                                Some(txt.text.as_str())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect();
+                                    if t.is_empty() {
+                                        None
+                                    } else {
+                                        Some(t)
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                            Block::Quote(q) => q
+                                .blocks
+                                .iter()
+                                .filter_map(|b| match b {
+                                    Block::Paragraph(p) => Some(
+                                        p.inlines
                                             .iter()
                                             .filter_map(|i| {
-                                                if let Inline::Text(txt) = i {
-                                                    Some(txt.text.as_str())
+                                                if let Inline::Text(t) = i {
+                                                    Some(t.text.as_str())
                                                 } else {
                                                     None
                                                 }
                                             })
-                                            .collect();
-                                        if t.is_empty() { None } else { Some(t) }
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            }
-                            Block::Quote(q) => {
-                                q.blocks
-                                    .iter()
-                                    .filter_map(|b| match b {
-                                        Block::Paragraph(p) => Some(
-                                            p.inlines
-                                                .iter()
-                                                .filter_map(|i| {
-                                                    if let Inline::Text(t) = i {
-                                                        Some(t.text.as_str())
-                                                    } else {
-                                                        None
-                                                    }
-                                                })
-                                                .collect::<String>(),
-                                        ),
-                                        _ => None,
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join(" ")
-                            }
-                            Block::HorizontalRule(_) => {
-                                "---".to_string()
-                            }
+                                            .collect::<String>(),
+                                    ),
+                                    _ => None,
+                                })
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                            Block::HorizontalRule(_) => "---".to_string(),
                         };
 
                         let confidence = match block {
@@ -338,11 +325,7 @@ impl SnipperEngine {
     /// return an error (`SnipperError::Image`) until a PDF renderer (pdfium/poppler)
     /// is integrated. Convert PDF pages to images externally (e.g. pdftoppm, pdfium)
     /// and process each page individually.
-    pub async fn recognize_pdf(
-        &self,
-        pdf_path: &Path,
-        mode: RecognizeMode,
-    ) -> Result<Document> {
+    pub async fn recognize_pdf(&self, pdf_path: &Path, mode: RecognizeMode) -> Result<Document> {
         info!("Recognizing PDF {:?} in {:?} mode", pdf_path, mode);
 
         let pages = decode_pdf(PdfSource::File(pdf_path), 300)

@@ -86,8 +86,7 @@ pub fn detect_handwriting(
     let (letterboxed, scale, pad_x, pad_y) =
         latexsnipper_image::operations::letterbox(image, params.target_size);
 
-    let pixels =
-        latexsnipper_image::operations::normalize(&letterboxed, &params.mean, &params.std);
+    let pixels = latexsnipper_image::operations::normalize(&letterboxed, &params.mean, &params.std);
 
     let input = Tensor::float32(
         "images",
