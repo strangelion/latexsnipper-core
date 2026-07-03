@@ -1,8 +1,15 @@
 [package]
 name = "latexsnipper-pipeline"
-description = "Pipeline capability — composable node graph for OCR workflows"
+description = "LaTeXSnipper Core — one-line image to LaTeX/Markdown/Typst"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 latexsnipper-foundation = { path = "../foundation" }
