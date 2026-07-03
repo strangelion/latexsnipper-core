@@ -305,29 +305,16 @@ See [docs/getting-started.md](docs/getting-started.md) for details.
 
 ## Models
 
-LaTeXSnipper Core uses PaddleOCR v6 ONNX models for text recognition.
+LaTeXSnipper Core uses ONNX models for formula detection/recognition and text detection/recognition.
 
 ### Supported Models
 
-| Model | Size | Purpose | Download |
-|-------|------|---------|----------|
-| PP-OCRv6 Medium Det | 32 MB | Text detection (high accuracy) | `latexsnipper-text-det-v6-medium.zip` |
-| PP-OCRv6 Medium Rec | 64 MB | Text recognition (18708 chars: CN/EN/math/greek) | `latexsnipper-text-rec-v6-medium.zip` |
-| PP-OCRv6 Small Det | 7 MB | Text detection (lightweight) | `latexsnipper-text-det-v6-small.zip` |
-| YOLOv8-MFD | 66 MB | Formula detection | `latexsnipper-formula-det.zip` |
-| TrOCR | 104 MB | Formula recognition (encoder+decoder) | `latexsnipper-formula-rec.zip` |
-| PP-LCNet Doc Ori | 6 MB | Document orientation (0/90/180/270) | `latexsnipper-doc-ori-v1.zip` |
-| PP-LCNet Textline Ori | 6 MB | Textline orientation (0/180) | `latexsnipper-textline-ori-v1.zip` |
-| UVDoc | 28 MB | Document unwarping | `latexsnipper-uvdoc-v1.zip` |
-
-### Quick Start
-
-Download `latexsnipper-models-all.zip` (193 MB) for all models:
-
-```bash
-curl -LO https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/latexsnipper-models-all.zip
-unzip latexsnipper-models-all.zip -d models/
-```
+| Model | Size | Purpose |
+|-------|------|---------|
+| YOLOv8-MFD | ~66 MB | Formula detection |
+| TrOCR | ~104 MB | Formula recognition (encoder+decoder) |
+| PP-OCRv6 Det | ~7-32 MB | Text detection (small/medium variants) |
+| PP-OCRv6 Rec | ~64 MB | Text recognition (18708 chars: CN/EN/math/greek) |
 
 ### Model Directory Structure
 
@@ -335,12 +322,11 @@ unzip latexsnipper-models-all.zip -d models/
 models/
 ├── formula-det/yolov8-mfd/     # Formula detection
 ├── formula-rec/trocr-deit/     # Formula recognition
-├── text-det/v6-medium/         # Text detection (recommended)
-├── text-rec/v6-medium/         # Text recognition (recommended)
-├── doc-ori/pp-lcnet-v1/        # Document orientation
-├── textline-ori/pp-lcnet-v1/   # Textline orientation
-└── uvdoc/uvdoc-v1/             # Document unwarping
+├── text-det/v6-small/          # Text detection (lightweight)
+└── text-rec/v6-small/          # Text recognition
 ```
+
+> Note: `test-models/` directory contains models under active testing and should not be modified.
 
 ---
 
