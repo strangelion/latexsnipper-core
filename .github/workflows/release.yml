@@ -58,10 +58,6 @@ jobs:
         with:
           key: cli-${{ matrix.target }}
 
-      - name: Setup Xcode (macOS)
-        if: runner.os == 'macOS'
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-
       - name: Build
         run: cargo build --release -p latexsnipper-cli --target ${{ matrix.target }}
 
