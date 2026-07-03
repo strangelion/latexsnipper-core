@@ -98,15 +98,15 @@ Engine
 
 | 能力 | 状态 | 说明 |
 |------|------|------|
-| **推理** | 🚧 | YOLOv8 检测、TrOCR 识别、CRNN+CTC |
-| **运行时** | 🚧 | ONNX Runtime（会话缓存）+ Stub |
-| **引擎** | 🚧 | JobQueue、Service trait、Request/Response Builder、Streaming API |
-| **模型** | 🚧 | 清单、配置、SHA256 校验 |
-| **插件** | 🚧 | Plugin trait、Registry、Request/Response |
-| **FFI** | 🚧 | Android JNI、iOS C FFI |
-| **WASM** | 🚧 | parse/render/convert 绑定 |
-| **CLI** | 🚧 | recognize/parse/render/version |
-| **导出** | 🚧 | SVG、Text 生成器 |
+| **推理** | ✅ | YOLOv8 检测、TrOCR 识别、CRNN+CTC |
+| **运行时** | ✅ | ONNX Runtime（会话缓存）+ Stub |
+| **引擎** | ✅ | JobQueue、Service trait、Request/Response Builder、Streaming API |
+| **模型** | ✅ | 清单、配置、SHA256 校验 |
+| **插件** | ✅ | Plugin trait、Registry |
+| **FFI** | ✅ | Android JNI、iOS C FFI |
+| **WASM** | ✅ | parse/render/convert/recognize 绑定 |
+| **CLI** | ✅ | recognize/parse/render/version |
+| **导出** | 🟡 | SVG/Text 可用，PDF 为基础实现 |
 
 ### 规划中
 
@@ -127,19 +127,19 @@ crates/
 ├── ast/            ✅ 文档 AST — 唯一数据源
 ├── tensor/         ✅ 推理 I/O 张量
 ├── image/          ✅ 平台无关图像处理
-├── runtime/        🚧 RuntimeBackend + InferenceSession trait
-├── model/          🚧 模型清单、配置、管理
-├── inference/      🚧 检测 + 识别管线
+├── runtime/        ✅ RuntimeBackend + InferenceSession trait（ONNX + Stub）
+├── model/          ✅ 模型清单、配置、SHA256 校验
+├── inference/      ✅ 检测 + 识别管线（YOLOv8/TrOCR/CRNN）
 ├── pipeline/       ✅ 节点化异步流水线
 ├── syntax/         ✅ LaTeX/Typst/Markdown 解析器 + 渲染器
 ├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
-├── export/         🚧 RenderTree → SVG/Text
-├── engine/         🚧 SnipperEngine — 主入口
-├── plugin/         🚧 插件 API（Plugin trait、Registry）
+├── export/         🟡 RenderTree → SVG/Text/PDF（PDF 为基础实现）
+├── engine/         ✅ SnipperEngine + JobQueue + Service
+├── plugin/         ✅ Plugin trait、Registry
 ├── mock/           ✅ 测试用 Fake 实现
-├── ffi/            🚧 Android JNI + iOS C FFI
-├── wasm/           🚧 WebAssembly 绑定
-├── cli/            🚧 命令行工具
+├── ffi/            ✅ Android JNI + iOS C FFI
+├── wasm/           ✅ WebAssembly 绑定
+├── cli/            ✅ 命令行工具
 └── tests/          ✅ 集成测试（70 个测试）
 ```
 

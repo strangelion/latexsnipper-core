@@ -194,15 +194,15 @@ Engine
 
 | Capability | Status | Details |
 |-----------|--------|---------|
-| **Inference** | 🚧 | YOLOv8 detection, TrOCR recognition, CRNN+CTC |
-| **Runtime** | 🚧 | ONNX Runtime (with session caching) + Stub |
-| **Engine** | 🚧 | JobQueue, Service trait, Request/Response Builder, Streaming API |
-| **Model** | 🚧 | Manifest, Config, SHA256 verification |
-| **Plugin** | 🚧 | Plugin trait, Registry, Request/Response |
-| **FFI** | 🚧 | Android JNI, iOS C FFI (OnnxRuntimeBackend) |
-| **WASM** | 🚧 | parse/render/convert/recognize bindings |
-| **CLI** | 🚧 | recognize/parse/render/version |
-| **Export** | 🚧 | SVG, Text, PDF generators |
+| **Inference** | ✅ | YOLOv8 检测 + TrOCR 公式识别 + CRNN+CTC 文本识别 |
+| **Runtime** | ✅ | ONNX Runtime（session 缓存、GPU 自动检测）+ Stub |
+| **Engine** | ✅ | JobQueue、Service trait、Request/Response Builder、Streaming API |
+| **Model** | ✅ | Manifest、Config、SHA256 校验 |
+| **Plugin** | ✅ | Plugin trait、Registry、TransformPlugin |
+| **FFI** | ✅ | Android JNI + iOS C FFI |
+| **WASM** | ✅ | parse/render/convert/recognize 完整绑定 |
+| **CLI** | ✅ | recognize/parse/render/version 命令 |
+| **Export** | 🟡 | SVG/Text 可用，PDF 为基础实现 |
 
 ### Planned
 
@@ -223,19 +223,19 @@ crates/
 ├── ast/            ✅ Document AST — single source of truth
 ├── tensor/         ✅ Inference I/O tensors
 ├── image/          ✅ Platform-independent image processing
-├── runtime/        🚧 RuntimeBackend + InferenceSession traits
-├── model/          🚧 Model manifest, config, management
-├── inference/      🚧 Detection + Recognition pipelines
+├── runtime/        ✅ RuntimeBackend + InferenceSession traits (ONNX + Stub)
+├── model/          ✅ Model manifest, config, SHA256 verification
+├── inference/      ✅ Detection + Recognition pipelines (YOLOv8/TrOCR/CRNN)
 ├── pipeline/       ✅ Node-based async pipeline
 ├── syntax/         ✅ LaTeX/Typst/Markdown Parser + Renderer
 ├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
-├── export/         🚧 RenderTree → SVG/Text/PDF
-├── engine/         🚧 SnipperEngine + JobQueue + Service
-├── plugin/         🚧 Plugin API (Plugin trait, Registry)
+├── export/         🟡 RenderTree → SVG/Text/PDF (PDF 为基础实现)
+├── engine/         ✅ SnipperEngine + JobQueue + Service
+├── plugin/         ✅ Plugin trait, Registry
 ├── mock/           ✅ Fake implementations for testing
-├── ffi/            🚧 Android JNI + iOS C FFI
-├── wasm/           🚧 WebAssembly bindings
-├── cli/            🚧 CLI tool
+├── ffi/            ✅ Android JNI + iOS C FFI
+├── wasm/           ✅ WebAssembly bindings
+├── cli/            ✅ CLI tool (recognize/parse/render/version)
 └── tests/          ✅ Integration tests (150+ tests)
 ```
 
