@@ -3,6 +3,11 @@ name = "latexsnipper-engine"
 description = "Core engine — orchestrates all capabilities"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 latexsnipper-foundation = { path = "../foundation" }

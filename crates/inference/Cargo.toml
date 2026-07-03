@@ -3,6 +3,11 @@ name = "latexsnipper-inference"
 description = "Inference capability — Detection, Recognition, Layout"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 latexsnipper-foundation = { path = "../foundation" }

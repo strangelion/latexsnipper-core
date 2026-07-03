@@ -3,7 +3,11 @@ name = "latexsnipper-ast"
 description = "Document AST — the single source of truth for all data models"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 serde.workspace = true

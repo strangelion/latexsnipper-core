@@ -43,9 +43,6 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact: snipper-linux-amd64
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            artifact: snipper-macos-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: snipper-windows-amd64.exe
@@ -60,6 +57,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: cli-${{ matrix.target }}
+
+      - name: Setup Xcode (macOS)
+        if: runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
       - name: Build
         run: cargo build --release -p latexsnipper-cli --target ${{ matrix.target }}
@@ -103,7 +104,7 @@ jobs:
         run: cargo test --workspace
 
   # ============================================================
-  # Job 3: Publish to crates.io (only pipeline)
+  # Job 3: Publish to crates.io (in dependency order)
   # ============================================================
   publish-crates:
     name: Publish to crates.io
@@ -117,8 +118,63 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Publish pipeline (includes all re-exports)
+      - name: Publish foundation
+        run: cargo publish -p latexsnipper-foundation
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish ast
+        run: cargo publish -p latexsnipper-ast
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish tensor
+        run: cargo publish -p latexsnipper-tensor
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish image
+        run: cargo publish -p latexsnipper-image
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish syntax
+        run: cargo publish -p latexsnipper-syntax
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish conversion
+        run: cargo publish -p latexsnipper-conversion
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish export
+        run: cargo publish -p latexsnipper-export
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish model
+        run: cargo publish -p latexsnipper-model
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish runtime
+        run: cargo publish -p latexsnipper-runtime
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish inference
+        run: cargo publish -p latexsnipper-inference
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish pipeline
         run: cargo publish -p latexsnipper-pipeline
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish engine
+        run: cargo publish -p latexsnipper-engine
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
