@@ -90,7 +90,7 @@ Engine
 |------|------|------|
 | **AST** | ✅ | Document → Page → Block → Inline → Formula |
 | **图像** | ✅ | SnipperImage、ImageView、解码、缩放、归一化 |
-| **转换** | ✅ | 12 种格式：LaTeX、OMML、MathML、Typst、Markdown、HTML |
+| **转换** | ✅ | 6 种格式：LaTeX、OMML、MathML、Typst、Markdown、HTML |
 | **语法** | ✅ | LaTeX/Typst/Markdown 解析器 + 渲染器 |
 | **流水线** | ✅ | 异步节点流水线，支持取消 |
 
@@ -105,17 +105,12 @@ Engine
 | **插件** | ✅ | Plugin trait、Registry |
 | **FFI** | ✅ | Android JNI、iOS C FFI |
 | **WASM** | ✅ | parse/render/convert/recognize 绑定 |
-| **CLI** | ✅ | recognize/parse/render/version，文件导出 (`-o output.tex`)，格式提示 |
+| **CLI** | ✅ | recognize/parse/render/version，文件导出 (`-o output.tex`)，格式提示，隐藏小游戏 (`snipper play`) |
 | **导出** | ✅ | SVG/Text/PDF（printpdf），标题/表格/列表/代码/公式/页面选择 |
-
-### 规划中
-
-| 能力 | 状态 | 说明 |
-|------|------|------|
-| **表格识别** | ○ | 表格结构检测和解析 |
-| **手写识别** | ○ | 手写文本识别 |
-| **公式布局** | ○ | 复杂公式布局分析 |
-| **多页处理** | ○ | 多页文档处理 |
+| **表格识别** | ✅ | SLANet+ 表格结构 + PP-DocLayout v3 版式检测 |
+| **手写识别** | ✅ | 手写检测 + TrOCR 识别 + 后处理（数字/字母混淆修复 + 标点归一化） |
+| **公式布局** | ✅ | LaTeX AST 解析 + 符号级检测；已知问题：layout 未写回 Formula 对象 |
+| **多页处理** | ✅ | 多页文档处理；PDF 渲染未实现（返回错误） |
 
 ---
 
@@ -139,8 +134,8 @@ crates/
 ├── mock/           ✅ 测试用 Fake 实现
 ├── ffi/            ✅ Android JNI + iOS C FFI
 ├── wasm/           ✅ WebAssembly 绑定
-├── cli/            ✅ 命令行工具
-└── tests/          ✅ 集成测试（70 个测试）
+├── cli/            ✅ 命令行工具（recognize/parse/render/version/play）
+└── tests/          ✅ 集成测试（64+ 个测试）
 ```
 
 ---
@@ -244,6 +239,7 @@ LaTeXSnipper Core 使用 ONNX 模型进行公式检测/识别和文本检测/识
 | TrOCR | ~104 MB | 公式识别（编码器+解码器） |
 | PP-OCRv6 Det | ~7-32 MB | 文本检测（small/medium 版本） |
 | PP-OCRv6 Rec | ~64 MB | 文本识别（18708 字符：中/英/数学/希腊） |
+| SLANet Plus | ~7 MB | 表格结构识别 |
 
 ### 模型目录结构
 
@@ -252,7 +248,10 @@ models/
 ├── formula-det/yolov8-mfd/     # 公式检测
 ├── formula-rec/trocr-deit/     # 公式识别
 ├── text-det/v6-small/          # 文本检测（轻量版）
-└── text-rec/v6-small/          # 文本识别
+├── text-rec/v6-small/          # 文本识别
+├── table-det/pp-doc-layoutv3/  # 版式检测
+├── table-struct/slanet-plus/   # 表格结构
+└── release_models/             # 发布用模型清单
 ```
 
 > 注意：`test-models/` 目录包含正在测试的模型，请勿修改。

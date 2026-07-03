@@ -1,9 +1,11 @@
 use log::info;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Mutex;
 
 use latexsnipper_ast::*;
 use latexsnipper_foundation::Result;
+use latexsnipper_image::pdf::{decode_pdf, PdfSource};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_model::ModelManager;
 use latexsnipper_pipeline::{PipelineContext, PipelineGraph};
@@ -30,10 +32,14 @@ pub struct SnipperEngine {
 
 /// Recognition mode.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum RecognizeMode {
     Formula,
     Text,
     Mixed,
+    Handwriting,
+    Table,
+    FormulaLayout,
 }
 
 impl SnipperEngine {
@@ -90,6 +96,35 @@ impl SnipperEngine {
                 graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::text()));
                 graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
             }
+            RecognizeMode::Handwriting => {
+                graph.add_node(Box::new(
+                    latexsnipper_pipeline::DetectorNode::handwriting(),
+                ));
+                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
+                graph.add_node(Box::new(
+                    latexsnipper_pipeline::HandwritingRecognizerNode::new(),
+                ));
+                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+            }
+            RecognizeMode::Table => {
+                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::table()));
+                graph.add_node(Box::new(
+                    latexsnipper_pipeline::TableStructureNode::new(),
+                ));
+                graph.add_node(Box::new(
+                    latexsnipper_pipeline::TableRecognizerNode::new(),
+                ));
+                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+            }
+            RecognizeMode::FormulaLayout => {
+                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
+                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
+                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::formula()));
+                graph.add_node(Box::new(
+                    latexsnipper_pipeline::FormulaLayoutNode::new(),
+                ));
+                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+            }
         }
 
         graph
@@ -118,17 +153,12 @@ impl SnipperEngine {
                 let mut idx = 0;
                 for page in &doc.pages {
                     for block in &page.blocks {
-                        match block {
+                        let text = match block {
                             Block::Formula(f) => {
-                                items.push(StreamItem::RegionRecognized {
-                                    index: idx,
-                                    text: f.formula.as_latex().to_string(),
-                                    confidence: f.formula.confidence,
-                                });
+                                f.formula.as_latex().to_string()
                             }
                             Block::Paragraph(p) => {
-                                let text: String = p
-                                    .inlines
+                                p.inlines
                                     .iter()
                                     .filter_map(|i| {
                                         if let Inline::Text(t) = i {
@@ -137,16 +167,108 @@ impl SnipperEngine {
                                             None
                                         }
                                     })
-                                    .collect();
-                                if !text.is_empty() {
-                                    items.push(StreamItem::RegionRecognized {
-                                        index: idx,
-                                        text,
-                                        confidence: 1.0,
-                                    });
-                                }
+                                    .collect::<String>()
                             }
-                            _ => {}
+                            Block::Heading(h) => {
+                                h.inlines
+                                    .iter()
+                                    .filter_map(|i| {
+                                        if let Inline::Text(t) = i {
+                                            Some(t.text.as_str())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect::<String>()
+                            }
+                            Block::Table(t) => {
+                                let mut buf = String::new();
+                                for row in &t.rows {
+                                    for cell in row {
+                                        for inline in &cell.inlines {
+                                            if let Inline::Text(txt) = inline {
+                                                buf.push_str(&txt.text);
+                                                buf.push(' ');
+                                            }
+                                        }
+                                        buf.push('\t');
+                                    }
+                                    buf.push('\n');
+                                }
+                                buf
+                            }
+                            Block::Handwriting(hw) => {
+                                hw.inlines
+                                    .iter()
+                                    .filter_map(|i| {
+                                        if let Inline::Text(t) = i {
+                                            Some(t.text.as_str())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect::<String>()
+                            }
+                            Block::Code(c) => c.code.clone(),
+                            Block::Figure(f) => f.caption.clone().unwrap_or_default(),
+                            Block::List(l) => {
+                                l.items
+                                    .iter()
+                                    .filter_map(|item| {
+                                        let t: String = item
+                                            .inlines
+                                            .iter()
+                                            .filter_map(|i| {
+                                                if let Inline::Text(txt) = i {
+                                                    Some(txt.text.as_str())
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect();
+                                        if t.is_empty() { None } else { Some(t) }
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            }
+                            Block::Quote(q) => {
+                                q.blocks
+                                    .iter()
+                                    .filter_map(|b| match b {
+                                        Block::Paragraph(p) => Some(
+                                            p.inlines
+                                                .iter()
+                                                .filter_map(|i| {
+                                                    if let Inline::Text(t) = i {
+                                                        Some(t.text.as_str())
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .collect::<String>(),
+                                        ),
+                                        _ => None,
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join(" ")
+                            }
+                            Block::HorizontalRule(_) => {
+                                "---".to_string()
+                            }
+                        };
+
+                        let confidence = match block {
+                            Block::Formula(f) => f.formula.confidence,
+                            Block::Handwriting(hw) => hw.confidence,
+                            _ => 1.0,
+                        };
+
+                        if !text.is_empty() {
+                            items.push(StreamItem::RegionRecognized {
+                                index: idx,
+                                text,
+                                confidence,
+                            });
                         }
                         idx += 1;
                     }
@@ -185,40 +307,12 @@ impl SnipperEngine {
         graph.run(&mut ctx).await?;
 
         // Extract document from context metadata
-        let mut blocks = Vec::new();
-
-        if let Some(val) = ctx.get("formula_blocks") {
-            if let Some(arr) = val.as_array() {
-                for block_val in arr {
-                    if let Ok(block) = serde_json::from_value::<Block>(block_val.clone()) {
-                        blocks.push(block);
-                    }
-                }
-            }
-        }
-
-        if let Some(val) = ctx.get("text_blocks") {
-            if let Some(arr) = val.as_array() {
-                for block_val in arr {
-                    if let Ok(block) = serde_json::from_value::<Block>(block_val.clone()) {
-                        blocks.push(block);
-                    }
-                }
-            }
-        }
+        let mut blocks = Self::collect_blocks_from_context(&ctx);
 
         // Sort by y-coordinate (reading order)
         blocks.sort_by(|a, b| {
-            let ay = match a {
-                Block::Formula(f) => f.geometry.as_ref().map_or(0.0, |g| g.y),
-                Block::Paragraph(p) => p.geometry.as_ref().map_or(0.0, |g| g.y),
-                _ => 0.0,
-            };
-            let by = match b {
-                Block::Formula(f) => f.geometry.as_ref().map_or(0.0, |g| g.y),
-                Block::Paragraph(p) => p.geometry.as_ref().map_or(0.0, |g| g.y),
-                _ => 0.0,
-            };
+            let ay = a.geometry().map_or(0.0, |g| g.y);
+            let by = b.geometry().map_or(0.0, |g| g.y);
             ay.partial_cmp(&by).unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -232,5 +326,98 @@ impl SnipperEngine {
             }],
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         })
+    }
+
+    /// Recognize content in a PDF file — Multi-page support.
+    ///
+    /// Each page is processed independently through the pipeline.
+    ///
+    /// # Note
+    ///
+    /// **PDF page rendering is not yet implemented.** Calling `decode_pdf` will
+    /// return an error (`SnipperError::Image`) until a PDF renderer (pdfium/poppler)
+    /// is integrated. Convert PDF pages to images externally (e.g. pdftoppm, pdfium)
+    /// and process each page individually.
+    pub async fn recognize_pdf(
+        &self,
+        pdf_path: &Path,
+        mode: RecognizeMode,
+    ) -> Result<Document> {
+        info!("Recognizing PDF {:?} in {:?} mode", pdf_path, mode);
+
+        let pages = decode_pdf(PdfSource::File(pdf_path), 300)
+            .map_err(|e| latexsnipper_foundation::SnipperError::Image(e.to_string()))?;
+
+        info!("PDF loaded: {} pages", pages.len());
+
+        let graph = self.build_pipeline(mode);
+        let mut doc_pages = Vec::new();
+
+        for (page_idx, page_img) in pages.iter().enumerate() {
+            if page_idx > 0 {
+                info!("Processing page {}/{}", page_idx + 1, pages.len());
+            }
+
+            let mut ctx = PipelineContext::with_image(page_img.clone());
+            ctx.models_dir = Some(self.config.models_dir.clone());
+
+            graph.run(&mut ctx).await?;
+
+            // Collect blocks for this page (all block types)
+            let mut blocks = Self::collect_blocks_from_context(&ctx);
+
+            // Sort by geometry (y-coordinate for reading order)
+            blocks.sort_by(|a, b| {
+                let ay = a.geometry().map_or(0.0, |g| g.y);
+                let by = b.geometry().map_or(0.0, |g| g.y);
+                ay.partial_cmp(&by).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            doc_pages.push(Page {
+                width: page_img.width() as f32,
+                height: page_img.height() as f32,
+                blocks,
+                page_number: Some((page_idx + 1) as u32),
+            });
+        }
+
+        info!(
+            "PDF recognition complete: {} pages, {} total blocks",
+            doc_pages.len(),
+            doc_pages.iter().map(|p| p.blocks.len()).sum::<usize>()
+        );
+
+        Ok(Document {
+            metadata: Metadata::default(),
+            pages: doc_pages,
+            id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+        })
+    }
+
+    /// Collect blocks from all known metadata keys in the pipeline context.
+    ///
+    /// Handles formula_blocks, text_blocks, handwriting_blocks, and table_blocks.
+    /// Used by both `recognize` and `recognize_pdf` to avoid duplication.
+    fn collect_blocks_from_context(ctx: &PipelineContext) -> Vec<Block> {
+        let mut blocks = Vec::new();
+
+        for key in &[
+            "formula_blocks",
+            "text_blocks",
+            "handwriting_blocks",
+            "table_blocks",
+        ] {
+            if let Some(val) = ctx.get(key) {
+                if let Some(arr) = val.as_array() {
+                    for block_val in arr {
+                        if let Ok(block) = serde_json::from_value::<Block>(block_val.clone()) {
+                            blocks.push(block);
+                        }
+                    }
+                }
+            }
+        }
+
+        blocks
     }
 }

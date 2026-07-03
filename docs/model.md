@@ -59,8 +59,9 @@ pub struct ModelConfig {
 | `dbnet` | detection | flat input/output | PaddleOCR 文字检测 |
 | `crnn_ctc` | ocr | flat input/output | PaddleOCR 文字识别 |
 | `pplcnet` | classification | flat input/output | 方向分类器 |
-| `detr` | detection | flat input/output | DETR 检测器（未来） |
-| `sam` | segmentation | 多子网络 | Segment Anything（未来） |
+| `detr` | detection | flat input/output | DETR 检测器 |
+| `picodet_layout` | detection | flat input/output | PicoDet 版面分析 |
+| `slanet` | table_structure | flat input/output | SLANet 表格结构识别 |
 
 ### PostprocessConfig 扩展字段
 
@@ -134,14 +135,26 @@ models/
 │       ├── tokenizer.json
 │       └── config.json
 ├── text-det/
-│   └── ppocrv5-mobile/
-│       ├── ppocrv5_mobile_det.onnx
+│   └── v6-small/
+│       ├── inference.onnx
 │       └── config.json
-└── text-rec/
-    └── ppocrv5-mobile/
-        ├── ppocrv5_mobile_rec.onnx
-        ├── ppocrv5_keys.txt
-        └── config.json
+├── text-rec/
+│   └── v6-small/
+│       ├── inference.onnx
+│       ├── inference.yml
+│       └── config.json
+├── table-det/
+│   └── tatr-detection/
+│       ├── model.onnx
+│       └── model.onnx.data
+└── table-struct/
+    ├── tatr-structure/
+    │   ├── model.onnx
+    │   └── model.onnx.data
+    └── slanet-plus/
+        ├── model.onnx
+        ├── config.json
+        └── dict.txt
 ```
 
 ## ModelManager

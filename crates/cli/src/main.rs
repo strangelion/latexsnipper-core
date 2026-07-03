@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use latexsnipper_pipeline::sdk::Snipper;
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
+use std::io::{self, Write};
 
 const SUPPORTED_FORMATS: &str = "latex, markdown, typst, html, mathml, omml, json";
 
@@ -44,6 +45,9 @@ enum Commands {
 
     /// Show version info
     Version,
+
+    /// Guess the LaTeX formula (hidden minigame)
+    Play,
 }
 
 fn resolve_format(format: &str, output: Option<&str>) -> String {
@@ -220,7 +224,94 @@ fn main() {
 
         Commands::Version => {
             println!("snipper {}", env!("CARGO_PKG_VERSION"));
-            println!("LaTeXSnipper Core — Real ONNX Runtime Mode");
+            println!("LaTeXSnipper Core -- Real ONNX Runtime Mode");
+            println!("");
+            println!("[Easter Egg] Try 'snipper play' for a hidden mini-game!");
         }
+
+        Commands::Play => play_game(),
+    }
+}
+
+fn play_game() {
+    println!("========================================");
+    println!(" LaTeX Formula Guessing Game");
+    println!("========================================");
+    println!("Guess the LaTeX command from the description!");
+    println!("Type 'quit' to exit, 'hint' for a hint.");
+    println!("");
+
+    let puzzles = [
+        ("Greek letter for wavelength", "\\lambda"),
+        ("Sum of a series (summation symbol)", "\\sum"),
+        ("Definite integral symbol", "\\int"),
+        ("Square root of x", "\\sqrt{x}"),
+        ("Fraction a over b", "\\frac{a}{b}"),
+        ("Infinity symbol", "\\infty"),
+        ("Partial derivative symbol", "\\partial"),
+        ("Pi (circumference / diameter)", "\\pi"),
+        ("Right arrow", "\\rightarrow"),
+        ("Nabla (gradient operator)", "\\nabla"),
+    ];
+
+    let mut score = 0;
+    let mut total = 0;
+
+    for (desc, answer) in &puzzles {
+        total += 1;
+        print!("[{}/{}] {} > ", total, puzzles.len(), desc);
+        io::stdout().flush().unwrap();
+
+        let mut guess = String::new();
+        io::stdin().read_line(&mut guess).unwrap();
+
+        let trimmed = guess.trim().to_lowercase();
+        if trimmed == "quit" {
+            println!();
+            println!("Thanks for playing! Score: {}/{}", score, total - 1);
+            return;
+        }
+
+        if trimmed == "hint" {
+            let hint_end = 4.min(answer.len());
+            println!("  (Hint: starts with '{}')", &answer[..hint_end]);
+            print!("  Try again > ");
+            io::stdout().flush().unwrap();
+            guess.clear();
+            io::stdin().read_line(&mut guess).unwrap();
+            let trimmed = guess.trim().to_lowercase();
+            if trimmed == "quit" {
+                println!();
+                println!("Thanks for playing! Score: {}/{}", score, total - 1);
+                return;
+            }
+            if trimmed == *answer {
+                println!("  Correct! (+1)");
+                score += 1;
+                continue;
+            } else {
+                println!("  Wrong! Answer: {}", answer);
+                continue;
+            }
+        }
+
+        if trimmed == *answer {
+            println!("  Correct! (+1)");
+            score += 1;
+        } else {
+            println!("  Wrong! Answer: {}", answer);
+        }
+    }
+
+    println!("");
+    println!("========================================");
+    println!(" Game Over! Final score: {}/{}", score, total);
+    println!("========================================");
+    if score == total {
+        println!(" Perfect! You're a LaTeX master!");
+    } else if score >= total / 2 {
+        println!(" Not bad, keep practicing!");
+    } else {
+        println!(" Time to brush up on your LaTeX!");
     }
 }

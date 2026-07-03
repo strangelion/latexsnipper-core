@@ -411,7 +411,8 @@ mod conversion_tests {
     };
     use latexsnipper_conversion::*;
 
-    fn test_doc() -> Document {
+    /// Shared test document fixture — built once per test file, reused by all tests.
+    static TEST_DOC: once_cell::sync::Lazy<Document> = once_cell::sync::Lazy::new(|| {
         Document {
             metadata: latexsnipper_ast::Metadata::default(),
             pages: vec![Page {
@@ -447,66 +448,66 @@ mod conversion_tests {
             }],
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         }
-    }
+    });
 
     #[test]
     fn latex() {
-        let r = LatexConverter.convert(&test_doc()).unwrap();
+        let r = LatexConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("E=mc^2"));
     }
     #[test]
     fn latex_display() {
-        let r = LatexDisplayConverter.convert(&test_doc()).unwrap();
+        let r = LatexDisplayConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("\\["));
     }
     #[test]
     fn latex_equation() {
-        let r = LatexEquationConverter.convert(&test_doc()).unwrap();
+        let r = LatexEquationConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("\\begin{equation}"));
     }
     #[test]
     fn markdown_inline() {
-        let r = MarkdownInlineConverter.convert(&test_doc()).unwrap();
+        let r = MarkdownInlineConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("$E=mc^2$"));
     }
     #[test]
     fn markdown_block() {
-        let r = MarkdownBlockConverter.convert(&test_doc()).unwrap();
+        let r = MarkdownBlockConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("$$"));
     }
     #[test]
     fn mathml() {
-        let r = MathmlConverter.convert(&test_doc()).unwrap();
+        let r = MathmlConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("<math"));
     }
     #[test]
     fn mathml_mml() {
-        let r = MathmlMmlConverter.convert(&test_doc()).unwrap();
+        let r = MathmlMmlConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("mml:math"));
     }
     #[test]
     fn mathml_m() {
-        let r = MathmlMConverter.convert(&test_doc()).unwrap();
+        let r = MathmlMConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("<m:math"));
     }
     #[test]
     fn mathml_attr() {
-        let r = MathmlAttrConverter.convert(&test_doc()).unwrap();
+        let r = MathmlAttrConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("math"));
     }
     #[test]
     fn omml() {
-        let r = OmmlConverter.convert(&test_doc()).unwrap();
+        let r = OmmlConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("<m:f>"));
     }
     #[test]
     fn typst() {
-        let r = TypstConverter.convert(&test_doc()).unwrap();
+        let r = TypstConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("frac") || r.contains("(a+b)/(c)") || r.contains("(a, b)"));
     }
     #[test]
     fn html() {
-        let r = HtmlConverter.convert(&test_doc()).unwrap();
+        let r = HtmlConverter.convert(&TEST_DOC).unwrap();
         assert!(r.contains("MathJax"));
     }
 
@@ -549,6 +550,148 @@ mod conversion_tests {
         };
         let r = MathmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<mfrac>"));
+    }
+
+    // ── Roundtrip / Loopback tests for nested formulas across all formats ──
+    // These verify that the full pipeline (LaTeX recognized string → OMML/MathML/Typst)
+    // preserves mathematical structure, not just raw text.
+
+    /// LaTeX string → all 6 output formats: check each preserves math structure.
+    #[test]
+    fn roundtrip_latex_to_all_formats() {
+        let formulas = vec![
+            ("E=mc^2", "simple", true),
+            ("x^{2}", "superscript", true),
+            ("x_{y_{z}}", "nested subscript", true),
+            ("x^{y^{z}}", "nested superscript", true),
+            ("\\frac{a}{b}", "fraction", true),
+            ("\\frac{\\frac{a}{b}}{c}", "nested fraction", true),
+            ("\\frac{x^{2}}{y_{n}}", "fraction with sub/sup", true),
+            ("\\sqrt{x}", "sqrt", true),
+            ("\\sqrt[3]{x}", "nth root", true),
+            ("\\sqrt[3]{\\frac{x}{y}}", "root with fraction", true),
+            ("\\alpha_{i}^{2}", "greek with sub/sup", true),
+            ("\\int_{0}^{\\infty} f(x) dx", "integral", true),
+            ("\\sum_{i=0}^{n} a_i", "summation", true),
+            ("\\prod_{i=1}^{\\infty} b_i", "product", true),
+            ("\\lim_{x \\to 0} \\sin x", "limit with arrow", true),
+            ("\\left(\\frac{a}{b}\\right)", "delimited", true),
+            ("\\hat{x} + \\bar{y}", "accents", true),
+            ("\\operatorname{Spec}(A)", "operatorname", true),
+        ];
+
+        for (latex, desc, should_have_math) in &formulas {
+            // LaTeX → LaTeX (passthrough)
+            let out_latex = DocumentConverter::convert_latex_string(latex, OutputFormat::Latex)
+                .unwrap_or_else(|e| panic!("LaTeX→LaTeX failed for {}: {}", desc, e));
+            assert!(!out_latex.is_empty(), "LaTeX→LaTeX empty for {}", desc);
+
+            // LaTeX → Typst
+            let out_typst = DocumentConverter::convert_latex_string(latex, OutputFormat::Typst)
+                .unwrap_or_else(|e| panic!("LaTeX→Typst failed for {}: {}", desc, e));
+            assert!(!out_typst.is_empty(), "LaTeX→Typst empty for {}", desc);
+
+            // LaTeX → MathML
+            let out_mathml = DocumentConverter::convert_latex_string(latex, OutputFormat::MathML)
+                .unwrap_or_else(|e| panic!("LaTeX→MathML failed for {}: {}", desc, e));
+            assert!(
+                out_mathml.contains("<math"),
+                "LaTeX→MathML missing <math> for {} ({}): {}",
+                desc, latex, out_mathml
+            );
+
+            // LaTeX → OMML
+            let out_omml = DocumentConverter::convert_latex_string(latex, OutputFormat::OMML)
+                .unwrap_or_else(|e| panic!("LaTeX→OMML failed for {}: {}", desc, e));
+            if *should_have_math {
+                let has = out_omml.contains("<m:f>")
+                    || out_omml.contains("<m:sSup>")
+                    || out_omml.contains("<m:sSub>")
+                    || out_omml.contains("<m:rad>")
+                    || out_omml.contains("<m:acc>")
+                    || out_omml.contains("<m:nary>")
+                    || out_omml.contains("<m:d>")
+                    || out_omml.contains("<m:mRow>")
+                    || out_omml.contains("<m:oMathPara")
+                    || out_omml.contains("<m:r>");
+                assert!(
+                    has,
+                    "LaTeX→OMML missing structure for {} ({}): {}",
+                    desc, latex, out_omml
+                );
+            }
+
+            // LaTeX → Markdown
+            let out_md = DocumentConverter::convert_latex_string(latex, OutputFormat::MarkdownBlock)
+                .unwrap_or_else(|e| panic!("LaTeX→Markdown failed for {}: {}", desc, e));
+            assert!(
+                out_md.contains("$") || out_md.contains("\\("),
+                "LaTeX→Markdown missing delimiters for {} ({}): {}",
+                desc, latex, out_md
+            );
+
+            // LaTeX → HTML
+            let out_html = DocumentConverter::convert_latex_string(latex, OutputFormat::Html)
+                .unwrap_or_else(|e| panic!("LaTeX→HTML failed for {}: {}", desc, e));
+            assert!(
+                out_html.contains("MathJax") || out_html.contains("math"),
+                "LaTeX→HTML missing math for {} ({}): {}",
+                desc, latex, out_html
+            );
+        }
+    }
+
+    /// LaTeX → OMML → LaTeX: verify math structure survives the roundtrip.
+    #[test]
+    fn roundtrip_latex_omml_latex() {
+        // Simple cases
+        let cases = vec![
+            ("\\frac{a}{b}", "<m:f>"),
+            ("x^{2}", "<m:sSup>"),
+            ("x_{i}", "<m:sSub>"),
+        ];
+        for (latex, omml_structure) in &cases {
+            let omml = DocumentConverter::convert_latex_string(latex, OutputFormat::OMML)
+                .unwrap_or_else(|e| panic!("LaTeX→OMML failed for {}: {}", latex, e));
+            assert!(
+                omml.contains(omml_structure),
+                "OMML missing {} for {}: {}",
+                omml_structure, latex, omml
+            );
+            let back = DocumentConverter::convert_omml_string(&omml, OutputFormat::Latex)
+                .unwrap_or_else(|e| panic!("OMML→LaTeX failed for {}: {}", latex, e));
+            assert!(
+                back.contains("frac") || back.contains("^") || back.contains("_"),
+                "OMML→LaTeX lost structure for {}: {}",
+                latex, back
+            );
+        }
+    }
+
+    /// LaTeX → MathML → LaTeX: verify math structure survives the roundtrip.
+    #[test]
+    fn roundtrip_latex_mathml_latex() {
+        let cases = vec![
+            ("\\frac{a}{b}", "mfrac"),
+            ("x^{2}", "msup"),
+            ("x_{i}", "msub"),
+        ];
+        for (latex, tag) in &cases {
+            let mathml = DocumentConverter::convert_latex_string(latex, OutputFormat::MathML)
+                .unwrap_or_else(|e| panic!("LaTeX→MathML failed for {}: {}", latex, e));
+            assert!(
+                mathml.contains(tag),
+                "MathML missing <{}> for {}: {}",
+                tag, latex, mathml
+            );
+            let back = DocumentConverter::convert_mathml_string(&mathml, OutputFormat::Latex)
+                .unwrap_or_else(|e| panic!("MathML→LaTeX failed for {}: {}", latex, e));
+            assert!(
+                back.contains("frac") || back.contains("^") || back.contains("_"),
+                "MathML→LaTeX lost structure for {}: {}",
+                latex, back
+            );
+        }
     }
 }
 

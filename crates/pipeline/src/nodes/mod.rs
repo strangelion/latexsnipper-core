@@ -1,6 +1,12 @@
 pub mod crop_node;
 pub mod detector_node;
+pub mod formula_layout_node;
+pub mod handwriting_recognizer_node;
 pub mod normalize_node;
+pub mod page_assembly_node;
+pub mod page_iterator_node;
 pub mod postprocess_node;
 pub mod recognizer_node;
 pub mod resize_node;
+pub mod table_recognizer_node;
+pub mod table_structure_node;

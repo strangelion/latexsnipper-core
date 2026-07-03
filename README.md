@@ -112,7 +112,7 @@ LaTeXSnipper Core follows a strict **four-layer architecture**:
 ```
 Engine
   ├── Conversion (LaTeX/OMML/MathML/Typst/Markdown/HTML)
-  ├── Export (SVG/Text)
+  ├── Export (SVG/Text/PDF)
   ├── Syntax (Parser + Renderer)
   ├── Pipeline (Node Graph)
   │     ├── Inference (Detection + Recognition)
@@ -131,17 +131,17 @@ Engine
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                        Recognition Pipeline                               │
+│                         Recognition Pipeline                              │
 ├───────────────────────────────────────────────────────────────────────────┤
 │                                                                           │
 │  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐             │
-│  │  Decode  │──▶│Normalize │──▶│  Layout  │──▶│  Region  │             │
+│  │  Decode  │──> │Normalize │──> │  Layout  │──> │  Region  │             │
 │  │          │    │          │    │Detection │    │ Proposal │             │
 │  └──────────┘    └──────────┘    └──────────┘    └──────────┘             │
 │        │                                             │                    │
 │        │            ┌────────────────────────────────┘                    │
 │        │            │                                                     │
-│        │            ▼                                                     │
+│        │            v                                                     │
 │        │         ┌─────────────────────────────────────┐                  │
 │        │         │                                     │                  │
 │        │         │  ┌─────────────┐  ┌─────────────┐   │                  │
@@ -154,19 +154,19 @@ Engine
 │        │         │                  │                  │                  │
 │        │         └──────────────────┼──────────────────┘                  │
 │        │                            │                                     │
-│        │                            ▼                                     │
+│        │                            v                                     │
 │        │                     ┌──────────┐                                 │
 │        │                     │  Merge   │                                 │
 │        │                     └────┬─────┘                                 │
 │        │                          │                                       │
-│        │                          ▼                                       │
+│        │                          v                                       │
 │        │                  ┌──────────────┐                                │
-│        └────────────────▶│ Document AST │                                │
+│        └────────────────> │ Document AST │                                │
 │                           └──────┬───────┘                                │
 │                                  │                                        │
-│                                  ▼                                        │
+│                                  v                                        │
 │                           ┌──────────┐    ┌──────────┐                    │
-│                           │Conversion│──▶│  Export  │                    │
+│                           │Conversion│──> │  Export  │                    │
 │                           └──────────┘    └──────────┘                    │
 │                                 │              │                          │
 │                          LaTeX/OMML        SVG/Text/PDF                   │
@@ -186,7 +186,7 @@ Engine
 |-----------|--------|---------|
 | **AST** | ✅ | Document → Page → Block → Inline → Formula |
 | **Image** | ✅ | SnipperImage, ImageView, decode, resize, normalize |
-| **Conversion** | ✅ | 12 formats: LaTeX, OMML, MathML, Typst, Markdown, HTML |
+| **Conversion** | ✅ | 6 formats: LaTeX, OMML, MathML, Typst, Markdown, HTML |
 | **Syntax** | ✅ | LaTeX/Typst/Markdown Parser + Renderer |
 | **Pipeline** | ✅ | DAG Node Graph, YAML/JSON Manifest, async with cancellation |
 
@@ -201,17 +201,12 @@ Engine
 | **Plugin** | ✅ | Plugin trait, Registry, TransformPlugin |
 | **FFI** | ✅ | Android JNI + iOS C FFI |
 | **WASM** | ✅ | Full parse/render/convert/recognize bindings |
-| **CLI** | ✅ | recognize/parse/render/version commands, file export (`-o output.tex`), format hints |
+| **CLI** | ✅ | recognize/parse/render/version commands, file export (`-o output.tex`), format hints, hidden minigame (`snipper play`) |
 | **Export** | ✅ | SVG/Text/PDF with printpdf, headings, tables, lists, code, formulas, page selection |
-
-### Planned
-
-| Capability | Status | Details |
-|-----------|--------|---------|
-| **Table Recognition** | ○ | Table structure detection and parsing |
-| **Handwriting** | ○ | Handwritten text recognition |
-| **Formula Layout** | ○ | Complex formula layout analysis |
-| **Multi-page** | ○ | Multi-page document processing |
+| **Table Recognition** | ✅ | SLANet+ table structure + PP-DocLayout v3 layout detection |
+| **Handwriting** | ✅ | Handwriting detection + TrOCR recognition + postprocessing |
+| **Formula Layout** | ✅ | LaTeX AST parsing + symbol-level detection + konwn issue: layout not written back to Formula object |
+| **Multi-page** | ✅ | PDF decoding + multi-page pipeline; PDF rendering not yet implemented (returns error) |
 
 ---
 
@@ -235,8 +230,8 @@ crates/
 ├── mock/           ✅ Fake implementations for testing
 ├── ffi/            ✅ Android JNI + iOS C FFI
 ├── wasm/           ✅ WebAssembly bindings
-├── cli/            ✅ CLI tool (recognize/parse/render/version)
-└── tests/          ✅ Integration tests (150+ tests)
+├── cli/            ✅ CLI tool (recognize/parse/render/version/play)
+└── tests/          ✅ Integration tests (64+ tests)
 ```
 
 ---
@@ -335,21 +330,24 @@ LaTeXSnipper Core uses ONNX models for formula detection/recognition and text de
 
 ### Supported Models
 
-| Model | Size | Purpose |
-|-------|------|---------|
-| YOLOv8-MFD | ~66 MB | Formula detection |
-| TrOCR | ~104 MB | Formula recognition (encoder+decoder) |
-| PP-OCRv6 Det | ~7-32 MB | Text detection (small/medium variants) |
-| PP-OCRv6 Rec | ~64 MB | Text recognition (18708 chars: CN/EN/math/greek) |
+| Model | Size | Purpose | Source | License |
+|-------|------|---------|--------|---------|
+| YOLOv8-MFD | ~66 MB | Formula detection | [Mathcraft](https://github.com/SakuraMathcraft/LaTeXSnipper) | MIT |
+| TrOCR-DeiT | ~104 MB | Formula recognition (encoder+decoder) | [Microsoft TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT |
+| PP-OCRv6 Det | ~10 MB | Text detection | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
+| PP-OCRv6 Rec | ~21 MB | Text recognition (18709 chars: CN/EN/math/greek) | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
+| SLANet Plus | ~7 MB | Table structure recognition (cells/rows/cols) | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 |
 
 ### Model Directory Structure
 
 ```
 models/
-├── formula-det/yolov8-mfd/     # Formula detection
-├── formula-rec/trocr-deit/     # Formula recognition
-├── text-det/v6-small/          # Text detection (lightweight)
-└── text-rec/v6-small/          # Text recognition
+├── formula-det/yolov8-mfd/     # Formula detection (YOLOv8)
+├── formula-rec/trocr-deit/     # Formula recognition (TrOCR)
+├── text-det/v6-small/          # Text detection (PP-OCRv6)
+├── text-rec/v6-small/          # Text recognition (PP-OCRv6)
+├── table-det/pp-doc-layoutv3/  # Layout detection (PP-DocLayout v3)
+└── table-struct/slanet-plus/   # Table structure (SLANet Plus)
 ```
 
 > Note: `test-models/` directory contains models under active testing and should not be modified.
@@ -413,3 +411,21 @@ This project builds on the work of these open-source projects:
 ## License
 
 GNU AGPL-3.0. Allowed for learning and personal use. Closed-source commercial distribution is prohibited.
+
+---
+
+## Model Sources & Licenses
+
+This project uses third-party models. Their licenses are listed below for compliance.
+
+| Model | Source Repository | License | Notes |
+|-------|-------------------|---------|-------|
+| YOLOv8-MFD | [SakuraMathcraft/LaTeXSnipper](https://github.com/SakuraMathcraft/LaTeXSnipper) | MIT | Formula detection model, trained on Mathcraft dataset |
+| TrOCR-DeiT | [microsoft/trocr-base-handwritten](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT | Transformer OCR encoder+decoder |
+| PP-OCRv6 | [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 | Text detection & recognition (v6-small variant) |
+| PP-DocLayout v3 | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 | PicoDet-based document layout analysis, 10 categories |
+| SLANet Plus | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 | Table structure recognition, 95.89% TEDS |
+
+**PaddleOCR / PP-Structure** models are developed by [Baidu PaddlePaddle](https://github.com/PaddlePaddle/PaddleOCR) under the Apache-2.0 license.
+
+**RapidAI** models ([RapidLayout](https://github.com/RapidAI/RapidLayout), [RapidTable](https://github.com/RapidAI/RapidTable)) are converted from PaddleOCR to ONNX format and distributed under the Apache-2.0 license. ONNX models are downloaded from [ModelScope](https://www.modelscope.cn/models/RapidAI).

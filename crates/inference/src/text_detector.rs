@@ -62,6 +62,13 @@ pub fn detect_text(
 
     let boxes = postprocess(prob_map, &map_shape, orig_w, orig_h, scale, params)?;
 
+    // Debug
+    let above_thresh: usize = prob_map.iter().filter(|&&v| v > params.det_threshold).count();
+    eprintln!(
+        "text-det debug: input={}x{}, output shape={:?}, prob_map len={}, above_threshold={}, boxes={}",
+        processed.width(), processed.height(), map_shape, prob_map.len(), above_thresh, boxes.len()
+    );
+
     Ok(boxes)
 }
 
@@ -110,6 +117,12 @@ fn postprocess(
 
     let contours = find_contours(&binary, map_w, map_h);
 
+    // Debug
+    eprintln!(
+        "text-det postprocess: map={}x{}, binary ones={}, contours={}",
+        map_w, map_h, binary.iter().filter(|&&b| b == 1).count(), contours.len()
+    );
+
     let mut boxes = Vec::new();
 
     for contour in &contours {
@@ -139,6 +152,12 @@ fn postprocess(
 
         let avg_score = average_score(prob_map, map_w, map_h, min_x, min_y, max_x, max_y);
         if avg_score < params.box_threshold {
+            if boxes.len() < 5 {
+                eprintln!(
+                    "  filtered contour: area={:.1} perimeter={:.1} avg_score={:.3} < box_thresh={}",
+                    area, perimeter, avg_score, params.box_threshold
+                );
+            }
             continue;
         }
 
@@ -156,87 +175,60 @@ fn postprocess(
 }
 
 fn find_contours(binary: &[u8], width: usize, height: usize) -> Vec<Vec<(i32, i32)>> {
-    let mut contours = Vec::new();
+    // Flood-fill connected component labeling → bounding boxes
     let mut visited = vec![false; width * height];
+    let mut contours = Vec::new();
 
     for y in 0..height {
         for x in 0..width {
             let idx = y * width + x;
             if binary[idx] == 1 && !visited[idx] {
-                if let Some(contour) = trace_contour(binary, width, height, x, y, &mut visited) {
-                    if contour.len() >= 4 {
-                        contours.push(contour);
+                // BFS flood fill to find connected component
+                let mut queue = std::collections::VecDeque::new();
+                let mut points = Vec::new();
+                let mut min_x = x;
+                let mut min_y = y;
+                let mut max_x = x;
+                let mut max_y = y;
+
+                queue.push_back((x, y));
+                visited[idx] = true;
+
+                while let Some((cx, cy)) = queue.pop_front() {
+                    points.push((cx as i32, cy as i32));
+                    if cx < min_x { min_x = cx; }
+                    if cy < min_y { min_y = cy; }
+                    if cx > max_x { max_x = cx; }
+                    if cy > max_y { max_y = cy; }
+
+                    // 4-connected neighbors
+                    for &(dx, dy) in &[(0i32, 1i32), (1, 0), (0, -1), (-1, 0)] {
+                        let nx = cx as i32 + dx;
+                        let ny = cy as i32 + dy;
+                        if nx >= 0 && nx < width as i32 && ny >= 0 && ny < height as i32 {
+                            let nidx = ny as usize * width + nx as usize;
+                            if binary[nidx] == 1 && !visited[nidx] {
+                                visited[nidx] = true;
+                                queue.push_back((nx as usize, ny as usize));
+                            }
+                        }
                     }
+                }
+
+                // Convert bounding box to contour (4 corners)
+                if points.len() >= 4 {
+                    contours.push(vec![
+                        (min_x as i32, min_y as i32),
+                        (max_x as i32, min_y as i32),
+                        (max_x as i32, max_y as i32),
+                        (min_x as i32, max_y as i32),
+                    ]);
                 }
             }
         }
     }
 
     contours
-}
-
-fn trace_contour(
-    binary: &[u8],
-    width: usize,
-    height: usize,
-    start_x: usize,
-    start_y: usize,
-    visited: &mut [bool],
-) -> Option<Vec<(i32, i32)>> {
-    let mut contour = Vec::new();
-    let dirs = [
-        (0, 1),
-        (1, 1),
-        (1, 0),
-        (1, -1),
-        (0, -1),
-        (-1, -1),
-        (-1, 0),
-        (-1, 1),
-    ];
-
-    let mut x = start_x as i32;
-    let mut y = start_y as i32;
-    let mut dir = 0;
-
-    for _ in 0..10000 {
-        contour.push((x, y));
-        visited[(y as usize) * width + (x as usize)] = true;
-
-        let start_dir = (dir + 5) % 8;
-        let mut found = false;
-
-        for i in 0..8 {
-            let d = (start_dir + i) % 8;
-            let nx = x + dirs[d].0;
-            let ny = y + dirs[d].1;
-
-            if nx >= 0 && nx < width as i32 && ny >= 0 && ny < height as i32 {
-                let nidx = (ny as usize) * width + (nx as usize);
-                if binary[nidx] == 1 {
-                    x = nx;
-                    y = ny;
-                    dir = d;
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        if !found {
-            break;
-        }
-
-        if x == start_x as i32 && y == start_y as i32 && contour.len() > 3 {
-            break;
-        }
-    }
-
-    if contour.len() > 3 {
-        Some(contour)
-    } else {
-        None
-    }
 }
 
 fn polygon_area(points: &[(i32, i32)]) -> f32 {

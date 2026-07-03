@@ -1,18 +1,41 @@
 pub mod formula_detector;
 pub mod formula_lines;
+pub mod formula_parser;
 pub mod formula_recognizer;
+pub mod handwriting_detector;
+pub mod handwriting_postprocess;
 pub mod latex_repair;
+pub mod symbol_detector;
+pub mod table_detector;
+pub mod table_structure;
+pub mod table_transformer;
 pub mod text_detector;
 pub mod text_recognizer;
 pub mod text_segmentation;
 pub mod trocr_tokenizer;
 pub mod types;
+pub mod yolo_utils;
 
 pub use formula_detector::{
     detect_formulas, filter_formula_detections, group_formula_detections, DetectionParams,
 };
+pub use formula_parser::parse_formula_latex;
 pub use formula_recognizer::{recognize_formula, RecognitionParams};
+pub use handwriting_detector::{
+    detect_handwriting, filter_handwriting_detections, HandwritingDetParams,
+};
+pub use handwriting_postprocess::postprocess_handwriting;
 pub use latex_repair::{has_severe_latex_issue, latex_quality_flags, repair_latex};
+pub use table_transformer::{
+    build_grid_from_detections, recognize_table_transformer, TableTransformerDetection,
+    TABLE_DETECTION_LABELS, TABLE_STRUCTURE_LABELS,
+};
+pub use symbol_detector::{detect_symbols, SymbolDetParams, SymbolDetection};
+pub use table_detector::{detect_tables, filter_table_detections, TableDetParams};
+pub use table_structure::{
+    parse_table_structure, recognize_structure_slanet, recognize_table_structure,
+    CellInfo, ColInfo, RowInfo, TableStructure,
+};
 pub use text_detector::{detect_text, TextDetParams};
 pub use text_recognizer::{load_keys, recognize_text, recognize_text_with_keys, TextRecParams};
-pub use types::{DetectionBox, RecognitionResult};
+pub use types::{DetectionBox, GridCell, RecognitionResult};

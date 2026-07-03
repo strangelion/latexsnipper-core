@@ -138,12 +138,8 @@ fn decode_yolo_output(
     // Handle layout: col_major needs transpose to row_major
     let is_col_major = params.output_layout == "col_major";
     let num_anchors_actual = if is_col_major {
-        // [6, N] layout: shape[smaller] is anchor count
-        if shape.len() == 3 {
-            shape[1].min(shape[2])
-        } else {
-            shape[0].min(shape[1])
-        }
+        // [B, 6, N] or [6, N] layout: last dim is anchor count
+        shape[shape.len() - 1]
     } else {
         num_anchors
     };

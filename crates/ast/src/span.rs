@@ -102,6 +102,11 @@ pub struct SourceInfo {
     /// Line/column position.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<Position>,
+    /// Page index (0-based) for multi-page input (PDF).
+    ///
+    /// `None` means page-agnostic (single-page input or unknown).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<usize>,
 }
 
 impl SourceInfo {
@@ -121,6 +126,12 @@ impl SourceInfo {
 
     pub fn with_position(mut self, pos: Position) -> Self {
         self.position = Some(pos);
+        self
+    }
+
+    /// Tag this source info with a page index (for multi-page PDF input).
+    pub fn with_page(mut self, page: usize) -> Self {
+        self.page = Some(page);
         self
     }
 }

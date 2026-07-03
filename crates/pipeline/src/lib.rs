@@ -12,10 +12,16 @@ pub use manifest::PipelineManifest;
 pub use node::{PipelineNode, TransformNode};
 pub use nodes::crop_node::CropNode;
 pub use nodes::detector_node::{DetectorNode, DetectorType};
+pub use nodes::formula_layout_node::FormulaLayoutNode;
+pub use nodes::handwriting_recognizer_node::HandwritingRecognizerNode;
 pub use nodes::normalize_node::NormalizeNode;
+pub use nodes::page_assembly_node::PageAssemblyNode;
+pub use nodes::page_iterator_node::PageIteratorNode;
 pub use nodes::postprocess_node::PostprocessNode;
 pub use nodes::recognizer_node::{RecognizerNode, RecognizerType};
 pub use nodes::resize_node::ResizeNode;
+pub use nodes::table_structure_node::TableStructureNode;
+pub use nodes::table_recognizer_node::TableRecognizerNode;
 pub use sdk::Snipper;
 pub use simple::{
     MockCropper, MockDetector, MockRecognizer, PipelineContext as SimpleContext, SimplePipeline,

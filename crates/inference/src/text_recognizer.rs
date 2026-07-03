@@ -77,7 +77,15 @@ pub fn recognize_text_with_keys(
     first_char_id: usize,
     params: &TextRecParams,
 ) -> Result<RecognitionResult> {
-    let (processed, _orig_w) = preprocess(image, params);
+    // PP-OCR models are trained on BGR input; convert if needed
+    use latexsnipper_image::color::PixelFormat;
+    let bgr_image = match image.format() {
+        PixelFormat::Rgba => latexsnipper_image::operations::rgba_to_bgr(image),
+        PixelFormat::Rgb => latexsnipper_image::operations::rgb_to_bgr(image),
+        PixelFormat::Bgr | PixelFormat::Bgra => image.clone(),
+        PixelFormat::Gray => image.clone(),
+    };
+    let (processed, _orig_w) = preprocess(&bgr_image, params);
 
     let input = Tensor::float32(
         "x",
@@ -165,11 +173,18 @@ fn load_paddle_character_dict(content: &str) -> Vec<String> {
             break;
         }
         if in_dict {
-            let value = trimmed
-                .trim_start_matches('-')
-                .trim()
-                .trim_matches('\'')
-                .trim_matches('"');
+            // Strip the leading "- " prefix
+            let value = trimmed.trim_start_matches('-').trim();
+            // Strip YAML string delimiters (outermost quotes only)
+            let value = if (value.starts_with('\'') && value.ends_with('\''))
+                || (value.starts_with('"') && value.ends_with('"'))
+            {
+                &value[1..value.len() - 1]
+            } else {
+                value
+            };
+            // Handle YAML single-quote escaping: '' inside '...' means literal '
+            let value = value.replace("''", "'");
             keys.push(value.to_string());
         }
     }

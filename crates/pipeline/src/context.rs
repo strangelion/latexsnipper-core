@@ -12,8 +12,12 @@ pub struct CachedSession {
 /// Context passed through the pipeline.
 /// Each node reads from and writes to this context.
 pub struct PipelineContext {
-    /// The input image (if any).
+    /// The input image (if any). For multi-page, this is the current page.
     pub image: Option<SnipperImage>,
+    /// All page images (for multi-page PDF input).
+    pub page_images: Vec<SnipperImage>,
+    /// Current page index (0-based) when processing multi-page input.
+    pub current_page: usize,
     /// The document being built.
     pub document: Document,
     /// Key-value metadata for passing data between nodes.
@@ -30,6 +34,8 @@ impl PipelineContext {
     pub fn new() -> Self {
         Self {
             image: None,
+            page_images: Vec::new(),
+            current_page: 0,
             document: Document::new(),
             metadata: HashMap::new(),
             cancelled: false,
@@ -44,10 +50,42 @@ impl PipelineContext {
         ctx
     }
 
+    /// Create context with multiple page images (for PDF input).
+    pub fn with_pages(pages: Vec<SnipperImage>) -> Self {
+        let mut ctx = Self::new();
+        if !pages.is_empty() {
+            ctx.image = Some(pages[0].clone());
+        }
+        ctx.page_images = pages;
+        ctx
+    }
+
     pub fn with_models_dir(models_dir: std::path::PathBuf) -> Self {
         let mut ctx = Self::new();
         ctx.models_dir = Some(models_dir);
         ctx
+    }
+
+    /// Check if this context has multiple pages.
+    pub fn is_multipage(&self) -> bool {
+        self.page_images.len() > 1
+    }
+
+    /// Get the total number of pages.
+    pub fn page_count(&self) -> usize {
+        if self.page_images.is_empty() {
+            if self.image.is_some() { 1 } else { 0 }
+        } else {
+            self.page_images.len()
+        }
+    }
+
+    /// Set the current page index and update the image reference.
+    pub fn set_current_page(&mut self, index: usize) {
+        if index < self.page_images.len() {
+            self.current_page = index;
+            self.image = Some(self.page_images[index].clone());
+        }
     }
 
     /// Set a metadata value.

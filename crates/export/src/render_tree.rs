@@ -136,6 +136,10 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
         }
         Block::HorizontalRule(_) => Some(RenderNode::HorizontalRule),
         Block::Figure(_) => None,
+        Block::Handwriting(hw) => {
+            let inlines = convert_inlines(&hw.inlines);
+            Some(RenderNode::Paragraph(inlines))
+        }
     }
 }
 

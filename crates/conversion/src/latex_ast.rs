@@ -77,6 +77,22 @@ pub enum LatexNode {
         content: Box<LatexNode>,
         label: Option<Box<LatexNode>>,
     },
+    /// Overset: \overset{top}{base} — stack top above base
+    Overset {
+        top: Box<LatexNode>,
+        base: Box<LatexNode>,
+    },
+    /// Underset: \underset{bottom}{base} — stack bottom below base
+    Underset {
+        bottom: Box<LatexNode>,
+        base: Box<LatexNode>,
+    },
+    /// Arrow with text above and/or below: \xrightarrow{text}, \xleftarrow{text}
+    XArrow {
+        direction: String, // "rightarrow" or "leftarrow"
+        above: Option<Box<LatexNode>>,
+        below: Option<Box<LatexNode>>,
+    },
     /// List of nodes
     Sequence(Vec<LatexNode>),
 }
@@ -107,6 +123,134 @@ impl LatexNode {
             LatexNode::Sequence(nodes) => nodes.is_empty(),
             LatexNode::Group(nodes) => nodes.is_empty(),
             _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for LatexNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LatexNode::Text(s) => write!(f, "{}", s),
+            LatexNode::Sequence(nodes) => {
+                let mut result = String::new();
+                for (i, n) in nodes.iter().enumerate() {
+                    if i > 0 {
+                        // Only add space if not adjacent to a previous symbol/operator
+                        // that would make the spacing wrong (e.g. E=mc^2 should not become E = m c ^ 2)
+                        let prev_str = format!("{}", n);
+                        let prev_text = format!("{}", &nodes[i-1]);
+                        // Don't add space:
+                        // - before superscript/subscript
+                        // - between single chars that form a contiguous token
+                        // - between a symbol and its following operator token
+                        let skip = prev_str.starts_with('^')
+                            || prev_str.starts_with('_')
+                            || prev_str == ")"
+                            || prev_str == "]"
+                            || prev_str == ","
+                            || prev_text.len() == 1 && prev_str.len() == 1;
+                        if !skip {
+                            result.push(' ');
+                        }
+                    }
+                    write!(f, "{}", n)?;
+                }
+                Ok(())
+            }
+            LatexNode::Group(nodes) => {
+                write!(f, "{{")?;
+                for (i, n) in nodes.iter().enumerate() {
+                    if i > 0 { write!(f, " ")?; }
+                    write!(f, "{}", n)?;
+                }
+                write!(f, "}}")
+            }
+            LatexNode::Superscript { base, exp } if base.is_empty() => {
+                write!(f, "^{{{}}}", exp)
+            }
+            LatexNode::Superscript { base, exp } => {
+                write!(f, "{{{}}}^{{{}}}", base, exp)
+            }
+            LatexNode::Subscript { base, sub } if base.is_empty() => {
+                write!(f, "_{{{}}}", sub)
+            }
+            LatexNode::Subscript { base, sub } => {
+                write!(f, "{{{}}}_{{{}}}", base, sub)
+            }
+            LatexNode::Fraction { num, den } => write!(f, "\\frac{{{}}}{{{}}}", num, den),
+            LatexNode::SquareRoot { index: Some(idx), content } => write!(f, "\\sqrt[{}]{{{}}}", idx, content),
+            LatexNode::SquareRoot { index: None, content } => write!(f, "\\sqrt{{{}}}", content),
+            LatexNode::Operator(op) => write!(f, "\\{}", op),
+            LatexNode::Relation(rel) => write!(f, "\\{}", rel),
+            LatexNode::Greek(g) => write!(f, "\\{}", g),
+            LatexNode::Symbol(s) => write!(f, "{}", s),
+            LatexNode::Command { name, args } => {
+                write!(f, "\\{}", name)?;
+                for arg in args {
+                    write!(f, "{{{}}}", arg)?;
+                }
+                Ok(())
+            }
+            LatexNode::Math { content, display: false } => {
+                let s: String = content.iter().map(|n| format!("{}", n)).collect::<Vec<_>>().join(" ");
+                write!(f, "${}$", s)
+            }
+            LatexNode::Math { content, display: true } => {
+                let s: String = content.iter().map(|n| format!("{}", n)).collect::<Vec<_>>().join(" ");
+                write!(f, "$${}$$", s)
+            }
+            LatexNode::Delimited { left, content, right } => {
+                let s: String = content.iter().map(|n| format!("{}", n)).collect::<Vec<_>>().join(" ");
+                write!(f, "\\left{}{}\\right{}", left, s, right)
+            }
+            LatexNode::FontModifier { font, content } => write!(f, "\\{}{{{}}}", font, content),
+            LatexNode::Matrix { env, .. } => write!(f, "\\begin{{{}}}...\\end{{{}}}", env, env),
+            LatexNode::Cases(..) => write!(f, "\\begin{{cases}}...\\end{{cases}}"),
+            LatexNode::Accent { chr, content } => {
+                let name = match chr.as_str() {
+                    "\u{0302}" => "hat",
+                    "\u{0304}" | "\u{0305}" => "bar",
+                    "\u{0307}" => "dot",
+                    "\u{0308}" => "ddot",
+                    "\u{0303}" => "tilde",
+                    "\u{030C}" => "check",
+                    "\u{20D7}" => "vec",
+                    "\u{0306}" => "breve",
+                    _ => chr,
+                };
+                write!(f, "\\{}{{{}}}", name, content)
+            }
+            LatexNode::OperatorName { name: _, args } => {
+                let s: String = args.iter().map(|n| format!("{}", n)).collect();
+                write!(f, "\\operatorname{{{}}}", s)
+            }
+            LatexNode::Overbrace { content, label: Some(l) } => {
+                write!(f, "\\overbrace{{{}}}^{{{}}}", content, l)
+            }
+            LatexNode::Overbrace { content, label: None } => {
+                write!(f, "\\overbrace{{{}}}", content)
+            }
+            LatexNode::Underbrace { content, label: Some(l) } => {
+                write!(f, "\\underbrace{{{}}}_{{{}}}", content, l)
+            }
+            LatexNode::Underbrace { content, label: None } => {
+                write!(f, "\\underbrace{{{}}}", content)
+            }
+            LatexNode::Overset { top, base } => {
+                write!(f, "\\overset{{{}}}{{{}}}", top, base)
+            }
+            LatexNode::Underset { bottom, base } => {
+                write!(f, "\\underset{{{}}}{{{}}}", bottom, base)
+            }
+            LatexNode::XArrow { direction, above, below } => {
+                let cmd = if direction == "rightarrow" { "xrightarrow" } else { "xleftarrow" };
+                match (above, below) {
+                    (Some(a), Some(b)) => write!(f, "\\{}[{}]{{{}}}", cmd, b, a),
+                    (Some(a), None) => write!(f, "\\{}{{{}}}", cmd, a),
+                    (None, Some(b)) => write!(f, "\\{}[{}]{{}}", cmd, b),
+                    (None, None) => write!(f, "\\{}{{}}", cmd),
+                }
+            }
         }
     }
 }

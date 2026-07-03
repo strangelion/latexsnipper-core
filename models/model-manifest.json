@@ -18,10 +18,7 @@
           "id": "yolov8-mfd",
           "label": "Formula Detection",
           "modelType": "yolov8",
-          "files": [
-            "mathcraft-mfd.onnx",
-            "config.json"
-          ],
+          "files": ["mathcraft-mfd.onnx", "config.json"],
           "sizeBytes": 80312016,
           "zipFile": "latexsnipper-formula-det.zip"
         }
@@ -36,12 +33,7 @@
           "id": "trocr-deit",
           "label": "Formula Recognition",
           "modelType": "trocr",
-          "files": [
-            "decoder_model.onnx",
-            "encoder_model.onnx",
-            "tokenizer.json",
-            "config.json"
-          ],
+          "files": ["decoder_model.onnx", "encoder_model.onnx", "tokenizer.json", "config.json"],
           "sizeBytes": 117654546,
           "zipFile": "latexsnipper-formula-rec.zip"
         }
@@ -50,16 +42,13 @@
     "text-det": {
       "label": "Text Detection",
       "required": false,
-      "default": "ppocrv5-mobile",
+      "default": "v6-small",
       "variants": [
         {
-          "id": "ppocrv5-mobile",
-          "label": "Text Detection",
+          "id": "v6-small",
+          "label": "PP-OCRv6 Text Detection",
           "modelType": "dbnet",
-          "files": [
-            "ppocrv5_mobile_det.onnx",
-            "config.json"
-          ],
+          "files": ["text-det.onnx"],
           "sizeBytes": 4746371,
           "zipFile": "latexsnipper-text-det.zip"
         }
@@ -68,19 +57,64 @@
     "text-rec": {
       "label": "Text Recognition",
       "required": false,
-      "default": "ppocrv5-mobile",
+      "default": "v6-small",
       "variants": [
         {
-          "id": "ppocrv5-mobile",
-          "label": "Text Recognition",
+          "id": "v6-small",
+          "label": "PP-OCRv6 Text Recognition",
           "modelType": "crnn_ctc",
-          "files": [
-            "ppocrv5_keys.txt",
-            "ppocrv5_mobile_rec.onnx",
-            "config.json"
-          ],
+          "files": ["text-rec.onnx", "ppocr_keys.txt"],
           "sizeBytes": 16724573,
           "zipFile": "latexsnipper-text-rec.zip"
+        }
+      ]
+    },
+    "table-det": {
+      "label": "Table Detection (Layout)",
+      "required": false,
+      "default": "pp-doc-layoutv3",
+      "description": "Document layout analysis: detect table regions among text, title, figure, etc.",
+      "variants": [
+        {
+          "id": "pp-doc-layoutv3",
+          "label": "PP-DocLayout v3 (PicoDet)",
+          "modelType": "picodet_layout",
+          "source": "RapidAI/RapidLayout",
+          "license": "Apache-2.0",
+          "files": ["model.onnx", "config.json"],
+          "sizeBytes": 130502330,
+          "zipFile": "latexsnipper-table-det.zip",
+          "notes": "Detects layout categories including text, title, figure, table (class 21), header, footer, equation, etc."
+        }
+      ]
+    },
+    "table-struct": {
+      "label": "Table Structure Recognition",
+      "required": false,
+      "default": "slanet-plus",
+      "description": "Parse table structure - rows, columns, headers, cells. Critical for Word/Excel/HTML export.",
+      "variants": [
+        {
+          "id": "slanet-plus",
+          "label": "SLANet_plus (PaddleOCR PP-Structure)",
+          "modelType": "slanet",
+          "source": "PaddlePaddle/PaddleOCR PP-Structure v2",
+          "license": "Apache-2.0",
+          "files": ["model.onnx", "config.json", "dict.txt"],
+          "sizeBytes": 10000000,
+          "zipFile": "latexsnipper-table-struct-slanet.zip",
+          "notes": "CNN-based. Outputs 50 HTML tokens + cell quads. Best for Chinese docs, complex merged cells, wireless tables. ~766ms CPU inference."
+        },
+        {
+          "id": "tatr-structure",
+          "label": "TATR Structure (Microsoft Table Transformer)",
+          "modelType": "detr",
+          "source": "microsoft/table-transformer-structure-recognition",
+          "license": "MIT",
+          "files": ["model.onnx"],
+          "sizeBytes": 2322263,
+          "zipFile": "latexsnipper-table-struct-tatr.zip",
+          "notes": "DETR-based. Outputs 7 classes: no_object, table, column, row, column_header, row_header, spanning_cell. Best for academic PDFs."
         }
       ]
     }

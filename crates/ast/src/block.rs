@@ -27,6 +27,8 @@ pub enum Block {
     Code(CodeBlock),
     /// A horizontal rule/divider.
     HorizontalRule(HorizontalRuleBlock),
+    /// A handwritten text block.
+    Handwriting(HandwritingBlock),
 }
 
 impl Block {
@@ -42,6 +44,7 @@ impl Block {
             Block::Quote(q) => q.source.as_ref(),
             Block::Code(c) => c.source.as_ref(),
             Block::HorizontalRule(h) => h.source.as_ref(),
+            Block::Handwriting(hw) => hw.source.as_ref(),
         }
     }
 
@@ -62,6 +65,7 @@ impl Block {
             Block::Quote(q) => q.source.as_mut(),
             Block::Code(c) => c.source.as_mut(),
             Block::HorizontalRule(h) => h.source.as_mut(),
+            Block::Handwriting(hw) => hw.source.as_mut(),
         }
     }
 
@@ -77,6 +81,7 @@ impl Block {
             Block::Quote(q) => q.geometry.as_ref(),
             Block::Code(c) => c.geometry.as_ref(),
             Block::HorizontalRule(h) => h.geometry.as_ref(),
+            Block::Handwriting(hw) => hw.geometry.as_ref(),
         }
     }
 
@@ -101,6 +106,7 @@ impl Block {
             Block::Quote(q) => q.blocks.iter().flat_map(|b| b.inlines()).collect(),
             Block::Code(_) => vec![],
             Block::HorizontalRule(_) => vec![],
+            Block::Handwriting(hw) => hw.inlines.iter().collect(),
         }
     }
 
@@ -116,6 +122,7 @@ impl Block {
             Block::Quote(_) => "quote",
             Block::Code(_) => "code",
             Block::HorizontalRule(_) => "horizontal_rule",
+            Block::Handwriting(_) => "handwriting",
         }
     }
 }
@@ -292,4 +299,19 @@ impl Default for HorizontalRuleBlock {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// A handwritten text block.
+///
+/// Used for content detected as handwriting in the input image.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HandwritingBlock {
+    /// Recognized inline content (text or formulas).
+    pub inlines: Vec<Inline>,
+    /// Confidence score for the handwriting detection/recognition.
+    pub confidence: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
 }

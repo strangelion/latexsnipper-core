@@ -11,8 +11,8 @@ pub fn resize(image: &SnipperImage, target_w: u32, target_h: u32) -> SnipperImag
 
     for ty in 0..target_h {
         for tx in 0..target_w {
-            let sx = (tx as f32 * src_w as f32 / target_w as f32) as u32;
-            let sy = (ty as f32 * src_h as f32 / target_h as f32) as u32;
+            let sx = (tx as f32 * src_w as f32 / target_w as f32 + 0.5) as u32;
+            let sy = (ty as f32 * src_h as f32 / target_h as f32 + 0.5) as u32;
             let sx = sx.min(src_w - 1);
             let sy = sy.min(src_h - 1);
 
@@ -130,6 +130,25 @@ pub fn rgb_to_bgr(image: &SnipperImage) -> SnipperImage {
         chunk.swap(0, 2);
     }
     SnipperImage::new(image.width(), image.height(), PixelFormat::Bgr, pixels)
+}
+
+/// Convert RGBA to BGR (drop alpha channel).
+/// The model expects BGR input (PP-OCR convention), but decoded images are RGBA.
+pub fn rgba_to_bgr(image: &SnipperImage) -> SnipperImage {
+    if image.format() != PixelFormat::Rgba {
+        return image.clone();
+    }
+    let w = image.width();
+    let h = image.height();
+    let pixels = image.pixels();
+    let mut bgr = Vec::with_capacity((w * h * 3) as usize);
+    for chunk in pixels.chunks_exact(4) {
+        // chunk = [R, G, B, A]
+        bgr.push(chunk[2]); // B
+        bgr.push(chunk[1]); // G
+        bgr.push(chunk[0]); // R
+    }
+    SnipperImage::new(w, h, PixelFormat::Bgr, bgr)
 }
 
 /// Pad image to make dimensions divisible by stride.

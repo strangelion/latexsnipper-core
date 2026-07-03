@@ -4,7 +4,7 @@
 
 ## 模型清单
 
-模型清单位于 `models-download/model-manifest.json`，定义了所有可用模型的元数据。
+模型清单位于 `models/model-manifest.json`，定义了所有可用模型的元数据。
 
 ## 可用模型
 
@@ -12,32 +12,47 @@
 |------|---------|------|------|------|
 | formula-det | yolov8-mfd | YOLOv8 | ~77 MB | 公式检测 |
 | formula-rec | trocr-deit | TrOCR | ~112 MB | 公式识别 |
-| text-det | ppocrv5-mobile | DBNet | ~4.5 MB | 文字检测 |
-| text-rec | ppocrv5-mobile | CRNN+CTC | ~16 MB | 文字识别 |
+| text-det | v6-small | DBNet | ~4.5 MB | 文字检测 |
+| text-rec | v6-small | CRNN+CTC | ~16 MB | 文字识别 |
+| table-det | tatr-detection | DETR | ~2 MB | 表格区域检测（Microsoft Table Transformer） |
+| table-struct | slanet-plus | SLANet | ~10 MB | 表格结构识别（推荐，中文表格友好，PP-Structure v2） |
+| table-struct | tatr-structure | DETR | ~2.2 MB | 表格结构识别（学术PDF友好，PubTables-1M） |
 
 ## 模型文件结构
 
-每个模型类别包含以下文件：
-
 ```
-formula-det/
-├── mathcraft-mfd.onnx    # 模型文件
-└── config.json           # 模型配置
-
-formula-rec/
-├── encoder_model.onnx    # 编码器
-├── decoder_model.onnx    # 解码器
-├── tokenizer.json        # 分词器
-└── config.json           # 模型配置
-
-text-det/
-├── ppocrv5_mobile_det.onnx
-└── config.json
-
-text-rec/
-├── ppocrv5_mobile_rec.onnx
-├── ppocrv5_keys.txt      # 字符集
-└── config.json
+models/
+├── formula-det/
+│   └── yolov8-mfd/
+│       ├── mathcraft-mfd.onnx
+│       └── config.json
+├── formula-rec/
+│   └── trocr-deit/
+│       ├── encoder_model.onnx
+│       ├── decoder_model.onnx
+│       ├── tokenizer.json
+│       └── config.json
+├── text-det/
+│   └── v6-small/
+│       ├── inference.onnx
+│       └── config.json
+├── text-rec/
+│   └── v6-small/
+│       ├── inference.onnx
+│       ├── inference.yml
+│       └── config.json
+├── table-det/
+│   └── tatr-detection/
+│       ├── model.onnx
+│       └── model.onnx.data
+└── table-struct/
+    ├── tatr-structure/
+    │   ├── model.onnx
+    │   └── model.onnx.data
+    └── slanet-plus/          # 可选，需手动转换
+        ├── model.onnx
+        ├── config.json
+        └── dict.txt
 ```
 
 ## config.json 示例
@@ -61,27 +76,20 @@ text-rec/
 
 ## 模型下载
 
-模型从 GitHub Releases 下载：
-
-```
-https://raw.githubusercontent.com/strangelion/LaTeXSnipper_mobile/main/dist-models/
-```
-
-每个模型打包为 ZIP 文件：
-
-| ZIP 文件 | 内容 |
-|----------|------|
-| latexsnipper-formula-det.zip | 公式检测模型 |
-| latexsnipper-formula-rec.zip | 公式识别模型 |
-| latexsnipper-text-det.zip | 文字检测模型 |
-| latexsnipper-text-rec.zip | 文字识别模型 |
+模型通过 `model-manifest.json` 中定义的 URL 下载，支持多镜像源。
 
 ## 本地模型路径
 
-默认模型目录：`~/.latexsnipper/models/`
-
-可通过 `EngineConfig.models_dir` 自定义路径。
+默认模型目录：项目根目录下的 `models/`
 
 ## SHA256 校验
 
 ModelManifest 支持 SHA256 校验，确保模型文件完整性。校验失败时 `ModelManager` 会拒绝加载。
+
+## 后端选择
+
+表格结构识别支持两个后端，通过 `STRUCT_BACKEND` 环境变量或 `TableStructureNode::with_backend()` 切换：
+
+- `tatr` — Microsoft Table Transformer（学术PDF友好）
+- `slanet` — SLANet_plus（中文表格推荐）
+- `projection` — 投影法 fallback（无需模型）

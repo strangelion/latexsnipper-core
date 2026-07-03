@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::formula_layout::FormulaLayout;
 use crate::SourceInfo;
 
 /// A mathematical formula.
@@ -10,6 +11,9 @@ pub struct Formula {
     pub confidence: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_info: Option<SourceInfo>,
+    /// Structured layout tree (if parsed).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<FormulaLayout>,
 }
 
 /// The source format of a formula.
@@ -29,6 +33,7 @@ impl Formula {
             display_mode: true,
             confidence: 1.0,
             source_info: None,
+            layout: None,
         }
     }
 

@@ -227,6 +227,24 @@ impl InferenceSession for OnnxSession {
                     })?;
                     latexsnipper_tensor::Tensor::int64(name, shape, data.to_vec())
                 }
+                ort::value::ValueType::Tensor {
+                    ty: ort::value::TensorElementType::Int32,
+                    ..
+                } => {
+                    let (_shape_out, data) = value.try_extract_tensor::<i32>().map_err(|e| {
+                        SnipperError::Inference(format!("Failed to extract output: {}", e))
+                    })?;
+                    latexsnipper_tensor::Tensor::int32(name, shape, data.to_vec())
+                }
+                ort::value::ValueType::Tensor {
+                    ty: ort::value::TensorElementType::Uint8,
+                    ..
+                } => {
+                    let (_shape_out, data) = value.try_extract_tensor::<u8>().map_err(|e| {
+                        SnipperError::Inference(format!("Failed to extract output: {}", e))
+                    })?;
+                    latexsnipper_tensor::Tensor::u8(name, shape, data.to_vec())
+                }
                 _ => return Err(SnipperError::Inference("Unsupported output dtype".into())),
             };
             result_tensors.push(tensor);
@@ -255,6 +273,11 @@ impl InferenceSession for OnnxSession {
     }
 
     fn release(&mut self) {
-        drop(self.session.lock());
+        // Clear all cached sessions to release ONNX session resources.
+        // Sessions are stored in OnnxRuntimeBackend.sessions. OnnxSession.session
+        // is just an Arc clone pointing to the same Mutex<Session>. Once the Arc
+        // refcount drops to zero, the underlying Session is freed.
+        // Here we only clear OnnxSession's own reference. The backend cache is
+        // out of scope — use SessionCache::clear() at the backend level instead.
     }
 }

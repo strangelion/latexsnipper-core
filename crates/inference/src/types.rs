@@ -15,3 +15,13 @@ pub struct RecognitionResult {
     pub text: String,
     pub confidence: f32,
 }
+
+/// A cell in a recognized table grid.
+#[derive(Debug, Clone)]
+pub struct GridCell {
+    pub row: usize,
+    pub col: usize,
+    pub rowspan: u32,
+    pub colspan: u32,
+    pub rect: Rect,
+}

@@ -292,6 +292,54 @@ impl LatexParser {
                 chr: "\u{0306}".to_string(),
                 content: Box::new(self.parse_single()),
             }),
+            // Overset / Underset
+            "overset" => {
+                let top = self.parse_single();
+                let base = self.parse_single();
+                Some(LatexNode::Overset {
+                    top: Box::new(top),
+                    base: Box::new(base),
+                })
+            }
+            "underset" => {
+                let bottom = self.parse_single();
+                let base = self.parse_single();
+                Some(LatexNode::Underset {
+                    bottom: Box::new(bottom),
+                    base: Box::new(base),
+                })
+            }
+            // Arrow with text: \xrightarrow{text} or \xrightarrow[below]{above}
+            "xrightarrow" | "xleftarrow" => {
+                let dir = if cmd == "xrightarrow" { "rightarrow" } else { "leftarrow" };
+                // Check for optional argument [below]
+                let (below, above) = if self.pos < self.chars.len() && self.chars[self.pos] == '[' {
+                    self.pos += 1;
+                    let below_node = self.parse_until(']');
+                    let below_content = if below_node.len() == 1 {
+                        below_node.into_iter().next().unwrap_or(LatexNode::Text(String::new()))
+                    } else {
+                        LatexNode::Group(below_node)
+                    };
+                    // Required argument {above}
+                    let above_node = self.parse_single();
+                    (Some(Box::new(below_content)), above_node)
+                } else {
+                    // Required argument {above}
+                    let above_node = self.parse_single();
+                    let above_content = if above_node.is_empty() {
+                        LatexNode::Text(String::new())
+                    } else {
+                        above_node
+                    };
+                    (None, above_content)
+                };
+                Some(LatexNode::XArrow {
+                    direction: dir.to_string(),
+                    above: Some(Box::new(above)),
+                    below,
+                })
+            }
             // Font modifiers
             "mathbb" | "mathbf" | "mathit" | "mathsf" | "mathtt" | "mathcal" | "mathfrak"
             | "mathrm" | "mathnormal" | "boldsymbol" | "bm" => {
@@ -317,7 +365,26 @@ impl LatexParser {
             }
             // Text commands
             "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" => {
-                let content = self.parse_single();
+                let mut content_str = String::new();
+                if self.pos < self.chars.len() && self.chars[self.pos] == '{' {
+                    self.pos += 1;
+                    let start = self.pos;
+                    let mut depth = 0i32;
+                    while self.pos < self.chars.len() {
+                        match self.chars[self.pos] {
+                            '{' => { depth += 1; }
+                            '}' if depth == 0 => { break; }
+                            '}' => { depth -= 1; }
+                            _ => {}
+                        }
+                        self.pos += 1;
+                    }
+                    content_str = self.chars[start..self.pos].iter().collect();
+                    if self.pos < self.chars.len() {
+                        self.pos += 1; // consume '}'
+                    }
+                }
+                let content = LatexNode::Text(content_str);
                 Some(LatexNode::Command {
                     name: cmd,
                     args: vec![content],
@@ -456,38 +523,52 @@ impl LatexParser {
             '[' => "[".to_string(),
             ']' => "]".to_string(),
             '|' => "|".to_string(),
-            '{' => ".".to_string(), // \left{ → invisible
+            '{' | '.' => ".".to_string(), // \left{ or \left. → invisible
             _ => left_ch.to_string(),
         };
 
-        let right = match left_ch {
-            '(' => ")",
-            ')' => "(",
-            '[' => "]",
-            ']' => "[",
-            '|' => "|",
-            '{' => "}",
-            _ => ")",
-        };
-
-        // Parse content until \right{right_char}
+        // Parse content until actual \right followed by any character
         let mut content_str = String::new();
+        let mut right_char = '\0';
         while self.pos < self.chars.len() {
             if self.pos + 5 < self.chars.len() {
-                let remaining: String = self.chars[self.pos..].iter().take(6).collect();
-                if remaining.starts_with("\\right") {
-                    let after_right = &self.chars[self.pos + 6..];
-                    if !after_right.is_empty()
-                        && after_right[0] == right.chars().next().unwrap_or(')')
-                    {
-                        self.pos += 7; // skip \rightX
+                let next_six: String = self.chars[self.pos..]
+                    .iter()
+                    .take(6)
+                    .collect();
+                if next_six.starts_with("\\right") {
+                    let after = if self.pos + 6 < self.chars.len() {
+                        self.chars[self.pos + 6]
+                    } else {
+                        right_char = ')';
+                        self.pos += 7;
                         break;
-                    }
+                    };
+                    right_char = after;
+                    self.pos += 7; // skip \rightX
+                    break;
                 }
             }
             content_str.push(self.chars[self.pos]);
             self.pos += 1;
         }
+
+        let right = match right_char {
+            '(' => ")",
+            ')' => "(",
+            '[' => "]",
+            ']' => "[",
+            '{' => "}",
+            '}' => "{",
+            '|' => "|",
+            '.' => ".", // invisible
+            '\0' => ".", // default
+            c => {
+                // For any other character (like \rangle), represent it
+                let s = c.to_string();
+                Box::leak(s.into_boxed_str())
+            },
+        };
 
         let mut parser = LatexParser::new(&content_str);
         let content_nodes = parser.parse();
@@ -754,5 +835,36 @@ mod tests {
             }
             _ => {}
         }
+    }
+
+    #[test]
+    fn test_lim_with_subscript() {
+        let node = parse_latex("\\lim_{x \\to 0} f(x)");
+        match node {
+            LatexNode::Sequence(nodes) => {
+                assert!(!nodes.is_empty());
+                // First node should be an Operator (lim) with a subscript attached
+                if let LatexNode::Subscript { base, .. } = &nodes[0] {
+                    match base.as_ref() {
+                        LatexNode::Operator(name) => assert_eq!(name, "lim"),
+                        _ => panic!("Expected Operator base in Subscript, got: {:?}", base),
+                    }
+                } else {
+                    // The subscript merge happens at parse() level — check it worked
+                    // \lim is emitted as Operator("lim"), then _ is parsed as
+                    // Subscript{empty, ...}, then parse() merges them
+                    let result = format!("{:?}", &nodes[0]);
+                    assert!(result.contains("lim"), "lim missing: {}", result);
+                }
+            }
+            _ => panic!("Expected Sequence"),
+        }
+    }
+
+    #[test]
+    fn test_text_with_spaces() {
+        let node = parse_latex("\\text{Hello World}");
+        let rendered = format!("{}", node);
+        assert!(rendered.contains("Hello World"), "space lost: {}", rendered);
     }
 }

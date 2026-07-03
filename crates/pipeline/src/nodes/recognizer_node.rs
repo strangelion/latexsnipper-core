@@ -117,14 +117,16 @@ impl RecognizerNode {
         } else {
             let s = backend.create_session(&enc_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("formula_encoder", s);
-            ctx.get_session("formula_encoder").unwrap()
+            ctx.get_session("formula_encoder")
+                .ok_or_else(|| SnipperError::Runtime("Failed to cache formula encoder session".into()))?
         };
         let dec_session = if let Some(s) = ctx.get_session("formula_decoder") {
             s
         } else {
             let s = backend.create_session(&dec_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("formula_decoder", s);
-            ctx.get_session("formula_decoder").unwrap()
+            ctx.get_session("formula_decoder")
+                .ok_or_else(|| SnipperError::Runtime("Failed to cache formula decoder session".into()))?
         };
 
         let params = RecognitionParams::default();
@@ -161,7 +163,10 @@ impl RecognizerNode {
                                         geometry: Some(Rect::new(
                                             x as f32, y as f32, w as f32, h as f32,
                                         )),
-                                        source: Some(SourceInfo::new()),
+                                        source: Some(
+                                            SourceInfo::new()
+                                                .with_page(ctx.current_page),
+                                        ),
                                     }));
                                 }
                                 Err(e) => log::warn!("Formula rec failed: {}", e),
@@ -198,7 +203,7 @@ impl RecognizerNode {
                                     geometry: Some(Rect::new(
                                         x as f32, y as f32, w as f32, h as f32,
                                     )),
-                                    source: Some(SourceInfo::new()),
+                                    source: Some(SourceInfo::new().with_page(ctx.current_page)),
                                 }));
                             }
                         }
@@ -251,7 +256,8 @@ impl RecognizerNode {
         } else {
             let s = backend.create_session(&handle, AccelerationMode::Cpu)?;
             ctx.cache_session("text_rec", s);
-            ctx.get_session("text_rec").unwrap()
+            ctx.get_session("text_rec")
+                .ok_or_else(|| SnipperError::Runtime("Failed to cache text recognition session".into()))?
         };
 
         let params = TextRecParams::from_config(&rec_model.config);
@@ -295,7 +301,7 @@ impl RecognizerNode {
                                         geometry: Some(Rect::new(
                                             x as f32, y as f32, w as f32, h as f32,
                                         )),
-                                        source: Some(SourceInfo::new()),
+                                        source: Some(SourceInfo::new().with_page(ctx.current_page)),
                                     }));
                                 }
                             }

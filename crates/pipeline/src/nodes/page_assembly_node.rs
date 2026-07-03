@@ -1,0 +1,253 @@
+use async_trait::async_trait;
+use latexsnipper_ast::*;
+use latexsnipper_foundation::Result;
+
+use crate::context::PipelineContext;
+use crate::node::PipelineNode;
+
+/// Assembles multiple pages into a final Document.
+///
+/// After all pages have been processed, this node:
+/// 1. Collects blocks from each page
+/// 2. Sorts blocks within each page by reading order
+/// 3. Builds the final multi-page Document
+///
+/// **IMPORTANT limitation**: Block-to-page assignment is not fully implemented
+/// yet — blocks in the context do not carry page metadata, so the node cannot
+/// reliably distribute blocks to the correct pages. Currently all blocks are
+/// assigned to page 0 (the first page). Proper per-page tracking requires the
+/// pipeline to tag blocks with page indices during processing.
+pub struct PageAssemblyNode {
+    name: String,
+}
+
+impl PageAssemblyNode {
+    pub fn new() -> Self {
+        Self {
+            name: "page_assembly".into(),
+        }
+    }
+}
+
+impl Default for PageAssemblyNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl PipelineNode for PageAssemblyNode {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
+        if !ctx.is_multipage() {
+            // Single page - nothing to assemble
+            return Ok(());
+        }
+
+        log::info!("PageAssembly: assembling {} pages", ctx.page_images.len());
+
+        let mut pages: Vec<Page> = Vec::new();
+
+        for (page_idx, page_image) in ctx.page_images.iter().enumerate() {
+            let page_number = (page_idx + 1) as u32;
+
+            // Collect blocks for this page from metadata
+            let blocks = self.collect_page_blocks(ctx, page_idx);
+
+            // Sort blocks by reading order (y-coordinate, then x-coordinate)
+            let mut sorted_blocks = blocks;
+            sorted_blocks.sort_by(|a, b| {
+                let ay = a.geometry().map_or(0.0, |g| g.y);
+                let by = b.geometry().map_or(0.0, |g| g.y);
+                ay.partial_cmp(&by)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| {
+                        let ax = a.geometry().map_or(0.0, |g| g.x);
+                        let bx = b.geometry().map_or(0.0, |g| g.x);
+                        ax.partial_cmp(&bx)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            });
+
+            log::info!(
+                "PageAssembly: page {} has {} blocks",
+                page_number,
+                sorted_blocks.len()
+            );
+
+            pages.push(Page {
+                width: page_image.width() as f32,
+                height: page_image.height() as f32,
+                blocks: sorted_blocks,
+                page_number: Some(page_number),
+            });
+        }
+
+        // Build the final document
+        ctx.document = Document {
+            metadata: Metadata::default(),
+            pages,
+            id_gen: NodeIdGenerator::new(),
+        };
+
+        log::info!(
+            "PageAssembly: assembled document with {} pages, {} total blocks",
+            ctx.document.pages.len(),
+            ctx.document.block_count()
+        );
+
+        Ok(())
+    }
+}
+
+impl PageAssemblyNode {
+    /// Collect blocks for a specific page from metadata.
+    fn collect_page_blocks(&self, ctx: &PipelineContext, page_idx: usize) -> Vec<Block> {
+        let mut blocks = Vec::new();
+
+        // Collect formula blocks
+        if let Some(formula_blocks) = ctx.get("formula_blocks") {
+            if let Some(arr) = formula_blocks.as_array() {
+                for val in arr {
+                    if let Ok(block) = serde_json::from_value::<Block>(val.clone()) {
+                        // Filter by page if page metadata is available
+                        if self.belongs_to_page(&block, page_idx) {
+                            blocks.push(block);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collect text blocks
+        if let Some(text_blocks) = ctx.get("text_blocks") {
+            if let Some(arr) = text_blocks.as_array() {
+                for val in arr {
+                    if let Ok(block) = serde_json::from_value::<Block>(val.clone()) {
+                        if self.belongs_to_page(&block, page_idx) {
+                            blocks.push(block);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collect table blocks
+        if let Some(table_blocks) = ctx.get("table_blocks") {
+            if let Some(arr) = table_blocks.as_array() {
+                for val in arr {
+                    if let Ok(block) = serde_json::from_value::<Block>(val.clone()) {
+                        if self.belongs_to_page(&block, page_idx) {
+                            blocks.push(block);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collect handwriting blocks
+        if let Some(hw_blocks) = ctx.get("handwriting_blocks") {
+            if let Some(arr) = hw_blocks.as_array() {
+                for val in arr {
+                    if let Ok(block) = serde_json::from_value::<Block>(val.clone()) {
+                        if self.belongs_to_page(&block, page_idx) {
+                            blocks.push(block);
+                        }
+                    }
+                }
+            }
+        }
+
+        blocks
+    }
+
+    /// Check if a block belongs to a specific page.
+    ///
+    /// Uses `SourceInfo::page` (set by recognizer nodes during pipeline execution).
+    /// Blocks without a page tag (`None`) are assigned to page 0 as fallback.
+    fn belongs_to_page(&self, block: &Block, page_idx: usize) -> bool {
+        match block.source() {
+            Some(src) => src.page.map_or(page_idx == 0, |p| p == page_idx),
+            None => page_idx == 0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use latexsnipper_image::color::PixelFormat;
+    use latexsnipper_image::SnipperImage;
+
+    fn make_test_image(w: u32, h: u32) -> SnipperImage {
+        let pixels = vec![255u8; (w * h * 3) as usize];
+        SnipperImage::new(w, h, PixelFormat::Rgb, pixels)
+    }
+
+    #[tokio::test]
+    async fn test_page_assembly_single_page() {
+        let mut ctx = PipelineContext::with_image(make_test_image(100, 100));
+        let node = PageAssemblyNode::new();
+
+        node.process(&mut ctx).await.unwrap();
+
+        // Single page should not modify document
+        assert_eq!(ctx.document.pages.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_page_assembly_multi_page() {
+        let pages = vec![make_test_image(100, 100), make_test_image(200, 200)];
+        let mut ctx = PipelineContext::with_pages(pages);
+
+        // Add blocks tagged with page indices
+        ctx.set(
+            "formula_blocks",
+            serde_json::json!([
+                {
+                    "type": "Formula",
+                    "formula": {
+                        "source": {"format": "Latex", "content": "E=mc^2"},
+                        "display_mode": true,
+                        "confidence": 0.95
+                    },
+                    "geometry": {"x": 10.0, "y": 20.0, "width": 100.0, "height": 30.0},
+                    "source": {"page": 0}
+                },
+                {
+                    "type": "Formula",
+                    "formula": {
+                        "source": {"format": "Latex", "content": "F=ma"},
+                        "display_mode": true,
+                        "confidence": 0.90
+                    },
+                    "geometry": {"x": 10.0, "y": 10.0, "width": 80.0, "height": 25.0},
+                    "source": {"page": 1}
+                }
+            ]),
+        );
+
+        let node = PageAssemblyNode::new();
+        node.process(&mut ctx).await.unwrap();
+
+        assert_eq!(ctx.document.pages.len(), 2);
+        assert_eq!(ctx.document.pages[0].blocks.len(), 1);
+        assert_eq!(ctx.document.pages[1].blocks.len(), 1);
+        assert_eq!(ctx.document.block_count(), 2);
+
+        // Verify block-to-page assignment is correct
+        if let Block::Formula(f0) = &ctx.document.pages[0].blocks[0] {
+            assert_eq!(f0.formula.as_latex(), "E=mc^2");
+        } else {
+            panic!("Expected Formula block on page 0");
+        }
+        if let Block::Formula(f1) = &ctx.document.pages[1].blocks[0] {
+            assert_eq!(f1.formula.as_latex(), "F=ma");
+        } else {
+            panic!("Expected Formula block on page 1");
+        }
+    }
+}

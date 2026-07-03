@@ -1,15 +1,17 @@
 use async_trait::async_trait;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_inference::{
-    detect_formulas, detect_text, filter_formula_detections, group_formula_detections,
-    DetectionParams, TextDetParams,
+    detect_formulas, detect_handwriting, detect_tables, detect_text,
+    filter_formula_detections, filter_handwriting_detections, filter_table_detections,
+    group_formula_detections, DetectionParams, HandwritingDetParams, TableDetParams,
+    TextDetParams,
 };
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 
-/// Detects regions (formulas or text) in the image.
+/// Detects regions (formulas, text, handwriting, or tables) in the image.
 /// Loads models, runs detection, stores results in context metadata.
 pub struct DetectorNode {
     name: String,
@@ -19,6 +21,8 @@ pub struct DetectorNode {
 pub enum DetectorType {
     Formula,
     Text,
+    Handwriting,
+    Table,
 }
 
 impl DetectorNode {
@@ -33,6 +37,20 @@ impl DetectorNode {
         Self {
             name: "detect_text".into(),
             detector_type: DetectorType::Text,
+        }
+    }
+
+    pub fn handwriting() -> Self {
+        Self {
+            name: "detect_handwriting".into(),
+            detector_type: DetectorType::Handwriting,
+        }
+    }
+
+    pub fn table() -> Self {
+        Self {
+            name: "detect_table".into(),
+            detector_type: DetectorType::Table,
         }
     }
 }
@@ -57,6 +75,8 @@ impl PipelineNode for DetectorNode {
         match &self.detector_type {
             DetectorType::Formula => self.detect_formulas(ctx, &image, &models).await,
             DetectorType::Text => self.detect_texts(ctx, &image, &models).await,
+            DetectorType::Handwriting => self.detect_handwriting(ctx, &image, &models).await,
+            DetectorType::Table => self.detect_tables(ctx, &image, &models).await,
         }
     }
 }
@@ -95,7 +115,8 @@ impl DetectorNode {
         } else {
             let s = backend.create_session(&det_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("formula_det", s);
-            ctx.get_session("formula_det").unwrap()
+            ctx.get_session("formula_det")
+                .ok_or_else(|| SnipperError::Runtime("Failed to cache formula detection session".into()))?
         };
 
         let mut detections = detect_formulas(image, &*session, &det_params)?;
@@ -162,7 +183,8 @@ impl DetectorNode {
         } else {
             let s = backend.create_session(&det_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("text_det", s);
-            ctx.get_session("text_det").unwrap()
+            ctx.get_session("text_det")
+                .ok_or_else(|| SnipperError::Runtime("Failed to cache text detection session".into()))?
         };
 
         let detections = detect_text(image, &*session, &det_params)?;
@@ -187,6 +209,126 @@ impl DetectorNode {
             .collect();
 
         ctx.set("text_detections", serde_json::json!(detections_json));
+        Ok(())
+    }
+
+    async fn detect_handwriting(
+        &self,
+        ctx: &mut PipelineContext,
+        image: &latexsnipper_image::SnipperImage,
+        models: &std::path::Path,
+    ) -> Result<()> {
+        let det_config = match load_config(models, "handwriting-det") {
+            Ok(c) => c,
+            Err(_) => {
+                log::warn!("Handwriting det model not found");
+                return Ok(());
+            }
+        };
+
+        let det_params = HandwritingDetParams::from_config(&det_config);
+        let det_model_path = det_config
+            .find_model_file(&models.join("handwriting-det"))
+            .ok_or_else(|| {
+                SnipperError::Model("Handwriting detection model not found".into())
+            })?;
+        let det_handle = ModelHandle::with_path("handwriting-det", det_model_path);
+
+        let backend = Self::create_backend(models)?;
+        let session = if let Some(s) = ctx.get_session("handwriting_det") {
+            s
+        } else {
+            let s = backend.create_session(&det_handle, AccelerationMode::Cpu)?;
+            ctx.cache_session("handwriting_det", s);
+            ctx.get_session("handwriting_det")
+                .ok_or_else(|| SnipperError::Runtime("Failed to cache handwriting detection session".into()))?
+        };
+
+        let mut detections = detect_handwriting(image, &*session, &det_params)?;
+
+        // Filter by minimum area and confidence
+        filter_handwriting_detections(&mut detections, 100.0, 0.2);
+
+        let count = detections.len();
+        log::info!("Pipeline: detect_handwriting found {} regions", count);
+
+        let detections_json: Vec<serde_json::Value> = detections
+            .iter()
+            .map(|d| {
+                serde_json::json!({
+                    "rect": {
+                        "x": d.rect.x,
+                        "y": d.rect.y,
+                        "w": d.rect.width,
+                        "h": d.rect.height
+                    },
+                    "confidence": d.confidence,
+                    "class_id": d.class_id,
+                    "class_name": d.class_name
+                })
+            })
+            .collect();
+
+        ctx.set("handwriting_detections", serde_json::json!(detections_json));
+        Ok(())
+    }
+
+    async fn detect_tables(
+        &self,
+        ctx: &mut PipelineContext,
+        image: &latexsnipper_image::SnipperImage,
+        models: &std::path::Path,
+    ) -> Result<()> {
+        let det_config = match load_config(models, "table-det") {
+            Ok(c) => c,
+            Err(_) => {
+                log::warn!("Table det model not found");
+                return Ok(());
+            }
+        };
+
+        let det_params = TableDetParams::from_config(&det_config);
+        let det_model_path = det_config
+            .find_model_file(&models.join("table-det"))
+            .ok_or_else(|| SnipperError::Model("Table detection model not found".into()))?;
+        let det_handle = ModelHandle::with_path("table-det", det_model_path);
+
+        let backend = Self::create_backend(models)?;
+        let session = if let Some(s) = ctx.get_session("table_det") {
+            s
+        } else {
+            let s = backend.create_session(&det_handle, AccelerationMode::Cpu)?;
+            ctx.cache_session("table_det", s);
+            ctx.get_session("table_det")
+                .ok_or_else(|| SnipperError::Runtime("Failed to cache table detection session".into()))?
+        };
+
+        let mut detections = detect_tables(image, &*session, &det_params)?;
+
+        // Filter by minimum area and confidence
+        filter_table_detections(&mut detections, 400.0, 0.3);
+
+        let count = detections.len();
+        log::info!("Pipeline: detect_table found {} regions", count);
+
+        let detections_json: Vec<serde_json::Value> = detections
+            .iter()
+            .map(|d| {
+                serde_json::json!({
+                    "rect": {
+                        "x": d.rect.x,
+                        "y": d.rect.y,
+                        "w": d.rect.width,
+                        "h": d.rect.height
+                    },
+                    "confidence": d.confidence,
+                    "class_id": d.class_id,
+                    "class_name": d.class_name
+                })
+            })
+            .collect();
+
+        ctx.set("table_detections", serde_json::json!(detections_json));
         Ok(())
     }
 }

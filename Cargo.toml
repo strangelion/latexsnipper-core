@@ -51,6 +51,7 @@ latexsnipper-ast = { path = "crates/ast" }
 latexsnipper-conversion = { path = "crates/conversion" }
 latexsnipper-pipeline = { path = "crates/pipeline" }
 latexsnipper-runtime = { path = "crates/runtime" }
+latexsnipper-tensor = { path = "crates/tensor" }
 latexsnipper-image = { path = "crates/image" }
 latexsnipper-inference = { path = "crates/inference" }
 latexsnipper-model = { path = "crates/model" }
@@ -81,3 +82,7 @@ path = "examples/pdf_export.rs"
 [[test]]
 name = "integration"
 path = "tests/integration.rs"
+
+[[test]]
+name = "table_e2e"
+path = "tests/table_e2e.rs"

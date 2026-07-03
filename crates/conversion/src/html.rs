@@ -101,6 +101,10 @@ fn render_block(block: &Block) -> String {
         Block::Quote(q) => render_quote(q),
         Block::Code(c) => render_code(c),
         Block::HorizontalRule(_) => "<hr>".to_string(),
+        Block::Handwriting(hw) => {
+            let text = render_inlines(&hw.inlines);
+            format!("<div class=\"handwriting\">{}</div>", text)
+        }
     }
 }
 
@@ -230,25 +234,26 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
     }
 
     let mut lines = Vec::new();
-    lines.push("<table>".to_string());
+    lines.push(
+        r#"<table border="1" cellpadding="4" cellspacing="0" style="border-collapse: collapse; width: 100%;">"#.to_string(),
+    );
 
     lines.push("  <thead>".to_string());
-    lines.push("    <tr>".to_string());
-    for cell in &t.rows[0] {
-        let text: String = cell
-            .inlines
-            .iter()
-            .filter_map(|i| {
-                if let Inline::Text(t) = i {
-                    Some(xml_escape(&t.text))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        lines.push(format!("      <th>{}</th>", text));
+    if let Some(first_row) = t.rows.first() {
+        lines.push("    <tr>".to_string());
+        for cell in first_row {
+            let content = render_cell_content(&cell.inlines);
+            let mut attrs = String::new();
+            if cell.colspan > 1 {
+                attrs.push_str(&format!(" colspan=\"{}\"", cell.colspan));
+            }
+            if cell.rowspan > 1 {
+                attrs.push_str(&format!(" rowspan=\"{}\"", cell.rowspan));
+            }
+            lines.push(format!("      <th{}>{}</th>", attrs, content));
+        }
+        lines.push("    </tr>".to_string());
     }
-    lines.push("    </tr>".to_string());
     lines.push("  </thead>".to_string());
 
     if t.rows.len() > 1 {
@@ -256,18 +261,15 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
         for row in &t.rows[1..] {
             lines.push("    <tr>".to_string());
             for cell in row {
-                let text: String = cell
-                    .inlines
-                    .iter()
-                    .filter_map(|i| {
-                        if let Inline::Text(t) = i {
-                            Some(xml_escape(&t.text))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                lines.push(format!("      <td>{}</td>", text));
+                let content = render_cell_content(&cell.inlines);
+                let mut attrs = String::new();
+                if cell.colspan > 1 {
+                    attrs.push_str(&format!(" colspan=\"{}\"", cell.colspan));
+                }
+                if cell.rowspan > 1 {
+                    attrs.push_str(&format!(" rowspan=\"{}\"", cell.rowspan));
+                }
+                lines.push(format!("      <td{}>{}</td>", attrs, content));
             }
             lines.push("    </tr>".to_string());
         }
@@ -276,6 +278,31 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
 
     lines.push("</table>".to_string());
     lines.join("\n")
+}
+
+fn render_cell_content(inlines: &[Inline]) -> String {
+    let parts: Vec<String> = inlines.iter().map(|i| match i {
+        Inline::Text(t) => {
+            let mut text = xml_escape(&t.text);
+            if t.bold == Some(true) {
+                text = format!("<strong>{}</strong>", text);
+            }
+            if t.italic == Some(true) {
+                text = format!("<em>{}</em>", text);
+            }
+            text
+        }
+        Inline::Formula(f) => {
+            let content = convert_formula_to_html(f);
+            if f.display_mode {
+                format!("$$\n{}\n$$", content)
+            } else {
+                format!("${}$", content)
+            }
+        }
+        Inline::Image(_) => "<img src=\"image.png\" alt=\"image\">".to_string(),
+    }).collect();
+    parts.join(" ")
 }
 
 fn xml_escape(s: &str) -> String {

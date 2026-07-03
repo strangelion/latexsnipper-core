@@ -241,20 +241,23 @@ fn test_text_pipeline_e2e() {
 
     // Find models
     let det_candidates = [
-        models.join("PP-OCRv6_medium_det_infer/inference.onnx"),
+        models.join("text-det/v6-small/inference.onnx"),
         models.join("PP-OCRv6_small_det_infer/inference.onnx"),
+        models.join("PP-OCRv6_medium_det_infer/inference.onnx"),
     ];
     let det_path = det_candidates.iter().find(|p| p.exists());
 
     let rec_candidates = [
-        models.join("PP-OCRv6_medium_rec_infer/inference.onnx"),
+        models.join("text-rec/v6-small/inference.onnx"),
         models.join("PP-OCRv6_small_rec_infer/inference.onnx"),
+        models.join("PP-OCRv6_medium_rec_infer/inference.onnx"),
     ];
     let rec_path = rec_candidates.iter().find(|p| p.exists());
 
     let keys_candidates = [
-        models.join("PP-OCRv6_medium_rec_infer/inference.yml"),
+        models.join("text-rec/v6-small/inference.yml"),
         models.join("PP-OCRv6_small_rec_infer/inference.yml"),
+        models.join("PP-OCRv6_medium_rec_infer/inference.yml"),
     ];
     let keys_path = keys_candidates.iter().find(|p| p.exists());
 
@@ -429,20 +432,23 @@ fn test_mixed_pipeline_e2e() {
     let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
 
     let text_det_candidates = [
-        models.join("PP-OCRv6_medium_det_infer/inference.onnx"),
+        models.join("text-det/v6-small/inference.onnx"),
         models.join("PP-OCRv6_small_det_infer/inference.onnx"),
+        models.join("PP-OCRv6_medium_det_infer/inference.onnx"),
     ];
     let text_det_path = text_det_candidates.iter().find(|p| p.exists());
 
     let text_rec_candidates = [
-        models.join("PP-OCRv6_medium_rec_infer/inference.onnx"),
+        models.join("text-rec/v6-small/inference.onnx"),
         models.join("PP-OCRv6_small_rec_infer/inference.onnx"),
+        models.join("PP-OCRv6_medium_rec_infer/inference.onnx"),
     ];
     let text_rec_path = text_rec_candidates.iter().find(|p| p.exists());
 
     let keys_candidates = [
-        models.join("PP-OCRv6_medium_rec_infer/inference.yml"),
+        models.join("text-rec/v6-small/inference.yml"),
         models.join("PP-OCRv6_small_rec_infer/inference.yml"),
+        models.join("PP-OCRv6_medium_rec_infer/inference.yml"),
     ];
     let keys_path = keys_candidates.iter().find(|p| p.exists());
 
@@ -594,6 +600,7 @@ fn test_mixed_pipeline_e2e() {
                     }
                     boxes.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
                     println!("3. Detected {} text regions", boxes.len());
+
 
                     // Recognize text
                     if let Some(text_rec) = text_rec_path {

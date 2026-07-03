@@ -34,6 +34,22 @@ impl Tensor {
         }
     }
 
+    pub fn int32(name: impl Into<String>, shape: Vec<usize>, data: Vec<i32>) -> Self {
+        Self {
+            name: name.into(),
+            shape,
+            data: TensorData::Int32(data),
+        }
+    }
+
+    pub fn u8(name: impl Into<String>, shape: Vec<usize>, data: Vec<u8>) -> Self {
+        Self {
+            name: name.into(),
+            shape,
+            data: TensorData::UInt8(data),
+        }
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -54,6 +70,20 @@ impl Tensor {
     pub fn as_i64_slice(&self) -> Option<&[i64]> {
         match &self.data {
             TensorData::Int64(d) => Some(d),
+            _ => None,
+        }
+    }
+
+    pub fn as_i32_slice(&self) -> Option<&[i32]> {
+        match &self.data {
+            TensorData::Int32(d) => Some(d),
+            _ => None,
+        }
+    }
+
+    pub fn as_u8_slice(&self) -> Option<&[u8]> {
+        match &self.data {
+            TensorData::UInt8(d) => Some(d),
             _ => None,
         }
     }

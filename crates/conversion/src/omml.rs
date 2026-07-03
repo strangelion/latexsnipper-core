@@ -92,8 +92,11 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 "sum" | "prod" | "coprod" | "int" | "iint" | "iiint" | "oint"
                 | "bigcup" | "bigcap" => {
                     if let Some(sym) = map_large_op(&format!("\\{}", name)) {
+                        // Word requires <m:e> to exist and NOT be self-closing (<m:e/> renders as box).
+                        // For nary operators with no subscript/superscript and no operand,
+                        // we still produce <m:e> with a space inside.
                         format!(
-                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:e/></m:nary>",
+                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
                             sym
                         )
                     } else {
@@ -102,6 +105,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 }
                 _ => {
                     // Functions like \lim, \log, \sin, etc.
+                    // <m:e/> inside m:func is allowed (Word fills it automatically)
                     format!(
                         "<m:func>\n  <m:fName><m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/></w:rPr></m:rPr><m:t>{}</m:t></m:r></m:fName>\n  <m:e/>\n</m:func>",
                         name
@@ -150,7 +154,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                         let cmd = format!("\\{}", name);
                         let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                         return format!(
-                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup><m:e/></m:nary>",
+                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
                             sym, flat_text_run(sub), flat_text_run(exp)
                         );
                     }
@@ -162,14 +166,17 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let cmd = format!("\\{}", name);
                     let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                     return format!(
-                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup><m:e/></m:nary>",
+                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
                         sym, flat_text_run(exp)
                     );
                 }
             }
+            // Check if base is a Sequence or Group containing an Operator (e.g. {\sum}^{n})
+            // This handles the case where Latex parser outputs the operator inside a Group.
+            let base_omml = ast_to_omml(base);
             format!(
                 "<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>",
-                ast_to_omml(base),
+                base_omml,
                 ast_to_omml(exp)
             )
         }
@@ -181,11 +188,14 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let cmd = format!("\\{}", name);
                     let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                     return format!(
-                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:e/></m:nary>",
+                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
                         sym, flat_text_run(sub)
                     );
                 }
-                // Non-large operators like \lim → use m:func with sub
+            }
+            // Non-large operators like \lim → use m:func with sub
+            let is_func = matches!(base.as_ref(), LatexNode::Operator(_));
+            if is_func {
                 let inner = ast_to_omml(base);
                 return format!(
                     "<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>",
@@ -256,6 +266,57 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     "<m:bar>\n  <m:barPr><m:pos m:val=\"bottom\"/></m:barPr>\n  <m:e>{}</m:e>\n</m:bar>",
                     inner
                 ),
+            }
+        }
+
+        LatexNode::Overset { top, base } => {
+            // Word OMML doesn't have a perfect overset equivalent.
+            // Use m:bar with position=top, which draws a bar above the base.
+            // For text stacking, we use sSup on the base's m:e.
+            let base_str = ast_to_omml(base);
+            let top_str = ast_to_omml(top);
+            format!(
+                "<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>",
+                base_str, top_str
+            )
+        }
+
+        LatexNode::Underset { bottom, base } => {
+            let base_str = ast_to_omml(base);
+            let bottom_str = ast_to_omml(bottom);
+            format!(
+                "<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>",
+                base_str, bottom_str
+            )
+        }
+
+        LatexNode::XArrow { direction, above, below } => {
+            let sym = if direction == "rightarrow" { "\u{2192}" } else { "\u{2190}" };
+            let arrow_text = wrap_mtext(sym);
+            match (above, below) {
+                (Some(a), Some(b)) => {
+                    let above_str = ast_to_omml(a);
+                    let below_str = ast_to_omml(b);
+                    format!(
+                        "<m:sSubSup><m:e>{}</m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>",
+                        arrow_text, below_str, above_str
+                    )
+                }
+                (Some(a), None) => {
+                    let above_str = ast_to_omml(a);
+                    format!(
+                        "<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>",
+                        arrow_text, above_str
+                    )
+                }
+                (None, Some(b)) => {
+                    let below_str = ast_to_omml(b);
+                    format!(
+                        "<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>",
+                        arrow_text, below_str
+                    )
+                }
+                (None, None) => arrow_text,
             }
         }
 
@@ -395,7 +456,13 @@ fn wrap_mtext(text: &str) -> String {
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
-        .replace('"', "&quot;");
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;");
+    // Strip XML control characters (U+0000-U+001F) except \t, \n, \r
+    let escaped: String = escaped
+        .chars()
+        .filter(|&c| c.is_ascii_graphic() || c.is_ascii_whitespace() || !c.is_ascii())
+        .collect();
     format!("<m:r><m:t>{}</m:t></m:r>", escaped)
 }
 
@@ -460,11 +527,33 @@ fn wrap_with_color(omml_content: &str, hex: &str) -> String {
     result = result.replace("<w:rPr>", &format!("<w:rPr>{}", color_tag));
 
     // For bare <m:r><m:t> without any <m:rPr>, add italic + color + font
+    // Only replace when <m:r><m:t> is NOT preceded by any <m:rPr> (i.e., no existing rPr)
+    let bare_run_pattern = "<m:r><m:t>";
     let bare_run_replacement = format!(
         "<m:r><m:rPr><w:rPr><w:rFonts w:ascii=\"Cambria Math\" w:h-ansi=\"Cambria Math\"/><w:i/>{}</w:rPr></m:rPr><m:t>",
         color_tag
     );
-    result = result.replace("<m:r><m:t>", &bare_run_replacement);
+
+    // Only apply for runs that don't already have <m:rPr>
+    let mut clean = String::new();
+    let mut search_pos = 0;
+    while let Some(pos) = result[search_pos..].find(bare_run_pattern) {
+        let abs_pos = search_pos + pos;
+        // Check backward: if there's already an <m:rPr> before this <m:r><m:t>, skip
+        let before = &result[..abs_pos];
+        if before.ends_with("</m:rPr>") {
+            // Already has rPr, keep as-is
+            clean.push_str(&result[search_pos..abs_pos + bare_run_pattern.len()]);
+        } else {
+            clean.push_str(&result[search_pos..abs_pos]);
+            clean.push_str(&bare_run_replacement);
+            search_pos = abs_pos + bare_run_pattern.len();
+            continue;
+        }
+        search_pos = abs_pos + bare_run_pattern.len();
+    }
+    clean.push_str(&result[search_pos..]);
+    result = clean;
 
     result
 }
@@ -663,7 +752,8 @@ fn color_name_to_hex(name: &str) -> String {
         "lightblue" | "light blue" => "ADD8E6".to_string(),
         "lightgray" | "light grey" => "D3D3D3".to_string(),
         s if s.starts_with('#') && s.len() == 7 => s[1..].to_uppercase(),
-        s if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) => s.to_uppercase(),
+        s if s.len() == 6 && !s.chars().any(|c| c.is_ascii_alphabetic())
+            && s.chars().all(|c| c.is_ascii_hexdigit()) => s.to_uppercase(),
         _ => "000000".to_string(),
     }
 }
@@ -676,6 +766,15 @@ fn fix_omml(omml: &str) -> String {
     if let Some(pos) = s.find("<?xml") {
         if let Some(end) = s[pos..].find("?>") {
             s.replace_range(..pos + end + 2, "");
+        }
+        // If ?> not found (e.g. truncated XML), remove <?xml line
+        // by scanning to newline or end
+        if s[pos..].starts_with("<?xml") && s[pos..].contains("?>") {
+            // already handled above
+        } else {
+            // Remove from <?xml to first newline or end
+            let end = s[pos..].find('\n').map(|n| pos + n + 1).unwrap_or(s.len());
+            s.replace_range(..end, "");
         }
     }
 
@@ -757,6 +856,24 @@ mod tests {
     fn debug_arrow_limits() {
         let result = latex_to_omml("x \\to^{a}_{b}");
         eprintln!("=== arrow with limits ===\n{}", result);
+    }
+
+    #[test]
+    fn debug_xrightarrow() {
+        let result = latex_to_omml("\\xrightarrow{abc}");
+        eprintln!("=== xrightarrow with text ===\n{}", result);
+    }
+
+    #[test]
+    fn debug_xrightarrow_both() {
+        let result = latex_to_omml("\\xrightarrow[below]{above}");
+        eprintln!("=== xrightarrow with both ===\n{}", result);
+    }
+
+    #[test]
+    fn debug_overset() {
+        let result = latex_to_omml("\\overset{*}{x}");
+        eprintln!("=== overset ===\n{}", result);
     }
 
     #[test]
@@ -1081,7 +1198,99 @@ mod tests {
         assert!(r.contains("Cambria Math"), "font missing: {}", r);
     }
 
-    // ═══ Comprehensive: Complex Formulas ═══
+    // ═══ Pure AST-level "ast_to_omml" tests (no DocumentConverter pipeline) ═══
+
+    use crate::latex_parser::parse_latex;
+
+    #[test]
+    fn ast_omml_fraction() {
+        let ast = parse_latex("\\frac{a}{b}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:f>"), "frac: {}", omml);
+        assert!(omml.contains("<m:num>"), "num: {}", omml);
+        assert!(omml.contains("<m:den>"), "den: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_superscript() {
+        let ast = parse_latex("x^{2}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:sSup>"), "sup: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_subscript() {
+        let ast = parse_latex("x_{i}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:sSub>"), "sub: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_sqrt() {
+        let ast = parse_latex("\\sqrt{x}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:rad>"), "rad: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_integral() {
+        let ast = parse_latex("\\int_{0}^{\\infty} f(x) dx");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:nary>"), "nary: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_xrightarrow() {
+        let ast = parse_latex("\\xrightarrow{abc}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:sSup>"), "sup for arrow: {}", omml);
+        assert!(omml.contains("→"), "arrow symbol: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_xrightarrow_both() {
+        let ast = parse_latex("\\xrightarrow[below]{above}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:sSubSup>"), "subsup: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_overset() {
+        let ast = parse_latex("\\overset{*}{x}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:sSup>"), "sup: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_underset() {
+        let ast = parse_latex("\\underset{n}{x}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:sSub>"), "sub: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_text_with_spaces() {
+        let ast = parse_latex("\\text{Hello World}");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("Hello"), "Hello: {}", omml);
+        assert!(omml.contains("World"), "World: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_no_self_closing_e_in_nary() {
+        let inputs = &[
+            "\\sum_{i=0}^{n} x_i",
+            "\\int_{0}^{1}",
+            "\\sum",
+            "\\prod_{i=1}^{n} a_i",
+        ];
+        for latex in inputs {
+            let ast = parse_latex(latex);
+            let omml = ast_to_omml(&ast);
+            assert!(!omml.contains("<m:e/>"),
+                "nary with self-closing <m:e/> (Word box!) for {}: {}", latex, omml);
+        }
+    }
 
     #[test]
     fn quadratic_formula() {
@@ -1139,5 +1348,33 @@ mod tests {
         assert!(r.contains("<m:sSup>"), "superscript: {}", r);
         assert!(r.contains("Spec"), "Spec: {}", r);
         assert!(r.contains("<m:t>"), "text runs: {}", r);
+    }
+
+    #[test]
+    fn nary_no_self_closing_e() {
+        // <m:e/> in nary causes Word to render a box instead of the operator.
+        // All nary <m:e> elements must have content inside (even just a space).
+        let cases = vec![
+            "\\sum_{i=0}^{n} x_i",
+            "\\int_{0}^{\\infty} f(x) dx",
+            "\\prod_{i=1}^{n} a_i",
+            "\\sum_{i=0}^{n}",
+            "\\sum^{n}",
+            "\\sum_{i}",
+            "\\int_{0}^{1}",
+            "\\int f(x) dx",
+            "\\sum",
+        ];
+        for latex in &cases {
+            let r = latex_to_omml(latex);
+            // Every <m:e> inside nary must have content, not be self-closing
+            let _nary_count = r.matches("<m:nary").count();
+            let self_close_e_count = r.matches("<m:e/>").count();
+            assert_eq!(
+                self_close_e_count, 0,
+                "nary output for {} has {} self-closing <m:e/>, Word will render boxes: {}",
+                latex, self_close_e_count, r
+            );
+        }
     }
 }

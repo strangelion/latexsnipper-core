@@ -142,6 +142,10 @@ fn render_block(block: &Block) -> String {
         Block::Quote(q) => render_quote(q),
         Block::Code(c) => render_code(c),
         Block::HorizontalRule(_) => "\\bigskip\\hrule\\bigskip".to_string(),
+        Block::Handwriting(hw) => {
+            let text = render_inlines(&hw.inlines);
+            format!("\\texttt{{{}}}", text)
+        }
     }
 }
 

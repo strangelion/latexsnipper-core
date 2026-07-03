@@ -8,15 +8,15 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
     match node {
         LatexNode::Text(s) => s.clone(),
         LatexNode::Sequence(nodes) => {
-            // Smart spacing: don't add spaces between certain elements
             let mut result = String::new();
             for (i, n) in nodes.iter().enumerate() {
                 let converted = latex_ast_to_typst(n);
                 if i > 0 && !converted.is_empty() {
                     // Don't add space before superscript/subscript
                     if !converted.starts_with('^') && !converted.starts_with('_') {
-                        // Check if previous ends with space
-                        if !result.ends_with(' ') {
+                        // Don't add space before a Symbol that looks like a closing delimiter or punctuation
+                        let skip = matches!(n, LatexNode::Symbol(s) if matches!(s.as_str(), ")" | "]" | "}" | "," | "." | "!" | "?"));
+                        if !skip && !result.ends_with(' ') {
                             result.push(' ');
                         }
                     }
@@ -160,6 +160,40 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             match label {
                 Some(lbl) => format!("underbrace({}, {})", inner, latex_ast_to_typst(lbl)),
                 None => format!("underbrace({})", inner),
+            }
+        }
+        LatexNode::Overset { top, base } => {
+            format!(
+                "overset({}, {})",
+                latex_ast_to_typst(top),
+                latex_ast_to_typst(base)
+            )
+        }
+        LatexNode::Underset { bottom, base } => {
+            format!(
+                "underset({}, {})",
+                latex_ast_to_typst(bottom),
+                latex_ast_to_typst(base)
+            )
+        }
+        LatexNode::XArrow { direction, above, below } => {
+            let arrow = if direction == "rightarrow" { "arrow.r" } else { "arrow.l" };
+            match (above, below) {
+                (Some(a), Some(b)) => {
+                    let a_str = latex_ast_to_typst(a);
+                    let b_str = latex_ast_to_typst(b);
+                    // Typst: arrow.r^("above")_("below")
+                    format!("{}^{}_({})", arrow, format!("\"{}\"", a_str), format!("\"{}\"", b_str))
+                }
+                (Some(a), None) => {
+                    let a_str = latex_ast_to_typst(a);
+                    format!("{}^{}", arrow, format!("\"{}\"", a_str))
+                }
+                (None, Some(b)) => {
+                    let b_str = latex_ast_to_typst(b);
+                    format!("{}_{}", arrow, format!("\"{}\"", b_str))
+                }
+                (None, None) => arrow.to_string(),
             }
         }
     }
@@ -735,6 +769,73 @@ mod tests {
         let result = latex_ast_to_typst(&node);
         assert!(result.contains("integral"));
         assert!(result.contains("infinity"));
+    }
+
+    #[test]
+    fn test_nested_superscript() {
+        let result = latex_ast_to_typst(&parse_latex("x^{y^{z}}"));
+        assert_eq!(result, "x^(y^(z))");
+    }
+
+    #[test]
+    fn test_nested_subscript() {
+        let result = latex_ast_to_typst(&parse_latex("x_{y_{z}}"));
+        assert_eq!(result, "x_(y_(z))");
+    }
+
+    #[test]
+    fn test_sub_sup_combined() {
+        let result = latex_ast_to_typst(&parse_latex("x_i^2"));
+        assert_eq!(result, "x_(i)^(2)");
+    }
+
+    #[test]
+    fn test_superscript_with_subscript_base() {
+        let result = latex_ast_to_typst(&parse_latex("x^{y_{z}}"));
+        assert_eq!(result, "x^(y_(z))");
+    }
+
+    #[test]
+    fn test_nested_fraction_numerator() {
+        let result = latex_ast_to_typst(&parse_latex("\\frac{\\frac{a}{b}}{c}"));
+        assert_eq!(result, "frac(frac(a, b), c)");
+    }
+
+    #[test]
+    fn test_nested_fraction_denominator() {
+        let result = latex_ast_to_typst(&parse_latex("\\frac{a}{\\frac{b}{c}}"));
+        assert_eq!(result, "frac(a, frac(b, c))");
+    }
+
+    #[test]
+    fn test_fraction_with_superscript() {
+        let result = latex_ast_to_typst(&parse_latex("\\frac{x^{2}}{y}"));
+        assert_eq!(result, "frac(x^(2), y)");
+    }
+
+    #[test]
+    fn test_nth_root_fraction() {
+        let result = latex_ast_to_typst(&parse_latex("\\sqrt[3]{\\frac{x}{y}}"));
+        assert_eq!(result, "root(3, frac(x, y))");
+    }
+
+    #[test]
+    fn test_nth_root() {
+        let result = latex_ast_to_typst(&parse_latex("\\sqrt[3]{x}"));
+        assert_eq!(result, "root(3, x)");
+    }
+
+    #[test]
+    fn test_greek_with_subscript() {
+        let result = latex_ast_to_typst(&parse_latex("\\alpha_{i}^{2}"));
+        assert_eq!(result, "alpha_(i)^(2)");
+    }
+
+    #[test]
+    fn test_complex_nested_expression() {
+        let result = latex_ast_to_typst(&parse_latex("\\frac{x^{2} + y^{2}}{z_{n}} + \\sqrt[3]{\\frac{a}{b}}"));
+        assert!(result.contains("frac"));
+        assert!(result.contains("root"));
     }
 
     #[test]

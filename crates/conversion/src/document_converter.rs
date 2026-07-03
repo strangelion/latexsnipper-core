@@ -117,6 +117,7 @@ impl DocumentConverter {
                         display_mode: true,
                         confidence: 1.0,
                         source_info: None,
+                        layout: None,
                     },
                     geometry: None,
                     source: None,

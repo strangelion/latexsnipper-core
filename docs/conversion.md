@@ -41,6 +41,15 @@ Document AST ───────├─→ OmmlConverter         ─→ <m:oMat
 | `typst` | typst.rs | Typst |
 | `markdown` | markdown.rs | Markdown (inline/block) |
 | `html` | html.rs | HTML + MathJax |
+| `latex_parser` | latex_parser.rs | LaTeX → LaTeX AST |
+| `latex_ast` | latex_ast.rs | LaTeX AST 定义（含 Display 实现） |
+| `latex_to_typst` | latex_to_typst.rs | LaTeX AST → Typst |
+| `latex_utils` | latex_utils.rs | 辅助函数 |
+| `omml_parser` | omml_parser.rs | OMML → LaTeX |
+| `mathml_parser` | mathml_parser.rs | MathML → LaTeX |
+| `markdown_parser` | markdown_parser.rs | Markdown → AST |
+| `typst_parser` | typst_parser.rs | Typst → LaTeX |
+| `table_export` | table_export.rs | 表格导出 |
 
 ## Converter Trait
 
@@ -119,6 +128,72 @@ let pages = DocumentConverter::new(OutputFormat::Typst)
 // 转换所有格式
 let all = DocumentConverter::convert_all(&doc)?;
 ```
+
+## OMML 注意事项
+
+Microsoft Word 对 OMML 处理有严格要求：
+
+### nary 运算（求和/积分/连乘）
+
+`<m:e/>` 自闭合标签在 Word 中会渲染为方框。
+
+所有 `<m:nary>`,  `<m:sSub>`,  `<m:sSup>`,  `<m:sSubSup>` 中的 `<m:e/>` 必须包含具体内容：
+
+```xml
+<!-- ❌ Word 渲染为方框 -->
+<m:e/>
+<!-- ✅ Word 正常显示 -->
+<m:e><m:r><m:t> </m:t></m:r></m:e>
+```
+
+### xrightarrow / xleftarrow / overset / underset
+
+这些命令通过 LaTeX AST 的 `XArrow`/`Overset`/`Underset` 节点处理，在 OMML 中转换为：
+
+| LaTeX | OMML |
+|-------|------|
+| `\xrightarrow{text}` | `<m:sSup><m:e>→</m:e><m:sup>text</m:sup></m:sSup>` |
+| `\xrightarrow[below]{above}` | `<m:sSubSup><m:e>→</m:e><m:sub>below</m:sub><m:sup>above</m:sup></m:sSubSup>` |
+| `\overset{*}{x}` | `<m:sSup><m:e>x</m:e><m:sup>*</m:sup></m:sSup>` |
+| `\underset{n}{x}` | `<m:sSub><m:e>x</m:e><m:sub>n</m:sub></m:sSub>` |
+
+### 跨格式回环测试
+
+现有的回环测试覆盖以下路径（约 200 个测试）：
+- LaTeX → OMML → LaTeX（验证分数/上下标/nary 结构保留）
+- LaTeX → MathML → LaTeX（验证分数/上下标结构保留）
+- LaTeX → 6 种输出格式（Typst/MathML/OMML/Markdown/HTML/LaTeX），验证数学结构完整性
+
+## LaTeX → Typst 转换
+
+通过 `latex_parser::parse_latex()` 解析后经 `latex_to_typst::latex_ast_to_typst()` 转换。
+
+### 支持的特殊结构
+
+| 结构 | LaTeX | Typst |
+|------|-------|-------|
+| 分数 | `\frac{a}{b}` | `frac(a, b)` |
+| 开方 | `\sqrt[3]{x}` | `root(3, x)` |
+| 上下标 | `x_i^2` | `x_(i)^(2)` |
+| 嵌套上下标 | `x^{y^{z}}` | `x^(y^(z))` |
+| 嵌套分式 | `\frac{\frac{a}{b}}{c}` | `frac(frac(a, b), c)` |
+| 积分限 | `\int_{0}^{\infty}` | `integral_(0)^(infinity)` |
+| 求和限 | `\sum_{i=0}^{n}` | `sum_(i=0)^(n)` |
+| 极限+箭头 | `\lim_{x \to 0}` | `limit_(x arrow.r 0)` |
+| 括号 | `\left(\frac{a}{b}\right)` | `lr((frac(a, b)))` |
+| hat/vec/bar | `\hat{x}` | `hat(x)` |
+
+### 上下文敏感的间距
+
+`Sequence` 节点处理时会自动抑制以下情况前的空格：
+- 上标/下标（`^`/`_`）
+- 闭括号、逗号、句点等标点符号
+
+## 已知局限
+
+1. **MathML→LaTeX 生成完整文档模板** — 包含 `\documentclass` 等，非纯公式字符串（MathML 解析器设计选择）
+2. **OMML 的 `<msubsup>` 往返** — LaTeX→OMML→LaTeX 可能展开为 `<m:sSub>` + `<m:sSup>` 两层，语义正确但形式不同
+3. **`parse_latex` 是纯文本解析器** — 不支持宏定义、条件分支等 TeX 引擎特性
 
 ## 与 Syntax Crate 的区别
 
