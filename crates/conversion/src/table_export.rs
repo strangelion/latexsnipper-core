@@ -38,7 +38,8 @@ impl TableExporter {
         let mut parts = vec![
             r#"<html xmlns:o="urn:schemas-microsoft-com:office:office"
 xmlns:w="urn:schemas-microsoft-com:office:word"
-xmlns="http://www.w3.org/TR/REC-html40">"#.to_string(),
+xmlns="http://www.w3.org/TR/REC-html40">"#
+                .to_string(),
             "<head>".to_string(),
             "<style>".to_string(),
             "table { border-collapse: collapse; }".to_string(),

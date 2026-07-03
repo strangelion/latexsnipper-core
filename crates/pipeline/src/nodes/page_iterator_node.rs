@@ -59,7 +59,11 @@ impl PipelineNode for PageIteratorNode {
                 break;
             }
 
-            log::info!("PageIterator: processing page {}/{}", page_idx + 1, page_count);
+            log::info!(
+                "PageIterator: processing page {}/{}",
+                page_idx + 1,
+                page_count
+            );
 
             // Set current page
             ctx.set_current_page(page_idx);

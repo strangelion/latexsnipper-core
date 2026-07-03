@@ -329,9 +329,8 @@ fn process_single_page(
     backend: &dyn RuntimeBackend,
 ) -> Result<Vec<Block>, SnipperError> {
     // 1. Detect formulas
-    let det_config =
-        latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
-            .map_err(|e| SnipperError::Model(e.to_string()))?;
+    let det_config = latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
+        .map_err(|e| SnipperError::Model(e.to_string()))?;
 
     let det_params = DetectionParams::from_config(&det_config);
     let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");

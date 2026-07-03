@@ -74,7 +74,11 @@ impl PipelineContext {
     /// Get the total number of pages.
     pub fn page_count(&self) -> usize {
         if self.page_images.is_empty() {
-            if self.image.is_some() { 1 } else { 0 }
+            if self.image.is_some() {
+                1
+            } else {
+                0
+            }
         } else {
             self.page_images.len()
         }

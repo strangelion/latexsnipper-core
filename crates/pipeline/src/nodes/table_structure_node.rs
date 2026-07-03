@@ -3,7 +3,9 @@ use latexsnipper_ast::Rect;
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_inference::recognize_table_structure;
-use latexsnipper_runtime::{AccelerationMode, InferenceSession, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_runtime::{
+    AccelerationMode, InferenceSession, ModelHandle, OnnxRuntimeBackend, RuntimeBackend,
+};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -41,7 +43,11 @@ impl TableStructureNode {
             "slanet" => models.join("table-struct/slanet-plus/model.onnx"),
             _ => return None,
         };
-        if path.exists() { Some(path) } else { None }
+        if path.exists() {
+            Some(path)
+        } else {
+            None
+        }
     }
 }
 
@@ -83,12 +89,13 @@ impl PipelineNode for TableStructureNode {
         };
 
         // Load backend model if needed
-        let backend_session: Option<Box<dyn InferenceSession>> = (|| -> Option<Box<dyn InferenceSession>> {
-            let model_path = self.backend_model_path(&models)?;
-            let backend = OnnxRuntimeBackend::new(models.clone()).ok()?;
-            let handle = ModelHandle::with_path(&self.backend, model_path);
-            backend.create_session(&handle, AccelerationMode::Cpu).ok()
-        })();
+        let backend_session: Option<Box<dyn InferenceSession>> =
+            (|| -> Option<Box<dyn InferenceSession>> {
+                let model_path = self.backend_model_path(&models)?;
+                let backend = OnnxRuntimeBackend::new(models.clone()).ok()?;
+                let handle = ModelHandle::with_path(&self.backend, model_path);
+                backend.create_session(&handle, AccelerationMode::Cpu).ok()
+            })();
 
         if self.backend.as_str() != "projection" && backend_session.is_none() {
             log::warn!(

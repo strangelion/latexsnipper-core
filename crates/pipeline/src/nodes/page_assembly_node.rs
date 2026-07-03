@@ -67,8 +67,7 @@ impl PipelineNode for PageAssemblyNode {
                     .then_with(|| {
                         let ax = a.geometry().map_or(0.0, |g| g.x);
                         let bx = b.geometry().map_or(0.0, |g| g.x);
-                        ax.partial_cmp(&bx)
-                            .unwrap_or(std::cmp::Ordering::Equal)
+                        ax.partial_cmp(&bx).unwrap_or(std::cmp::Ordering::Equal)
                     })
             });
 

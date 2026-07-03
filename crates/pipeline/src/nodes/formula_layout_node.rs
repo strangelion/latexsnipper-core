@@ -66,13 +66,11 @@ impl PipelineNode for FormulaLayoutNode {
                 {
                     match parse_formula_latex(latex) {
                         Ok(layout) => {
-                            log::debug!(
-                                "Parsed formula layout: {} symbols",
-                                layout.symbol_count
-                            );
+                            log::debug!("Parsed formula layout: {} symbols", layout.symbol_count);
                             // Write the FormulaLayout back into the formula's layout field
                             if let Ok(layout_val) = serde_json::to_value(&layout) {
-                                formula_val.as_object_mut()
+                                formula_val
+                                    .as_object_mut()
                                     .map(|obj| obj.insert("layout".to_string(), layout_val));
                             }
                         }
@@ -86,10 +84,7 @@ impl PipelineNode for FormulaLayoutNode {
         }
 
         // Write the updated blocks back to context metadata
-        ctx.set(
-            "formula_blocks",
-            serde_json::json!(updated_blocks),
-        );
+        ctx.set("formula_blocks", serde_json::json!(updated_blocks));
 
         log::info!(
             "FormulaLayout: parsed and wrote back layout for {} formulas",

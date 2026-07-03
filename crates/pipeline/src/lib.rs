@@ -20,8 +20,8 @@ pub use nodes::page_iterator_node::PageIteratorNode;
 pub use nodes::postprocess_node::PostprocessNode;
 pub use nodes::recognizer_node::{RecognizerNode, RecognizerType};
 pub use nodes::resize_node::ResizeNode;
-pub use nodes::table_structure_node::TableStructureNode;
 pub use nodes::table_recognizer_node::TableRecognizerNode;
+pub use nodes::table_structure_node::TableStructureNode;
 pub use sdk::Snipper;
 pub use simple::{
     MockCropper, MockDetector, MockRecognizer, PipelineContext as SimpleContext, SimplePipeline,

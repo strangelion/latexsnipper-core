@@ -1,10 +1,9 @@
 use async_trait::async_trait;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_inference::{
-    detect_formulas, detect_handwriting, detect_tables, detect_text,
-    filter_formula_detections, filter_handwriting_detections, filter_table_detections,
-    group_formula_detections, DetectionParams, HandwritingDetParams, TableDetParams,
-    TextDetParams,
+    detect_formulas, detect_handwriting, detect_tables, detect_text, filter_formula_detections,
+    filter_handwriting_detections, filter_table_detections, group_formula_detections,
+    DetectionParams, HandwritingDetParams, TableDetParams, TextDetParams,
 };
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 
@@ -115,8 +114,9 @@ impl DetectorNode {
         } else {
             let s = backend.create_session(&det_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("formula_det", s);
-            ctx.get_session("formula_det")
-                .ok_or_else(|| SnipperError::Runtime("Failed to cache formula detection session".into()))?
+            ctx.get_session("formula_det").ok_or_else(|| {
+                SnipperError::Runtime("Failed to cache formula detection session".into())
+            })?
         };
 
         let mut detections = detect_formulas(image, &*session, &det_params)?;
@@ -183,8 +183,9 @@ impl DetectorNode {
         } else {
             let s = backend.create_session(&det_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("text_det", s);
-            ctx.get_session("text_det")
-                .ok_or_else(|| SnipperError::Runtime("Failed to cache text detection session".into()))?
+            ctx.get_session("text_det").ok_or_else(|| {
+                SnipperError::Runtime("Failed to cache text detection session".into())
+            })?
         };
 
         let detections = detect_text(image, &*session, &det_params)?;
@@ -229,9 +230,7 @@ impl DetectorNode {
         let det_params = HandwritingDetParams::from_config(&det_config);
         let det_model_path = det_config
             .find_model_file(&models.join("handwriting-det"))
-            .ok_or_else(|| {
-                SnipperError::Model("Handwriting detection model not found".into())
-            })?;
+            .ok_or_else(|| SnipperError::Model("Handwriting detection model not found".into()))?;
         let det_handle = ModelHandle::with_path("handwriting-det", det_model_path);
 
         let backend = Self::create_backend(models)?;
@@ -240,8 +239,9 @@ impl DetectorNode {
         } else {
             let s = backend.create_session(&det_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("handwriting_det", s);
-            ctx.get_session("handwriting_det")
-                .ok_or_else(|| SnipperError::Runtime("Failed to cache handwriting detection session".into()))?
+            ctx.get_session("handwriting_det").ok_or_else(|| {
+                SnipperError::Runtime("Failed to cache handwriting detection session".into())
+            })?
         };
 
         let mut detections = detect_handwriting(image, &*session, &det_params)?;
@@ -299,8 +299,9 @@ impl DetectorNode {
         } else {
             let s = backend.create_session(&det_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("table_det", s);
-            ctx.get_session("table_det")
-                .ok_or_else(|| SnipperError::Runtime("Failed to cache table detection session".into()))?
+            ctx.get_session("table_det").ok_or_else(|| {
+                SnipperError::Runtime("Failed to cache table detection session".into())
+            })?
         };
 
         let mut detections = detect_tables(image, &*session, &det_params)?;

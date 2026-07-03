@@ -5,9 +5,8 @@ use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
 use latexsnipper_inference::{
-    detect_formulas, filter_formula_detections, group_formula_detections,
-    recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams,
-    TextRecParams, load_keys,
+    detect_formulas, filter_formula_detections, group_formula_detections, load_keys,
+    recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams, TextRecParams,
 };
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 
@@ -103,7 +102,13 @@ impl TableRecognizerNode {
 
         for structure_val in &structures_array {
             if let Some(table_block) = self
-                .recognize_single_table(image.clone(), structure_val, &formula_det_session, &formula_rec_session, &text_rec_session)
+                .recognize_single_table(
+                    image.clone(),
+                    structure_val,
+                    &formula_det_session,
+                    &formula_rec_session,
+                    &text_rec_session,
+                )
                 .await?
             {
                 table_blocks.push(table_block);
@@ -124,12 +129,19 @@ impl TableRecognizerNode {
         image: latexsnipper_image::SnipperImage,
         structure_val: &serde_json::Value,
         formula_det_session: &Option<Arc<Box<dyn latexsnipper_runtime::InferenceSession>>>,
-        formula_rec_session: &Option<(Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, std::path::PathBuf)>,
-        text_rec_session: &Option<(Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, std::path::PathBuf)>,
+        formula_rec_session: &Option<(
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            std::path::PathBuf,
+        )>,
+        text_rec_session: &Option<(
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            std::path::PathBuf,
+        )>,
     ) -> Result<Option<Block>> {
-        let table_rect = structure_val.get("rect").ok_or_else(|| {
-            SnipperError::Inference("Table structure missing rect".into())
-        })?;
+        let table_rect = structure_val
+            .get("rect")
+            .ok_or_else(|| SnipperError::Inference("Table structure missing rect".into()))?;
 
         let x = table_rect.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
         let y = table_rect.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
@@ -258,7 +270,13 @@ impl TableRecognizerNode {
         ctx: &mut PipelineContext,
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
-    ) -> Result<Option<(Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, std::path::PathBuf)>> {
+    ) -> Result<
+        Option<(
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            std::path::PathBuf,
+        )>,
+    > {
         let enc_path = models.join("formula-rec/trocr-deit/encoder_model.onnx");
         let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
         let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
@@ -296,7 +314,12 @@ impl TableRecognizerNode {
         ctx: &mut PipelineContext,
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
-    ) -> Result<Option<(Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, std::path::PathBuf)>> {
+    ) -> Result<
+        Option<(
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            std::path::PathBuf,
+        )>,
+    > {
         // Check cache
         if let Some(s) = ctx.get_session("text_rec") {
             let keys_path = self.find_text_rec_keys(models);
@@ -313,8 +336,7 @@ impl TableRecognizerNode {
         let handle = ModelHandle::with_path("text-rec", rec_path.unwrap());
         let session = backend.create_session(&handle, AccelerationMode::Cpu)?;
         ctx.cache_session("text_rec", session);
-        Ok(ctx.get_session("text_rec")
-            .map(|s| (s, keys_path)))
+        Ok(ctx.get_session("text_rec").map(|s| (s, keys_path)))
     }
 
     fn find_text_rec_model(&self, models: &std::path::Path) -> Option<std::path::PathBuf> {
@@ -334,7 +356,10 @@ impl TableRecognizerNode {
             models.join("text-rec/v6-small/ppocr_keys.txt"),
             models.join("text-rec/v6-small/inference.yml"),
         ];
-        candidates.iter().find(|p| p.exists()).cloned()
+        candidates
+            .iter()
+            .find(|p| p.exists())
+            .cloned()
             .unwrap_or_else(|| models.join("text-rec/v6-small/inference.yml"))
     }
 
@@ -343,8 +368,15 @@ impl TableRecognizerNode {
         image: &latexsnipper_image::SnipperImage,
         rect: &Rect,
         formula_det: &Option<Arc<Box<dyn latexsnipper_runtime::InferenceSession>>>,
-        formula_rec: &Option<(Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, std::path::PathBuf)>,
-        text_rec: &Option<(Arc<Box<dyn latexsnipper_runtime::InferenceSession>>, std::path::PathBuf)>,
+        formula_rec: &Option<(
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            std::path::PathBuf,
+        )>,
+        text_rec: &Option<(
+            Arc<Box<dyn latexsnipper_runtime::InferenceSession>>,
+            std::path::PathBuf,
+        )>,
     ) -> Vec<Inline> {
         let w = rect.width as u32;
         let h = rect.height as u32;
@@ -374,8 +406,10 @@ impl TableRecognizerNode {
                             let dh = det.rect.height as u32;
 
                             if dw >= 4 && dh >= 4 {
-                                let formula_crop =
-                                    operations::crop(&cropped, Rect::new(dx as f32, dy as f32, dw as f32, dh as f32));
+                                let formula_crop = operations::crop(
+                                    &cropped,
+                                    Rect::new(dx as f32, dy as f32, dw as f32, dh as f32),
+                                );
                                 if let Ok(result) = recognize_formula(
                                     &formula_crop,
                                     &**enc,

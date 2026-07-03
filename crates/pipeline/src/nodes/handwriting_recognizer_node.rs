@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
-use latexsnipper_inference::{
-    postprocess_handwriting, recognize_formula, RecognitionParams,
-};
+use latexsnipper_inference::{postprocess_handwriting, recognize_formula, RecognitionParams};
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 
 use crate::context::PipelineContext;
@@ -99,22 +97,24 @@ impl HandwritingRecognizerNode {
         } else {
             let s = backend.create_session(&enc_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("handwriting_encoder", s);
-            ctx.get_session("handwriting_encoder")
-                .ok_or_else(|| SnipperError::Runtime("Failed to cache handwriting encoder session".into()))?
+            ctx.get_session("handwriting_encoder").ok_or_else(|| {
+                SnipperError::Runtime("Failed to cache handwriting encoder session".into())
+            })?
         };
         let dec_session = if let Some(s) = ctx.get_session("handwriting_decoder") {
             s
         } else {
             let s = backend.create_session(&dec_handle, AccelerationMode::Cpu)?;
             ctx.cache_session("handwriting_decoder", s);
-            ctx.get_session("handwriting_decoder")
-                .ok_or_else(|| SnipperError::Runtime("Failed to cache handwriting decoder session".into()))?
+            ctx.get_session("handwriting_decoder").ok_or_else(|| {
+                SnipperError::Runtime("Failed to cache handwriting decoder session".into())
+            })?
         };
 
         // Handwriting-optimized parameters
         let params = RecognitionParams {
             img_size: 384,
-            beam_width: 5,    // Wider beam for handwriting
+            beam_width: 5, // Wider beam for handwriting
             top_k: 5,
             max_tokens: 256,
             ..RecognitionParams::default()
@@ -145,8 +145,7 @@ impl HandwritingRecognizerNode {
                         ) {
                             Ok(result) => {
                                 // Apply handwriting-specific post-processing
-                                let processed_text =
-                                    postprocess_handwriting(&result.text);
+                                let processed_text = postprocess_handwriting(&result.text);
 
                                 if !processed_text.is_empty() {
                                     // Determine if the result looks like a formula
@@ -156,12 +155,11 @@ impl HandwritingRecognizerNode {
                                         blocks.push(Block::Formula(FormulaBlock {
                                             formula: f,
                                             geometry: Some(Rect::new(
-                                                x as f32,
-                                                y as f32,
-                                                w as f32,
-                                                h as f32,
+                                                x as f32, y as f32, w as f32, h as f32,
                                             )),
-                                            source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                            source: Some(
+                                                SourceInfo::new().with_page(ctx.current_page),
+                                            ),
                                         }));
                                     } else {
                                         blocks.push(Block::Handwriting(HandwritingBlock {
@@ -170,12 +168,11 @@ impl HandwritingRecognizerNode {
                                             ))],
                                             confidence: result.confidence,
                                             geometry: Some(Rect::new(
-                                                x as f32,
-                                                y as f32,
-                                                w as f32,
-                                                h as f32,
+                                                x as f32, y as f32, w as f32, h as f32,
                                             )),
-                                            source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                            source: Some(
+                                                SourceInfo::new().with_page(ctx.current_page),
+                                            ),
                                         }));
                                     }
                                 }
@@ -210,10 +207,10 @@ fn looks_like_formula(text: &str) -> bool {
 
     // Structural math indicators (rare in natural language)
     let strong_indicators = [
-        "\\",  // Backslash commands
-        "^",   // Superscript
-        "_",   // Subscript
-        "=",   // Equations
+        "\\", // Backslash commands
+        "^",  // Superscript
+        "_",  // Subscript
+        "=",  // Equations
     ];
 
     let strong_count = strong_indicators
@@ -226,9 +223,8 @@ fn looks_like_formula(text: &str) -> bool {
     }
 
     // Dense notation without spaces: "3x+2=5" or "a+b"
-    let has_dense_math = text.len() >= 3
-        && !text.contains(' ')
-        && (text.contains('+') || text.contains('='));
+    let has_dense_math =
+        text.len() >= 3 && !text.contains(' ') && (text.contains('+') || text.contains('='));
 
     has_dense_math
 }
