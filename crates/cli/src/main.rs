@@ -225,7 +225,7 @@ fn main() {
         Commands::Version => {
             println!("snipper {}", env!("CARGO_PKG_VERSION"));
             println!("LaTeXSnipper Core -- Real ONNX Runtime Mode");
-            println!("");
+            println!();
             println!("[Easter Egg] Try 'snipper play' for a hidden mini-game!");
         }
 
@@ -239,7 +239,7 @@ fn play_game() {
     println!("========================================");
     println!("Guess the LaTeX command from the description!");
     println!("Type 'quit' to exit, 'hint' for a hint.");
-    println!("");
+    println!();
 
     let puzzles = [
         ("Greek letter for wavelength", "\\lambda"),
@@ -303,7 +303,7 @@ fn play_game() {
         }
     }
 
-    println!("");
+    println!();
     println!("========================================");
     println!(" Game Over! Final score: {}/{}", score, total);
     println!("========================================");
