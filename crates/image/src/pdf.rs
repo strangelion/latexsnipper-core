@@ -135,10 +135,10 @@ fn extract_media_box(page_obj: &lopdf::Object) -> Result<[f32; 4]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lopdf::{Dictionary, Object};
 
     #[test]
     fn test_extract_media_box_from_dict() {
-        use lopdf::{Dictionary, Object};
         let mut dict = Dictionary::new();
         dict.set(
             b"MediaBox",
@@ -168,8 +168,7 @@ mod tests {
 
     #[test]
     fn test_get_pdf_page_info_empty() {
-        // An empty document with no pages
-        let doc = lopdf::Document::new();
+        let mut doc = lopdf::Document::new();
         let path = std::env::temp_dir().join("test_empty.pdf");
         doc.save(&path).unwrap();
         let info = get_pdf_page_info(PdfSource::File(&path));

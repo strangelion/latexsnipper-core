@@ -27,8 +27,8 @@ use latexsnipper_tensor::Tensor;
 /// Recommended model combinations:
 /// - Chinese Office docs: PP-Structure layout + SLANet_plus
 /// - Academic PDFs: TATR detection + TATR structure
-/// - MVP / lightweight: YOLO table det (detection only, no structure)
-
+///   - MVP / lightweight: YOLO table det (detection only, no structure)
+///
 /// Information about a row in the table.
 #[derive(Debug, Clone)]
 pub struct RowInfo {
@@ -238,7 +238,7 @@ pub fn recognize_structure_slanet(
             col: c.col,
             rowspan: c.rowspan,
             colspan: c.colspan,
-            rect: c.rect.clone(),
+            rect: c.rect,
         })
         .collect();
 
@@ -287,7 +287,7 @@ pub fn recognize_table_structure(
                     col: c.col,
                     rowspan: c.rowspan,
                     colspan: c.colspan,
-                    rect: c.rect.clone(),
+                    rect: c.rect,
                 })
                 .collect();
             Ok(Some(cells))
@@ -522,7 +522,7 @@ pub fn parse_table_structure(image: &SnipperImage, table_rect: &Rect) -> Result<
         rows,
         cols,
         cells,
-        rect: table_rect.clone(),
+        rect: *table_rect,
     })
 }
 
@@ -578,8 +578,8 @@ fn detect_horizontal_lines(image: &SnipperImage) -> Vec<f32> {
     let mut in_line = false;
     let mut line_start = 0;
 
-    for y in 0..h {
-        if projection[y] > threshold {
+    for (y, &val) in projection.iter().enumerate() {
+        if val > threshold {
             if !in_line {
                 line_start = y;
                 in_line = true;
@@ -631,8 +631,8 @@ fn detect_vertical_lines(image: &SnipperImage) -> Vec<f32> {
     let mut in_line = false;
     let mut line_start = 0;
 
-    for x in 0..w {
-        if projection[x] > threshold {
+    for (x, &val) in projection.iter().enumerate() {
+        if val > threshold {
             if !in_line {
                 line_start = x;
                 in_line = true;

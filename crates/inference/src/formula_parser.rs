@@ -183,7 +183,7 @@ impl FormulaParser {
             // Functions with optional limits
             "sum" | "prod" | "int" | "iint" | "iiint" | "oint" => {
                 let node = self.parse_command_with_subsup(FormulaNode::Symbol(SymbolInfo::new(
-                    &format!("\\{}", cmd),
+                    format!("\\{}", cmd),
                     SymbolCategory::Operator,
                 )));
                 Ok(node)

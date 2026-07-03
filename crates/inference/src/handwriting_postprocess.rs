@@ -1,11 +1,11 @@
 /// Handwriting-specific post-processing.
 ///
 /// Applies heuristics to improve handwriting recognition results:
-/// - Whitespace normalization
-/// - Common OCR symbol confusion fixes
-/// - Handwriting-specific number/letter confusions (O→0, l→1, etc.)
-/// - LaTeX-specific cleanup
-
+///   - Whitespace normalization
+///   - Common OCR symbol confusion fixes
+///   - Handwriting-specific number/letter confusions (O→0, l→1, etc.)
+///   - LaTeX-specific cleanup
+///
 /// Post-process handwriting recognition result.
 ///
 /// Applies handwriting-specific fixes that are not covered by
@@ -28,9 +28,7 @@ pub fn postprocess_handwriting(text: &str) -> String {
     let result = normalize_spacing(&result);
 
     // Normalize punctuation for sentences
-    let result = normalize_punctuation(&result);
-
-    result
+    normalize_punctuation(&result)
 }
 
 /// Fix common number/letter confusions in handwriting OCR.
@@ -60,7 +58,8 @@ fn fix_number_letter_confusions(text: &str) -> String {
                 Some(next) => next.is_ascii_digit() || *next == '.' || *next == ',',
                 None => false,
             };
-            let prev_is_numeric = prev_char.map_or(false, |p| p.is_ascii_digit() || p == '.');
+            let prev_is_numeric =
+                prev_char.is_some_and(|p| p.is_ascii_digit() || p == '.');
             if next_is_numeric || prev_is_numeric {
                 output.push('0');
             } else {
@@ -72,7 +71,7 @@ fn fix_number_letter_confusions(text: &str) -> String {
                 Some(next) => next.is_ascii_digit() || *next == '.' || *next == '/',
                 None => false,
             };
-            let prev_is_numeric = prev_char.map_or(false, |p| p.is_ascii_digit());
+            let prev_is_numeric = prev_char.is_some_and(|p| p.is_ascii_digit());
             if next_is_numeric || prev_is_numeric {
                 output.push('1');
             } else {
@@ -84,7 +83,8 @@ fn fix_number_letter_confusions(text: &str) -> String {
                 Some(next) => next.is_ascii_digit() || *next == '.' || *next == ',',
                 None => false,
             };
-            let prev_is_numeric = prev_char.map_or(false, |p| p.is_ascii_digit() || p == '.');
+            let prev_is_numeric =
+                prev_char.is_some_and(|p| p.is_ascii_digit() || p == '.');
             if next_is_numeric || prev_is_numeric {
                 output.push('5');
             } else {
