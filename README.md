@@ -2,14 +2,14 @@
 
 # LaTeXSnipper Core
 
-**从图片到多格式文档的一站式解决方案**
+**One-stop solution from images to multi-format documents**
 
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
 [![Status](https://img.shields.io/badge/Status-Core%20Pipeline%20Working-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20WASM-lightgrey)]()
 
-**一行代码，图片变 LaTeX/Markdown/Typst**
+**One line of code, images to LaTeX/Markdown/Typst**
 
 [![About](assets/About.png)]()
 
@@ -19,15 +19,15 @@
 
 ---
 
-## 快速开始
+## Quick Start
 
 ```rust
 use latexsnipper_pipeline::sdk::Snipper;
 
-// 一行完成：图片 → 检测 → 识别 → AST → 导出
+// One line: image → detect → recognize → AST → export
 let snipper = Snipper::from_file("input.png")?;
 
-// 导出到任意格式
+// Export to any format
 let latex = snipper.to_latex()?;
 let markdown = snipper.to_markdown()?;
 let typst = snipper.to_typst()?;
@@ -35,25 +35,25 @@ let html = snipper.to_html()?;
 let json = snipper.to_json()?;
 ```
 
-### 输出示例
+### Output Examples
 
-**输入**: 包含公式的图片
+**Input**: Image containing formulas
 
-**输出 (LaTeX)**:
+**Output (LaTeX)**:
 ```latex
 $$ E = m c ^ { 2 } $$
 
 $$ \int _ { 0 } ^ { \infty } e ^ { - x ^ { 2 } } d x = \frac { \sqrt { \pi } } { 2 } $$
 ```
 
-**输出 (Markdown)**:
+**Output (Markdown)**:
 ```markdown
 $$ E = m c ^ { 2 } $$
 
 $$ \int _ { 0 } ^ { \infty } e ^ { - x ^ { 2 } } d x = \frac { \sqrt { \pi } } { 2 } $$
 ```
 
-**输出 (Typst)**:
+**Output (Typst)**:
 ```typst
 $ E = m c ^ { 2 } $
 
@@ -62,33 +62,33 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 
 ---
 
-## 核心能力
+## Core Capabilities
 
-| 能力 | 状态 | 说明 |
-|------|------|------|
-| **图片 → AST** | ✅ | YOLOv8 检测 + TrOCR 识别 |
-| **AST → LaTeX** | ✅ | 完整支持公式、表格、列表 |
-| **AST → Markdown** | ✅ | MathJax 兼容 |
-| **AST → Typst** | ✅ | 原生 Typst 语法 |
-| **AST → HTML** | ✅ | MathJax 渲染 |
-| **AST → MathML** | ✅ | Office 兼容 |
-| **AST → OMML** | ✅ | Word 兼容 |
+| Capability | Status | Details |
+|------------|--------|---------|
+| **Image → AST** | ✅ | YOLOv8 detection + TrOCR recognition |
+| **AST → LaTeX** | ✅ | Full formula, table, list support |
+| **AST → Markdown** | ✅ | MathJax compatible |
+| **AST → Typst** | ✅ | Native Typst syntax |
+| **AST → HTML** | ✅ | MathJax rendering |
+| **AST → MathML** | ✅ | Office compatible |
+| **AST → OMML** | ✅ | Word compatible |
 
 ---
 
-## 为什么选择 LaTeXSnipper Core?
+## Why LaTeXSnipper Core?
 
-**不是又一个 OCR 引擎。**
+**Not just another OCR engine.**
 
-LaTeXSnipper Core 的核心价值是 **统一文档 AST**：
+The core value of LaTeXSnipper Core is a **unified document AST**:
 
-1. **任意输入** → 图片、剪贴板、Office、PDF
-2. **统一 AST** → Document / Block / Inline / Formula
-3. **任意输出** → LaTeX、Typst、Markdown、Office、Web
+1. **Any input** → Images, clipboard, Office, PDF
+2. **Unified AST** → Document / Block / Inline / Formula
+3. **Any output** → LaTeX, Typst, Markdown, Office, Web
 
-OCR 只是其中一个输入源。未来 Office 插件、剪贴板监听、PDF 解析都会接入同一个 AST。
+OCR is just one input source. Future Office plugins, clipboard listeners, and PDF parsers will all connect to the same AST.
 
-> 拍一张数学题的照片，同时输出 LaTeX、Typst、Markdown 和 Word 兼容格式——而且是同一个 API。
+> Take a photo of a math problem, and simultaneously output LaTeX, Typst, Markdown, and Word-compatible formats — all from the same API.
 
 ---
 
@@ -194,15 +194,15 @@ Engine
 
 | Capability | Status | Details |
 |-----------|--------|---------|
-| **Inference** | ✅ | YOLOv8 检测 + TrOCR 公式识别 + CRNN+CTC 文本识别 |
-| **Runtime** | ✅ | ONNX Runtime（session 缓存、GPU 自动检测）+ Stub |
-| **Engine** | ✅ | JobQueue、Service trait、Request/Response Builder、Streaming API |
-| **Model** | ✅ | Manifest、Config、SHA256 校验 |
-| **Plugin** | ✅ | Plugin trait、Registry、TransformPlugin |
+| **Inference** | ✅ | YOLOv8 detection + TrOCR formula recognition + CRNN+CTC text recognition |
+| **Runtime** | ✅ | ONNX Runtime (session caching, GPU auto-detect) + Stub |
+| **Engine** | ✅ | JobQueue, Service trait, Request/Response Builder, Streaming API |
+| **Model** | ✅ | Manifest, Config, SHA256 verification |
+| **Plugin** | ✅ | Plugin trait, Registry, TransformPlugin |
 | **FFI** | ✅ | Android JNI + iOS C FFI |
-| **WASM** | ✅ | parse/render/convert/recognize 完整绑定 |
-| **CLI** | ✅ | recognize/parse/render/version 命令 |
-| **Export** | 🟡 | SVG/Text 可用，PDF 为基础实现 |
+| **WASM** | ✅ | Full parse/render/convert/recognize bindings |
+| **CLI** | ✅ | recognize/parse/render/version commands |
+| **Export** | 🟡 | SVG/Text available, PDF basic implementation |
 
 ### Planned
 
@@ -229,7 +229,7 @@ crates/
 ├── pipeline/       ✅ Node-based async pipeline
 ├── syntax/         ✅ LaTeX/Typst/Markdown Parser + Renderer
 ├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
-├── export/         🟡 RenderTree → SVG/Text/PDF (PDF 为基础实现)
+├── export/         🟡 RenderTree → SVG/Text/PDF (PDF basic impl)
 ├── engine/         ✅ SnipperEngine + JobQueue + Service
 ├── plugin/         ✅ Plugin trait, Registry
 ├── mock/           ✅ Fake implementations for testing
@@ -400,4 +400,4 @@ This project builds on the work of these open-source projects:
 
 ## License
 
-GNU AGPL-3.0. 学习和个人使用允许，禁止闭源商业化分发。
+GNU AGPL-3.0. Allowed for learning and personal use. Closed-source commercial distribution is prohibited.
