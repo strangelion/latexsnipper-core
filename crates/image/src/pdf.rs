@@ -99,29 +99,27 @@ fn extract_media_box(page_obj: &lopdf::Object) -> Result<[f32; 4]> {
     match page_obj {
         lopdf::Object::Dictionary(dict) => {
             if let Ok(lopdf::Object::Array(arr)) = dict.get(b"MediaBox") {
-                if let lopdf::Object::Array(arr) = mediabox {
-                    if arr.len() < 4 {
-                        return Err(SnipperError::Image(
-                            "MediaBox requires at least 4 values".into(),
-                        ));
-                    }
-                    let mut values = [0.0f32; 4];
-                    for (i, val) in arr.iter().enumerate().take(4) {
-                        if let lopdf::Object::Integer(n) = val {
-                            values[i] = *n as f32;
-                        } else if let lopdf::Object::Real(r) = val {
-                            values[i] = *r as f32;
-                        }
-                    }
-                    // Validate: width and height must be positive
-                    if values[2] <= values[0] || values[3] <= values[1] {
-                        return Err(SnipperError::Image(format!(
-                            "Invalid MediaBox dimensions: [{}, {}, {}, {}]",
-                            values[0], values[1], values[2], values[3]
-                        )));
-                    }
-                    return Ok(values);
+                if arr.len() < 4 {
+                    return Err(SnipperError::Image(
+                        "MediaBox requires at least 4 values".into(),
+                    ));
                 }
+                let mut values = [0.0f32; 4];
+                for (i, val) in arr.iter().enumerate().take(4) {
+                    if let lopdf::Object::Integer(n) = val {
+                        values[i] = *n as f32;
+                    } else if let lopdf::Object::Real(r) = val {
+                        values[i] = *r;
+                    }
+                }
+                // Validate: width and height must be positive
+                if values[2] <= values[0] || values[3] <= values[1] {
+                    return Err(SnipperError::Image(format!(
+                        "Invalid MediaBox dimensions: [{}, {}, {}, {}]",
+                        values[0], values[1], values[2], values[3]
+                    )));
+                }
+                return Ok(values);
             }
             // Return error instead of hardcoded US Letter fallback
             Err(SnipperError::Image(
@@ -139,29 +137,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pdf_page_info() {
-        let info = PdfPageInfo {
-            page_number: 1,
-            width: 612.0,
-            height: 792.0,
-        };
-        assert_eq!(info.page_number, 1);
-        assert_eq!(info.width, 612.0);
+    fn test_extract_media_box_from_dict() {
+        use lopdf::{Dictionary, Object};
+        let mut dict = Dictionary::new();
+        dict.set(
+            b"MediaBox",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(612),
+                Object::Integer(792),
+            ]),
+        );
+        let obj = Object::Dictionary(dict);
+        let result = extract_media_box(&obj).unwrap();
+        assert_eq!(result, [0.0, 0.0, 612.0, 792.0]);
     }
 
     #[test]
-    fn test_decode_pdf_returns_error() {
-        let result = decode_pdf(PdfSource::Memory(b"%PDF-1.4 trash"), 300);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("not yet implemented"));
+    fn test_extract_media_box_missing() {
+        let obj = Object::Dictionary(Dictionary::new());
+        assert!(extract_media_box(&obj).is_err());
     }
 
     #[test]
-    fn test_decode_pdf_page_returns_error() {
-        let result = decode_pdf_page(PdfSource::Memory(b"%PDF-1.4 trash"), 1, 300);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("not yet implemented"));
+    fn test_extract_media_box_invalid_type() {
+        let obj = Object::Null;
+        assert!(extract_media_box(&obj).is_err());
+    }
+
+    #[test]
+    fn test_get_pdf_page_info_empty() {
+        // An empty document with no pages
+        let doc = lopdf::Document::new();
+        let path = std::env::temp_dir().join("test_empty.pdf");
+        doc.save(&path).unwrap();
+        let info = get_pdf_page_info(PdfSource::File(&path));
+        std::fs::remove_file(&path).unwrap();
+        assert!(info.is_ok());
+        assert!(info.unwrap().is_empty());
     }
 }
