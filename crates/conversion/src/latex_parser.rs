@@ -577,14 +577,14 @@ impl LatexParser {
                 '}' => {
                     if depth == 0 && delimiter == '}' {
                         self.pos += 1;
-                        return nodes;
+                        return Self::merge_sub_sup(nodes);
                     }
                     depth -= 1;
                     self.pos += 1;
                 }
                 c if c == delimiter && depth == 0 => {
                     self.pos += 1;
-                    return nodes;
+                    return Self::merge_sub_sup(nodes);
                 }
                 _ => {
                     if let Some(node) = self.parse_element() {
@@ -594,7 +594,45 @@ impl LatexParser {
             }
         }
 
-        nodes
+        Self::merge_sub_sup(nodes)
+    }
+
+    /// Merge empty-base Subscript/Superscript with the preceding node.
+    /// E.g. [Text("x"), Subscript{empty,"i"}] → [Subscript{Text("x"),"i"}]
+    fn merge_sub_sup(nodes: Vec<LatexNode>) -> Vec<LatexNode> {
+        let mut result = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            match &node {
+                LatexNode::Superscript { base, .. } if base.is_empty() => {
+                    if let Some(last) = result.pop() {
+                        result.push(LatexNode::Superscript {
+                            base: Box::new(last),
+                            exp: Box::new(match node {
+                                LatexNode::Superscript { exp, .. } => *exp,
+                                _ => LatexNode::Text(String::new()),
+                            }),
+                        });
+                    } else {
+                        result.push(node);
+                    }
+                }
+                LatexNode::Subscript { base, .. } if base.is_empty() => {
+                    if let Some(last) = result.pop() {
+                        result.push(LatexNode::Subscript {
+                            base: Box::new(last),
+                            sub: Box::new(match node {
+                                LatexNode::Subscript { sub, .. } => *sub,
+                                _ => LatexNode::Text(String::new()),
+                            }),
+                        });
+                    } else {
+                        result.push(node);
+                    }
+                }
+                _ => result.push(node),
+            }
+        }
+        result
     }
 }
 
