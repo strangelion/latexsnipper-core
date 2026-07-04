@@ -78,34 +78,32 @@ mod tests {
     #[test]
     fn test_write_simple_table() {
         let table = TableBlock {
-            rows: vec![
-                vec![
-                    TableCell {
-                        inlines: vec![Inline::Text(TextRun::new("A"))],
-                        colspan: 1,
-                        rowspan: 1,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: None,
-                        source: None,
-                    },
-                    TableCell {
-                        inlines: vec![Inline::Text(TextRun::new("B"))],
-                        colspan: 1,
-                        rowspan: 1,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: None,
-                        source: None,
-                    },
-                ],
-            ],
+            rows: vec![vec![
+                TableCell {
+                    inlines: vec![Inline::Text(TextRun::new("A"))],
+                    colspan: 1,
+                    rowspan: 1,
+                    border_style: None,
+                    border_width: None,
+                    border_color: None,
+                    background: None,
+                    alignment: None,
+                    geometry: None,
+                    source: None,
+                },
+                TableCell {
+                    inlines: vec![Inline::Text(TextRun::new("B"))],
+                    colspan: 1,
+                    rowspan: 1,
+                    border_style: None,
+                    border_width: None,
+                    border_color: None,
+                    background: None,
+                    alignment: None,
+                    geometry: None,
+                    source: None,
+                },
+            ]],
             geometry: None,
             source: None,
         };
