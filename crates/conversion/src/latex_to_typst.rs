@@ -253,12 +253,8 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             let inner = latex_ast_to_typst(content);
             format!("*Proof.* {} □", inner)
         }
-        LatexNode::Minipage { content, .. } => {
-            latex_ast_to_typst(content)
-        }
-        LatexNode::Float { content, .. } => {
-            latex_ast_to_typst(content)
-        }
+        LatexNode::Minipage { content, .. } => latex_ast_to_typst(content),
+        LatexNode::Float { content, .. } => latex_ast_to_typst(content),
     }
 }
 

@@ -282,7 +282,8 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
         "menclose" => {
             let inner = children.join("");
             // Check for notation attribute
-            let notation = attrs.split_whitespace()
+            let notation = attrs
+                .split_whitespace()
                 .find(|p| p.starts_with("notation="))
                 .and_then(|p| p.strip_prefix("notation="));
             match notation {

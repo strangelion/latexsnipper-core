@@ -156,7 +156,11 @@ fn render_block(block: &Block) -> String {
 }
 
 fn render_blocks(blocks: &[Block]) -> String {
-    blocks.iter().map(render_block).collect::<Vec<_>>().join("\n")
+    blocks
+        .iter()
+        .map(render_block)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn render_block_display(block: &Block) -> String {
@@ -264,10 +268,7 @@ fn render_description_list(dl: &latexsnipper_ast::DescriptionListBlock) -> Strin
 
 fn render_theorem(t: &latexsnipper_ast::TheoremBlock) -> String {
     let content = render_blocks(&t.content);
-    format!(
-        "\\begin{{{}}}\n{}\n\\end{{{}}}",
-        t.name, content, t.name
-    )
+    format!("\\begin{{{}}}\n{}\n\\end{{{}}}", t.name, content, t.name)
 }
 
 fn render_proof(p: &latexsnipper_ast::ProofBlock) -> String {

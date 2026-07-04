@@ -111,7 +111,10 @@ fn render_block(block: &Block) -> String {
         Block::Proof(p) => render_proof(p),
         Block::Minipage(m) => {
             let content = render_blocks(&m.content);
-            format!("<div class=\"minipage\" style=\"width:{}\">{}</div>", m.width, content)
+            format!(
+                "<div class=\"minipage\" style=\"width:{}\">{}</div>",
+                m.width, content
+            )
         }
         Block::Float(f) => {
             let content = render_blocks(&f.content);
@@ -243,7 +246,10 @@ fn render_description_list(dl: &latexsnipper_ast::DescriptionListBlock) -> Strin
         let content = render_blocks(&item.content);
         if let Some(label) = &item.label {
             let label_text = render_inlines(label);
-            items.push(format!("  <dt><strong>{}</strong></dt>\n  <dd>{}</dd>", label_text, content));
+            items.push(format!(
+                "  <dt><strong>{}</strong></dt>\n  <dd>{}</dd>",
+                label_text, content
+            ));
         } else {
             items.push(format!("  <dd>{}</dd>", content));
         }
@@ -261,11 +267,18 @@ fn render_theorem(t: &latexsnipper_ast::TheoremBlock) -> String {
 
 fn render_proof(p: &latexsnipper_ast::ProofBlock) -> String {
     let content = render_blocks(&p.content);
-    format!("<div class=\"proof\"><strong>Proof.</strong> {} □</div>", content)
+    format!(
+        "<div class=\"proof\"><strong>Proof.</strong> {} □</div>",
+        content
+    )
 }
 
 fn render_blocks(blocks: &[latexsnipper_ast::Block]) -> String {
-    blocks.iter().map(render_block).collect::<Vec<_>>().join("\n")
+    blocks
+        .iter()
+        .map(render_block)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn render_quote(q: &latexsnipper_ast::QuoteBlock) -> String {

@@ -227,7 +227,10 @@ fn render_list(l: &latexsnipper_ast::ListBlock, mode: &MarkdownMode) -> String {
     items.join("\n")
 }
 
-fn render_description_list(dl: &latexsnipper_ast::DescriptionListBlock, mode: &MarkdownMode) -> String {
+fn render_description_list(
+    dl: &latexsnipper_ast::DescriptionListBlock,
+    mode: &MarkdownMode,
+) -> String {
     let mut items = Vec::new();
     for item in &dl.items {
         let content = render_blocks(&item.content, mode);
@@ -252,7 +255,11 @@ fn render_proof(p: &latexsnipper_ast::ProofBlock, mode: &MarkdownMode) -> String
 }
 
 fn render_blocks(blocks: &[latexsnipper_ast::Block], mode: &MarkdownMode) -> String {
-    blocks.iter().map(|b| render_block(b, mode)).collect::<Vec<_>>().join("\n")
+    blocks
+        .iter()
+        .map(|b| render_block(b, mode))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn render_quote(q: &latexsnipper_ast::QuoteBlock, mode: &MarkdownMode) -> String {

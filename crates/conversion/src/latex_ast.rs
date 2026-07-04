@@ -113,13 +113,23 @@ pub enum LatexNode {
     /// Table of contents: \tableofcontents
     TableOfContents,
     /// Theorem-like environment: \begin{theorem}...\end{theorem}
-    Theorem { name: String, content: Box<LatexNode> },
+    Theorem {
+        name: String,
+        content: Box<LatexNode>,
+    },
     /// Proof environment: \begin{proof}...\end{proof}
     Proof { content: Box<LatexNode> },
     /// Minipage: \begin{minipage}{width}...\end{minipage}
-    Minipage { width: String, content: Box<LatexNode> },
+    Minipage {
+        width: String,
+        content: Box<LatexNode>,
+    },
     /// Float: \begin{figure}...\end{figure} or \begin{table}...\end{table}
-    Float { env: String, caption: Option<String>, content: Box<LatexNode> },
+    Float {
+        env: String,
+        caption: Option<String>,
+        content: Box<LatexNode>,
+    },
     /// List of nodes
     Sequence(Vec<LatexNode>),
 }
@@ -387,7 +397,11 @@ impl std::fmt::Display for LatexNode {
                 write!(f, "{}", content)?;
                 write!(f, "\\end{{minipage}}")
             }
-            LatexNode::Float { env, caption, content } => {
+            LatexNode::Float {
+                env,
+                caption,
+                content,
+            } => {
                 writeln!(f, "\\begin{{{}}}", env)?;
                 write!(f, "{}", content)?;
                 if let Some(cap) = caption {

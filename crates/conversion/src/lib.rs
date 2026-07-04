@@ -641,58 +641,114 @@ mod tests {
         // underline
         let node = parse_latex("\\underline{x}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\underline{x}"), "underline roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\underline{x}"),
+            "underline roundtrip: {}",
+            latex_out
+        );
         let typst_out = latex_ast_to_typst(&node);
-        assert!(typst_out.contains("underline"), "underline→typst: {}", typst_out);
+        assert!(
+            typst_out.contains("underline"),
+            "underline→typst: {}",
+            typst_out
+        );
 
         // footnote
         let node = parse_latex("\\footnote{text}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\footnote{text}"), "footnote roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\footnote{text}"),
+            "footnote roundtrip: {}",
+            latex_out
+        );
 
         // label and ref
         let node = parse_latex("\\label{eq:1} x \\ref{eq:1}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\label{eq:1}"), "label roundtrip: {}", latex_out);
-        assert!(latex_out.contains("\\ref{eq:1}"), "ref roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\label{eq:1}"),
+            "label roundtrip: {}",
+            latex_out
+        );
+        assert!(
+            latex_out.contains("\\ref{eq:1}"),
+            "ref roundtrip: {}",
+            latex_out
+        );
 
         // eqref
         let node = parse_latex("\\eqref{eq:1}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\eqref{eq:1}"), "eqref roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\eqref{eq:1}"),
+            "eqref roundtrip: {}",
+            latex_out
+        );
 
         // cite family
         let node = parse_latex("\\cite{knuth}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\cite{knuth}"), "cite roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\cite{knuth}"),
+            "cite roundtrip: {}",
+            latex_out
+        );
 
         let node = parse_latex("\\citet{knuth}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\citet{knuth}"), "citet roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\citet{knuth}"),
+            "citet roundtrip: {}",
+            latex_out
+        );
 
         let node = parse_latex("\\citep{knuth}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\citep{knuth}"), "citep roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\citep{knuth}"),
+            "citep roundtrip: {}",
+            latex_out
+        );
 
         // bibliography
         let node = parse_latex("\\bibliography{refs}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\bibliography{refs}"), "bibliography roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\bibliography{refs}"),
+            "bibliography roundtrip: {}",
+            latex_out
+        );
 
         // theorem environments
         let node = parse_latex("\\begin{theorem}content\\end{theorem}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\begin{theorem}"), "theorem roundtrip: {}", latex_out);
-        assert!(latex_out.contains("content"), "theorem content: {}", latex_out);
+        assert!(
+            latex_out.contains("\\begin{theorem}"),
+            "theorem roundtrip: {}",
+            latex_out
+        );
+        assert!(
+            latex_out.contains("content"),
+            "theorem content: {}",
+            latex_out
+        );
 
         let node = parse_latex("\\begin{proof}QED\\end{proof}");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\begin{proof}"), "proof roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\begin{proof}"),
+            "proof roundtrip: {}",
+            latex_out
+        );
 
         // tableofcontents
         let node = parse_latex("\\tableofcontents");
         let latex_out = format!("{}", node);
-        assert!(latex_out.contains("\\tableofcontents"), "toc roundtrip: {}", latex_out);
+        assert!(
+            latex_out.contains("\\tableofcontents"),
+            "toc roundtrip: {}",
+            latex_out
+        );
     }
 
     /// Test new AST node types through OMML conversion
@@ -711,7 +767,11 @@ mod tests {
 
         // ref renders as placeholder
         let omml = latex_to_omml("\\ref{key}");
-        assert!(omml.contains("(key)") || omml.contains("(?)"), "ref OMML: {}", omml);
+        assert!(
+            omml.contains("(key)") || omml.contains("(?)"),
+            "ref OMML: {}",
+            omml
+        );
 
         // cite renders as placeholder
         let omml = latex_to_omml("\\cite{knuth}");
@@ -726,7 +786,12 @@ mod tests {
         let ast = crate::latex_parser::parse_latex("\\tableofcontents");
         let ast_str = format!("{:?}", ast);
         let omml = latex_to_omml("\\tableofcontents");
-        assert!(omml.contains("目录") || omml.contains("<m:t>"), "toc OMML empty. ast: {}, omml: [{}]", ast_str, omml);
+        assert!(
+            omml.contains("目录") || omml.contains("<m:t>"),
+            "toc OMML empty. ast: {}, omml: [{}]",
+            ast_str,
+            omml
+        );
     }
 
     /// Test Markdown parser handles all block types
@@ -736,17 +801,38 @@ mod tests {
         let doc = parse_markdown_to_document(md);
 
         let block_types: Vec<&str> = doc.pages[0].blocks.iter().map(|b| b.type_name()).collect();
-        assert!(block_types.contains(&"heading"), "should have heading, got: {:?}", block_types);
-        assert!(block_types.contains(&"paragraph"), "should have paragraph, got: {:?}", block_types);
-        assert!(block_types.contains(&"list"), "should have list, got: {:?}", block_types);
-        assert!(block_types.contains(&"horizontal_rule"), "should have hr, got: {:?}", block_types);
-        assert!(block_types.contains(&"formula"), "should have formula, got: {:?}", block_types);
+        assert!(
+            block_types.contains(&"heading"),
+            "should have heading, got: {:?}",
+            block_types
+        );
+        assert!(
+            block_types.contains(&"paragraph"),
+            "should have paragraph, got: {:?}",
+            block_types
+        );
+        assert!(
+            block_types.contains(&"list"),
+            "should have list, got: {:?}",
+            block_types
+        );
+        assert!(
+            block_types.contains(&"horizontal_rule"),
+            "should have hr, got: {:?}",
+            block_types
+        );
+        assert!(
+            block_types.contains(&"formula"),
+            "should have formula, got: {:?}",
+            block_types
+        );
 
         // Check bold in paragraph
         if let Block::Paragraph(p) = &doc.pages[0].blocks[1] {
-            let has_bold = p.inlines.iter().any(|i| {
-                matches!(i, Inline::Text(t) if t.bold == Some(true))
-            });
+            let has_bold = p
+                .inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Text(t) if t.bold == Some(true)));
             assert!(has_bold, "should have bold text");
         }
     }

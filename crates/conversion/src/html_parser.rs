@@ -1,6 +1,6 @@
 use latexsnipper_ast::{
-    Block, CodeBlock, Document, Formula, FormulaBlock, Inline, ListBlock, ListItem,
-    Metadata, NodeIdGenerator, Page, ParagraphBlock, QuoteBlock, TextRun,
+    Block, CodeBlock, Document, Formula, FormulaBlock, Inline, ListBlock, ListItem, Metadata,
+    NodeIdGenerator, Page, ParagraphBlock, QuoteBlock, TextRun,
 };
 
 /// Parsed HTML tag: (tag_name, attributes, self_closing, end_position)
@@ -18,7 +18,12 @@ pub fn parse_html_to_document(html: &str) -> Document {
 
     while i < len {
         // HTML comment
-        if i + 3 < len && chars[i] == '<' && chars[i + 1] == '!' && chars[i + 2] == '-' && chars[i + 3] == '-' {
+        if i + 3 < len
+            && chars[i] == '<'
+            && chars[i + 1] == '!'
+            && chars[i + 2] == '-'
+            && chars[i + 3] == '-'
+        {
             if let Some(end) = find_comment_end(&chars, i + 4) {
                 i = end;
                 continue;
@@ -149,11 +154,8 @@ pub fn parse_html_to_document(html: &str) -> Document {
                         flush_paragraph(&mut blocks, &mut current_inlines);
                         let content = extract_tag_content(&chars, end, "blockquote");
                         let quote_doc = parse_html_to_document(&content);
-                        let quote_blocks: Vec<Block> = quote_doc
-                            .pages
-                            .into_iter()
-                            .flat_map(|p| p.blocks)
-                            .collect();
+                        let quote_blocks: Vec<Block> =
+                            quote_doc.pages.into_iter().flat_map(|p| p.blocks).collect();
                         blocks.push(Block::Quote(QuoteBlock {
                             blocks: quote_blocks,
                             attribution: None,
@@ -197,7 +199,11 @@ pub fn parse_html_to_document(html: &str) -> Document {
                         blocks.push(Block::HorizontalRule(
                             latexsnipper_ast::HorizontalRuleBlock::new(),
                         ));
-                        i = if self_closing { end } else { find_closing_tag(&chars, end, "hr").unwrap_or(len) };
+                        i = if self_closing {
+                            end
+                        } else {
+                            find_closing_tag(&chars, end, "hr").unwrap_or(len)
+                        };
                         continue;
                     }
                     // Math (MathJax)
@@ -326,7 +332,12 @@ fn parse_tag(chars: &[char], start: usize) -> Option<ParsedTag> {
 
         // Parse attribute name
         let mut attr_name = String::new();
-        while i < chars.len() && chars[i] != '=' && chars[i] != '>' && chars[i] != '/' && !chars[i].is_whitespace() {
+        while i < chars.len()
+            && chars[i] != '='
+            && chars[i] != '>'
+            && chars[i] != '/'
+            && !chars[i].is_whitespace()
+        {
             attr_name.push(chars[i]);
             i += 1;
         }
@@ -365,7 +376,8 @@ fn parse_tag(chars: &[char], start: usize) -> Option<ParsedTag> {
 }
 
 fn get_attr(attrs: &[(String, String)], name: &str) -> Option<String> {
-    attrs.iter()
+    attrs
+        .iter()
         .find(|(n, _)| n == name)
         .map(|(_, v)| v.clone())
 }
@@ -572,7 +584,12 @@ fn parse_list_items(content: &str, _ordered: bool) -> Vec<ListItem> {
         }
 
         // Find <li> tag
-        if i + 3 < len && chars[i] == '<' && chars[i + 1] == 'l' && chars[i + 2] == 'i' && chars[i + 3] == '>' {
+        if i + 3 < len
+            && chars[i] == '<'
+            && chars[i + 1] == 'l'
+            && chars[i + 2] == 'i'
+            && chars[i + 3] == '>'
+        {
             let content_start = i + 4;
             if let Some(end) = find_closing_tag(&chars, content_start, "li") {
                 let item_content: String = chars[content_start..end].iter().collect();
@@ -603,7 +620,10 @@ mod tests {
         let html = "<h1>Title</h1><p>Text.</p>";
         let doc = parse_html_to_document(html);
         assert!(doc.pages[0].blocks.len() >= 2);
-        let heading = doc.pages[0].blocks.iter().find(|b| matches!(b, Block::Heading(_)));
+        let heading = doc.pages[0]
+            .blocks
+            .iter()
+            .find(|b| matches!(b, Block::Heading(_)));
         assert!(heading.is_some());
         if let Block::Heading(h) = heading.unwrap() {
             assert_eq!(h.level, 1);
@@ -615,7 +635,10 @@ mod tests {
         let html = "<p>Hello <strong>world</strong>!</p>";
         let doc = parse_html_to_document(html);
         assert!(doc.pages[0].blocks.len() >= 1);
-        let para = doc.pages[0].blocks.iter().find(|b| matches!(b, Block::Paragraph(_)));
+        let para = doc.pages[0]
+            .blocks
+            .iter()
+            .find(|b| matches!(b, Block::Paragraph(_)));
         assert!(para.is_some());
         if let Block::Paragraph(p) = para.unwrap() {
             assert!(p.inlines.len() >= 2);
@@ -626,7 +649,10 @@ mod tests {
     fn test_list() {
         let html = "<ul><li>Item 1</li><li>Item 2</li></ul>";
         let doc = parse_html_to_document(html);
-        let list = doc.pages[0].blocks.iter().find(|b| matches!(b, Block::List(_)));
+        let list = doc.pages[0]
+            .blocks
+            .iter()
+            .find(|b| matches!(b, Block::List(_)));
         assert!(list.is_some());
         if let Block::List(l) = list.unwrap() {
             assert_eq!(l.items.len(), 2);
@@ -638,7 +664,10 @@ mod tests {
     fn test_code() {
         let html = "<pre><code class=\"language-rust\">fn main() {}</code></pre>";
         let doc = parse_html_to_document(html);
-        let code = doc.pages[0].blocks.iter().find(|b| matches!(b, Block::Code(_)));
+        let code = doc.pages[0]
+            .blocks
+            .iter()
+            .find(|b| matches!(b, Block::Code(_)));
         assert!(code.is_some());
         if let Block::Code(c) = code.unwrap() {
             assert_eq!(c.language.as_deref(), Some("rust"));

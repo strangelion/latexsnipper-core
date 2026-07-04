@@ -109,11 +109,8 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
                 // Flush blockquote
                 let quote_text = blockquote_lines.join("\n");
                 let quote_doc = parse_markdown_to_document(&quote_text);
-                let quote_blocks: Vec<Block> = quote_doc
-                    .pages
-                    .into_iter()
-                    .flat_map(|p| p.blocks)
-                    .collect();
+                let quote_blocks: Vec<Block> =
+                    quote_doc.pages.into_iter().flat_map(|p| p.blocks).collect();
                 blocks.push(Block::Quote(QuoteBlock {
                     blocks: quote_blocks,
                     attribution: None,

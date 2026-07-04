@@ -450,17 +450,11 @@ impl LatexParser {
             }
             "ref" => {
                 let key = self.parse_group_text();
-                Some(LatexNode::Reference {
-                    key,
-                    eq_ref: false,
-                })
+                Some(LatexNode::Reference { key, eq_ref: false })
             }
             "eqref" => {
                 let key = self.parse_group_text();
-                Some(LatexNode::Reference {
-                    key,
-                    eq_ref: true,
-                })
+                Some(LatexNode::Reference { key, eq_ref: true })
             }
             // Citations
             "cite" | "citep" | "citet" | "citealp" | "citealt" => {

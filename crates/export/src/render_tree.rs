@@ -166,7 +166,9 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
                 items,
             })
         }
-        Block::TableOfContents => Some(RenderNode::Paragraph(vec![RenderNode::Text("目录".to_string())])),
+        Block::TableOfContents => Some(RenderNode::Paragraph(vec![RenderNode::Text(
+            "目录".to_string(),
+        )])),
         Block::Theorem(t) => {
             let mut nodes = vec![RenderNode::Text(format!("{}.", t.name))];
             for block in &t.content {
@@ -209,10 +211,16 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<RenderNode> {
             Inline::Image(_) => RenderNode::Text(String::new()),
             Inline::Footnote { content } => {
                 let inner = convert_inlines(&[*content.clone()]);
-                RenderNode::Text(format!("[^{}]", inner.iter().map(|n| match n {
-                    RenderNode::Text(t) => t.clone(),
-                    _ => String::new(),
-                }).collect::<String>()))
+                RenderNode::Text(format!(
+                    "[^{}]",
+                    inner
+                        .iter()
+                        .map(|n| match n {
+                            RenderNode::Text(t) => t.clone(),
+                            _ => String::new(),
+                        })
+                        .collect::<String>()
+                ))
             }
             Inline::Label { key } => RenderNode::Text(format!("[label={}]", key)),
             Inline::Reference { key, .. } => RenderNode::Text(format!("({})", key)),

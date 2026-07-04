@@ -188,7 +188,11 @@ fn render_proof(p: &latexsnipper_ast::ProofBlock) -> String {
 }
 
 fn render_blocks(blocks: &[latexsnipper_ast::Block]) -> String {
-    blocks.iter().map(render_block).collect::<Vec<_>>().join("\n")
+    blocks
+        .iter()
+        .map(render_block)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn render_quote(q: &latexsnipper_ast::QuoteBlock) -> String {
