@@ -18,11 +18,7 @@ fn simple_table(rows: usize, cols: usize, prefix: &str) -> TableBlock {
     for r in 0..rows {
         let mut row = Vec::new();
         for c in 0..cols {
-            row.push(make_cell(
-                &format!("{}{}{}", prefix, r + 1, c + 1),
-                1,
-                1,
-            ));
+            row.push(make_cell(&format!("{}{}{}", prefix, r + 1, c + 1), 1, 1));
         }
         table_rows.push(row);
     }
@@ -54,7 +50,11 @@ fn merged_table() -> TableBlock {
     TableBlock {
         rows: vec![
             vec![make_cell("AB", 2, 1), make_cell("C", 1, 1)],
-            vec![make_cell("D", 1, 1), make_cell("E", 1, 1), make_cell("F", 1, 1)],
+            vec![
+                make_cell("D", 1, 1),
+                make_cell("E", 1, 1),
+                make_cell("F", 1, 1),
+            ],
         ],
         geometry: None,
         source: None,
@@ -273,41 +273,42 @@ fn roundtrip_merged_cells() {
     // HTML output should contain colspan
     let converter = DocumentConverter::new(OutputFormat::Html);
     let html = converter.convert(&doc).unwrap();
-    assert!(html.contains("colspan"), "HTML should contain colspan for merged cells");
+    assert!(
+        html.contains("colspan"),
+        "HTML should contain colspan for merged cells"
+    );
 }
 
 /// Test table with styling.
 #[test]
 fn roundtrip_styled_table() {
     let table = TableBlock {
-        rows: vec![
-            vec![
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("Bold".to_string()))],
-                    colspan: 1,
-                    rowspan: 1,
-                    border_style: Some(latexsnipper_ast::BorderStyle::Solid),
-                    border_width: Some(2),
-                    border_color: Some("red".to_string()),
-                    background: Some("#ffff00".to_string()),
-                    alignment: Some(latexsnipper_ast::CellAlignment::Center),
-                    geometry: None,
-                    source: None,
-                },
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("Normal".to_string()))],
-                    colspan: 1,
-                    rowspan: 1,
-                    border_style: Some(latexsnipper_ast::BorderStyle::Dashed),
-                    border_width: Some(1),
-                    border_color: Some("blue".to_string()),
-                    background: None,
-                    alignment: Some(latexsnipper_ast::CellAlignment::Right),
-                    geometry: None,
-                    source: None,
-                },
-            ],
-        ],
+        rows: vec![vec![
+            TableCell {
+                inlines: vec![Inline::Text(TextRun::new("Bold".to_string()))],
+                colspan: 1,
+                rowspan: 1,
+                border_style: Some(latexsnipper_ast::BorderStyle::Solid),
+                border_width: Some(2),
+                border_color: Some("red".to_string()),
+                background: Some("#ffff00".to_string()),
+                alignment: Some(latexsnipper_ast::CellAlignment::Center),
+                geometry: None,
+                source: None,
+            },
+            TableCell {
+                inlines: vec![Inline::Text(TextRun::new("Normal".to_string()))],
+                colspan: 1,
+                rowspan: 1,
+                border_style: Some(latexsnipper_ast::BorderStyle::Dashed),
+                border_width: Some(1),
+                border_color: Some("blue".to_string()),
+                background: None,
+                alignment: Some(latexsnipper_ast::CellAlignment::Right),
+                geometry: None,
+                source: None,
+            },
+        ]],
         geometry: None,
         source: None,
     };
@@ -326,14 +327,32 @@ fn roundtrip_styled_table() {
     // HTML output should contain styling
     let converter = DocumentConverter::new(OutputFormat::Html);
     let html = converter.convert(&doc).unwrap();
-    assert!(html.contains("border: 2px solid red"), "HTML should contain border style");
-    assert!(html.contains("background-color: #ffff00"), "HTML should contain background color");
-    assert!(html.contains("text-align: center"), "HTML should contain text alignment");
-    assert!(html.contains("border: 1px dashed blue"), "HTML should contain dashed border");
-    assert!(html.contains("text-align: right"), "HTML should contain right alignment");
+    assert!(
+        html.contains("border: 2px solid red"),
+        "HTML should contain border style"
+    );
+    assert!(
+        html.contains("background-color: #ffff00"),
+        "HTML should contain background color"
+    );
+    assert!(
+        html.contains("text-align: center"),
+        "HTML should contain text alignment"
+    );
+    assert!(
+        html.contains("border: 1px dashed blue"),
+        "HTML should contain dashed border"
+    );
+    assert!(
+        html.contains("text-align: right"),
+        "HTML should contain right alignment"
+    );
 
     // LaTeX output should contain alignment
     let converter = DocumentConverter::new(OutputFormat::Latex);
     let latex = converter.convert(&doc).unwrap();
-    assert!(latex.contains("\\begin{tabular}"), "LaTeX should contain tabular environment");
+    assert!(
+        latex.contains("\\begin{tabular}"),
+        "LaTeX should contain tabular environment"
+    );
 }

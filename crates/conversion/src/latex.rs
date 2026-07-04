@@ -267,7 +267,10 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
         .map(|row| {
             row.iter()
                 .map(|cell| {
-                    let align = cell.alignment.as_ref().unwrap_or(&latexsnipper_ast::CellAlignment::Center);
+                    let align = cell
+                        .alignment
+                        .as_ref()
+                        .unwrap_or(&latexsnipper_ast::CellAlignment::Center);
                     match align {
                         latexsnipper_ast::CellAlignment::Left => "l",
                         latexsnipper_ast::CellAlignment::Center => "c",
@@ -290,7 +293,10 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
                 let mut parts = Vec::new();
                 // Handle colspan with \multicolumn
                 if cell.colspan > 1 {
-                    let align = cell.alignment.as_ref().unwrap_or(&latexsnipper_ast::CellAlignment::Center);
+                    let align = cell
+                        .alignment
+                        .as_ref()
+                        .unwrap_or(&latexsnipper_ast::CellAlignment::Center);
                     let align_char = match align {
                         latexsnipper_ast::CellAlignment::Left => "l",
                         latexsnipper_ast::CellAlignment::Center => "c",

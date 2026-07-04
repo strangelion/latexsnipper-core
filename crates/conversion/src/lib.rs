@@ -13,6 +13,7 @@ pub mod mathml_parser;
 pub mod omml;
 pub mod omml_parser;
 pub mod table_export;
+pub mod table_parser;
 pub mod typst;
 pub mod typst_parser;
 
@@ -27,6 +28,9 @@ pub use mathml_parser::parse_mathml_to_latex;
 pub use omml::OmmlConverter;
 pub use omml_parser::parse_omml_to_latex;
 pub use table_export::TableExporter;
+pub use table_parser::{
+    parse_html_table, parse_latex_table, parse_markdown_table, parse_typst_table,
+};
 pub use typst::TypstConverter;
 pub use typst_parser::parse_typst_to_latex;
 
