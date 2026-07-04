@@ -146,6 +146,74 @@ fn parse_cell_content(text: &str) -> Vec<Inline> {
     inlines
 }
 
+/// Parse a TSV (tab-separated values) table into a TableBlock.
+///
+/// Format: first line is "rows\tcols", followed by tab-separated cell data.
+/// This format is used by the Office COM add-in to transfer table data.
+///
+/// Example input:
+/// ```tsv
+/// 2	2
+/// A	B
+/// C	D
+/// ```
+pub fn parse_tsv_table(tsv: &str) -> Option<TableBlock> {
+    let lines: Vec<&str> = tsv.lines().collect();
+    if lines.is_empty() {
+        return None;
+    }
+
+    // First line: rows\tcols
+    let header: Vec<&str> = lines[0].split('\t').collect();
+    if header.len() < 2 {
+        return None;
+    }
+
+    let _rows: usize = header[0].parse().ok()?;
+    let _cols: usize = header[1].parse().ok()?;
+
+    let mut table_rows = Vec::new();
+
+    for line in &lines[1..] {
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let cells: Vec<TableCell> = line
+            .split('\t')
+            .map(|cell_text| {
+                let cell_text = cell_text.trim();
+                TableCell {
+                    inlines: parse_cell_content(cell_text),
+                    colspan: 1,
+                    rowspan: 1,
+                    border_style: None,
+                    border_width: None,
+                    border_color: None,
+                    background: None,
+                    alignment: None,
+                    geometry: None,
+                    source: None,
+                }
+            })
+            .collect();
+
+        if !cells.is_empty() {
+            table_rows.push(cells);
+        }
+    }
+
+    if table_rows.is_empty() {
+        return None;
+    }
+
+    Some(TableBlock {
+        rows: table_rows,
+        geometry: None,
+        source: None,
+    })
+}
+
 /// Parse a Markdown pipe table into a TableBlock.
 ///
 /// Example input:
@@ -492,6 +560,16 @@ C & D \\
         let typst = "#table(columns: 2, [A], [B], [C], [D])";
 
         let table = parse_typst_table(typst).unwrap();
+        assert_eq!(table.rows.len(), 2);
+        assert_eq!(table.rows[0].len(), 2);
+        assert_eq!(table.rows[1].len(), 2);
+    }
+
+    #[test]
+    fn test_parse_tsv_table() {
+        let tsv = "2\t2\nA\tB\nC\tD";
+
+        let table = parse_tsv_table(tsv).unwrap();
         assert_eq!(table.rows.len(), 2);
         assert_eq!(table.rows[0].len(), 2);
         assert_eq!(table.rows[1].len(), 2);

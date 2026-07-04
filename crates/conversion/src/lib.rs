@@ -31,7 +31,7 @@ pub use omml::OmmlConverter;
 pub use omml_parser::parse_omml_to_latex;
 pub use table_export::TableExporter;
 pub use table_parser::{
-    parse_html_table, parse_latex_table, parse_markdown_table, parse_typst_table,
+    parse_html_table, parse_latex_table, parse_markdown_table, parse_tsv_table, parse_typst_table,
 };
 pub use typst::TypstConverter;
 pub use typst_parser::parse_typst_to_latex;
