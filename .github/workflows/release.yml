@@ -4,18 +4,8 @@ on:
   push:
     tags:
       - 'v*'
-      - 'models-v*'
   workflow_dispatch:
     inputs:
-      release_type:
-        description: 'Release type'
-        required: true
-        default: 'cli'
-        type: choice
-        options:
-          - cli
-          - models
-          - all
       version:
         description: 'Custom version tag (optional, overrides git tag)'
         required: false
@@ -34,9 +24,6 @@ jobs:
   build-cli:
     name: Build CLI (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    if: >
-      (github.event_name == 'push' && startsWith(github.ref_name, 'v')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.release_type != 'models')
     strategy:
       matrix:
         include:
@@ -86,9 +73,6 @@ jobs:
   test-sdk:
     name: Test SDK
     runs-on: ubuntu-latest
-    if: >
-      (github.event_name == 'push' && startsWith(github.ref_name, 'v')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.release_type != 'models')
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -105,9 +89,6 @@ jobs:
   publish-crates:
     name: Publish to crates.io
     needs: test-sdk
-    if: >
-      (github.event_name == 'push' && startsWith(github.ref_name, 'v')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.release_type != 'models')
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
@@ -175,105 +156,11 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   # ============================================================
-  # Job 4: Package models (from repo, not download)
-  # ============================================================
-  package-models:
-    name: Package Models
-    if: >
-      (github.event_name == 'push' && startsWith(github.ref_name, 'models-v')) ||
-      (github.event_name == 'workflow_dispatch' && (inputs.release_type == 'models' || inputs.release_type == 'all'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Get version from manifest
-        id: manifest
-        run: |
-          VERSION=$(python3 -c "import json; print(json.load(open('models/model-manifest.json'))['version'])")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Model version: $VERSION"
-
-      - name: Validate model manifests
-        run: |
-          echo "Validating model manifests..."
-          for dir in models/*/; do
-            if [ -f "$dir/manifest.toml" ]; then
-              echo "  Found manifest: $dir/manifest.toml"
-              # Basic validation: check required fields
-              python3 -c "
-          import tomllib
-          with open('${dir}manifest.toml', 'rb') as f:
-              m = tomllib.load(f)
-          assert 'id' in m, 'Missing id'
-          assert 'task' in m, 'Missing task'
-          assert 'adapter' in m, 'Missing adapter'
-          print(f'    Valid: {m[\"id\"]} ({m[\"task\"]})')
-          "
-            else
-              echo "  No manifest: $dir (skipping validation)"
-            fi
-          done
-
-      - name: Generate checksums
-        run: |
-          echo "Generating SHA-256 checksums..."
-          cd models
-          find . -name "*.onnx" -o -name "*.json" -o -name "*.txt" -o -name "*.toml" | \
-            sort | xargs sha256sum > CHECKSUMS.sha256
-          echo "Checksums generated:"
-          cat CHECKSUMS.sha256 | head -10
-
-      - name: Package models directory
-        run: |
-          VERSION="${{ steps.manifest.outputs.version }}"
-
-          # Create structured package
-          mkdir -p package/models
-
-          # Copy model directories with manifests
-          for dir in models/*/; do
-            if [ -d "$dir" ]; then
-              MODEL_NAME=$(basename "$dir")
-              mkdir -p "package/models/$MODEL_NAME"
-              cp -r "$dir"* "package/models/$MODEL_NAME/"
-
-              # Ensure manifest exists (generate minimal if missing)
-              if [ ! -f "package/models/$MODEL_NAME/manifest.toml" ]; then
-                echo "Warning: No manifest.toml in $MODEL_NAME"
-              fi
-            fi
-          done
-
-          # Copy checksums
-          cp models/CHECKSUMS.sha256 package/models/ 2>/dev/null || true
-
-          # Copy model-manifest.json
-          cp models/model-manifest.json package/models/ 2>/dev/null || true
-
-          # Create tar.gz
-          tar czf latexsnipper-models-v${VERSION}.tar.gz -C package models
-
-          echo "Package created:"
-          ls -lh latexsnipper-models-*.tar.gz
-
-          echo "Contents:"
-          tar tzf latexsnipper-models-*.tar.gz | head -30
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: models
-          path: latexsnipper-models-*.tar.gz
-
-  # ============================================================
-  # Job 5: Create CLI Release
+  # Job 4: Create CLI Release
   # ============================================================
   release-cli:
     name: Release CLI
     needs: [build-cli, test-sdk]
-    if: >
-      (github.event_name == 'push' && startsWith(github.ref_name, 'v')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.release_type != 'models')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -335,65 +222,5 @@ jobs:
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ============================================================
-  # Job 6: Create Model Release
-  # ============================================================
-  release-models:
-    name: Release Models
-    needs: package-models
-    if: >
-      (github.event_name == 'push' && startsWith(github.ref_name, 'models-v')) ||
-      (github.event_name == 'workflow_dispatch' && (inputs.release_type == 'models' || inputs.release_type == 'all'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(python3 -c "import json; print(json.load(open('models/model-manifest.json'))['version'])")
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "models-v${{ steps.version.outputs.version }}"
-          name: "Models v${{ steps.version.outputs.version }}"
-          body: |
-            ## LaTeXSnipper Core Models v${{ steps.version.outputs.version }}
-
-            ### Quick Start
-
-            ```bash
-            curl -LO https://github.com/strangelion/latexsnipper-core/releases/download/models-v${{ steps.version.outputs.version }}/latexsnipper-models-v${{ steps.version.outputs.version }}.tar.gz
-            tar xzf latexsnipper-models-v${{ steps.version.outputs.version }}.tar.gz
-            ```
-
-            ### Model Directory Structure
-
-            ```
-            models/
-            ├── model-manifest.json          # Manifest with mirrors
-            ├── formula-det/yolov8-mfd/      # Formula detection (66MB)
-            ├── formula-rec/trocr-deit/      # Formula recognition (104MB)
-            ├── text-det/v6-small/           # Text detection (7MB)
-            └── text-rec/v6-small/           # Text recognition (64MB)
-            ```
-
-            ### Mirrors
-
-            See `model-manifest.json` for mirror URLs (for regions with restricted access).
-          files: artifacts/**/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
