@@ -148,14 +148,14 @@ fn parse_cell_content(text: &str) -> Vec<Inline> {
 
 /// Parse a TSV (tab-separated values) table into a TableBlock.
 ///
-/// Format: first line is "rows\tcols", followed by tab-separated cell data.
+/// Format: first line is "rows cols", followed by tab-separated cell data.
 /// This format is used by the Office COM add-in to transfer table data.
 ///
 /// Example input:
 /// ```tsv
-/// 2	2
-/// A	B
-/// C	D
+/// 2    2
+/// A    B
+/// C    D
 /// ```
 pub fn parse_tsv_table(tsv: &str) -> Option<TableBlock> {
     let lines: Vec<&str> = tsv.lines().collect();
