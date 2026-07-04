@@ -79,15 +79,15 @@ impl TableRecognizerNode {
             None => return Ok(()),
         };
 
-        log::info!(
-            "TableRecognizer: processing {} table cells",
-            cells.len()
-        );
+        log::info!("TableRecognizer: processing {} table cells", cells.len());
 
         // Group cells by their table rect (cells from same table share the same rect)
         // For simplicity, treat all cells as belonging to one table
         // TODO: Group cells by table rect for proper multi-table support
-        let table_rect = cells.first().map(|c| c.rect).unwrap_or(Rect::new(0.0, 0.0, 0.0, 0.0));
+        let table_rect = cells
+            .first()
+            .map(|c| c.rect)
+            .unwrap_or(Rect::new(0.0, 0.0, 0.0, 0.0));
 
         let mut table_blocks = Vec::new();
 
@@ -113,7 +113,10 @@ impl TableRecognizerNode {
 
         ctx.artifacts.table_blocks = table_blocks;
 
-        log::info!("Recognized {} table blocks", ctx.artifacts.table_blocks.len());
+        log::info!(
+            "Recognized {} table blocks",
+            ctx.artifacts.table_blocks.len()
+        );
         Ok(())
     }
 

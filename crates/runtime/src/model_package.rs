@@ -165,10 +165,7 @@ pub trait ModelPackage: Send + Sync {
     fn descriptor(&self) -> &ModelDescriptor;
 
     /// Create an executor for this model.
-    fn create_executor(
-        &self,
-        runtime: Arc<dyn RuntimeBackend>,
-    ) -> Result<Box<dyn ModelExecutor>>;
+    fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>>;
 }
 
 /// A model executor — runs inference on a loaded model.

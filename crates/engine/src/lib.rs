@@ -3,8 +3,8 @@ pub mod config;
 pub mod engine;
 pub mod job;
 pub mod metrics;
-pub mod service;
 pub mod sdk;
+pub mod service;
 
 pub use config::EngineConfig;
 pub use engine::{RecognizeMode, RecognizeRequest, RecognizeResponse, SnipperEngine, StreamItem};

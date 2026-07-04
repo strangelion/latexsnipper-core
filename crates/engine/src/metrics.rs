@@ -48,14 +48,16 @@ impl RecognitionMetrics {
 
     /// Record detected regions.
     pub fn record_detections(&mut self, category: &str, count: usize) {
-        *self.detected_regions
+        *self
+            .detected_regions
             .entry(category.to_string())
             .or_insert(0) += count;
     }
 
     /// Record recognized blocks.
     pub fn record_blocks(&mut self, category: &str, count: usize) {
-        *self.recognized_blocks
+        *self
+            .recognized_blocks
             .entry(category.to_string())
             .or_insert(0) += count;
     }

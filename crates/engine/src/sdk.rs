@@ -51,13 +51,16 @@ impl Snipper {
             .map_err(|e| SnipperError::Runtime(e.to_string()))?;
         let engine = SnipperEngine::new(config, Box::new(backend));
 
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+        let rt =
+            tokio::runtime::Runtime::new().map_err(|e| SnipperError::Runtime(e.to_string()))?;
         let doc = rt
             .block_on(engine.recognize_pdf(path.as_ref(), RecognizeMode::Mixed))
             .map_err(|e| SnipperError::Inference(e.to_string()))?;
 
-        Ok(Self { engine, document: doc })
+        Ok(Self {
+            engine,
+            document: doc,
+        })
     }
 
     /// Create from raw RGB pixels.
@@ -67,13 +70,16 @@ impl Snipper {
             .map_err(|e| SnipperError::Runtime(e.to_string()))?;
         let engine = SnipperEngine::new(config, Box::new(backend));
 
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+        let rt =
+            tokio::runtime::Runtime::new().map_err(|e| SnipperError::Runtime(e.to_string()))?;
         let doc = rt
             .block_on(engine.recognize(img, RecognizeMode::Formula))
             .map_err(|e| SnipperError::Inference(e.to_string()))?;
 
-        Ok(Self { engine, document: doc })
+        Ok(Self {
+            engine,
+            document: doc,
+        })
     }
 
     /// Get the Document AST.

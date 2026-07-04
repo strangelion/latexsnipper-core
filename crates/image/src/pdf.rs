@@ -58,17 +58,13 @@ pub fn decode_pdf(source: PdfSource, dpi: u32) -> Result<Vec<SnipperImage>> {
         PdfSource::File(path) => path.to_path_buf(),
         PdfSource::Memory(bytes) => {
             // Write bytes to temp file for rendering
-            let tmp_dir = std::env::temp_dir().join(format!(
-                "latexsnipper-pdf-{}",
-                std::process::id()
-            ));
-            std::fs::create_dir_all(&tmp_dir).map_err(|e| {
-                SnipperError::Image(format!("Failed to create temp dir: {}", e))
-            })?;
+            let tmp_dir =
+                std::env::temp_dir().join(format!("latexsnipper-pdf-{}", std::process::id()));
+            std::fs::create_dir_all(&tmp_dir)
+                .map_err(|e| SnipperError::Image(format!("Failed to create temp dir: {}", e)))?;
             let tmp_path = tmp_dir.join("input.pdf");
-            std::fs::write(&tmp_path, bytes).map_err(|e| {
-                SnipperError::Image(format!("Failed to write temp PDF: {}", e))
-            })?;
+            std::fs::write(&tmp_path, bytes)
+                .map_err(|e| SnipperError::Image(format!("Failed to write temp PDF: {}", e)))?;
             tmp_path
         }
     };
@@ -100,17 +96,13 @@ pub fn decode_pdf_page(source: PdfSource, page: u32, dpi: u32) -> Result<Snipper
     let pdf_path = match source {
         PdfSource::File(path) => path.to_path_buf(),
         PdfSource::Memory(bytes) => {
-            let tmp_dir = std::env::temp_dir().join(format!(
-                "latexsnipper-pdf-{}",
-                std::process::id()
-            ));
-            std::fs::create_dir_all(&tmp_dir).map_err(|e| {
-                SnipperError::Image(format!("Failed to create temp dir: {}", e))
-            })?;
+            let tmp_dir =
+                std::env::temp_dir().join(format!("latexsnipper-pdf-{}", std::process::id()));
+            std::fs::create_dir_all(&tmp_dir)
+                .map_err(|e| SnipperError::Image(format!("Failed to create temp dir: {}", e)))?;
             let tmp_path = tmp_dir.join("input.pdf");
-            std::fs::write(&tmp_path, bytes).map_err(|e| {
-                SnipperError::Image(format!("Failed to write temp PDF: {}", e))
-            })?;
+            std::fs::write(&tmp_path, bytes)
+                .map_err(|e| SnipperError::Image(format!("Failed to write temp PDF: {}", e)))?;
             tmp_path
         }
     };

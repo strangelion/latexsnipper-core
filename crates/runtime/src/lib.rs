@@ -18,16 +18,18 @@ pub use model_package::{
     ModelOutput, ModelPackage, ModelTask, TableResult, TensorDtype, TensorSpec, TextResult,
 };
 pub use model_plugin::{ManifestAdapter, ModelManifestView, ModelPlugin, ModelPluginRegistry};
-pub use plugin_loader::load_plugins_from_dir;
 pub use model_registry::{
     ManifestDecoding, ManifestPreprocessing, ManifestResize, ManifestTensorSpec, ModelFiles,
     ModelManifest, ModelRegistry,
 };
-pub use model_resolver::{FsModelResolver, MemoryModelResolver, ModelId, ModelResolver, SharedModelResolver};
-pub use model_validation::{
-    compute_bytes_checksum, compute_checksum, load_checksums, validate_all_models,
-    validate_model, validate_model_bytes, ValidationReport,
+pub use model_resolver::{
+    FsModelResolver, MemoryModelResolver, ModelId, ModelResolver, SharedModelResolver,
 };
+pub use model_validation::{
+    compute_bytes_checksum, compute_checksum, load_checksums, validate_all_models, validate_model,
+    validate_model_bytes, ValidationReport,
+};
+pub use plugin_loader::load_plugins_from_dir;
 pub use providers::onnx::OnnxRuntimeBackend;
 pub use providers::onnx::{Acceleration, Platform};
 pub use providers::stub::StubRuntime;

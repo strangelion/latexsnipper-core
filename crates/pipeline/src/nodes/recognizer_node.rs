@@ -184,7 +184,10 @@ impl RecognizerNode {
             _ => {
                 ctx.diagnostic_warn(
                     &self.name,
-                    format!("Unsupported recognition task via ModelPackage: {:?}", self.task),
+                    format!(
+                        "Unsupported recognition task via ModelPackage: {:?}",
+                        self.task
+                    ),
                 );
             }
         }
@@ -210,15 +213,17 @@ impl RecognizerNode {
         let rec_config = match load_config(models, "formula-rec") {
             Ok(c) => c,
             Err(_) => {
-                ctx.diagnostic_warn("recognize_formula", "Formula recognition model config not found, skipping");
+                ctx.diagnostic_warn(
+                    "recognize_formula",
+                    "Formula recognition model config not found, skipping",
+                );
                 return Ok(());
             }
         };
 
         let (_variant_config, rec_dir, _variant_dir) =
-            latexsnipper_model::ModelConfig::find_best(models, "formula-rec").ok_or_else(|| {
-                SnipperError::Model("Formula recognition model not found".into())
-            })?;
+            latexsnipper_model::ModelConfig::find_best(models, "formula-rec")
+                .ok_or_else(|| SnipperError::Model("Formula recognition model not found".into()))?;
         let encoder_path = rec_config
             .pipeline_encoder_path(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Encoder not found".into()))?;
@@ -247,10 +252,8 @@ impl RecognizerNode {
 
             if let Some(ref image) = ctx.image {
                 if w >= 4 && h >= 4 {
-                    let cropped = operations::crop(
-                        image,
-                        Rect::new(x as f32, y as f32, w as f32, h as f32),
-                    );
+                    let cropped =
+                        operations::crop(image, Rect::new(x as f32, y as f32, w as f32, h as f32));
                     let line_groups = split_formula_line_groups(&cropped);
 
                     if line_groups.is_empty() {
@@ -303,9 +306,7 @@ impl RecognizerNode {
                             f.confidence = 0.9;
                             blocks.push(Block::Formula(FormulaBlock {
                                 formula: f,
-                                geometry: Some(Rect::new(
-                                    x as f32, y as f32, w as f32, h as f32,
-                                )),
+                                geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                                 source: Some(SourceInfo::new().with_page(ctx.current_page)),
                             }));
                         }
@@ -315,7 +316,10 @@ impl RecognizerNode {
         }
 
         ctx.artifacts.formula_blocks = blocks;
-        log::info!("Recognized {} formula blocks", ctx.artifacts.formula_blocks.len());
+        log::info!(
+            "Recognized {} formula blocks",
+            ctx.artifacts.formula_blocks.len()
+        );
         Ok(())
     }
 
@@ -332,7 +336,10 @@ impl RecognizerNode {
         let rec_model = match select_text_rec_model(models) {
             Ok(m) => m,
             Err(e) => {
-                ctx.diagnostic_warn("recognize_text", format!("Text recognition model not found: {}", e));
+                ctx.diagnostic_warn(
+                    "recognize_text",
+                    format!("Text recognition model not found: {}", e),
+                );
                 return Ok(());
             }
         };
@@ -412,13 +419,15 @@ fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
             continue;
         };
 
-        let keys_path = config.pipeline_tokenizer_path(&variant_dir).ok_or_else(|| {
-            SnipperError::Model(format!(
-                "Text keys not found in {}/{}",
-                models.display(),
-                variant
-            ))
-        })?;
+        let keys_path = config
+            .pipeline_tokenizer_path(&variant_dir)
+            .ok_or_else(|| {
+                SnipperError::Model(format!(
+                    "Text keys not found in {}/{}",
+                    models.display(),
+                    variant
+                ))
+            })?;
 
         return Ok(TextRecModel {
             config,
@@ -511,15 +520,10 @@ mod tests {
     fn select_text_rec_prefers_v6_when_onnx_exists() {
         let root = temp_models_dir("text-rec-v6");
         let v6 = root.join("v6_models/PP-OCRv6_medium_rec_infer");
-        let old = root.join("text-rec/ppocrv5-mobile");
         fs::create_dir_all(&v6).unwrap();
-        fs::create_dir_all(&old).unwrap();
         write_text_rec_config(&v6);
-        write_text_rec_config(&old);
         fs::write(v6.join("model.onnx"), []).unwrap();
         fs::write(v6.join("ppocr_keys.txt"), "a\nb\n").unwrap();
-        fs::write(old.join("ppocrv5_mobile_rec.onnx"), []).unwrap();
-        fs::write(old.join("ppocrv5_keys.txt"), "x\ny\n").unwrap();
 
         let selected = select_text_rec_model(&root).unwrap();
         assert!(selected.model_path.ends_with("model.onnx"));

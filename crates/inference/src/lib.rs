@@ -18,6 +18,7 @@ pub mod trocr_tokenizer;
 pub mod types;
 pub mod yolo_utils;
 
+pub use adapter_registry::register_builtin_adapters;
 pub use formula_detector::{
     detect_formulas, filter_formula_detections, group_formula_detections, DetectionParams,
 };
@@ -41,4 +42,3 @@ pub use table_transformer::{
 pub use text_detector::{detect_text, TextDetParams};
 pub use text_recognizer::{load_keys, recognize_text, recognize_text_with_keys, TextRecParams};
 pub use types::{DetectionBox, GridCell, RecognitionResult};
-pub use adapter_registry::register_builtin_adapters;

@@ -365,7 +365,11 @@ fn main() {
         Commands::Play => play_game(),
 
         Commands::Models(cmd) => match cmd {
-            ModelsCommand::Download { category, all, manifest_url } => {
+            ModelsCommand::Download {
+                category,
+                all,
+                manifest_url,
+            } => {
                 handle_models_download(category, all, manifest_url);
             }
             ModelsCommand::List { category } => {
@@ -411,8 +415,8 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
                     let url = format!("{}/{}", manifest.base_url, zip_file);
                     eprintln!("Downloading {} from {}", cat, url);
 
-                    let progress = Box::new(|status: latexsnipper_model::DownloadStatus| {
-                        match status {
+                    let progress =
+                        Box::new(|status: latexsnipper_model::DownloadStatus| match status {
                             latexsnipper_model::DownloadStatus::Starting { url, total_bytes } => {
                                 eprintln!("Starting download: {}", url);
                                 if let Some(total) = total_bytes {
@@ -434,8 +438,7 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
                             latexsnipper_model::DownloadStatus::Failed { error } => {
                                 eprintln!("  Failed: {}", error);
                             }
-                        }
-                    });
+                        });
 
                     match manager.download_with_progress(&url, &cat, &variant.id, Some(progress)) {
                         Ok(path) => {
@@ -450,7 +453,10 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
             }
         } else {
             eprintln!("Unknown category: {}", cat);
-            eprintln!("Available categories: {:?}", manifest.categories.keys().collect::<Vec<_>>());
+            eprintln!(
+                "Available categories: {:?}",
+                manifest.categories.keys().collect::<Vec<_>>()
+            );
             std::process::exit(1);
         }
     } else if all {
@@ -514,15 +520,16 @@ fn handle_models_list(category: Option<String>) {
                     } else {
                         eprintln!("  {}:", cat);
                         for variant in &variants {
-                            let status = if let Some(v) = info.variants.iter().find(|v| &v.id == variant) {
-                                if let Some(ref zip) = v.zip_file {
-                                    format!(" ({})", zip)
+                            let status =
+                                if let Some(v) = info.variants.iter().find(|v| &v.id == variant) {
+                                    if let Some(ref zip) = v.zip_file {
+                                        format!(" ({})", zip)
+                                    } else {
+                                        String::new()
+                                    }
                                 } else {
                                     String::new()
-                                }
-                            } else {
-                                String::new()
-                            };
+                                };
                             eprintln!("    - {}{}", variant, status);
                         }
                     }

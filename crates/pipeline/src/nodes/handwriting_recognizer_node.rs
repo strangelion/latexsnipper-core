@@ -60,7 +60,10 @@ impl HandwritingRecognizerNode {
         let rec_config = match load_config(models, "formula-rec") {
             Ok(c) => c,
             Err(_) => {
-                ctx.diagnostic_warn("recognize_handwriting", "TrOCR model config not found for handwriting recognition");
+                ctx.diagnostic_warn(
+                    "recognize_handwriting",
+                    "TrOCR model config not found for handwriting recognition",
+                );
                 return Ok(());
             }
         };
@@ -106,10 +109,8 @@ impl HandwritingRecognizerNode {
 
             if let Some(ref image) = ctx.image {
                 if w >= 4 && h >= 4 {
-                    let cropped = operations::crop(
-                        image,
-                        Rect::new(x as f32, y as f32, w as f32, h as f32),
-                    );
+                    let cropped =
+                        operations::crop(image, Rect::new(x as f32, y as f32, w as f32, h as f32));
 
                     match recognize_formula(
                         &cropped,
@@ -130,22 +131,16 @@ impl HandwritingRecognizerNode {
                                         geometry: Some(Rect::new(
                                             x as f32, y as f32, w as f32, h as f32,
                                         )),
-                                        source: Some(
-                                            SourceInfo::new().with_page(ctx.current_page),
-                                        ),
+                                        source: Some(SourceInfo::new().with_page(ctx.current_page)),
                                     }));
                                 } else {
                                     blocks.push(Block::Handwriting(HandwritingBlock {
-                                        inlines: vec![Inline::Text(TextRun::new(
-                                            &processed_text,
-                                        ))],
+                                        inlines: vec![Inline::Text(TextRun::new(&processed_text))],
                                         confidence: result.confidence,
                                         geometry: Some(Rect::new(
                                             x as f32, y as f32, w as f32, h as f32,
                                         )),
-                                        source: Some(
-                                            SourceInfo::new().with_page(ctx.current_page),
-                                        ),
+                                        source: Some(SourceInfo::new().with_page(ctx.current_page)),
                                     }));
                                 }
                             }
@@ -157,7 +152,10 @@ impl HandwritingRecognizerNode {
         }
 
         ctx.artifacts.handwriting_blocks = blocks;
-        log::info!("Recognized {} handwriting blocks", ctx.artifacts.handwriting_blocks.len());
+        log::info!(
+            "Recognized {} handwriting blocks",
+            ctx.artifacts.handwriting_blocks.len()
+        );
         Ok(())
     }
 }

@@ -1,7 +1,9 @@
 use crate::artifacts::PipelineArtifacts;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
-use latexsnipper_runtime::{InferenceSession, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver};
+use latexsnipper_runtime::{
+    InferenceSession, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -198,7 +200,12 @@ impl PipelineContext {
     }
 
     /// Record a diagnostic event.
-    pub fn diagnostic(&mut self, level: DiagnosticLevel, node: impl Into<String>, message: impl Into<String>) {
+    pub fn diagnostic(
+        &mut self,
+        level: DiagnosticLevel,
+        node: impl Into<String>,
+        message: impl Into<String>,
+    ) {
         self.diagnostics.push(DiagnosticEvent {
             level,
             node: node.into(),
@@ -223,7 +230,9 @@ impl PipelineContext {
 
     /// Check if there are any error-level diagnostics.
     pub fn has_errors(&self) -> bool {
-        self.diagnostics.iter().any(|d| d.level == DiagnosticLevel::Error)
+        self.diagnostics
+            .iter()
+            .any(|d| d.level == DiagnosticLevel::Error)
     }
 
     /// Register a model package for a specific task.

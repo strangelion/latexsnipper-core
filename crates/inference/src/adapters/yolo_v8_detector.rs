@@ -30,7 +30,12 @@ impl YoloV8DetectorPackage {
                 .unwrap_or_else(|| "unknown".into()),
             input_spec: TensorSpec {
                 name: "images".into(),
-                shape: vec![1, 3, params.target_size as usize, params.target_size as usize],
+                shape: vec![
+                    1,
+                    3,
+                    params.target_size as usize,
+                    params.target_size as usize,
+                ],
                 dtype: TensorDtype::Float32,
             },
             output_spec: vec![TensorSpec {
@@ -56,7 +61,12 @@ impl YoloV8DetectorPackage {
             version: "custom".into(),
             input_spec: TensorSpec {
                 name: "images".into(),
-                shape: vec![1, 3, params.target_size as usize, params.target_size as usize],
+                shape: vec![
+                    1,
+                    3,
+                    params.target_size as usize,
+                    params.target_size as usize,
+                ],
                 dtype: TensorDtype::Float32,
             },
             output_spec: vec![TensorSpec {
@@ -86,10 +96,7 @@ impl ModelPackage for YoloV8DetectorPackage {
         &self.descriptor
     }
 
-    fn create_executor(
-        &self,
-        runtime: Arc<dyn RuntimeBackend>,
-    ) -> Result<Box<dyn ModelExecutor>> {
+    fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
         Ok(Box::new(YoloV8DetectorExecutor {
             descriptor: self.descriptor.clone(),
             params: self.params.clone(),
@@ -119,10 +126,9 @@ impl YoloV8DetectorExecutor {
             return Ok(self.session.as_ref().unwrap());
         }
 
-        let model_path = self
-            .model_path
-            .as_ref()
-            .ok_or_else(|| SnipperError::Inference("No model path configured for YoloV8Detector".into()))?;
+        let model_path = self.model_path.as_ref().ok_or_else(|| {
+            SnipperError::Inference("No model path configured for YoloV8Detector".into())
+        })?;
 
         let handle = latexsnipper_runtime::ModelHandle::with_path(
             self.descriptor.id.composite_key(),
@@ -137,11 +143,7 @@ impl YoloV8DetectorExecutor {
 }
 
 impl ModelExecutor for YoloV8DetectorExecutor {
-    fn run(
-        &mut self,
-        input: ModelInput,
-        _ctx: &mut InferenceContext,
-    ) -> Result<ModelOutput> {
+    fn run(&mut self, input: ModelInput, _ctx: &mut InferenceContext) -> Result<ModelOutput> {
         // Clone params to avoid borrow conflict
         let params = self.params.clone();
         let session = self.ensure_session()?;

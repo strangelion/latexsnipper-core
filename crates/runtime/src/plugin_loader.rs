@@ -35,22 +35,24 @@ pub fn load_plugins_from_dir(
         )));
     }
 
-    for entry in std::fs::read_dir(dir).map_err(|e| {
-        SnipperError::Model(format!("Failed to read plugin directory: {}", e))
-    })? {
-        let entry = entry.map_err(|e| {
-            SnipperError::Model(format!("Failed to read entry: {}", e))
-        })?;
+    for entry in std::fs::read_dir(dir)
+        .map_err(|e| SnipperError::Model(format!("Failed to read plugin directory: {}", e)))?
+    {
+        let entry =
+            entry.map_err(|e| SnipperError::Model(format!("Failed to read entry: {}", e)))?;
 
         let path = entry.path();
 
         // Skip hidden files and directories
-        if path.file_name().map_or(false, |n| n.to_string_lossy().starts_with('.')) {
+        if path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with('.'))
+        {
             continue;
         }
 
         // Try to load as different plugin types
-        if path.extension().map_or(false, |e| e == "toml") {
+        if path.extension().is_some_and(|e| e == "toml") {
             // Try to load as plugin manifest
             match load_plugin_from_manifest(&path) {
                 Ok(plugin) => {
@@ -70,13 +72,11 @@ pub fn load_plugins_from_dir(
 
 /// Load a plugin from a manifest file.
 fn load_plugin_from_manifest(path: &Path) -> Result<Box<dyn ModelPlugin>> {
-    let content = std::fs::read_to_string(path).map_err(|e| {
-        SnipperError::Model(format!("Failed to read manifest: {}", e))
-    })?;
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| SnipperError::Model(format!("Failed to read manifest: {}", e)))?;
 
-    let manifest: PluginManifest = toml::from_str(&content).map_err(|e| {
-        SnipperError::Model(format!("Failed to parse manifest: {}", e))
-    })?;
+    let manifest: PluginManifest = toml::from_str(&content)
+        .map_err(|e| SnipperError::Model(format!("Failed to parse manifest: {}", e)))?;
 
     log::info!(
         "Loading plugin '{}' v{} (type: {}, adapters: {:?}){}",
@@ -84,7 +84,11 @@ fn load_plugin_from_manifest(path: &Path) -> Result<Box<dyn ModelPlugin>> {
         manifest.version,
         manifest.plugin_type,
         manifest.adapters,
-        manifest.description.as_deref().map(|d| format!(" - {}", d)).unwrap_or_default()
+        manifest
+            .description
+            .as_deref()
+            .map(|d| format!(" - {}", d))
+            .unwrap_or_default()
     );
 
     // For now, only support built-in plugins

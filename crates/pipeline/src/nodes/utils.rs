@@ -13,10 +13,7 @@ pub fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
 }
 
 /// Load model config from the first variant directory under a category.
-pub fn load_config(
-    models: &Path,
-    category: &str,
-) -> Result<latexsnipper_model::ModelConfig> {
+pub fn load_config(models: &Path, category: &str) -> Result<latexsnipper_model::ModelConfig> {
     let cat_dir = models.join(category);
     let variant_dir = std::fs::read_dir(&cat_dir)
         .map_err(|e| SnipperError::Model(format!("Cannot read {}: {}", cat_dir.display(), e)))?
@@ -50,14 +47,10 @@ pub fn get_or_create_session(
     if let Some(s) = ctx.get_session(key) {
         return Ok(s);
     }
-    let session = backend.create_session(
-        handle,
-        latexsnipper_runtime::AccelerationMode::Cpu,
-    )?;
+    let session = backend.create_session(handle, latexsnipper_runtime::AccelerationMode::Cpu)?;
     ctx.cache_session(key, session);
-    ctx.get_session(key).ok_or_else(|| {
-        SnipperError::Runtime(format!("Failed to cache session: {}", key))
-    })
+    ctx.get_session(key)
+        .ok_or_else(|| SnipperError::Runtime(format!("Failed to cache session: {}", key)))
 }
 
 /// Find the best model using config, with fallback to primary variant.
@@ -65,7 +58,11 @@ pub fn find_best_with_fallback(
     models: &Path,
     category: &str,
     primary_config: &latexsnipper_model::ModelConfig,
-) -> Option<(latexsnipper_model::ModelConfig, std::path::PathBuf, std::path::PathBuf)> {
+) -> Option<(
+    latexsnipper_model::ModelConfig,
+    std::path::PathBuf,
+    std::path::PathBuf,
+)> {
     if let Some(result) = latexsnipper_model::ModelConfig::find_best(models, category) {
         return Some(result);
     }

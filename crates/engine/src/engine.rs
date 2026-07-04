@@ -9,7 +9,9 @@ use latexsnipper_image::pdf::{decode_pdf, PdfSource};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_model::ModelManager;
 use latexsnipper_pipeline::{PipelineContext, PipelineGraph};
-use latexsnipper_runtime::{FsModelResolver, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver};
+use latexsnipper_runtime::{
+    FsModelResolver, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver,
+};
 
 use crate::config::EngineConfig;
 use crate::job::JobQueue;
@@ -190,9 +192,7 @@ impl SnipperEngine {
                 );
             }
             RecognizeMode::Handwriting => {
-                graph.add_node(Box::new(
-                    latexsnipper_pipeline::DetectorNode::handwriting(),
-                ));
+                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::handwriting()));
                 graph.add_node_with_deps(
                     Box::new(latexsnipper_pipeline::CropNode::default()),
                     vec!["detect_handwriting".into()],

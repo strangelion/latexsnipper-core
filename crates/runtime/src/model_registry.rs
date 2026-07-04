@@ -40,7 +40,7 @@ pub struct ManifestTensorSpec {
 }
 
 /// Model file paths.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModelFiles {
     /// Primary model file.
     #[serde(default)]
@@ -57,18 +57,6 @@ pub struct ModelFiles {
     /// Configuration file.
     #[serde(default)]
     pub config: Option<String>,
-}
-
-impl Default for ModelFiles {
-    fn default() -> Self {
-        Self {
-            primary: None,
-            encoder: None,
-            decoder: None,
-            tokenizer: None,
-            config: None,
-        }
-    }
 }
 
 /// Preprocessing configuration.
@@ -119,7 +107,8 @@ pub struct ManifestDecoding {
 use serde::{Deserialize, Serialize};
 
 /// Factory function type for creating ModelPackage from manifest.
-pub type AdapterFactory = Box<dyn Fn(&ModelManifest, &Path) -> Result<Box<dyn ModelPackage>> + Send + Sync>;
+pub type AdapterFactory =
+    Box<dyn Fn(&ModelManifest, &Path) -> Result<Box<dyn ModelPackage>> + Send + Sync>;
 
 /// Registry of available models with adapter routing.
 pub struct ModelRegistry {
@@ -153,7 +142,8 @@ impl ModelRegistry {
         adapter_name: impl Into<String>,
         factory: impl Fn(&ModelManifest, &Path) -> Result<Box<dyn ModelPackage>> + Send + Sync + 'static,
     ) {
-        self.adapter_factories.insert(adapter_name.into(), Box::new(factory));
+        self.adapter_factories
+            .insert(adapter_name.into(), Box::new(factory));
     }
 
     /// Create a ModelPackage from a manifest by looking up the adapter.
@@ -198,12 +188,11 @@ impl ModelRegistry {
         self.dirs.push(path.clone());
 
         // Scan for manifest files
-        for entry in std::fs::read_dir(&path).map_err(|e| {
-            SnipperError::Model(format!("Failed to read {}: {}", path.display(), e))
-        })? {
-            let entry = entry.map_err(|e| {
-                SnipperError::Model(format!("Failed to read entry: {}", e))
-            })?;
+        for entry in std::fs::read_dir(&path)
+            .map_err(|e| SnipperError::Model(format!("Failed to read {}: {}", path.display(), e)))?
+        {
+            let entry =
+                entry.map_err(|e| SnipperError::Model(format!("Failed to read entry: {}", e)))?;
 
             if !entry.path().is_dir() {
                 continue;
@@ -234,9 +223,8 @@ impl ModelRegistry {
         let content = std::fs::read_to_string(path).map_err(|e| {
             SnipperError::Model(format!("Failed to read {}: {}", path.display(), e))
         })?;
-        toml::from_str(&content).map_err(|e| {
-            SnipperError::Model(format!("Failed to parse {}: {}", path.display(), e))
-        })
+        toml::from_str(&content)
+            .map_err(|e| SnipperError::Model(format!("Failed to parse {}: {}", path.display(), e)))
     }
 
     /// Get a model by ID.

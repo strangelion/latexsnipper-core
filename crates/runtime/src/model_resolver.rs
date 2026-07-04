@@ -74,10 +74,7 @@ impl ModelResolver for FsModelResolver {
 
         for path in &candidates {
             if path.exists() {
-                return Ok(ModelHandle::with_path(
-                    id.composite_key(),
-                    path.clone(),
-                ));
+                return Ok(ModelHandle::with_path(id.composite_key(), path.clone()));
             }
         }
 

@@ -20,32 +20,39 @@ fn manifest_to_config(manifest: &ModelManifest) -> latexsnipper_model::ModelConf
         range: None,
     });
 
-    let output = manifest.output.first().map(|o| latexsnipper_model::OutputConfig {
-        name: o.name.clone(),
-        shape: o.shape.clone(),
-        description: None,
-    });
+    let output = manifest
+        .output
+        .first()
+        .map(|o| latexsnipper_model::OutputConfig {
+            name: o.name.clone(),
+            shape: o.shape.clone(),
+            description: None,
+        });
 
-    let preprocessing = manifest.preprocessing.as_ref().map(|p| {
-        latexsnipper_model::PreprocessConfig {
-            resize: p.resize.as_ref().map(|r| latexsnipper_model::ResizeConfig {
-                width: r.width,
-                height: r.height,
-                keep_ratio: r.keep_ratio,
+    let preprocessing =
+        manifest
+            .preprocessing
+            .as_ref()
+            .map(|p| latexsnipper_model::PreprocessConfig {
+                resize: p.resize.as_ref().map(|r| latexsnipper_model::ResizeConfig {
+                    width: r.width,
+                    height: r.height,
+                    keep_ratio: r.keep_ratio,
+                    pad_value: None,
+                }),
+                normalization: Some(latexsnipper_model::NormalizationConfig {
+                    mean: p.mean.clone(),
+                    std: p.std.clone(),
+                }),
+                color_format: p.color_format.clone(),
+                divisible_by: None,
                 pad_value: None,
-            }),
-            normalization: Some(latexsnipper_model::NormalizationConfig {
-                mean: p.mean.clone(),
-                std: p.std.clone(),
-            }),
-            color_format: p.color_format.clone(),
-            divisible_by: None,
-            pad_value: None,
-        }
-    });
+            });
 
-    let decoding = manifest.decoding.as_ref().map(|d| {
-        latexsnipper_model::DecodingConfig {
+    let decoding = manifest
+        .decoding
+        .as_ref()
+        .map(|d| latexsnipper_model::DecodingConfig {
             decoding_type: Some(d.decoding_type.clone()),
             beam_width: d.beam_width,
             blank_id: d.blank_id,
@@ -54,8 +61,7 @@ fn manifest_to_config(manifest: &ModelManifest) -> latexsnipper_model::ModelConf
             tokenizer_file: None,
             keys_file: None,
             top_p: None,
-        }
-    });
+        });
 
     let model_type = match manifest.task {
         latexsnipper_runtime::ModelTask::FormulaDetection => "yolov8",
@@ -153,7 +159,11 @@ pub fn register_builtin_adapters(registry: &mut ModelRegistry) {
             &manifest.files.decoder,
             &manifest.files.tokenizer,
         ) {
-            package.with_paths(model_dir.join(enc), model_dir.join(dec), model_dir.join(tok))
+            package.with_paths(
+                model_dir.join(enc),
+                model_dir.join(dec),
+                model_dir.join(tok),
+            )
         } else {
             package
         };
@@ -176,11 +186,16 @@ pub fn register_builtin_adapters(registry: &mut ModelRegistry) {
         let package = if let Some(config) = config {
             CrnnTextRecognizerPackage::from_config(&config, model_id)
         } else {
-            CrnnTextRecognizerPackage::from_config(&latexsnipper_model::ModelConfig::minimal(), model_id)
+            CrnnTextRecognizerPackage::from_config(
+                &latexsnipper_model::ModelConfig::minimal(),
+                model_id,
+            )
         };
 
         // Set paths from manifest
-        let package = if let (Some(model), Some(keys)) = (&manifest.files.primary, &manifest.files.tokenizer) {
+        let package = if let (Some(model), Some(keys)) =
+            (&manifest.files.primary, &manifest.files.tokenizer)
+        {
             package.with_paths(model_dir.join(model), model_dir.join(keys))
         } else {
             package

@@ -31,9 +31,7 @@ pub use nodes::table_recognizer_node::TableRecognizerNode;
 pub use nodes::table_structure_node::TableStructureNode;
 #[allow(deprecated)]
 pub use sdk::Snipper;
-pub use simple::{
-    MockCropper, MockDetector, MockRecognizer, SimpleContext, SimplePipeline, Stage,
-};
+pub use simple::{MockCropper, MockDetector, MockRecognizer, SimpleContext, SimplePipeline, Stage};
 
 // Re-export core types for downstream users
 pub use latexsnipper_foundation::SnipperError;

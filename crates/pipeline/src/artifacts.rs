@@ -1,6 +1,6 @@
 use latexsnipper_ast::{Block, Rect};
-use latexsnipper_inference::{DetectionBox, GridCell};
 use latexsnipper_image::SnipperImage;
+use latexsnipper_inference::{DetectionBox, GridCell};
 
 /// Strongly-typed pipeline data artifacts.
 /// Replaces string-keyed metadata for type safety.

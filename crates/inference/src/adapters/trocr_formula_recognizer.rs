@@ -55,12 +55,7 @@ impl TrOcrFormulaPackage {
     }
 
     /// Set model paths for encoder, decoder, and tokenizer.
-    pub fn with_paths(
-        mut self,
-        encoder: PathBuf,
-        decoder: PathBuf,
-        tokenizer: PathBuf,
-    ) -> Self {
+    pub fn with_paths(mut self, encoder: PathBuf, decoder: PathBuf, tokenizer: PathBuf) -> Self {
         self.encoder_path = Some(encoder);
         self.decoder_path = Some(decoder);
         self.tokenizer_path = Some(tokenizer);
@@ -73,10 +68,7 @@ impl ModelPackage for TrOcrFormulaPackage {
         &self.descriptor
     }
 
-    fn create_executor(
-        &self,
-        runtime: Arc<dyn RuntimeBackend>,
-    ) -> Result<Box<dyn ModelExecutor>> {
+    fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
         Ok(Box::new(TrOcrFormulaExecutor {
             descriptor: self.descriptor.clone(),
             runtime,
@@ -105,8 +97,17 @@ struct TrOcrFormulaExecutor {
 
 impl TrOcrFormulaExecutor {
     /// Ensure sessions are loaded, creating from paths if needed.
-    fn ensure_sessions(&mut self) -> Result<(&Arc<Box<dyn InferenceSession>>, &Arc<Box<dyn InferenceSession>>, &PathBuf)> {
-        if self.encoder_session.is_some() && self.decoder_session.is_some() && self.tokenizer_path.is_some() {
+    fn ensure_sessions(
+        &mut self,
+    ) -> Result<(
+        &Arc<Box<dyn InferenceSession>>,
+        &Arc<Box<dyn InferenceSession>>,
+        &PathBuf,
+    )> {
+        if self.encoder_session.is_some()
+            && self.decoder_session.is_some()
+            && self.tokenizer_path.is_some()
+        {
             return Ok((
                 self.encoder_session.as_ref().unwrap(),
                 self.decoder_session.as_ref().unwrap(),
@@ -114,13 +115,17 @@ impl TrOcrFormulaExecutor {
             ));
         }
 
-        let encoder_path = self.encoder_path.as_ref()
-            .ok_or_else(|| SnipperError::Inference("No encoder path configured for TrOcrFormula".into()))?;
-        let decoder_path = self.decoder_path.as_ref()
-            .ok_or_else(|| SnipperError::Inference("No decoder path configured for TrOcrFormula".into()))?;
+        let encoder_path = self.encoder_path.as_ref().ok_or_else(|| {
+            SnipperError::Inference("No encoder path configured for TrOcrFormula".into())
+        })?;
+        let decoder_path = self.decoder_path.as_ref().ok_or_else(|| {
+            SnipperError::Inference("No decoder path configured for TrOcrFormula".into())
+        })?;
         // Validate tokenizer path exists
         if self.tokenizer_path.is_none() {
-            return Err(SnipperError::Inference("No tokenizer path configured for TrOcrFormula".into()));
+            return Err(SnipperError::Inference(
+                "No tokenizer path configured for TrOcrFormula".into(),
+            ));
         }
 
         let enc_handle = latexsnipper_runtime::ModelHandle::with_path(
@@ -132,8 +137,12 @@ impl TrOcrFormulaExecutor {
             decoder_path.to_path_buf(),
         );
 
-        let enc_session = self.runtime.create_session(&enc_handle, AccelerationMode::Cpu)?;
-        let dec_session = self.runtime.create_session(&dec_handle, AccelerationMode::Cpu)?;
+        let enc_session = self
+            .runtime
+            .create_session(&enc_handle, AccelerationMode::Cpu)?;
+        let dec_session = self
+            .runtime
+            .create_session(&dec_handle, AccelerationMode::Cpu)?;
 
         self.encoder_session = Some(Arc::new(enc_session));
         self.decoder_session = Some(Arc::new(dec_session));
@@ -147,11 +156,7 @@ impl TrOcrFormulaExecutor {
 }
 
 impl ModelExecutor for TrOcrFormulaExecutor {
-    fn run(
-        &mut self,
-        input: ModelInput,
-        _ctx: &mut InferenceContext,
-    ) -> Result<ModelOutput> {
+    fn run(&mut self, input: ModelInput, _ctx: &mut InferenceContext) -> Result<ModelOutput> {
         let (encoder, decoder, tokenizer_path) = self.ensure_sessions()?;
 
         // Reconstruct SnipperImage from ModelInput

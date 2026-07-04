@@ -64,10 +64,7 @@ impl ModelPackage for CrnnTextRecognizerPackage {
         &self.descriptor
     }
 
-    fn create_executor(
-        &self,
-        runtime: Arc<dyn RuntimeBackend>,
-    ) -> Result<Box<dyn ModelExecutor>> {
+    fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
         Ok(Box::new(CrnnTextRecognizerExecutor {
             descriptor: self.descriptor.clone(),
             runtime,
@@ -105,16 +102,20 @@ impl CrnnTextRecognizerExecutor {
             ));
         }
 
-        let model_path = self.model_path.as_ref()
-            .ok_or_else(|| SnipperError::Inference("No model path configured for CrnnTextRecognizer".into()))?;
-        let keys_path = self.keys_path.as_ref()
-            .ok_or_else(|| SnipperError::Inference("No keys path configured for CrnnTextRecognizer".into()))?;
+        let model_path = self.model_path.as_ref().ok_or_else(|| {
+            SnipperError::Inference("No model path configured for CrnnTextRecognizer".into())
+        })?;
+        let keys_path = self.keys_path.as_ref().ok_or_else(|| {
+            SnipperError::Inference("No keys path configured for CrnnTextRecognizer".into())
+        })?;
 
         let handle = latexsnipper_runtime::ModelHandle::with_path(
             self.descriptor.id.composite_key(),
             model_path.to_path_buf(),
         );
-        let session = self.runtime.create_session(&handle, AccelerationMode::Cpu)?;
+        let session = self
+            .runtime
+            .create_session(&handle, AccelerationMode::Cpu)?;
 
         let (keys, first_char_id) = crate::text_recognizer::load_keys(keys_path)?;
 
@@ -131,11 +132,7 @@ impl CrnnTextRecognizerExecutor {
 }
 
 impl ModelExecutor for CrnnTextRecognizerExecutor {
-    fn run(
-        &mut self,
-        input: ModelInput,
-        _ctx: &mut InferenceContext,
-    ) -> Result<ModelOutput> {
+    fn run(&mut self, input: ModelInput, _ctx: &mut InferenceContext) -> Result<ModelOutput> {
         let (session, keys, first_char_id) = self.ensure_loaded()?;
 
         // Reconstruct SnipperImage from ModelInput
@@ -168,12 +165,10 @@ impl ModelExecutor for CrnnTextRecognizerExecutor {
         )?;
 
         // Convert to ModelOutput
-        Ok(ModelOutput::Text(vec![
-            latexsnipper_runtime::TextResult {
-                text: result.text,
-                confidence: result.confidence,
-            },
-        ]))
+        Ok(ModelOutput::Text(vec![latexsnipper_runtime::TextResult {
+            text: result.text,
+            confidence: result.confidence,
+        }]))
     }
 
     fn descriptor(&self) -> &ModelDescriptor {

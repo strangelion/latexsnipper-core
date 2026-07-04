@@ -39,9 +39,8 @@ impl ValidationReport {
 
 /// Compute SHA-256 checksum of a file.
 pub fn compute_checksum(path: &Path) -> Result<String> {
-    let bytes = std::fs::read(path).map_err(|e| {
-        SnipperError::Model(format!("Failed to read file for checksum: {}", e))
-    })?;
+    let bytes = std::fs::read(path)
+        .map_err(|e| SnipperError::Model(format!("Failed to read file for checksum: {}", e)))?;
 
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
@@ -58,9 +57,8 @@ pub fn compute_bytes_checksum(data: &[u8]) -> String {
 
 /// Validate a model file against an expected checksum.
 pub fn validate_model(path: &Path, expected_checksum: &str) -> Result<ValidationReport> {
-    let metadata = std::fs::metadata(path).map_err(|e| {
-        SnipperError::Model(format!("Failed to read model metadata: {}", e))
-    })?;
+    let metadata = std::fs::metadata(path)
+        .map_err(|e| SnipperError::Model(format!("Failed to read model metadata: {}", e)))?;
 
     let file_size = metadata.len();
     let checksum = compute_checksum(path)?;
@@ -125,9 +123,8 @@ pub fn validate_model_bytes(data: &[u8], expected_checksum: &str) -> ValidationR
 
 /// Load and validate checksums from a CHECKSUMS.sha256 file.
 pub fn load_checksums(path: &Path) -> Result<std::collections::HashMap<String, String>> {
-    let content = std::fs::read_to_string(path).map_err(|e| {
-        SnipperError::Model(format!("Failed to read checksums file: {}", e))
-    })?;
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| SnipperError::Model(format!("Failed to read checksums file: {}", e)))?;
 
     let mut checksums = std::collections::HashMap::new();
 

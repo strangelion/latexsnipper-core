@@ -10,8 +10,8 @@ use latexsnipper_foundation::{Result, SnipperError};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::image::SnipperImage;
 use crate::color::PixelFormat;
+use crate::image::SnipperImage;
 
 /// Detect available PDF rendering tool.
 pub fn detect_pdf_tool() -> Option<PdfTool> {
@@ -62,11 +62,7 @@ impl PdfTool {
 }
 
 /// Render a PDF page to an image using an external tool.
-pub fn render_pdf_page(
-    pdf_path: &Path,
-    page: u32,
-    dpi: u32,
-) -> Result<SnipperImage> {
+pub fn render_pdf_page(pdf_path: &Path, page: u32, dpi: u32) -> Result<SnipperImage> {
     let tool = detect_pdf_tool().ok_or_else(|| {
         SnipperError::Image(
             "No PDF rendering tool found. Install one of:\n  \
@@ -86,9 +82,8 @@ pub fn render_pdf_page(
 /// Render using pdftoppm.
 fn render_with_pdftoppm(pdf_path: &Path, page: u32, dpi: u32) -> Result<SnipperImage> {
     let tmp_dir = std::env::temp_dir().join(format!("latexsnipper-pdf-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp_dir).map_err(|e| {
-        SnipperError::Image(format!("Failed to create temp dir: {}", e))
-    })?;
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| SnipperError::Image(format!("Failed to create temp dir: {}", e)))?;
 
     let output_prefix = tmp_dir.join("page");
 
@@ -125,20 +120,14 @@ fn render_with_pdftoppm(pdf_path: &Path, page: u32, dpi: u32) -> Result<SnipperI
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
-    Ok(SnipperImage::new(
-        width,
-        height,
-        PixelFormat::Rgba,
-        pixels,
-    ))
+    Ok(SnipperImage::new(width, height, PixelFormat::Rgba, pixels))
 }
 
 /// Render using mutool.
 fn render_with_mutool(pdf_path: &Path, page: u32, dpi: u32) -> Result<SnipperImage> {
     let tmp_dir = std::env::temp_dir().join(format!("latexsnipper-pdf-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp_dir).map_err(|e| {
-        SnipperError::Image(format!("Failed to create temp dir: {}", e))
-    })?;
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| SnipperError::Image(format!("Failed to create temp dir: {}", e)))?;
 
     let output_file = tmp_dir.join("page.png");
 
@@ -170,12 +159,7 @@ fn render_with_mutool(pdf_path: &Path, page: u32, dpi: u32) -> Result<SnipperIma
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
-    Ok(SnipperImage::new(
-        width,
-        height,
-        PixelFormat::Rgba,
-        pixels,
-    ))
+    Ok(SnipperImage::new(width, height, PixelFormat::Rgba, pixels))
 }
 
 /// Find the rendered page file in a directory.

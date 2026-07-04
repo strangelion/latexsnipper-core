@@ -63,7 +63,9 @@ impl ReadingOrder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use latexsnipper_ast::{Formula, FormulaBlock, Inline, ParagraphBlock, Rect, SourceInfo, TextRun};
+    use latexsnipper_ast::{
+        Formula, FormulaBlock, Inline, ParagraphBlock, Rect, SourceInfo, TextRun,
+    };
 
     fn make_text_block(text: &str, x: f32, y: f32) -> Block {
         Block::Paragraph(ParagraphBlock {

@@ -35,7 +35,10 @@ pub type DownloadProgress = Box<dyn Fn(DownloadStatus) + Send>;
 /// Download status updates.
 pub enum DownloadStatus {
     /// Download starting.
-    Starting { url: String, total_bytes: Option<u64> },
+    Starting {
+        url: String,
+        total_bytes: Option<u64>,
+    },
     /// Download progress.
     Progress { downloaded: u64, total: Option<u64> },
     /// Extracting archive.
@@ -120,12 +123,7 @@ impl ModelManager {
     /// Download a model package from a URL and extract it.
     ///
     /// This is a blocking operation. For async usage, see `download_async`.
-    pub fn download(
-        &self,
-        url: &str,
-        category: &str,
-        variant: &str,
-    ) -> Result<PathBuf> {
+    pub fn download(&self, url: &str, category: &str, variant: &str) -> Result<PathBuf> {
         self.download_with_progress(url, category, variant, None)
     }
 
@@ -136,30 +134,36 @@ impl ModelManager {
         category: &str,
         variant: &str,
         progress: Option<DownloadProgress>,
-) -> Result<PathBuf> {
+    ) -> Result<PathBuf> {
         validate_name(category)?;
         validate_name(variant)?;
 
         let target_dir = self.variant_dir(category, variant);
 
         // Check if already installed
-        if target_dir.exists() && std::fs::read_dir(&target_dir).map(|mut e| e.next().is_some()).unwrap_or(false) {
+        if target_dir.exists()
+            && std::fs::read_dir(&target_dir)
+                .map(|mut e| e.next().is_some())
+                .unwrap_or(false)
+        {
             if let Some(ref cb) = progress {
-                cb(DownloadStatus::Complete { path: target_dir.clone() });
+                cb(DownloadStatus::Complete {
+                    path: target_dir.clone(),
+                });
             }
             return Ok(target_dir);
         }
 
         // Create temp directory for download
-        let temp_dir = self.models_dir.join(format!(".download_{}_{}", category, variant));
+        let temp_dir = self
+            .models_dir
+            .join(format!(".download_{}_{}", category, variant));
         if temp_dir.exists() {
-            std::fs::remove_dir_all(&temp_dir).map_err(|e| {
-                SnipperError::Model(format!("Failed to clean temp dir: {}", e))
-            })?;
+            std::fs::remove_dir_all(&temp_dir)
+                .map_err(|e| SnipperError::Model(format!("Failed to clean temp dir: {}", e)))?;
         }
-        std::fs::create_dir_all(&temp_dir).map_err(|e| {
-            SnipperError::Model(format!("Failed to create temp dir: {}", e))
-        })?;
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| SnipperError::Model(format!("Failed to create temp dir: {}", e)))?;
 
         // Determine filename from URL
         let filename = url.rsplit('/').next().unwrap_or("model.zip");
@@ -182,25 +186,22 @@ impl ModelManager {
             .and_then(|v| v.parse::<u64>().ok());
 
         let mut reader = response.into_reader();
-        let mut file = std::fs::File::create(&zip_path).map_err(|e| {
-            SnipperError::Model(format!("Failed to create file: {}", e))
-        })?;
+        let mut file = std::fs::File::create(&zip_path)
+            .map_err(|e| SnipperError::Model(format!("Failed to create file: {}", e)))?;
 
         let mut downloaded = 0u64;
         let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
 
         loop {
-            let bytes_read = std::io::Read::read(&mut reader, &mut buffer).map_err(|e| {
-                SnipperError::Model(format!("Read error: {}", e))
-            })?;
+            let bytes_read = std::io::Read::read(&mut reader, &mut buffer)
+                .map_err(|e| SnipperError::Model(format!("Read error: {}", e)))?;
 
             if bytes_read == 0 {
                 break;
             }
 
-            std::io::Write::write_all(&mut file, &buffer[..bytes_read]).map_err(|e| {
-                SnipperError::Model(format!("Write error: {}", e))
-            })?;
+            std::io::Write::write_all(&mut file, &buffer[..bytes_read])
+                .map_err(|e| SnipperError::Model(format!("Write error: {}", e)))?;
 
             downloaded += bytes_read as u64;
 
@@ -228,9 +229,8 @@ impl ModelManager {
         let extracted_dir = self.find_extracted_dir(&temp_dir, filename)?;
 
         // Create target parent directory
-        std::fs::create_dir_all(target_dir.parent().unwrap_or(&self.models_dir)).map_err(|e| {
-            SnipperError::Model(format!("Failed to create target dir: {}", e))
-        })?;
+        std::fs::create_dir_all(target_dir.parent().unwrap_or(&self.models_dir))
+            .map_err(|e| SnipperError::Model(format!("Failed to create target dir: {}", e)))?;
 
         // Move to target
         if target_dir.exists() {
@@ -239,15 +239,16 @@ impl ModelManager {
             })?;
         }
 
-        std::fs::rename(&extracted_dir, &target_dir).map_err(|e| {
-            SnipperError::Model(format!("Failed to move to target: {}", e))
-        })?;
+        std::fs::rename(&extracted_dir, &target_dir)
+            .map_err(|e| SnipperError::Model(format!("Failed to move to target: {}", e)))?;
 
         // Cleanup temp
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         if let Some(ref cb) = progress {
-            cb(DownloadStatus::Complete { path: target_dir.clone() });
+            cb(DownloadStatus::Complete {
+                path: target_dir.clone(),
+            });
         }
 
         Ok(target_dir)
@@ -255,25 +256,22 @@ impl ModelManager {
 
     /// Extract a zip file.
     fn extract_zip(&self, zip_path: &Path, target_dir: &Path) -> Result<()> {
-        let file = std::fs::File::open(zip_path).map_err(|e| {
-            SnipperError::Model(format!("Failed to open zip: {}", e))
-        })?;
+        let file = std::fs::File::open(zip_path)
+            .map_err(|e| SnipperError::Model(format!("Failed to open zip: {}", e)))?;
 
-        let mut archive = zip::ZipArchive::new(file).map_err(|e| {
-            SnipperError::Model(format!("Failed to read zip: {}", e))
-        })?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| SnipperError::Model(format!("Failed to read zip: {}", e)))?;
 
         for i in 0..archive.len() {
-            let mut entry = archive.by_index(i).map_err(|e| {
-                SnipperError::Model(format!("Failed to read zip entry: {}", e))
-            })?;
+            let mut entry = archive
+                .by_index(i)
+                .map_err(|e| SnipperError::Model(format!("Failed to read zip entry: {}", e)))?;
 
             let out_path = target_dir.join(entry.mangled_name());
 
             if entry.is_dir() {
-                std::fs::create_dir_all(&out_path).map_err(|e| {
-                    SnipperError::Model(format!("Failed to create dir: {}", e))
-                })?;
+                std::fs::create_dir_all(&out_path)
+                    .map_err(|e| SnipperError::Model(format!("Failed to create dir: {}", e)))?;
             } else {
                 if let Some(parent) = out_path.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| {
@@ -281,13 +279,11 @@ impl ModelManager {
                     })?;
                 }
 
-                let mut out_file = std::fs::File::create(&out_path).map_err(|e| {
-                    SnipperError::Model(format!("Failed to create file: {}", e))
-                })?;
+                let mut out_file = std::fs::File::create(&out_path)
+                    .map_err(|e| SnipperError::Model(format!("Failed to create file: {}", e)))?;
 
-                std::io::copy(&mut entry, &mut out_file).map_err(|e| {
-                    SnipperError::Model(format!("Failed to extract file: {}", e))
-                })?;
+                std::io::copy(&mut entry, &mut out_file)
+                    .map_err(|e| SnipperError::Model(format!("Failed to extract file: {}", e)))?;
             }
         }
 
@@ -297,12 +293,11 @@ impl ModelManager {
     /// Find the extracted directory in temp folder.
     fn find_extracted_dir(&self, temp_dir: &Path, _zip_filename: &str) -> Result<PathBuf> {
         // Look for directories in temp_dir
-        for entry in std::fs::read_dir(temp_dir).map_err(|e| {
-            SnipperError::Model(format!("Failed to read temp dir: {}", e))
-        })? {
-            let entry = entry.map_err(|e| {
-                SnipperError::Model(format!("Failed to read entry: {}", e))
-            })?;
+        for entry in std::fs::read_dir(temp_dir)
+            .map_err(|e| SnipperError::Model(format!("Failed to read temp dir: {}", e)))?
+        {
+            let entry =
+                entry.map_err(|e| SnipperError::Model(format!("Failed to read entry: {}", e)))?;
 
             if entry.path().is_dir() && !entry.file_name().to_string_lossy().starts_with('.') {
                 return Ok(entry.path());
@@ -331,12 +326,17 @@ impl ModelManager {
             if let Some(variant) = variant {
                 if let Some(ref zip_file) = variant.zip_file {
                     let url = format!("{}/{}", manifest.base_url, zip_file);
-                    let path = self.download_with_progress(&url, category, &variant.id, progress.as_ref().map(|_p| {
-                        // Create a new progress callback for this download
-                        Box::new(move |_status| {
-                            // In a real implementation, we'd prefix the status with category info
-                        }) as DownloadProgress
-                    }))?;
+                    let path = self.download_with_progress(
+                        &url,
+                        category,
+                        &variant.id,
+                        progress.as_ref().map(|_p| {
+                            // Create a new progress callback for this download
+                            Box::new(move |_status| {
+                                // In a real implementation, we'd prefix the status with category info
+                            }) as DownloadProgress
+                        }),
+                    )?;
                     paths.push(path);
                 }
             }
