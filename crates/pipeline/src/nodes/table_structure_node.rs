@@ -5,10 +5,10 @@ use latexsnipper_image::operations;
 use latexsnipper_inference::recognize_table_structure;
 use latexsnipper_runtime::{AccelerationMode, InferenceSession};
 
+use crate::artifacts::RecognizedTable;
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::nodes::utils::resolve_model_handle;
-use crate::artifacts::RecognizedTable;
 
 /// Parses table structure using a configurable backend.
 ///

@@ -458,7 +458,13 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
 
                     let expected_sha256 = manifest.checksums.get(zip_file).map(|s| s.as_str());
 
-                    match manager.download_with_progress(&url, &cat, &variant.id, expected_sha256, Some(progress)) {
+                    match manager.download_with_progress(
+                        &url,
+                        &cat,
+                        &variant.id,
+                        expected_sha256,
+                        Some(progress),
+                    ) {
                         Ok(path) => {
                             eprintln!("Successfully downloaded {} to {}", cat, path.display());
                         }
@@ -613,7 +619,12 @@ fn handle_models_verify(category: Option<String>) {
                     }
 
                     if missing.is_empty() {
-                        eprintln!("  {}/{} - VERIFY_OK ({} files)", cat, variant, present.len());
+                        eprintln!(
+                            "  {}/{} - VERIFY_OK ({} files)",
+                            cat,
+                            variant,
+                            present.len()
+                        );
                     } else {
                         for m in &missing {
                             eprintln!("  {}/{} - MISSING: {}", cat, variant, m);
@@ -630,7 +641,9 @@ fn handle_models_verify(category: Option<String>) {
     );
     if all_valid {
         eprintln!("All model files present.");
-        eprintln!("Note: SHA-256 integrity is verified at download time. Re-download to re-verify.");
+        eprintln!(
+            "Note: SHA-256 integrity is verified at download time. Re-download to re-verify."
+        );
     } else {
         eprintln!("Some model files are missing. Run 'snipper models download' to re-download.");
         std::process::exit(1);

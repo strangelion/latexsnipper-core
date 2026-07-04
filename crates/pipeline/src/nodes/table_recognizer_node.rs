@@ -6,15 +6,14 @@ use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, load_keys,
-    recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams,
-    TextRecParams,
+    recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams, TextRecParams,
 };
 use latexsnipper_runtime::{AccelerationMode, RuntimeBackend};
 
+use crate::artifacts::RecognizedTable;
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::nodes::utils::{get_backend, resolve_model_handle};
-use crate::artifacts::RecognizedTable;
 
 type InferenceArc = Arc<Box<dyn latexsnipper_runtime::InferenceSession>>;
 type FormulaRecSession = (InferenceArc, InferenceArc, std::path::PathBuf);
@@ -428,7 +427,13 @@ impl TableRecognizerNode {
                 load_keys(keys_path).unwrap_or_default()
             };
             let rec_params = TextRecParams::default();
-            match recognize_text_with_keys(&cropped, &**rec_session, &keys, first_char_id, &rec_params) {
+            match recognize_text_with_keys(
+                &cropped,
+                &**rec_session,
+                &keys,
+                first_char_id,
+                &rec_params,
+            ) {
                 Ok(result) => {
                     if !result.text.trim().is_empty() {
                         return vec![Inline::Text(TextRun::new(result.text))];

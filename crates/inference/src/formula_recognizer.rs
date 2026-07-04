@@ -300,7 +300,7 @@ fn beam_search(
     // The beam log_prob is the sum of log probs of each token. Divide by sequence length
     // to get average log prob, then exponentiate to get a number in [0, 1].
     let avg_log_prob = if best.0.len() > 1 {
-        best.1 / (best.0.len() - 1) as f32  // exclude start token
+        best.1 / (best.0.len() - 1) as f32 // exclude start token
     } else {
         0.0
     };
@@ -390,7 +390,12 @@ mod tests {
         let tok_path = tokenizer_path(&tmp);
 
         let result = recognize_formula(
-            &latexsnipper_image::SnipperImage::new(10, 10, latexsnipper_image::PixelFormat::Rgb, vec![0u8; 300]),
+            &latexsnipper_image::SnipperImage::new(
+                10,
+                10,
+                latexsnipper_image::PixelFormat::Rgb,
+                vec![0u8; 300],
+            ),
             &encoder,
             &decoder,
             &tok_path,
@@ -425,7 +430,12 @@ mod tests {
         };
 
         let result = recognize_formula(
-            &latexsnipper_image::SnipperImage::new(10, 10, latexsnipper_image::PixelFormat::Rgb, vec![0u8; 300]),
+            &latexsnipper_image::SnipperImage::new(
+                10,
+                10,
+                latexsnipper_image::PixelFormat::Rgb,
+                vec![0u8; 300],
+            ),
             &encoder,
             &decoder,
             &{
@@ -464,7 +474,12 @@ mod tests {
         };
 
         let result = recognize_formula(
-            &latexsnipper_image::SnipperImage::new(10, 10, latexsnipper_image::PixelFormat::Rgb, vec![0u8; 300]),
+            &latexsnipper_image::SnipperImage::new(
+                10,
+                10,
+                latexsnipper_image::PixelFormat::Rgb,
+                vec![0u8; 300],
+            ),
             &encoder,
             &decoder,
             &{
@@ -502,7 +517,12 @@ mod tests {
         };
 
         let result = recognize_formula(
-            &latexsnipper_image::SnipperImage::new(10, 10, latexsnipper_image::PixelFormat::Rgb, vec![0u8; 300]),
+            &latexsnipper_image::SnipperImage::new(
+                10,
+                10,
+                latexsnipper_image::PixelFormat::Rgb,
+                vec![0u8; 300],
+            ),
             &encoder,
             &decoder,
             &{

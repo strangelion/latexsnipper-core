@@ -22,7 +22,7 @@ pub fn load_config(models: &Path, category: &str) -> Result<latexsnipper_model::
         .filter(|e| e.path().is_dir())
         .collect();
     // Deterministic: sort by name so behavior is stable across filesystems
-    entries.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    entries.sort_by_key(|a| a.file_name());
     let variant_dir = entries
         .first()
         .ok_or_else(|| SnipperError::Model(format!("No variant in {}", cat_dir.display())))?;

@@ -226,7 +226,10 @@ impl ModelManager {
                 });
             }
             let zip_bytes = std::fs::read(&zip_path).map_err(|e| {
-                SnipperError::Model(format!("Failed to read downloaded file for verification: {}", e))
+                SnipperError::Model(format!(
+                    "Failed to read downloaded file for verification: {}",
+                    e
+                ))
             })?;
             let actual = {
                 use sha2::{Digest, Sha256};

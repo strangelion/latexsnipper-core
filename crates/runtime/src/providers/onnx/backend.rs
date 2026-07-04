@@ -123,8 +123,9 @@ impl OnnxRuntimeBackend {
         }
 
         // Create new session with acceleration and thread config
-        let mut builder = Session::builder()
-            .map_err(|e| SnipperError::Runtime(format!("Failed to create session builder: {}", e)))?;
+        let mut builder = Session::builder().map_err(|e| {
+            SnipperError::Runtime(format!("Failed to create session builder: {}", e))
+        })?;
 
         // Configure execution providers based on acceleration mode
         match acceleration {
@@ -138,15 +139,13 @@ impl OnnxRuntimeBackend {
         }
 
         // Set thread count
-        let session = builder
-            .commit_from_file(model_path)
-            .map_err(|e| {
-                SnipperError::Runtime(format!(
-                    "Failed to load model {}: {}",
-                    model_path.display(),
-                    e
-                ))
-            })?;
+        let session = builder.commit_from_file(model_path).map_err(|e| {
+            SnipperError::Runtime(format!(
+                "Failed to load model {}: {}",
+                model_path.display(),
+                e
+            ))
+        })?;
 
         let shared = Arc::new(Mutex::new(session));
 
