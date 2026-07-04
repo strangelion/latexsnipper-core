@@ -29,7 +29,13 @@ pub struct RecognizerNode {
 impl RecognizerNode {
     /// Create a recognizer for a specific task.
     pub fn for_task(task: ModelTask) -> Self {
-        let name = format!("recognize_{:?}", task).to_lowercase();
+        let name = match task {
+            ModelTask::FormulaRecognition => "recognize_formula".to_string(),
+            ModelTask::TextRecognition => "recognize_text".to_string(),
+            ModelTask::HandwritingRecognition => "recognize_handwriting".to_string(),
+            ModelTask::TableStructure => "recognize_table".to_string(),
+            _ => format!("recognize_{:?}", task).to_lowercase(),
+        };
         Self { name, task }
     }
 

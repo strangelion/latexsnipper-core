@@ -91,9 +91,13 @@ struct CrnnTextRecognizerExecutor {
     first_char_id: usize,
 }
 
+/// Type alias for loaded session reference.
+type SessionRef<'a> = &'a Arc<Box<dyn InferenceSession>>;
+
 impl CrnnTextRecognizerExecutor {
     /// Ensure session and keys are loaded, creating from paths if needed.
-    fn ensure_loaded(&mut self) -> Result<(&Arc<Box<dyn InferenceSession>>, &Vec<String>, usize)> {
+    #[allow(clippy::unnecessary_unwrap)]
+    fn ensure_loaded(&mut self) -> Result<(SessionRef<'_>, &Vec<String>, usize)> {
         if self.session.is_some() && !self.keys.is_empty() {
             return Ok((
                 self.session.as_ref().unwrap(),
@@ -145,7 +149,7 @@ impl ModelExecutor for CrnnTextRecognizerExecutor {
         }
         let height = shape[0] as u32;
         let width = shape[1] as u32;
-        let pixels: Vec<u8> = input.data.iter().copied().collect();
+        let pixels: Vec<u8> = input.data.to_vec();
 
         let image = SnipperImage::new(
             width,

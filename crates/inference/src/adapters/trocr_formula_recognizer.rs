@@ -95,15 +95,13 @@ struct TrOcrFormulaExecutor {
     decoder_session: Option<Arc<Box<dyn InferenceSession>>>,
 }
 
+/// Type alias for session references.
+type SessionRef<'a> = &'a Arc<Box<dyn InferenceSession>>;
+
 impl TrOcrFormulaExecutor {
     /// Ensure sessions are loaded, creating from paths if needed.
-    fn ensure_sessions(
-        &mut self,
-    ) -> Result<(
-        &Arc<Box<dyn InferenceSession>>,
-        &Arc<Box<dyn InferenceSession>>,
-        &PathBuf,
-    )> {
+    #[allow(clippy::unnecessary_unwrap)]
+    fn ensure_sessions(&mut self) -> Result<(SessionRef<'_>, SessionRef<'_>, &PathBuf)> {
         if self.encoder_session.is_some()
             && self.decoder_session.is_some()
             && self.tokenizer_path.is_some()
@@ -169,7 +167,7 @@ impl ModelExecutor for TrOcrFormulaExecutor {
         }
         let height = shape[0] as u32;
         let width = shape[1] as u32;
-        let pixels: Vec<u8> = input.data.iter().copied().collect();
+        let pixels: Vec<u8> = input.data.to_vec();
 
         let image = SnipperImage::new(
             width,

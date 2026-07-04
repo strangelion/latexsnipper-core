@@ -25,7 +25,13 @@ pub struct DetectorNode {
 impl DetectorNode {
     /// Create a detector for a specific task.
     pub fn for_task(task: ModelTask) -> Self {
-        let name = format!("detect_{:?}", task).to_lowercase();
+        let name = match task {
+            ModelTask::FormulaDetection => "detect_formula".to_string(),
+            ModelTask::TextDetection => "detect_text".to_string(),
+            ModelTask::HandwritingRecognition => "detect_handwriting".to_string(),
+            ModelTask::TableDetection => "detect_table".to_string(),
+            _ => format!("detect_{:?}", task).to_lowercase(),
+        };
         Self { name, task }
     }
 

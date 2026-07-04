@@ -121,6 +121,7 @@ struct YoloV8DetectorExecutor {
 
 impl YoloV8DetectorExecutor {
     /// Ensure session is loaded, creating from model_path if needed.
+    #[allow(clippy::unnecessary_unwrap)]
     fn ensure_session(&mut self) -> Result<&Arc<Box<dyn InferenceSession>>> {
         if self.session.is_some() {
             return Ok(self.session.as_ref().unwrap());
@@ -159,7 +160,7 @@ impl ModelExecutor for YoloV8DetectorExecutor {
         }
         let height = shape[0] as u32;
         let width = shape[1] as u32;
-        let pixels: Vec<u8> = input.data.iter().copied().collect();
+        let pixels: Vec<u8> = input.data.to_vec();
 
         let image = SnipperImage::new(
             width,
