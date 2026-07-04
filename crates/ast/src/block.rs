@@ -185,9 +185,10 @@ pub struct TableBlock {
 }
 
 /// Border style for table cells.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum BorderStyle {
     None,
+    #[default]
     Solid,
     Dashed,
     Dotted,
@@ -198,25 +199,14 @@ pub enum BorderStyle {
     Outset,
 }
 
-impl Default for BorderStyle {
-    fn default() -> Self {
-        Self::Solid
-    }
-}
-
 /// Text alignment for table cells.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CellAlignment {
+    #[default]
     Left,
     Center,
     Right,
     Justify,
-}
-
-impl Default for CellAlignment {
-    fn default() -> Self {
-        Self::Left
-    }
 }
 
 /// A table cell.
