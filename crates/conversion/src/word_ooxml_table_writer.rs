@@ -120,22 +120,18 @@ mod tests {
     #[test]
     fn test_write_with_colspan() {
         let table = TableBlock {
-            rows: vec![
-                vec![
-                    TableCell {
-                        inlines: vec![Inline::Text(TextRun::new("Span"))],
-                        colspan: 2,
-                        rowspan: 1,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: None,
-                        source: None,
-                    },
-                ],
-            ],
+            rows: vec![vec![TableCell {
+                inlines: vec![Inline::Text(TextRun::new("Span"))],
+                colspan: 2,
+                rowspan: 1,
+                border_style: None,
+                border_width: None,
+                border_color: None,
+                background: None,
+                alignment: None,
+                geometry: None,
+                source: None,
+            }]],
             geometry: None,
             source: None,
         };
