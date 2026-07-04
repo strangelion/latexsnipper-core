@@ -3,11 +3,10 @@ use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
 use latexsnipper_inference::{postprocess_handwriting, recognize_formula, RecognitionParams};
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
-use std::sync::Arc;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
+use crate::nodes::utils::{get_backend, get_or_create_session, load_config, resolve_model_handle};
 
 /// Recognizes content in handwriting-detected regions.
 ///
@@ -22,12 +21,6 @@ impl HandwritingRecognizerNode {
         Self {
             name: "recognize_handwriting".into(),
         }
-    }
-
-    fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
-        ctx.backend
-            .clone()
-            .ok_or_else(|| SnipperError::Runtime("No backend configured".into()))
     }
 }
 
@@ -59,64 +52,45 @@ impl HandwritingRecognizerNode {
         ctx: &mut PipelineContext,
         models: &std::path::Path,
     ) -> Result<()> {
-        let crop_key = "handwriting_crops";
-        let crops = match ctx.get(crop_key) {
-            Some(v) => v.clone(),
-            None => return Ok(()),
-        };
-
-        let crop_array = match crops.as_array() {
-            Some(a) => a.clone(),
-            None => return Ok(()),
-        };
-
-        if crop_array.is_empty() {
+        let detections = ctx.artifacts.handwriting_detections.clone();
+        if detections.is_empty() {
             return Ok(());
         }
 
-        // Load TrOCR model for handwriting recognition
-        let rec_dir = models.join("formula-rec/trocr-deit");
-        if !rec_dir.exists() {
-            log::warn!("TrOCR model not found for handwriting recognition");
-            return Ok(());
-        }
-
-        let enc_path = rec_dir.join("encoder_model.onnx");
-        let dec_path = rec_dir.join("decoder_model.onnx");
-        let tok_path = rec_dir.join("tokenizer.json");
-
-        if !enc_path.exists() || !dec_path.exists() || !tok_path.exists() {
-            log::warn!("TrOCR model files incomplete for handwriting recognition");
-            return Ok(());
-        }
-
-        let backend = Self::get_backend(ctx)?;
-        let enc_handle = ModelHandle::with_path("encoder", enc_path);
-        let dec_handle = ModelHandle::with_path("decoder", dec_path);
-
-        let enc_session = if let Some(s) = ctx.get_session("handwriting_encoder") {
-            s
-        } else {
-            let s = backend.create_session(&enc_handle, AccelerationMode::Cpu)?;
-            ctx.cache_session("handwriting_encoder", s);
-            ctx.get_session("handwriting_encoder").ok_or_else(|| {
-                SnipperError::Runtime("Failed to cache handwriting encoder session".into())
-            })?
+        let rec_config = match load_config(models, "formula-rec") {
+            Ok(c) => c,
+            Err(_) => {
+                ctx.diagnostic_warn("recognize_handwriting", "TrOCR model config not found for handwriting recognition");
+                return Ok(());
+            }
         };
-        let dec_session = if let Some(s) = ctx.get_session("handwriting_decoder") {
-            s
-        } else {
-            let s = backend.create_session(&dec_handle, AccelerationMode::Cpu)?;
-            ctx.cache_session("handwriting_decoder", s);
-            ctx.get_session("handwriting_decoder").ok_or_else(|| {
-                SnipperError::Runtime("Failed to cache handwriting decoder session".into())
-            })?
-        };
+
+        let (_variant_config, rec_dir, _variant_dir) =
+            latexsnipper_model::ModelConfig::find_best(models, "formula-rec").ok_or_else(|| {
+                SnipperError::Model("TrOCR model not found for handwriting recognition".into())
+            })?;
+
+        let enc_path = rec_config
+            .pipeline_encoder_path(&rec_dir)
+            .ok_or_else(|| SnipperError::Model("Encoder not found".into()))?;
+        let dec_path = rec_config
+            .pipeline_decoder_path(&rec_dir)
+            .ok_or_else(|| SnipperError::Model("Decoder not found".into()))?;
+        let tok_path = rec_config
+            .pipeline_tokenizer_path(&rec_dir)
+            .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
+
+        let backend = get_backend(ctx)?;
+        let enc_handle = resolve_model_handle(ctx, "formula-rec/encoder", enc_path)?;
+        let dec_handle = resolve_model_handle(ctx, "formula-rec/decoder", dec_path)?;
+
+        let enc_session = get_or_create_session(ctx, "handwriting_encoder", &backend, &enc_handle)?;
+        let dec_session = get_or_create_session(ctx, "handwriting_decoder", &backend, &dec_handle)?;
 
         // Handwriting-optimized parameters
         let params = RecognitionParams {
             img_size: 384,
-            beam_width: 5, // Wider beam for handwriting
+            beam_width: 5,
             top_k: 5,
             max_tokens: 256,
             ..RecognitionParams::default()
@@ -124,90 +98,76 @@ impl HandwritingRecognizerNode {
 
         let mut blocks = Vec::new();
 
-        for crop_val in &crop_array {
-            if let Some(rect_val) = crop_val.get("rect") {
-                let x = rect_val.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let y = rect_val.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let w = rect_val.get("w").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let h = rect_val.get("h").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
+        for det in &detections {
+            let x = det.rect.x as u32;
+            let y = det.rect.y as u32;
+            let w = det.rect.width as u32;
+            let h = det.rect.height as u32;
 
-                if let Some(ref image) = ctx.image {
-                    if w >= 4 && h >= 4 {
-                        let cropped = operations::crop(
-                            image,
-                            Rect::new(x as f32, y as f32, w as f32, h as f32),
-                        );
+            if let Some(ref image) = ctx.image {
+                if w >= 4 && h >= 4 {
+                    let cropped = operations::crop(
+                        image,
+                        Rect::new(x as f32, y as f32, w as f32, h as f32),
+                    );
 
-                        match recognize_formula(
-                            &cropped,
-                            &*enc_session,
-                            &*dec_session,
-                            &tok_path,
-                            &params,
-                        ) {
-                            Ok(result) => {
-                                // Apply handwriting-specific post-processing
-                                let processed_text = postprocess_handwriting(&result.text);
+                    match recognize_formula(
+                        &cropped,
+                        &*enc_session,
+                        &*dec_session,
+                        &tok_path,
+                        &params,
+                    ) {
+                        Ok(result) => {
+                            let processed_text = postprocess_handwriting(&result.text);
 
-                                if !processed_text.is_empty() {
-                                    // Determine if the result looks like a formula
-                                    if looks_like_formula(&processed_text) {
-                                        let mut f = Formula::latex(&processed_text);
-                                        f.confidence = result.confidence;
-                                        blocks.push(Block::Formula(FormulaBlock {
-                                            formula: f,
-                                            geometry: Some(Rect::new(
-                                                x as f32, y as f32, w as f32, h as f32,
-                                            )),
-                                            source: Some(
-                                                SourceInfo::new().with_page(ctx.current_page),
-                                            ),
-                                        }));
-                                    } else {
-                                        blocks.push(Block::Handwriting(HandwritingBlock {
-                                            inlines: vec![Inline::Text(TextRun::new(
-                                                &processed_text,
-                                            ))],
-                                            confidence: result.confidence,
-                                            geometry: Some(Rect::new(
-                                                x as f32, y as f32, w as f32, h as f32,
-                                            )),
-                                            source: Some(
-                                                SourceInfo::new().with_page(ctx.current_page),
-                                            ),
-                                        }));
-                                    }
+                            if !processed_text.is_empty() {
+                                if looks_like_formula(&processed_text) {
+                                    let mut f = Formula::latex(&processed_text);
+                                    f.confidence = result.confidence;
+                                    blocks.push(Block::Formula(FormulaBlock {
+                                        formula: f,
+                                        geometry: Some(Rect::new(
+                                            x as f32, y as f32, w as f32, h as f32,
+                                        )),
+                                        source: Some(
+                                            SourceInfo::new().with_page(ctx.current_page),
+                                        ),
+                                    }));
+                                } else {
+                                    blocks.push(Block::Handwriting(HandwritingBlock {
+                                        inlines: vec![Inline::Text(TextRun::new(
+                                            &processed_text,
+                                        ))],
+                                        confidence: result.confidence,
+                                        geometry: Some(Rect::new(
+                                            x as f32, y as f32, w as f32, h as f32,
+                                        )),
+                                        source: Some(
+                                            SourceInfo::new().with_page(ctx.current_page),
+                                        ),
+                                    }));
                                 }
                             }
-                            Err(e) => log::warn!("Handwriting rec failed: {}", e),
                         }
+                        Err(e) => log::warn!("Handwriting rec failed: {}", e),
                     }
                 }
             }
         }
 
-        ctx.set(
-            "handwriting_blocks",
-            serde_json::to_value(&blocks).unwrap_or_default(),
-        );
-        log::info!("Recognized {} handwriting blocks", blocks.len());
+        ctx.artifacts.handwriting_blocks = blocks;
+        log::info!("Recognized {} handwriting blocks", ctx.artifacts.handwriting_blocks.len());
         Ok(())
     }
 }
 
 /// Check if text looks like a mathematical formula.
-///
-/// Heuristic: strong indicator = `\\frac`/`\\sqrt` → always formula;
-/// otherwise count structural operators (`\\`, `^`, `_`, `=`).
-/// Parentheses and + - alone are NOT formula indicators
-/// (common in natural language: "a (b)", "item 1-2").
 fn looks_like_formula(text: &str) -> bool {
-    // Strongest signal: unambiguous LaTeX commands
     if text.contains("\\frac") || text.contains("\\sqrt") {
         return true;
     }
 
-    // Structural math indicators (rare in natural language)
     let strong_indicators = [
         "\\", // Backslash commands
         "^",  // Superscript
@@ -224,7 +184,6 @@ fn looks_like_formula(text: &str) -> bool {
         return true;
     }
 
-    // Dense notation without spaces: "3x+2=5" or "a+b"
     text.len() >= 3 && !text.contains(' ') && (text.contains('+') || text.contains('='))
 }
 
@@ -239,9 +198,7 @@ mod tests {
         assert!(looks_like_formula("x^2 + y^2 = z^2"));
         assert!(!looks_like_formula("Hello World"));
         assert!(!looks_like_formula("This is text"));
-        // Parentheses alone should NOT flag as formula
         assert!(!looks_like_formula("This is a test (with explanation)"));
-        // Dense math notation
         assert!(looks_like_formula("3x+2=5"));
     }
 }

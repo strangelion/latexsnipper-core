@@ -12,9 +12,8 @@ use crate::node::PipelineNode;
 /// over pages externally and runs the full pipeline for each page independently.
 ///
 /// What this node currently does:
-/// 1. Clears per-page detection/crop/block metadata for each page
-/// 2. Initializes `page_results` entries with "pending" status
-/// 3. Sets `total_pages` metadata
+/// 1. Clears per-page artifacts for each page
+/// 2. Sets `current_page` index
 ///
 /// The actual detection/recognition is handled by downstream nodes that read
 /// `ctx.image` (set per-page by the external loop or `set_current_page`).
@@ -44,14 +43,11 @@ impl PipelineNode for PageIteratorNode {
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
         if !ctx.is_multipage() {
-            // Single page - nothing to iterate
             return Ok(());
         }
 
         let page_count = ctx.page_images.len();
         log::info!("PageIterator: processing {} pages", page_count);
-
-        let mut page_results: Vec<serde_json::Value> = Vec::new();
 
         for page_idx in 0..page_count {
             if ctx.cancelled {
@@ -68,28 +64,25 @@ impl PipelineNode for PageIteratorNode {
             // Set current page
             ctx.set_current_page(page_idx);
 
-            // Clear previous page's detection results
-            ctx.set("formula_detections", serde_json::json!([]));
-            ctx.set("text_detections", serde_json::json!([]));
-            ctx.set("formula_crops", serde_json::json!([]));
-            ctx.set("text_crops", serde_json::json!([]));
-            ctx.set("formula_blocks", serde_json::json!([]));
-            ctx.set("text_blocks", serde_json::json!([]));
+            // Clear previous page's artifacts
+            ctx.artifacts.formula_detections.clear();
+            ctx.artifacts.text_detections.clear();
+            ctx.artifacts.handwriting_detections.clear();
+            ctx.artifacts.table_detections.clear();
+            ctx.artifacts.formula_crops.clear();
+            ctx.artifacts.text_crops.clear();
+            ctx.artifacts.handwriting_crops.clear();
+            ctx.artifacts.formula_blocks.clear();
+            ctx.artifacts.text_blocks.clear();
+            ctx.artifacts.handwriting_blocks.clear();
+            ctx.artifacts.table_blocks.clear();
+            ctx.artifacts.table_structures.clear();
 
             // NOTE: This node does NOT run detection/recognition sub-pipelines.
             // Multi-page iteration happens externally via Engine::recognize_pdf or
             // similar loops that invoke the full pipeline per page. This node only
-            // initializes tracking metadata for downstream consumers.
-
-            page_results.push(serde_json::json!({
-                "page_number": page_idx + 1,
-                "page_index": page_idx,
-                "status": "pending"
-            }));
+            // initializes tracking for downstream consumers.
         }
-
-        ctx.set("page_results", serde_json::json!(page_results));
-        ctx.set("total_pages", serde_json::json!(page_count));
 
         log::info!("PageIterator: initialized {} pages", page_count);
         Ok(())
@@ -112,11 +105,9 @@ mod tests {
         let mut ctx = PipelineContext::with_image(make_test_image(100, 100));
         let node = PageIteratorNode::new();
 
-        // Single page should not modify context
         node.process(&mut ctx).await.unwrap();
 
         assert!(!ctx.is_multipage());
-        assert!(ctx.get("page_results").is_none());
     }
 
     #[tokio::test]
@@ -133,9 +124,5 @@ mod tests {
 
         assert!(ctx.is_multipage());
         assert_eq!(ctx.page_count(), 3);
-
-        let page_results = ctx.get("page_results").unwrap();
-        assert!(page_results.is_array());
-        assert_eq!(page_results.as_array().unwrap().len(), 3);
     }
 }

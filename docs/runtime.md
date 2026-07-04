@@ -15,7 +15,11 @@
 | `backend` | backend.rs | RuntimeBackend trait |
 | `session` | session.rs | InferenceSession trait |
 | `acceleration` | acceleration.rs | AccelerationMode (Cpu/Gpu/Auto) |
-| `model_handle` | model_handle.rs | ModelHandle（替代 Path） |
+| `model_handle` | model_handle.rs | ModelHandle（替代 Path，支持 bytes 加载） |
+| `model_resolver` | model_resolver.rs | ModelResolver trait + FsModelResolver + MemoryModelResolver |
+| `model_package` | model_package.rs | ModelPackage/ModelExecutor traits + ModelTask + ModelDescriptor |
+| `model_registry` | model_registry.rs | ModelRegistry + ModelManifest (TOML) |
+| `model_validation` | model_validation.rs | SHA-256 checksum + validation |
 | `providers/stub` | stub/mod.rs | StubRuntime（测试用） |
 | `providers/onnx` | onnx/backend.rs | OnnxRuntimeBackend（ORT 实现） |
 | `providers/onnx/platform` | onnx/platform.rs | Platform 检测 + Acceleration 检测 |
@@ -51,11 +55,93 @@ pub struct ModelHandle {
     category: String,
     variant: String,
     model_path: Option<PathBuf>,
+    model_bytes: Option<Vec<u8>>,
 }
-// methods: new(), with_path(), id(), category(), variant(), model_path()
+// methods: new(), with_path(), with_bytes(), id(), category(), variant(), model_path(), model_bytes()
 ```
 
-`ModelHandle` 替代裸 `Path`，封装模型的 category/variant 信息，支持显式路径和自动发现。
+`ModelHandle` 封装模型的 category/variant 信息，支持文件路径和内存字节两种加载方式。
+
+## ModelResolver
+
+统一模型解析接口，消除管道节点的硬编码路径：
+
+```rust
+pub trait ModelResolver: Send + Sync {
+    fn resolve(&self, id: &ModelId) -> Result<ModelHandle>;
+    fn is_available(&self, id: &ModelId) -> bool;
+}
+```
+
+| 实现 | 说明 |
+|------|------|
+| `FsModelResolver` | 原生端：从文件系统解析 |
+| `MemoryModelResolver` | WASM 端：从内存存储解析 |
+
+## ModelPackage / ModelExecutor
+
+模型包架构的核心 trait，允许自定义模型集成而无需修改 pipeline 代码：
+
+```rust
+pub trait ModelPackage: Send + Sync {
+    fn descriptor(&self) -> &ModelDescriptor;
+    fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>>;
+}
+
+pub trait ModelExecutor: Send {
+    fn run(&mut self, input: ModelInput, ctx: &mut InferenceContext) -> Result<ModelOutput>;
+}
+```
+
+### 内建实现
+
+| 适配器 | 任务 | 输入 | 输出 |
+|--------|------|------|------|
+| `YoloV8DetectorPackage` | FormulaDetection | RGB 图像字节 | `Detections` (bbox + confidence) |
+| `TrOcrFormulaPackage` | FormulaRecognition | RGB 图像字节 | `Formula` (LaTeX + confidence) |
+| `CrnnTextRecognizerPackage` | TextRecognition | RGB 图像字节 | `Text` (文本 + confidence) |
+
+### 惰性会话加载
+
+Executor 在首次 `run()` 调用时自动加载模型会话，无需预先加载：
+
+```rust
+let package = YoloV8DetectorPackage::from_config(&config, model_id)
+    .with_model_path("models/formula-det/model.onnx".into());
+let mut executor = package.create_executor(runtime)?;
+// 首次 run() 时自动加载模型
+let output = executor.run(input, &mut ctx)?;
+```
+
+### Pipeline 集成
+
+Pipeline 节点优先使用 ModelPackage，回退到直接函数调用：
+
+```rust
+// 注册 ModelPackage
+ctx.register_model_package(ModelTask::FormulaDetection, Arc::new(package));
+
+// DetectorNode 会自动使用 ModelPackage（如果已注册）
+// 否则回退到直接调用 detect_formulas()
+```
+
+## ModelRegistry
+
+模型注册表，支持 TOML manifest：
+
+```rust
+let registry = ModelRegistry::from_dir("models")?;
+let models = registry.find_by_task(ModelTask::TextRecognition);
+```
+
+## ModelValidation
+
+SHA-256 完整性检查：
+
+```rust
+let report = validate_model(&path, expected_checksum)?;
+assert!(report.valid);
+```
 
 ## StubRuntime
 

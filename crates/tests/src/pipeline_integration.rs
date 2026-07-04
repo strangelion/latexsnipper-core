@@ -131,13 +131,23 @@ fn test_formula_recognition_with_real_model() {
 fn test_text_detection_with_real_model() {
     let models = models_dir();
     let fixtures = fixtures_dir();
-    let model_path = models.join("PP-OCRv6_medium_det_infer/inference.onnx");
+
+    // Try multiple model paths
+    let model_candidates = [
+        models.join("text-det/v6-small/inference.onnx"),
+        models.join("v6_models/PP-OCRv6_medium_det_infer/inference.onnx"),
+        models.join("v6_models/PP-OCRv6_small_det_infer/inference.onnx"),
+    ];
+    let model_path = model_candidates.iter().find(|p| p.exists());
+
     let image_path = fixtures.join("text.png");
 
-    if !model_path.exists() || !image_path.exists() {
+    if model_path.is_none() || !image_path.exists() {
         println!("Skipping: model or fixture not found");
         return;
     }
+
+    let model_path = model_path.unwrap().to_path_buf();
 
     let backend = OnnxRuntimeBackend::new(models.clone()).unwrap();
     let img = decode(ImageSource::File(&image_path)).unwrap();
@@ -186,14 +196,16 @@ fn test_text_recognition_with_real_model() {
     let fixtures = fixtures_dir();
     let image_path = fixtures.join("text.png");
 
-    // Find text rec model
+    // Find text rec model - try multiple paths
     let rec_candidates = [
+        models.join("text-rec/v6-small/inference.onnx"),
         models.join("PP-OCRv6_medium_rec_infer/inference.onnx"),
         models.join("PP-OCRv6_small_rec_infer/inference.onnx"),
     ];
     let rec_path = rec_candidates.iter().find(|p| p.exists());
 
     let keys_candidates = [
+        models.join("text-rec/v6-small/inference.yml"),
         models.join("PP-OCRv6_medium_rec_infer/inference.yml"),
         models.join("PP-OCRv6_small_rec_infer/inference.yml"),
     ];

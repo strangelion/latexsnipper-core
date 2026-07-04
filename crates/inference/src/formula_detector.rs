@@ -113,7 +113,8 @@ pub fn detect_formulas(
     Ok(final_boxes)
 }
 
-fn decode_yolo_output(
+/// Decode YOLO output tensor into detection boxes.
+pub fn decode_yolo_output(
     data: &[f32],
     shape: &[usize],
     scale: f32,
@@ -210,7 +211,8 @@ fn decode_yolo_output(
     Ok(boxes)
 }
 
-fn nms(mut boxes: Vec<DetectionBox>, iou_threshold: f32) -> Vec<DetectionBox> {
+/// Non-maximum suppression for detection boxes.
+pub fn nms(mut boxes: Vec<DetectionBox>, iou_threshold: f32) -> Vec<DetectionBox> {
     boxes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
 
     let mut keep = Vec::new();

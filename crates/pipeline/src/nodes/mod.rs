@@ -10,3 +10,4 @@ pub mod recognizer_node;
 pub mod resize_node;
 pub mod table_recognizer_node;
 pub mod table_structure_node;
+pub mod utils;

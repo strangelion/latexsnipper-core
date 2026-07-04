@@ -273,14 +273,14 @@ mod tests {
     }
 
     #[test]
-    fn test_fix_O_zero_confusion_numeric() {
+    fn test_fix_o_zero_confusion_numeric() {
         // 'O' followed by digit → '0'
         let result = fix_number_letter_confusions("My file is O7");
         assert_eq!(result, "My file is 07");
     }
 
     #[test]
-    fn test_fix_O_zero_confusion_alpha() {
+    fn test_fix_o_zero_confusion_alpha() {
         // 'O' in non-numeric context stays 'O'
         let result = fix_number_letter_confusions("Open the door");
         assert_eq!(result, "Open the door");
@@ -301,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fix_S_five_confusion_numeric() {
+    fn test_fix_s_five_confusion_numeric() {
         // 'S' followed by digit → '5'
         let result = fix_number_letter_confusions("Item S");
         assert_eq!(result, "Item S");

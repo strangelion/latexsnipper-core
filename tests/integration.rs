@@ -4,7 +4,7 @@
 
 use latexsnipper_ast::*;
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
-use latexsnipper_pipeline::sdk::Snipper;
+use latexsnipper_engine::sdk::Snipper;
 
 // ═══════════════════════════════════════════════════════════
 // AST Tests

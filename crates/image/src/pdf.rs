@@ -49,41 +49,80 @@ pub fn get_pdf_page_info(source: PdfSource) -> Result<Vec<PdfPageInfo>> {
 
 /// Decode all pages from a PDF source into images.
 ///
-/// # Note
-///
-/// PDF rendering is **not yet implemented**. This function returns an error
-/// because generating white placeholder images would silently break all
-/// downstream recognition (OCR, formula detection, etc.).
-///
-/// To render PDF pages, one of the following renderers needs to be integrated:
-/// - [pdfium-render](https://github.com/nicohman/pdfium-render) (Rust bindings to PDFium)
-/// - [poppler-rs](https://crates.io/crates/poppler-rs) (Rust bindings to poppler)
-/// - Shelling out to `pdftoppm` or `mutool draw` (Poppler/MuPDF CLI)
-///
-/// Until then, use `get_pdf_page_info` to read PDF metadata, and process
-/// individual page images through `Snipper::from_file` or `Engine::recognize`.
-pub fn decode_pdf(_source: PdfSource, _dpi: u32) -> Result<Vec<SnipperImage>> {
-    Err(SnipperError::Image(
-        "PDF page rendering is not yet implemented. \
-         Use get_pdf_page_info() to read metadata, or convert PDF pages to images \
-         externally (e.g. pdftoppm, pdfium) and process each page image individually. \
-         See the doc comment on decode_pdf() for integration options."
-            .into(),
-    ))
+/// Uses external tools (pdftoppm or mutool) for rendering.
+/// Requires one of these tools to be installed:
+/// - `pdftoppm` from poppler-utils
+/// - `mutool` from MuPDF
+pub fn decode_pdf(source: PdfSource, dpi: u32) -> Result<Vec<SnipperImage>> {
+    let pdf_path = match source {
+        PdfSource::File(path) => path.to_path_buf(),
+        PdfSource::Memory(bytes) => {
+            // Write bytes to temp file for rendering
+            let tmp_dir = std::env::temp_dir().join(format!(
+                "latexsnipper-pdf-{}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&tmp_dir).map_err(|e| {
+                SnipperError::Image(format!("Failed to create temp dir: {}", e))
+            })?;
+            let tmp_path = tmp_dir.join("input.pdf");
+            std::fs::write(&tmp_path, bytes).map_err(|e| {
+                SnipperError::Image(format!("Failed to write temp PDF: {}", e))
+            })?;
+            tmp_path
+        }
+    };
+
+    let page_info = get_pdf_page_info(PdfSource::File(&pdf_path))?;
+    let mut images = Vec::with_capacity(page_info.len());
+
+    for info in &page_info {
+        match crate::pdf_render::render_pdf_page(&pdf_path, info.page_number, dpi) {
+            Ok(img) => images.push(img),
+            Err(e) => {
+                log::warn!("Failed to render page {}: {}", info.page_number, e);
+                // Return error instead of skipping
+                return Err(e);
+            }
+        }
+    }
+
+    // Clean up temp file if we created one
+    if pdf_path.starts_with(std::env::temp_dir()) {
+        let _ = std::fs::remove_file(&pdf_path);
+    }
+
+    Ok(images)
 }
 
 /// Decode a single page from a PDF source into an image.
-///
-/// # Note
-///
-/// Same limitation as [`decode_pdf`] — returns an error because PDF content
-/// rendering is not yet implemented.
-pub fn decode_pdf_page(_source: PdfSource, _page: u32, _dpi: u32) -> Result<SnipperImage> {
-    Err(SnipperError::Image(
-        "PDF page rendering is not yet implemented. \
-         See decode_pdf() for details."
-            .into(),
-    ))
+pub fn decode_pdf_page(source: PdfSource, page: u32, dpi: u32) -> Result<SnipperImage> {
+    let pdf_path = match source {
+        PdfSource::File(path) => path.to_path_buf(),
+        PdfSource::Memory(bytes) => {
+            let tmp_dir = std::env::temp_dir().join(format!(
+                "latexsnipper-pdf-{}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&tmp_dir).map_err(|e| {
+                SnipperError::Image(format!("Failed to create temp dir: {}", e))
+            })?;
+            let tmp_path = tmp_dir.join("input.pdf");
+            std::fs::write(&tmp_path, bytes).map_err(|e| {
+                SnipperError::Image(format!("Failed to write temp PDF: {}", e))
+            })?;
+            tmp_path
+        }
+    };
+
+    let result = crate::pdf_render::render_pdf_page(&pdf_path, page, dpi);
+
+    // Clean up temp file if we created one
+    if pdf_path.starts_with(std::env::temp_dir()) {
+        let _ = std::fs::remove_file(&pdf_path);
+    }
+
+    result
 }
 
 fn load_document(source: PdfSource) -> Result<lopdf::Document> {

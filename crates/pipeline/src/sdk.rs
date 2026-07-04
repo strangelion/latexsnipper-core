@@ -17,7 +17,6 @@ use latexsnipper_foundation::SnipperError;
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::image::SnipperImage;
-use latexsnipper_image::pdf::{decode_pdf, PdfSource};
 use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, recognize_formula,
     DetectionParams, RecognitionParams,
@@ -44,58 +43,16 @@ impl Snipper {
         Self::from_image(rgb)
     }
 
-    /// Create from a PDF file path. Each page becomes a separate page in the document.
+    /// Create from a PDF file path.
     ///
-    /// Currently only supports formula recognition mode. For multi-mode
-    /// recognition (Text, Mixed, Handwriting, Table), use `SnipperEngine`
-    /// with the appropriate `RecognizeMode`.
-    ///
-    /// **Note**: PDF page rendering is not yet implemented (see `decode_pdf`
-    /// in `latexsnipper_image::pdf`). Convert PDF pages to images externally
-    /// (e.g. pdftoppm, pdfium) and use `from_file` for now.
+    /// **Note**: PDF page rendering is not yet implemented.
     pub fn from_pdf(path: impl AsRef<Path>) -> Result<Self, SnipperError> {
-        let path = path.as_ref();
-        log::info!("Loading PDF from {:?}", path);
-
-        let pages = decode_pdf(PdfSource::File(path), 300)
-            .map_err(|e| SnipperError::Image(e.to_string()))?;
-
-        log::info!("PDF loaded: {} pages", pages.len());
-
-        let models = find_models_dir()?;
-
-        let backend = OnnxRuntimeBackend::new(models.clone())
-            .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-
-        let mut doc_pages = Vec::new();
-
-        for (page_idx, page_img) in pages.iter().enumerate() {
-            log::info!(
-                "Processing page {}/{}: {}x{}",
-                page_idx + 1,
-                pages.len(),
-                page_img.width(),
-                page_img.height()
-            );
-
-            let rgb = rgba_to_rgb(page_img);
-            let blocks = process_single_page(&rgb, &models, &backend)?;
-
-            doc_pages.push(Page {
-                width: page_img.width() as f32,
-                height: page_img.height() as f32,
-                blocks,
-                page_number: Some((page_idx + 1) as u32),
-            });
-        }
-
-        let doc = Document {
-            metadata: Metadata::default(),
-            pages: doc_pages,
-            id_gen: NodeIdGenerator::new(),
-        };
-
-        Ok(Self { document: doc })
+        let _path = path.as_ref();
+        Err(SnipperError::Image(
+            "PDF page rendering is not yet implemented. \
+             Use from_file() with converted page images instead."
+                .into(),
+        ))
     }
 
     /// Create from raw RGB pixels.
@@ -106,8 +63,7 @@ impl Snipper {
         let backend = OnnxRuntimeBackend::new(models.clone())
             .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
-        // 1. Detect formulas
-        log::info!("Detecting formulas...");
+        // Detect formulas
         let det_config =
             latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
                 .map_err(|e| SnipperError::Model(e.to_string()))?;
@@ -125,7 +81,7 @@ impl Snipper {
         group_formula_detections(&mut detections);
         filter_formula_detections(&mut detections, 100.0, 0.2);
 
-        // Sort by position for reading order
+        // Sort by reading order (y then x)
         detections.sort_by(|a, b| {
             a.rect
                 .y
@@ -140,8 +96,7 @@ impl Snipper {
         });
         log::info!("Detected {} formula regions", detections.len());
 
-        // 2. Recognize formulas
-        log::info!("Recognizing formulas...");
+        // Recognize formulas
         let enc_path = models.join("formula-rec/trocr-deit/encoder_model.onnx");
         let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
         let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
@@ -169,12 +124,6 @@ impl Snipper {
                 if let Ok(result) =
                     recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params)
                 {
-                    log::debug!(
-                        "Recognized formula at ({}, {}): {}",
-                        x,
-                        y,
-                        &result.text[..result.text.len().min(50)]
-                    );
                     let mut f = Formula::latex(result.text);
                     f.confidence = result.confidence;
                     blocks.push(Block::Formula(FormulaBlock {
@@ -186,8 +135,7 @@ impl Snipper {
             }
         }
 
-        // 3. Build Document AST
-        log::info!("Building Document AST with {} blocks", blocks.len());
+        log::info!("Building Document with {} blocks", blocks.len());
         let doc = Document {
             metadata: Metadata::default(),
             pages: vec![Page {
@@ -320,83 +268,4 @@ fn crop_region(img: &SnipperImage, x: u32, y: u32, w: u32, h: u32) -> SnipperIma
         }
     }
     SnipperImage::new(w, h, PixelFormat::Rgb, pixels)
-}
-
-/// Process a single page image through the formula detection and recognition pipeline.
-fn process_single_page(
-    img: &SnipperImage,
-    models: &Path,
-    backend: &dyn RuntimeBackend,
-) -> Result<Vec<Block>, SnipperError> {
-    // 1. Detect formulas
-    let det_config = latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
-        .map_err(|e| SnipperError::Model(e.to_string()))?;
-
-    let det_params = DetectionParams::from_config(&det_config);
-    let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
-    let det_handle = ModelHandle::with_path("formula-det", det_path);
-    let det_session = backend
-        .create_session(&det_handle, AccelerationMode::Cpu)
-        .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-
-    let mut detections = detect_formulas(img, &*det_session, &det_params)
-        .map_err(|e| SnipperError::Inference(e.to_string()))?;
-
-    group_formula_detections(&mut detections);
-    filter_formula_detections(&mut detections, 100.0, 0.2);
-
-    // Sort by position for reading order
-    detections.sort_by(|a, b| {
-        a.rect
-            .y
-            .partial_cmp(&b.rect.y)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                a.rect
-                    .x
-                    .partial_cmp(&b.rect.x)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-    });
-
-    // 2. Recognize formulas
-    let enc_path = models.join("formula-rec/trocr-deit/encoder_model.onnx");
-    let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
-    let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
-
-    let enc_handle = ModelHandle::with_path("encoder", enc_path);
-    let dec_handle = ModelHandle::with_path("decoder", dec_path);
-    let enc_session = backend
-        .create_session(&enc_handle, AccelerationMode::Cpu)
-        .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-    let dec_session = backend
-        .create_session(&dec_handle, AccelerationMode::Cpu)
-        .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-
-    let rec_params = RecognitionParams::default();
-    let mut blocks = Vec::new();
-
-    for det in &detections {
-        let x = det.rect.x as u32;
-        let y = det.rect.y as u32;
-        let w = det.rect.width as u32;
-        let h = det.rect.height as u32;
-
-        if w >= 4 && h >= 4 {
-            let crop = crop_region(img, x, y, w, h);
-            if let Ok(result) =
-                recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params)
-            {
-                let mut f = Formula::latex(result.text);
-                f.confidence = result.confidence;
-                blocks.push(Block::Formula(FormulaBlock {
-                    formula: f,
-                    geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
-                    source: Some(SourceInfo::new()),
-                }));
-            }
-        }
-    }
-
-    Ok(blocks)
 }

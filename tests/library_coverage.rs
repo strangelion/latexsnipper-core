@@ -2,7 +2,6 @@ use latexsnipper_conversion::{DocumentConverter, OutputFormat};
 
 /// Real-world formulas extracted from obsidian-formula-library.
 /// Tests all key symbol patterns that must survive roundtrip conversion.
-
 const LIBRARY_FORMULAS: &[(&str, &str)] = &[
     // === Algebra ===
     ("vector_space", r"V\text{ over }\mathbb{F}"),
@@ -627,7 +626,7 @@ fn markdown_to_latex(latex: &str) -> String {
 }
 
 fn strip_braces(s: &str) -> String {
-    s.replace('{', "").replace('}', "")
+    s.replace(['{', '}'], "")
 }
 
 #[test]

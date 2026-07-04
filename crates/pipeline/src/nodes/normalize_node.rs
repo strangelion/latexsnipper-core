@@ -4,7 +4,14 @@ use latexsnipper_foundation::Result;
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 
-/// Normalizes image pixels using mean/std normalization.
+/// Stores normalization parameters in context metadata for downstream nodes.
+///
+/// This node does not modify the image directly. Instead, it stores the
+/// normalization parameters (mean/std) in the context metadata, which can
+/// be used by downstream inference nodes that need to normalize input tensors.
+///
+/// Actual pixel normalization is performed by the inference functions
+/// (e.g., `detect_formulas`, `recognize_formula`) when they prepare input tensors.
 pub struct NormalizeNode {
     name: String,
     mean: [f32; 3],
@@ -36,9 +43,13 @@ impl PipelineNode for NormalizeNode {
     }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
-        // Store normalization params in metadata for downstream nodes
         ctx.set("norm_mean", serde_json::json!(self.mean));
         ctx.set("norm_std", serde_json::json!(self.std));
+        log::debug!(
+            "NormalizeNode: stored normalization params (mean={:?}, std={:?})",
+            self.mean,
+            self.std
+        );
         Ok(())
     }
 }

@@ -1,5 +1,8 @@
 //! Simplified pipeline for demonstrating the Happy Path.
 //! Uses mock implementations without requiring real ONNX models.
+//!
+//! This module provides a lightweight pipeline for testing and examples.
+//! For production use, see the main `PipelineGraph` and `PipelineNode` system.
 
 use latexsnipper_ast::{
     Block, Document, Formula, FormulaBlock, Inline, Page, ParagraphBlock, TextRun,
@@ -9,40 +12,40 @@ use latexsnipper_foundation::Result;
 /// A simplified pipeline stage trait.
 pub trait Stage: Send + Sync {
     fn name(&self) -> &str;
-    fn process(&self, ctx: &mut PipelineContext) -> Result<()>;
+    fn process(&self, ctx: &mut SimpleContext) -> Result<()>;
 }
 
 /// Simplified pipeline context.
-pub struct PipelineContext {
+pub struct SimpleContext {
     pub document: Document,
     pub input_image: Option<String>,
-    pub detections: Vec<Region>,
-    pub crops: Vec<Crop>,
+    pub detections: Vec<SimpleRegion>,
+    pub crops: Vec<SimpleCrop>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Region {
+pub struct SimpleRegion {
     pub x: f32,
     pub y: f32,
     pub width: f32,
     pub height: f32,
-    pub class: RegionClass,
+    pub class: SimpleRegionClass,
     pub confidence: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum RegionClass {
+pub enum SimpleRegionClass {
     Formula,
     Text,
 }
 
 #[derive(Debug, Clone)]
-pub struct Crop {
-    pub region: Region,
+pub struct SimpleCrop {
+    pub region: SimpleRegion,
     pub content: String,
 }
 
-impl PipelineContext {
+impl SimpleContext {
     pub fn new() -> Self {
         Self {
             document: Document::new(),
@@ -59,7 +62,7 @@ impl PipelineContext {
     }
 }
 
-impl Default for PipelineContext {
+impl Default for SimpleContext {
     fn default() -> Self {
         Self::new()
     }
@@ -67,35 +70,35 @@ impl Default for PipelineContext {
 
 /// Mock detector that simulates finding formulas and text.
 pub struct MockDetector {
-    regions: Vec<Region>,
+    regions: Vec<SimpleRegion>,
 }
 
 impl MockDetector {
     pub fn mock_formula_recognition() -> Self {
         Self {
             regions: vec![
-                Region {
+                SimpleRegion {
                     x: 100.0,
                     y: 50.0,
                     width: 200.0,
                     height: 40.0,
-                    class: RegionClass::Formula,
+                    class: SimpleRegionClass::Formula,
                     confidence: 0.95,
                 },
-                Region {
+                SimpleRegion {
                     x: 100.0,
                     y: 150.0,
                     width: 150.0,
                     height: 30.0,
-                    class: RegionClass::Text,
+                    class: SimpleRegionClass::Text,
                     confidence: 0.92,
                 },
-                Region {
+                SimpleRegion {
                     x: 100.0,
                     y: 200.0,
                     width: 180.0,
                     height: 40.0,
-                    class: RegionClass::Formula,
+                    class: SimpleRegionClass::Formula,
                     confidence: 0.88,
                 },
             ],
@@ -108,7 +111,7 @@ impl Stage for MockDetector {
         "mock_detector"
     }
 
-    fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
+    fn process(&self, ctx: &mut SimpleContext) -> Result<()> {
         ctx.detections = self.regions.clone();
         log::info!("MockDetector: found {} regions", ctx.detections.len());
         Ok(())
@@ -123,23 +126,23 @@ impl Stage for MockCropper {
         "mock_cropper"
     }
 
-    fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
+    fn process(&self, ctx: &mut SimpleContext) -> Result<()> {
         ctx.crops = ctx
             .detections
             .iter()
             .enumerate()
             .map(|(i, region)| {
                 let content = match region.class {
-                    RegionClass::Formula => {
+                    SimpleRegionClass::Formula => {
                         if i == 0 {
                             "E = mc^2".to_string()
                         } else {
                             "\\frac{a+b}{c}".to_string()
                         }
                     }
-                    RegionClass::Text => "The quick brown fox".to_string(),
+                    SimpleRegionClass::Text => "The quick brown fox".to_string(),
                 };
-                Crop {
+                SimpleCrop {
                     region: region.clone(),
                     content,
                 }
@@ -158,7 +161,7 @@ impl Stage for MockRecognizer {
         "mock_recognizer"
     }
 
-    fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
+    fn process(&self, ctx: &mut SimpleContext) -> Result<()> {
         let mut blocks = Vec::new();
 
         // Sort by y position for proper document order
@@ -167,7 +170,7 @@ impl Stage for MockRecognizer {
 
         for crop in &crops {
             match crop.region.class {
-                RegionClass::Formula => {
+                SimpleRegionClass::Formula => {
                     let formula = Formula::latex(&crop.content);
                     blocks.push(Block::Formula(FormulaBlock {
                         formula,
@@ -180,7 +183,7 @@ impl Stage for MockRecognizer {
                         source: None,
                     }));
                 }
-                RegionClass::Text => {
+                SimpleRegionClass::Text => {
                     blocks.push(Block::Paragraph(ParagraphBlock {
                         inlines: vec![Inline::Text(TextRun::new(&crop.content))],
                         geometry: Some(latexsnipper_ast::Rect::new(
@@ -229,7 +232,7 @@ impl SimplePipeline {
         self
     }
 
-    pub fn run(&self, ctx: &mut PipelineContext) -> Result<()> {
+    pub fn run(&self, ctx: &mut SimpleContext) -> Result<()> {
         log::info!(
             "Pipeline '{}' starting with {} stages",
             self.name,
@@ -257,7 +260,7 @@ mod tests {
             .add_stage(Box::new(MockCropper))
             .add_stage(Box::new(MockRecognizer));
 
-        let mut ctx = PipelineContext::with_image("test.png");
+        let mut ctx = SimpleContext::with_image("test.png");
         pipeline.run(&mut ctx).unwrap();
 
         assert_eq!(ctx.document.block_count(), 3);
@@ -271,7 +274,7 @@ mod tests {
             .add_stage(Box::new(MockCropper))
             .add_stage(Box::new(MockRecognizer));
 
-        let mut ctx = PipelineContext::with_image("test.png");
+        let mut ctx = SimpleContext::with_image("test.png");
         pipeline.run(&mut ctx).unwrap();
 
         let blocks = ctx.document.all_blocks();

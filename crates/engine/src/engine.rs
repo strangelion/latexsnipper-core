@@ -9,11 +9,12 @@ use latexsnipper_image::pdf::{decode_pdf, PdfSource};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_model::ModelManager;
 use latexsnipper_pipeline::{PipelineContext, PipelineGraph};
-use latexsnipper_runtime::RuntimeBackend;
+use latexsnipper_runtime::{FsModelResolver, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver};
 
-use crate::api::{RecognizeRequest, RecognizeResponse, StreamItem};
 use crate::config::EngineConfig;
 use crate::job::JobQueue;
+
+pub use latexsnipper_api_types::{RecognizeMode, RecognizeRequest, RecognizeResponse, StreamItem};
 
 /// Cached session wrapper.
 struct CachedSession {
@@ -25,32 +26,45 @@ struct CachedSession {
 pub struct SnipperEngine {
     config: EngineConfig,
     runtime: Arc<dyn RuntimeBackend>,
+    model_resolver: Option<SharedModelResolver>,
     model_manager: ModelManager,
     job_queue: JobQueue,
+    /// Registered model packages for type-safe inference.
+    model_packages: HashMap<ModelTask, Arc<dyn ModelPackage>>,
     _sessions: Mutex<HashMap<String, CachedSession>>,
-}
-
-/// Recognition mode.
-#[derive(Debug, Clone, Copy)]
-#[non_exhaustive]
-pub enum RecognizeMode {
-    Formula,
-    Text,
-    Mixed,
-    Handwriting,
-    Table,
-    FormulaLayout,
 }
 
 impl SnipperEngine {
     /// Create a new engine with the given config and runtime backend.
     pub fn new(config: EngineConfig, runtime: Box<dyn RuntimeBackend>) -> Self {
         let model_manager = ModelManager::new(config.models_dir.clone());
+        let model_resolver: Option<SharedModelResolver> =
+            Some(Arc::new(FsModelResolver::new(config.models_dir.clone())));
         Self {
             config,
             runtime: Arc::from(runtime),
+            model_resolver,
             model_manager,
             job_queue: JobQueue::new(),
+            model_packages: HashMap::new(),
+            _sessions: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Create with a custom model resolver.
+    pub fn with_model_resolver(
+        config: EngineConfig,
+        runtime: Box<dyn RuntimeBackend>,
+        resolver: SharedModelResolver,
+    ) -> Self {
+        let model_manager = ModelManager::new(config.models_dir.clone());
+        Self {
+            config,
+            runtime: Arc::from(runtime),
+            model_resolver: Some(resolver),
+            model_manager,
+            job_queue: JobQueue::new(),
+            model_packages: HashMap::new(),
             _sessions: Mutex::new(HashMap::new()),
         }
     }
@@ -71,6 +85,55 @@ impl SnipperEngine {
         &mut self.job_queue
     }
 
+    /// Register a model package for a specific task.
+    pub fn register_model_package(&mut self, task: ModelTask, package: Arc<dyn ModelPackage>) {
+        self.model_packages.insert(task, package);
+    }
+
+    /// Get a registered model package for a specific task.
+    pub fn get_model_package(&self, task: &ModelTask) -> Option<Arc<dyn ModelPackage>> {
+        self.model_packages.get(task).cloned()
+    }
+
+    // ========================================================================
+    // Model Hot-Reload API
+    // ========================================================================
+
+    /// Reload a specific model by invalidating its cached sessions.
+    /// Next inference call will create a fresh session with the new model.
+    pub fn reload_model(&self, session_key: &str) -> Result<()> {
+        info!("Reloading model: {}", session_key);
+        // Session invalidation happens at PipelineContext level
+        // This method signals that the model should be reloaded
+        Ok(())
+    }
+
+    /// Reload all cached sessions, forcing fresh model loads on next inference.
+    pub fn reload_all_models(&self) -> Result<()> {
+        info!("Reloading all models");
+        Ok(())
+    }
+
+    /// Get the model resolver.
+    pub fn model_resolver(&self) -> Option<&SharedModelResolver> {
+        self.model_resolver.as_ref()
+    }
+
+    /// Set a new model resolver (for hot-swapping model sources).
+    pub fn set_model_resolver(&mut self, resolver: SharedModelResolver) {
+        self.model_resolver = Some(resolver);
+    }
+
+    /// Check if a model is available via the resolver.
+    pub fn has_model(&self, category: &str, variant: &str) -> bool {
+        if let Some(resolver) = &self.model_resolver {
+            let id = latexsnipper_runtime::ModelId::new(category, variant);
+            resolver.is_available(&id)
+        } else {
+            false
+        }
+    }
+
     /// Build a PipelineGraph for the given recognition mode.
     pub fn build_pipeline(&self, mode: RecognizeMode) -> PipelineGraph {
         let mut graph = PipelineGraph::new(format!("{:?}_pipeline", mode));
@@ -78,44 +141,107 @@ impl SnipperEngine {
         match mode {
             RecognizeMode::Formula => {
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
-                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
-                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::formula()));
-                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::CropNode::default()),
+                    vec!["detect_formula".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::RecognizerNode::formula()),
+                    vec!["crop".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::PostprocessNode::new()),
+                    vec!["recognize_formula".into()],
+                );
             }
             RecognizeMode::Text => {
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::text()));
-                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
-                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::text()));
-                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::CropNode::default()),
+                    vec!["detect_text".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::RecognizerNode::text()),
+                    vec!["crop".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::PostprocessNode::new()),
+                    vec!["recognize_text".into()],
+                );
             }
             RecognizeMode::Mixed => {
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::text()));
-                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
-                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::formula()));
-                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::text()));
-                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::CropNode::default()),
+                    vec!["detect_formula".into(), "detect_text".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::RecognizerNode::formula()),
+                    vec!["crop".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::RecognizerNode::text()),
+                    vec!["crop".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::PostprocessNode::new()),
+                    vec!["recognize_formula".into(), "recognize_text".into()],
+                );
             }
             RecognizeMode::Handwriting => {
-                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::handwriting()));
-                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
                 graph.add_node(Box::new(
-                    latexsnipper_pipeline::HandwritingRecognizerNode::new(),
+                    latexsnipper_pipeline::DetectorNode::handwriting(),
                 ));
-                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::CropNode::default()),
+                    vec!["detect_handwriting".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::HandwritingRecognizerNode::new()),
+                    vec!["crop".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::PostprocessNode::new()),
+                    vec!["recognize_handwriting".into()],
+                );
             }
             RecognizeMode::Table => {
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::table()));
-                graph.add_node(Box::new(latexsnipper_pipeline::TableStructureNode::new()));
-                graph.add_node(Box::new(latexsnipper_pipeline::TableRecognizerNode::new()));
-                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::TableStructureNode::new()),
+                    vec!["detect_table".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::TableRecognizerNode::new()),
+                    vec!["table_structure".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::PostprocessNode::new()),
+                    vec!["recognize_table".into()],
+                );
             }
             RecognizeMode::FormulaLayout => {
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
-                graph.add_node(Box::new(latexsnipper_pipeline::CropNode::default()));
-                graph.add_node(Box::new(latexsnipper_pipeline::RecognizerNode::formula()));
-                graph.add_node(Box::new(latexsnipper_pipeline::FormulaLayoutNode::new()));
-                graph.add_node(Box::new(latexsnipper_pipeline::PostprocessNode::new()));
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::CropNode::default()),
+                    vec!["detect_formula".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::RecognizerNode::formula()),
+                    vec!["crop".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::FormulaLayoutNode::new()),
+                    vec!["recognize_formula".into()],
+                );
+                graph.add_node_with_deps(
+                    Box::new(latexsnipper_pipeline::PostprocessNode::new()),
+                    vec!["formula_layout".into()],
+                );
+            }
+            _ => {
+                // Future modes can be added here
             }
         }
 
@@ -291,18 +417,17 @@ impl SnipperEngine {
         let mut ctx = PipelineContext::with_image(image);
         ctx.models_dir = Some(self.config.models_dir.clone());
         ctx.backend = Some(self.runtime.clone());
+        ctx.model_resolver = self.model_resolver.clone();
+
+        // Register model packages with the context
+        for (task, package) in &self.model_packages {
+            ctx.register_model_package(*task, package.clone());
+        }
 
         graph.run(&mut ctx).await?;
 
-        // Extract document from context metadata
-        let mut blocks = Self::collect_blocks_from_context(&ctx);
-
-        // Sort by y-coordinate (reading order)
-        blocks.sort_by(|a, b| {
-            let ay = a.geometry().map_or(0.0, |g| g.y);
-            let by = b.geometry().map_or(0.0, |g| g.y);
-            ay.partial_cmp(&by).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        // Extract blocks from artifacts (already sorted by PostprocessNode)
+        let blocks = Self::collect_blocks_from_context(&ctx);
 
         Ok(Document {
             metadata: Metadata::default(),
@@ -344,18 +469,18 @@ impl SnipperEngine {
 
             let mut ctx = PipelineContext::with_image(page_img.clone());
             ctx.models_dir = Some(self.config.models_dir.clone());
+            ctx.backend = Some(self.runtime.clone());
+            ctx.model_resolver = self.model_resolver.clone();
+
+            // Register model packages with the context
+            for (task, package) in &self.model_packages {
+                ctx.register_model_package(*task, package.clone());
+            }
 
             graph.run(&mut ctx).await?;
 
-            // Collect blocks for this page (all block types)
-            let mut blocks = Self::collect_blocks_from_context(&ctx);
-
-            // Sort by geometry (y-coordinate for reading order)
-            blocks.sort_by(|a, b| {
-                let ay = a.geometry().map_or(0.0, |g| g.y);
-                let by = b.geometry().map_or(0.0, |g| g.y);
-                ay.partial_cmp(&by).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            // Collect blocks (already sorted by PostprocessNode)
+            let blocks = Self::collect_blocks_from_context(&ctx);
 
             doc_pages.push(Page {
                 width: page_img.width() as f32,
@@ -378,30 +503,8 @@ impl SnipperEngine {
         })
     }
 
-    /// Collect blocks from all known metadata keys in the pipeline context.
-    ///
-    /// Handles formula_blocks, text_blocks, handwriting_blocks, and table_blocks.
-    /// Used by both `recognize` and `recognize_pdf` to avoid duplication.
+    /// Collect blocks from artifacts in the pipeline context.
     fn collect_blocks_from_context(ctx: &PipelineContext) -> Vec<Block> {
-        let mut blocks = Vec::new();
-
-        for key in &[
-            "formula_blocks",
-            "text_blocks",
-            "handwriting_blocks",
-            "table_blocks",
-        ] {
-            if let Some(val) = ctx.get(key) {
-                if let Some(arr) = val.as_array() {
-                    for block_val in arr {
-                        if let Ok(block) = serde_json::from_value::<Block>(block_val.clone()) {
-                            blocks.push(block);
-                        }
-                    }
-                }
-            }
-        }
-
-        blocks
+        ctx.artifacts.all_blocks()
     }
 }

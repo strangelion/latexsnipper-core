@@ -10,16 +10,16 @@ name = "snipper"
 path = "src/main.rs"
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
-latexsnipper-ast = { path = "../ast" }
-latexsnipper-image = { path = "../image" }
-latexsnipper-runtime = { path = "../runtime" }
-latexsnipper-engine = { path = "../engine" }
-latexsnipper-inference = { path = "../inference" }
-latexsnipper-conversion = { path = "../conversion" }
-latexsnipper-model = { path = "../model" }
-latexsnipper-pipeline = { path = "../pipeline" }
-latexsnipper-syntax = { path = "../syntax" }
+latexsnipper-foundation.workspace = true
+latexsnipper-ast.workspace = true
+latexsnipper-image.workspace = true
+latexsnipper-runtime.workspace = true
+latexsnipper-engine.workspace = true
+latexsnipper-inference.workspace = true
+latexsnipper-conversion.workspace = true
+latexsnipper-model.workspace = true
+latexsnipper-pipeline.workspace = true
+latexsnipper-syntax.workspace = true
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 serde_json.workspace = true

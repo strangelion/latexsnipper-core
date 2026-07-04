@@ -1,12 +1,33 @@
+use crate::artifacts::PipelineArtifacts;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
-use latexsnipper_runtime::{InferenceSession, RuntimeBackend};
+use latexsnipper_runtime::{InferenceSession, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+/// Diagnostic event level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticLevel {
+    Info,
+    Warning,
+    Error,
+}
+
+/// A diagnostic event recorded during pipeline execution.
+#[derive(Debug, Clone)]
+pub struct DiagnosticEvent {
+    pub level: DiagnosticLevel,
+    pub node: String,
+    pub message: String,
+}
 
 /// Cached ONNX session for reuse across pipeline nodes.
 pub struct CachedSession {
     pub session: Arc<Box<dyn InferenceSession>>,
+    /// Model version when this session was created.
+    pub version: String,
+    /// When this session was created.
+    pub created_at: std::time::Instant,
 }
 
 /// Context passed through the pipeline.
@@ -20,7 +41,9 @@ pub struct PipelineContext {
     pub current_page: usize,
     /// The document being built.
     pub document: Document,
-    /// Key-value metadata for passing data between nodes.
+    /// Strongly-typed pipeline data (replaces string-keyed metadata).
+    pub artifacts: PipelineArtifacts,
+    /// Key-value metadata for passing data between nodes (kept for extensibility).
     pub metadata: HashMap<String, serde_json::Value>,
     /// Whether the pipeline was cancelled.
     pub cancelled: bool,
@@ -28,8 +51,14 @@ pub struct PipelineContext {
     pub models_dir: Option<std::path::PathBuf>,
     /// Runtime backend for inference sessions (injected by engine).
     pub backend: Option<Arc<dyn RuntimeBackend>>,
+    /// Model resolver for loading models (injects backend-specific loading).
+    pub model_resolver: Option<SharedModelResolver>,
+    /// Model packages for type-safe inference (indexed by ModelTask).
+    pub model_packages: HashMap<ModelTask, Arc<dyn ModelPackage>>,
     /// Cached ONNX sessions for reuse across nodes.
     pub sessions: HashMap<String, CachedSession>,
+    /// Diagnostic events collected during pipeline execution.
+    pub diagnostics: Vec<DiagnosticEvent>,
 }
 
 impl PipelineContext {
@@ -39,11 +68,15 @@ impl PipelineContext {
             page_images: Vec::new(),
             current_page: 0,
             document: Document::new(),
+            artifacts: PipelineArtifacts::default(),
             metadata: HashMap::new(),
             cancelled: false,
             models_dir: None,
             backend: None,
+            model_resolver: None,
+            model_packages: HashMap::new(),
             sessions: HashMap::new(),
+            diagnostics: Vec::new(),
         }
     }
 
@@ -116,13 +149,91 @@ impl PipelineContext {
             key.into(),
             CachedSession {
                 session: Arc::new(session),
+                version: String::new(),
+                created_at: std::time::Instant::now(),
             },
         );
+    }
+
+    /// Cache a session with version info.
+    pub fn cache_session_with_version(
+        &mut self,
+        key: impl Into<String>,
+        session: Box<dyn InferenceSession>,
+        version: impl Into<String>,
+    ) {
+        self.sessions.insert(
+            key.into(),
+            CachedSession {
+                session: Arc::new(session),
+                version: version.into(),
+                created_at: std::time::Instant::now(),
+            },
+        );
+    }
+
+    /// Get session version.
+    pub fn get_session_version(&self, key: &str) -> Option<&str> {
+        self.sessions.get(key).map(|c| c.version.as_str())
+    }
+
+    /// Invalidate a cached session.
+    pub fn invalidate_session(&mut self, key: &str) -> bool {
+        self.sessions.remove(key).is_some()
+    }
+
+    /// Invalidate all cached sessions.
+    pub fn invalidate_all_sessions(&mut self) {
+        self.sessions.clear();
+    }
+
+    /// Get session count.
+    pub fn session_count(&self) -> usize {
+        self.sessions.len()
     }
 
     /// Cancel the pipeline.
     pub fn cancel(&mut self) {
         self.cancelled = true;
+    }
+
+    /// Record a diagnostic event.
+    pub fn diagnostic(&mut self, level: DiagnosticLevel, node: impl Into<String>, message: impl Into<String>) {
+        self.diagnostics.push(DiagnosticEvent {
+            level,
+            node: node.into(),
+            message: message.into(),
+        });
+    }
+
+    /// Record an info diagnostic.
+    pub fn diagnostic_info(&mut self, node: impl Into<String>, message: impl Into<String>) {
+        self.diagnostic(DiagnosticLevel::Info, node, message);
+    }
+
+    /// Record a warning diagnostic.
+    pub fn diagnostic_warn(&mut self, node: impl Into<String>, message: impl Into<String>) {
+        self.diagnostic(DiagnosticLevel::Warning, node, message);
+    }
+
+    /// Record an error diagnostic.
+    pub fn diagnostic_error(&mut self, node: impl Into<String>, message: impl Into<String>) {
+        self.diagnostic(DiagnosticLevel::Error, node, message);
+    }
+
+    /// Check if there are any error-level diagnostics.
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics.iter().any(|d| d.level == DiagnosticLevel::Error)
+    }
+
+    /// Register a model package for a specific task.
+    pub fn register_model_package(&mut self, task: ModelTask, package: Arc<dyn ModelPackage>) {
+        self.model_packages.insert(task, package);
+    }
+
+    /// Get a model package for a specific task.
+    pub fn get_model_package(&self, task: &ModelTask) -> Option<Arc<dyn ModelPackage>> {
+        self.model_packages.get(task).cloned()
     }
 }
 

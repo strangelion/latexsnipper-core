@@ -53,5 +53,17 @@
     "box_threshold": 0.5,
     "max_candidates": 1000,
     "unclip_ratio": 1.5
+  },
+  "pipeline": {
+    "min_area": 100.0,
+    "min_confidence": 0.2,
+    "model_files": {
+      "primary": "inference.onnx"
+    },
+    "fallback_dirs": [
+      "v6_models/PP-OCRv6_medium_det_infer",
+      "v6_models/PP-OCRv6_small_det_infer",
+      "text-det/ppocrv5-mobile"
+    ]
   }
 }

@@ -100,8 +100,10 @@ Engine
 |------|------|------|
 | **推理** | ✅ | YOLOv8 检测、TrOCR 识别、CRNN+CTC |
 | **运行时** | ✅ | ONNX Runtime（会话缓存）+ Stub |
-| **引擎** | ✅ | JobQueue、Service trait、Request/Response Builder、Streaming API |
+| **引擎** | ✅ | JobQueue、Service trait、Request/Response Builder、Streaming API、ModelPackage |
 | **模型** | ✅ | 清单、配置、SHA256 校验 |
+| **ModelPackage** | ✅ | `ModelPackage`/`ModelExecutor` trait、惰性会话加载、流水线集成 |
+| **流水线** | ✅ | 异步节点流水线 + ModelTask 抽象 + ReadingOrder + ModelPackage 回退 |
 | **插件** | ✅ | Plugin trait、Registry |
 | **FFI** | ✅ | Android JNI、iOS C FFI |
 | **WASM** | ✅ | parse/render/convert/recognize 绑定 |
@@ -109,8 +111,9 @@ Engine
 | **导出** | ✅ | SVG/Text/PDF（printpdf），标题/表格/列表/代码/公式/页面选择 |
 | **表格识别** | ✅ | SLANet+ 表格结构 + PP-DocLayout v3 版式检测 |
 | **手写识别** | ✅ | 手写检测 + TrOCR 识别 + 后处理（数字/字母混淆修复 + 标点归一化） |
-| **公式布局** | ✅ | LaTeX AST 解析 + 符号级检测；已知问题：layout 未写回 Formula 对象 |
-| **多页处理** | ✅ | 多页文档处理；PDF 渲染未实现（返回错误） |
+| **公式布局** | ✅ | LaTeX AST 解析 + 符号级检测 |
+| **多页处理** | ✅ | PDF 解码 + 多页流水线；PDF 渲染通过 pdftoppm/mutool |
+| **PDF 渲染** | ✅ | 通过 pdftoppm（poppler）或 mutool（MuPDF）渲染页面 |
 
 ---
 
@@ -121,21 +124,23 @@ crates/
 ├── foundation/     ✅ 错误、Result、日志、配置、事件总线
 ├── ast/            ✅ 文档 AST — 唯一数据源
 ├── tensor/         ✅ 推理 I/O 张量
-├── image/          ✅ 平台无关图像处理
-├── runtime/        ✅ RuntimeBackend + InferenceSession trait（ONNX + Stub）
+├── image/          ✅ 平台无关图像处理 + PDF 渲染
+├── runtime/        ✅ RuntimeBackend + InferenceSession + ModelResolver + ModelPackage + ModelRegistry + Validation
 ├── model/          ✅ 模型清单、配置、SHA256 校验
-├── inference/      ✅ 检测 + 识别管线（YOLOv8/TrOCR/CRNN）
-├── pipeline/       ✅ 节点化异步流水线
+├── inference/      ✅ 检测 + 识别管线 + ModelPackage 适配器
+├── pipeline/       ✅ 节点化异步流水线 + PipelineArtifacts + ReadingOrder
 ├── syntax/         ✅ LaTeX/Typst/Markdown 解析器 + 渲染器
 ├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
 ├── export/         ✅ RenderTree → SVG/Text/PDF（printpdf），页面选择
-├── engine/         ✅ SnipperEngine + JobQueue + Service
+├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
+├── api-types/      ✅ 公共 API 类型（RecognizeMode、Request、Response、StreamItem）
+├── tract/          ✅ Tract-based WASM RuntimeBackend
 ├── plugin/         ✅ Plugin trait、Registry
 ├── mock/           ✅ 测试用 Fake 实现
 ├── ffi/            ✅ Android JNI + iOS C FFI
 ├── wasm/           ✅ WebAssembly 绑定
 ├── cli/            ✅ 命令行工具（recognize/parse/render/version/play）
-└── tests/          ✅ 集成测试（64+ 个测试）
+└── tests/          ✅ 集成测试
 ```
 
 ---
@@ -156,11 +161,11 @@ cargo build --release -p latexsnipper-cli
 
 ```toml
 [dependencies]
-latexsnipper-pipeline = "1.0"
+latexsnipper-engine = "1.0"
 ```
 
 ```rust
-use latexsnipper_pipeline::sdk::Snipper;
+use latexsnipper_engine::sdk::Snipper;
 
 let snipper = Snipper::from_file("input.png")?;
 let latex = snipper.to_latex()?;

@@ -72,5 +72,12 @@
     "beam_width": 3,
     "top_k": 5,
     "tokenizer_file": "tokenizer.json"
+  },
+  "pipeline": {
+    "model_files": {
+      "encoder": "encoder_model.onnx",
+      "decoder": "decoder_model.onnx",
+      "tokenizer": "tokenizer.json"
+    }
   }
 }

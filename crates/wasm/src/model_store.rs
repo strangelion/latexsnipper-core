@@ -13,12 +13,6 @@ pub fn store_model(name: &str, bytes: Vec<u8>) {
     }
 }
 
-/// Get a model by name.
-#[allow(dead_code)]
-pub fn get_model(name: &str) -> Option<Vec<u8>> {
-    MODEL_STORE.lock().ok()?.get(name).cloned()
-}
-
 /// Check if a model is loaded.
 pub fn has_model(name: &str) -> bool {
     MODEL_STORE

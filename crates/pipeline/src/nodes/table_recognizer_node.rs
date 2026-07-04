@@ -2,16 +2,18 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use latexsnipper_ast::*;
-use latexsnipper_foundation::{Result, SnipperError};
+use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, load_keys,
-    recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams, TextRecParams,
+    recognize_formula, recognize_text_with_keys, DetectionParams, GridCell, RecognitionParams,
+    TextRecParams,
 };
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
+use latexsnipper_runtime::{AccelerationMode, RuntimeBackend};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
+use crate::nodes::utils::{get_backend, resolve_model_handle};
 
 type InferenceArc = Arc<Box<dyn latexsnipper_runtime::InferenceSession>>;
 type FormulaRecSession = (InferenceArc, InferenceArc, std::path::PathBuf);
@@ -36,12 +38,6 @@ impl TableRecognizerNode {
         Self {
             name: "recognize_table".into(),
         }
-    }
-
-    fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
-        ctx.backend
-            .clone()
-            .ok_or_else(|| SnipperError::Runtime("No backend configured".into()))
     }
 }
 
@@ -73,17 +69,8 @@ impl TableRecognizerNode {
         ctx: &mut PipelineContext,
         models: &std::path::Path,
     ) -> Result<()> {
-        let structures = match ctx.get("table_structures") {
-            Some(v) => v.clone(),
-            None => return Ok(()),
-        };
-
-        let structures_array = match structures.as_array() {
-            Some(a) => a.clone(),
-            None => return Ok(()),
-        };
-
-        if structures_array.is_empty() {
+        let cells = ctx.artifacts.table_structures.clone();
+        if cells.is_empty() {
             return Ok(());
         }
 
@@ -93,122 +80,83 @@ impl TableRecognizerNode {
         };
 
         log::info!(
-            "TableRecognizer: processing {} tables",
-            structures_array.len()
+            "TableRecognizer: processing {} table cells",
+            cells.len()
         );
+
+        // Group cells by their table rect (cells from same table share the same rect)
+        // For simplicity, treat all cells as belonging to one table
+        // TODO: Group cells by table rect for proper multi-table support
+        let table_rect = cells.first().map(|c| c.rect).unwrap_or(Rect::new(0.0, 0.0, 0.0, 0.0));
 
         let mut table_blocks = Vec::new();
 
         // Load models ONCE (with ctx session caching) for all tables
-        let backend = Self::get_backend(ctx)?;
+        let backend = get_backend(ctx)?;
         let formula_det_session = self.load_formula_det_session(ctx, &*backend, models)?;
         let formula_rec_session = self.load_formula_rec_session(ctx, &*backend, models)?;
         let text_rec_session = self.load_text_rec_session(ctx, &*backend, models)?;
 
-        for structure_val in &structures_array {
-            if let Some(table_block) = self
-                .recognize_single_table(
-                    image.clone(),
-                    structure_val,
-                    &formula_det_session,
-                    &formula_rec_session,
-                    &text_rec_session,
-                )
-                .await?
-            {
-                table_blocks.push(table_block);
-            }
+        if let Some(table_block) = self
+            .recognize_single_table(
+                image.clone(),
+                &cells,
+                table_rect,
+                &formula_det_session,
+                &formula_rec_session,
+                &text_rec_session,
+            )
+            .await?
+        {
+            table_blocks.push(table_block);
         }
 
-        ctx.set(
-            "table_blocks",
-            serde_json::to_value(&table_blocks).unwrap_or_default(),
-        );
+        ctx.artifacts.table_blocks = table_blocks;
 
-        log::info!("Recognized {} table blocks", table_blocks.len());
+        log::info!("Recognized {} table blocks", ctx.artifacts.table_blocks.len());
         Ok(())
     }
 
     async fn recognize_single_table(
         &self,
         image: latexsnipper_image::SnipperImage,
-        structure_val: &serde_json::Value,
+        cells: &[GridCell],
+        table_rect: Rect,
         formula_det_session: &Option<InferenceArc>,
         formula_rec_session: &Option<FormulaRecSession>,
         text_rec_session: &Option<TextRecSession>,
     ) -> Result<Option<Block>> {
-        let table_rect = structure_val
-            .get("rect")
-            .ok_or_else(|| SnipperError::Inference("Table structure missing rect".into()))?;
-
-        let x = table_rect.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-        let y = table_rect.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-        let w = table_rect.get("w").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-        let h = table_rect.get("h").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-
-        let cells = structure_val
-            .get("cells")
-            .and_then(|c| c.as_array())
-            .cloned()
-            .unwrap_or_default();
-
         if cells.is_empty() {
             return Ok(None);
         }
 
-        // Determine max row and col
-        let max_row = cells
-            .iter()
-            .filter_map(|c| c.get("row").and_then(|r| r.as_u64()))
-            .max()
-            .unwrap_or(0) as usize;
-        let _max_col = cells
-            .iter()
-            .filter_map(|c| c.get("col").and_then(|r| r.as_u64()))
-            .max()
-            .unwrap_or(0) as usize;
+        // Determine max row
+        let max_row = cells.iter().map(|c| c.row).max().unwrap_or(0);
 
         // Create 2D grid for rows and columns
         let mut rows: Vec<Vec<TableCell>> = vec![vec![]; max_row + 1];
 
-        for cell_val in &cells {
-            let row = cell_val.get("row").and_then(|r| r.as_u64()).unwrap_or(0) as usize;
-            let _col = cell_val.get("col").and_then(|c| c.as_u64()).unwrap_or(0) as usize;
-            let rowspan = cell_val
-                .get("rowspan")
-                .and_then(|r| r.as_u64())
-                .unwrap_or(1) as u32;
-            let colspan = cell_val
-                .get("colspan")
-                .and_then(|c| c.as_u64())
-                .unwrap_or(1) as u32;
+        for cell in cells {
+            let row = cell.row;
+            let rowspan = cell.rowspan;
+            let colspan = cell.colspan;
+            let cell_rect = cell.rect;
 
-            let cell_rect = cell_val.get("rect").map(|r| {
-                let x = r.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                let y = r.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                let w = r.get("w").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                let h = r.get("h").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                Rect::new(x, y, w, h)
-            });
-
-            let geometry = cell_rect;
+            let geometry = Some(cell_rect);
             let source = Some(SourceInfo::new());
 
             // Recognize cell content
-            let inlines = if let Some(ref rect) = cell_rect {
-                self.recognize_cell_content(
+            let inlines = self
+                .recognize_cell_content(
                     &image,
-                    rect,
+                    &cell_rect,
                     formula_det_session,
                     formula_rec_session,
                     text_rec_session,
                 )
-                .await
-            } else {
-                vec![]
-            };
+                .await;
 
-            let cell = TableCell {
+            let table_cell = TableCell {
                 inlines,
                 colspan,
                 rowspan,
@@ -217,7 +165,7 @@ impl TableRecognizerNode {
             };
 
             if row < rows.len() {
-                rows[row].push(cell);
+                rows[row].push(table_cell);
             }
         }
 
@@ -232,7 +180,7 @@ impl TableRecognizerNode {
 
         let table_block = Block::Table(TableBlock {
             rows,
-            geometry: Some(Rect::new(x, y, w, h)),
+            geometry: Some(table_rect),
             source: Some(SourceInfo::new()),
         });
 
@@ -246,17 +194,31 @@ impl TableRecognizerNode {
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
     ) -> Result<Option<Arc<Box<dyn latexsnipper_runtime::InferenceSession>>>> {
-        // Check cache first
         if let Some(s) = ctx.get_session("formula_det") {
             return Ok(Some(s));
         }
 
-        let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
-        if !det_path.exists() {
-            return Ok(None);
-        }
+        let det_path = if let Some(resolver) = &ctx.model_resolver {
+            let id = latexsnipper_runtime::ModelId::new("formula-det", "yolov8-mfd");
+            match resolver.resolve(&id) {
+                Ok(handle) => {
+                    if let Some(p) = handle.model_path() {
+                        p.to_path_buf()
+                    } else {
+                        return Ok(None);
+                    }
+                }
+                Err(_) => return Ok(None),
+            }
+        } else {
+            let path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
+            if !path.exists() {
+                return Ok(None);
+            }
+            path
+        };
 
-        let handle = ModelHandle::with_path("formula-det", det_path);
+        let handle = resolve_model_handle(ctx, "formula-det", det_path)?;
         let session = backend.create_session(&handle, AccelerationMode::Cpu)?;
         ctx.cache_session("formula_det", session);
         Ok(ctx.get_session("formula_det"))
@@ -269,18 +231,42 @@ impl TableRecognizerNode {
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
     ) -> Result<Option<FormulaRecSession>> {
-        let enc_path = models.join("formula-rec/trocr-deit/encoder_model.onnx");
-        let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
-        let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
+        let (enc_path, dec_path, tok_path) = if let Some(resolver) = &ctx.model_resolver {
+            let enc_id = latexsnipper_runtime::ModelId::new("formula-rec", "encoder");
+            let dec_id = latexsnipper_runtime::ModelId::new("formula-rec", "decoder");
+            let tok_id = latexsnipper_runtime::ModelId::new("formula-rec", "tokenizer");
 
-        if !enc_path.exists() || !dec_path.exists() || !tok_path.exists() {
-            return Ok(None);
-        }
+            let enc = resolver
+                .resolve(&enc_id)
+                .ok()
+                .and_then(|h| h.model_path().map(|p| p.to_path_buf()));
+            let dec = resolver
+                .resolve(&dec_id)
+                .ok()
+                .and_then(|h| h.model_path().map(|p| p.to_path_buf()));
+            let tok = resolver
+                .resolve(&tok_id)
+                .ok()
+                .and_then(|h| h.model_path().map(|p| p.to_path_buf()));
+
+            match (enc, dec, tok) {
+                (Some(e), Some(d), Some(t)) => (e, d, t),
+                _ => return Ok(None),
+            }
+        } else {
+            let enc = models.join("formula-rec/trocr-deit/encoder_model.onnx");
+            let dec = models.join("formula-rec/trocr-deit/decoder_model.onnx");
+            let tok = models.join("formula-rec/trocr-deit/tokenizer.json");
+            if !enc.exists() || !dec.exists() || !tok.exists() {
+                return Ok(None);
+            }
+            (enc, dec, tok)
+        };
 
         let enc_session = match ctx.get_session("formula_encoder") {
             Some(s) => s,
             None => {
-                let enc_handle = ModelHandle::with_path("encoder", enc_path);
+                let enc_handle = resolve_model_handle(ctx, "formula-rec/encoder", enc_path)?;
                 let s = backend.create_session(&enc_handle, AccelerationMode::Cpu)?;
                 ctx.cache_session("formula_encoder", s);
                 ctx.get_session("formula_encoder").unwrap()
@@ -290,7 +276,7 @@ impl TableRecognizerNode {
         let dec_session = match ctx.get_session("formula_decoder") {
             Some(s) => s,
             None => {
-                let dec_handle = ModelHandle::with_path("decoder", dec_path);
+                let dec_handle = resolve_model_handle(ctx, "formula-rec/decoder", dec_path)?;
                 let s = backend.create_session(&dec_handle, AccelerationMode::Cpu)?;
                 ctx.cache_session("formula_decoder", s);
                 ctx.get_session("formula_decoder").unwrap()
@@ -307,7 +293,6 @@ impl TableRecognizerNode {
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
     ) -> Result<Option<TextRecSession>> {
-        // Check cache
         if let Some(s) = ctx.get_session("text_rec") {
             let keys_path = self.find_text_rec_keys(models);
             return Ok(Some((s, keys_path)));
@@ -320,7 +305,7 @@ impl TableRecognizerNode {
             return Ok(None);
         }
 
-        let handle = ModelHandle::with_path("text-rec", rec_path.unwrap());
+        let handle = resolve_model_handle(ctx, "text-rec", rec_path.unwrap())?;
         let session = backend.create_session(&handle, AccelerationMode::Cpu)?;
         ctx.cache_session("text_rec", session);
         Ok(ctx.get_session("text_rec").map(|s| (s, keys_path)))

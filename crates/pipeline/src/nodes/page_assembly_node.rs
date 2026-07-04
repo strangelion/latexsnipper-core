@@ -8,15 +8,9 @@ use crate::node::PipelineNode;
 /// Assembles multiple pages into a final Document.
 ///
 /// After all pages have been processed, this node:
-/// 1. Collects blocks from each page
+/// 1. Collects blocks from artifacts for each page
 /// 2. Sorts blocks within each page by reading order
 /// 3. Builds the final multi-page Document
-///
-/// **IMPORTANT limitation**: Block-to-page assignment is not fully implemented
-/// yet — blocks in the context do not carry page metadata, so the node cannot
-/// reliably distribute blocks to the correct pages. Currently all blocks are
-/// assigned to page 0 (the first page). Proper per-page tracking requires the
-/// pipeline to tag blocks with page indices during processing.
 pub struct PageAssemblyNode {
     name: String,
 }
@@ -43,7 +37,6 @@ impl PipelineNode for PageAssemblyNode {
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
         if !ctx.is_multipage() {
-            // Single page - nothing to assemble
             return Ok(());
         }
 
@@ -54,7 +47,7 @@ impl PipelineNode for PageAssemblyNode {
         for (page_idx, page_image) in ctx.page_images.iter().enumerate() {
             let page_number = (page_idx + 1) as u32;
 
-            // Collect blocks for this page from metadata
+            // Collect blocks for this page from artifacts
             let blocks = self.collect_page_blocks(ctx, page_idx);
 
             // Sort blocks by reading order (y-coordinate, then x-coordinate)
@@ -103,60 +96,35 @@ impl PipelineNode for PageAssemblyNode {
 }
 
 impl PageAssemblyNode {
-    /// Collect blocks for a specific page from metadata.
+    /// Collect blocks for a specific page from artifacts.
     fn collect_page_blocks(&self, ctx: &PipelineContext, page_idx: usize) -> Vec<Block> {
         let mut blocks = Vec::new();
 
         // Collect formula blocks
-        if let Some(formula_blocks) = ctx.get("formula_blocks") {
-            if let Some(arr) = formula_blocks.as_array() {
-                for val in arr {
-                    if let Ok(block) = serde_json::from_value::<Block>(val.clone()) {
-                        // Filter by page if page metadata is available
-                        if self.belongs_to_page(&block, page_idx) {
-                            blocks.push(block);
-                        }
-                    }
-                }
+        for block in &ctx.artifacts.formula_blocks {
+            if self.belongs_to_page(block, page_idx) {
+                blocks.push(block.clone());
             }
         }
 
         // Collect text blocks
-        if let Some(text_blocks) = ctx.get("text_blocks") {
-            if let Some(arr) = text_blocks.as_array() {
-                for val in arr {
-                    if let Ok(block) = serde_json::from_value::<Block>(val.clone()) {
-                        if self.belongs_to_page(&block, page_idx) {
-                            blocks.push(block);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Collect table blocks
-        if let Some(table_blocks) = ctx.get("table_blocks") {
-            if let Some(arr) = table_blocks.as_array() {
-                for val in arr {
-                    if let Ok(block) = serde_json::from_value::<Block>(val.clone()) {
-                        if self.belongs_to_page(&block, page_idx) {
-                            blocks.push(block);
-                        }
-                    }
-                }
+        for block in &ctx.artifacts.text_blocks {
+            if self.belongs_to_page(block, page_idx) {
+                blocks.push(block.clone());
             }
         }
 
         // Collect handwriting blocks
-        if let Some(hw_blocks) = ctx.get("handwriting_blocks") {
-            if let Some(arr) = hw_blocks.as_array() {
-                for val in arr {
-                    if let Ok(block) = serde_json::from_value::<Block>(val.clone()) {
-                        if self.belongs_to_page(&block, page_idx) {
-                            blocks.push(block);
-                        }
-                    }
-                }
+        for block in &ctx.artifacts.handwriting_blocks {
+            if self.belongs_to_page(block, page_idx) {
+                blocks.push(block.clone());
+            }
+        }
+
+        // Collect table blocks
+        for block in &ctx.artifacts.table_blocks {
+            if self.belongs_to_page(block, page_idx) {
+                blocks.push(block.clone());
             }
         }
 
@@ -202,32 +170,19 @@ mod tests {
         let pages = vec![make_test_image(100, 100), make_test_image(200, 200)];
         let mut ctx = PipelineContext::with_pages(pages);
 
-        // Add blocks tagged with page indices
-        ctx.set(
-            "formula_blocks",
-            serde_json::json!([
-                {
-                    "type": "Formula",
-                    "formula": {
-                        "source": {"format": "Latex", "content": "E=mc^2"},
-                        "display_mode": true,
-                        "confidence": 0.95
-                    },
-                    "geometry": {"x": 10.0, "y": 20.0, "width": 100.0, "height": 30.0},
-                    "source": {"page": 0}
-                },
-                {
-                    "type": "Formula",
-                    "formula": {
-                        "source": {"format": "Latex", "content": "F=ma"},
-                        "display_mode": true,
-                        "confidence": 0.90
-                    },
-                    "geometry": {"x": 10.0, "y": 10.0, "width": 80.0, "height": 25.0},
-                    "source": {"page": 1}
-                }
-            ]),
-        );
+        // Add blocks directly to artifacts
+        ctx.artifacts.formula_blocks = vec![
+            Block::Formula(FormulaBlock {
+                formula: Formula::latex("E=mc^2"),
+                geometry: Some(Rect::new(10.0, 20.0, 100.0, 30.0)),
+                source: Some(SourceInfo::new().with_page(0)),
+            }),
+            Block::Formula(FormulaBlock {
+                formula: Formula::latex("F=ma"),
+                geometry: Some(Rect::new(10.0, 10.0, 80.0, 25.0)),
+                source: Some(SourceInfo::new().with_page(1)),
+            }),
+        ];
 
         let node = PageAssemblyNode::new();
         node.process(&mut ctx).await.unwrap();

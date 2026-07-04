@@ -14,6 +14,7 @@ members = [
     "crates/export",
     "crates/model",
     "crates/engine",
+    "crates/api-types",
     "crates/mock",
     "crates/plugin",
     "crates/ffi",
@@ -40,6 +41,24 @@ serde_json = "1"
 thiserror = "2"
 log = "0.4"
 
+# Internal crates
+latexsnipper-foundation = { path = "crates/foundation", version = "1.0.0" }
+latexsnipper-ast = { path = "crates/ast", version = "1.0.0" }
+latexsnipper-tensor = { path = "crates/tensor", version = "1.0.0" }
+latexsnipper-image = { path = "crates/image", version = "1.0.0" }
+latexsnipper-runtime = { path = "crates/runtime", version = "1.0.0" }
+latexsnipper-inference = { path = "crates/inference", version = "1.0.0" }
+latexsnipper-pipeline = { path = "crates/pipeline", version = "1.0.0" }
+latexsnipper-syntax = { path = "crates/syntax", version = "1.0.0" }
+latexsnipper-conversion = { path = "crates/conversion", version = "1.0.0" }
+latexsnipper-export = { path = "crates/export", version = "1.0.0" }
+latexsnipper-model = { path = "crates/model", version = "1.0.0" }
+latexsnipper-engine = { path = "crates/engine", version = "1.0.0" }
+latexsnipper-api-types = { path = "crates/api-types", version = "1.0.0" }
+latexsnipper-mock = { path = "crates/mock", version = "1.0.0" }
+latexsnipper-plugin = { path = "crates/plugin", version = "1.0.0" }
+latexsnipper-tract = { path = "crates/tract", version = "1.0.0" }
+
 # Root package for examples and tests
 [package]
 name = "latexsnipper-core"
@@ -51,6 +70,7 @@ description = "LaTeXSnipper Core — Unified Document AST for multi-format expor
 latexsnipper-ast = { path = "crates/ast" }
 latexsnipper-conversion = { path = "crates/conversion" }
 latexsnipper-pipeline = { path = "crates/pipeline" }
+latexsnipper-engine = { path = "crates/engine" }
 latexsnipper-runtime = { path = "crates/runtime" }
 latexsnipper-tensor = { path = "crates/tensor" }
 latexsnipper-image = { path = "crates/image" }
@@ -59,6 +79,7 @@ latexsnipper-model = { path = "crates/model" }
 latexsnipper-foundation = { path = "crates/foundation" }
 latexsnipper-export = { path = "crates/export" }
 serde_json.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [[example]]
 name = "ast_demo"
@@ -79,6 +100,10 @@ path = "examples/pipeline_demo.rs"
 [[example]]
 name = "pdf_export"
 path = "examples/pdf_export.rs"
+
+[[example]]
+name = "ctc_ocr_model"
+path = "examples/ctc_ocr_model/main.rs"
 
 [[test]]
 name = "integration"

@@ -1,3 +1,5 @@
+pub mod adapter_registry;
+pub mod adapters;
 pub mod formula_detector;
 pub mod formula_lines;
 pub mod formula_parser;
@@ -39,3 +41,4 @@ pub use table_transformer::{
 pub use text_detector::{detect_text, TextDetParams};
 pub use text_recognizer::{load_keys, recognize_text, recognize_text_with_keys, TextRecParams};
 pub use types::{DetectionBox, GridCell, RecognitionResult};
+pub use adapter_registry::register_builtin_adapters;

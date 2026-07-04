@@ -27,8 +27,7 @@ models-download/
 
 # release models (ONNX files)
 release_models/
-models/table-struct/
-models/table-det/
+models/
 
 # Cargo local config (mirror settings)
 .cargo/

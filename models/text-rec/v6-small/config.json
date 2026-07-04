@@ -52,5 +52,16 @@
     "type": "ctc_greedy",
     "blank_id": 0,
     "keys_file": "inference.yml"
+  },
+  "pipeline": {
+    "model_files": {
+      "primary": "inference.onnx",
+      "tokenizer": "inference.yml"
+    },
+    "fallback_dirs": [
+      "v6_models/PP-OCRv6_medium_rec_infer",
+      "v6_models/PP-OCRv6_small_rec_infer",
+      "text-rec/ppocrv5-mobile"
+    ]
   }
 }

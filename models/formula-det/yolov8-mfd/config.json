@@ -23,7 +23,7 @@
       6,
       8400
     ],
-    "description": "[batch, 6, num_detections] — 6 = (x, y, w, h, confidence, class)"
+    "description": "[batch, 6, num_detections] -- 6 = (x, y, w, h, confidence, class)"
   },
   "preprocessing": {
     "resize": {
@@ -53,5 +53,13 @@
     "max_detections": 100,
     "apply_sigmoid": true,
     "output_layout": "col_major"
+  },
+  "pipeline": {
+    "min_area": 100.0,
+    "min_confidence": 0.2,
+    "max_detections": 100,
+    "model_files": {
+      "primary": "mathcraft-mfd.onnx"
+    }
   }
 }

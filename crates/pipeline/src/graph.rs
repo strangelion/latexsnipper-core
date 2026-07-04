@@ -9,6 +9,8 @@ struct NodeEntry {
     name: String,
     node: Box<dyn PipelineNode>,
     depends_on: Vec<String>,
+    /// Insertion index for deterministic ordering of nodes with equal dependencies.
+    index: usize,
 }
 
 /// A pipeline graph that executes nodes respecting dependency order (DAG).
@@ -28,10 +30,12 @@ impl PipelineGraph {
     /// Add a node with no dependencies.
     pub fn add_node(&mut self, node: Box<dyn PipelineNode>) -> &mut Self {
         let name = node.name().to_string();
+        let index = self.entries.len();
         self.entries.push(NodeEntry {
             name,
             node,
             depends_on: Vec::new(),
+            index,
         });
         self
     }
@@ -43,10 +47,12 @@ impl PipelineGraph {
         depends_on: Vec<String>,
     ) -> &mut Self {
         let name = node.name().to_string();
+        let index = self.entries.len();
         self.entries.push(NodeEntry {
             name,
             node,
             depends_on,
+            index,
         });
         self
     }
@@ -81,6 +87,7 @@ impl PipelineGraph {
     }
 
     /// Topological sort using Kahn's algorithm.
+    /// Nodes with equal in-degree are ordered by their insertion index (FIFO).
     fn topological_sort(&self) -> Result<Vec<String>> {
         let mut in_degree: HashMap<String, usize> = HashMap::new();
         let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
@@ -108,13 +115,19 @@ impl PipelineGraph {
             }
         }
 
-        // Start with nodes that have no dependencies
+        // Start with nodes that have no dependencies, ordered by insertion index
         let mut queue: Vec<String> = in_degree
             .iter()
             .filter(|(_, &deg)| deg == 0)
             .map(|(name, _)| name.clone())
             .collect();
-        queue.sort(); // Deterministic order
+        // Sort by insertion index to preserve add_node() order
+        queue.sort_by_key(|name| {
+            self.entries
+                .iter()
+                .find(|e| &e.name == name)
+                .map_or(usize::MAX, |e| e.index)
+        });
 
         let mut result = Vec::new();
 
@@ -130,7 +143,13 @@ impl PipelineGraph {
                         queue.push(dep_name.clone());
                     }
                 }
-                queue.sort(); // Keep deterministic
+                // Re-sort by insertion index for newly ready nodes
+                queue.sort_by_key(|name| {
+                    self.entries
+                        .iter()
+                        .find(|e| &e.name == name)
+                        .map_or(usize::MAX, |e| e.index)
+                });
             }
         }
 

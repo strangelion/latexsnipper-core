@@ -1,0 +1,82 @@
+use latexsnipper_ast::{Block, Rect};
+use latexsnipper_inference::{DetectionBox, GridCell};
+use latexsnipper_image::SnipperImage;
+
+/// Strongly-typed pipeline data artifacts.
+/// Replaces string-keyed metadata for type safety.
+#[derive(Debug, Clone, Default)]
+pub struct PipelineArtifacts {
+    // Detections (from detector nodes)
+    pub formula_detections: Vec<DetectionBox>,
+    pub text_detections: Vec<DetectionBox>,
+    pub handwriting_detections: Vec<DetectionBox>,
+    pub table_detections: Vec<DetectionBox>,
+
+    // Crops (from crop nodes)
+    pub formula_crops: Vec<CropRegion>,
+    pub text_crops: Vec<CropRegion>,
+    pub handwriting_crops: Vec<CropRegion>,
+
+    // Table structures (grid cells from table structure recognition)
+    pub table_structures: Vec<GridCell>,
+
+    // Blocks (from recognizer nodes)
+    pub formula_blocks: Vec<Block>,
+    pub text_blocks: Vec<Block>,
+    pub handwriting_blocks: Vec<Block>,
+    pub table_blocks: Vec<Block>,
+
+    // Page-level results (for multi-page)
+    pub page_results: Vec<Vec<Block>>,
+}
+
+/// A cropped region with its bounding box and image data.
+#[derive(Debug, Clone)]
+pub struct CropRegion {
+    pub rect: Rect,
+    pub image: SnipperImage,
+}
+
+impl PipelineArtifacts {
+    /// Get all blocks from all sources.
+    pub fn all_blocks(&self) -> Vec<Block> {
+        let mut blocks = Vec::new();
+        blocks.extend(self.formula_blocks.clone());
+        blocks.extend(self.text_blocks.clone());
+        blocks.extend(self.handwriting_blocks.clone());
+        blocks.extend(self.table_blocks.clone());
+        blocks
+    }
+
+    /// Check if there are any detections.
+    pub fn has_detections(&self) -> bool {
+        !self.formula_detections.is_empty()
+            || !self.text_detections.is_empty()
+            || !self.handwriting_detections.is_empty()
+            || !self.table_detections.is_empty()
+    }
+
+    /// Check if there are any blocks.
+    pub fn has_blocks(&self) -> bool {
+        !self.formula_blocks.is_empty()
+            || !self.text_blocks.is_empty()
+            || !self.handwriting_blocks.is_empty()
+            || !self.table_blocks.is_empty()
+    }
+
+    /// Get total detection count.
+    pub fn detection_count(&self) -> usize {
+        self.formula_detections.len()
+            + self.text_detections.len()
+            + self.handwriting_detections.len()
+            + self.table_detections.len()
+    }
+
+    /// Get total block count.
+    pub fn block_count(&self) -> usize {
+        self.formula_blocks.len()
+            + self.text_blocks.len()
+            + self.handwriting_blocks.len()
+            + self.table_blocks.len()
+    }
+}

@@ -3,10 +3,11 @@ use latexsnipper_ast::Rect;
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_inference::recognize_table_structure;
-use latexsnipper_runtime::{AccelerationMode, InferenceSession, ModelHandle};
+use latexsnipper_runtime::{AccelerationMode, InferenceSession};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
+use crate::nodes::utils::resolve_model_handle;
 
 /// Parses table structure using a configurable backend.
 ///
@@ -36,11 +37,19 @@ impl TableStructureNode {
     }
 
     fn backend_model_path(&self, models: &std::path::Path) -> Option<std::path::PathBuf> {
-        let path = match self.backend.as_str() {
-            "tatr" => models.join("table-struct/tatr-structure/model.onnx"),
-            "slanet" => models.join("table-struct/slanet-plus/model.onnx"),
+        let category = match self.backend.as_str() {
+            "tatr" => "table-struct/tatr-structure",
+            "slanet" => "table-struct/slanet-plus",
             _ => return None,
         };
+
+        if let Some((_config, path, _dir)) =
+            latexsnipper_model::ModelConfig::find_best(models, category)
+        {
+            return Some(path);
+        }
+
+        let path = models.join(category).join("model.onnx");
         if path.exists() {
             Some(path)
         } else {
@@ -62,17 +71,8 @@ impl PipelineNode for TableStructureNode {
     }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
-        let detections = match ctx.get("table_detections") {
-            Some(v) => v.clone(),
-            None => return Ok(()),
-        };
-
-        let det_array = match detections.as_array() {
-            Some(a) => a.clone(),
-            None => return Ok(()),
-        };
-
-        if det_array.is_empty() {
+        let detections = ctx.artifacts.table_detections.clone();
+        if detections.is_empty() {
             return Ok(());
         }
 
@@ -90,8 +90,8 @@ impl PipelineNode for TableStructureNode {
         let backend_session: Option<Box<dyn InferenceSession>> =
             (|| -> Option<Box<dyn InferenceSession>> {
                 let model_path = self.backend_model_path(&models)?;
+                let handle = resolve_model_handle(ctx, &self.backend, model_path).ok()?;
                 let backend = ctx.backend.as_ref()?;
-                let handle = ModelHandle::with_path(&self.backend, model_path);
                 backend.create_session(&handle, AccelerationMode::Cpu).ok()
             })();
 
@@ -105,67 +105,44 @@ impl PipelineNode for TableStructureNode {
 
         log::info!(
             "TableStructure: parsing {} table regions with backend '{}'",
-            det_array.len(),
+            detections.len(),
             self.backend
         );
 
-        let mut all_structures = Vec::new();
+        let mut all_cells = Vec::new();
 
-        for det_val in &det_array {
-            if let Some(rect_val) = det_val.get("rect") {
-                let x = rect_val.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                let y = rect_val.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                let w = rect_val.get("w").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                let h = rect_val.get("h").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        for det in &detections {
+            let x = det.rect.x;
+            let y = det.rect.y;
+            let w = det.rect.width;
+            let h = det.rect.height;
 
-                let table_rect = Rect::new(x, y, w, h);
-                let cropped = operations::crop(&image, table_rect);
+            let table_rect = Rect::new(x, y, w, h);
+            let cropped = operations::crop(&image, table_rect);
 
-                let grid = if let Some(ref sess) = backend_session {
-                    recognize_table_structure(&cropped, &self.backend, Some(&**sess))?
-                } else {
-                    recognize_table_structure(&cropped, "projection", None)?
-                };
+            let grid = if let Some(ref sess) = backend_session {
+                recognize_table_structure(&cropped, &self.backend, Some(&**sess))?
+            } else {
+                recognize_table_structure(&cropped, "projection", None)?
+            };
 
-                let grid = match grid {
-                    Some(g) => g,
-                    None => continue,
-                };
+            let grid = match grid {
+                Some(g) => g,
+                None => continue,
+            };
 
-                if grid.is_empty() {
-                    log::warn!("Grid is empty for table at ({}, {})", x, y);
-                    continue;
-                }
-
-                let cells_json: Vec<serde_json::Value> = grid
-                    .iter()
-                    .map(|cell| {
-                        serde_json::json!({
-                            "row": cell.row,
-                            "col": cell.col,
-                            "rowspan": cell.rowspan,
-                            "colspan": cell.colspan,
-                            "rect": {
-                                "x": cell.rect.x + x,
-                                "y": cell.rect.y + y,
-                                "w": cell.rect.width,
-                                "h": cell.rect.height,
-                            }
-                        })
-                    })
-                    .collect();
-
-                all_structures.push(serde_json::json!({
-                    "rect": {"x": x, "y": y, "w": w, "h": h},
-                    "cells": cells_json,
-                }));
+            if grid.is_empty() {
+                log::warn!("Grid is empty for table at ({}, {})", x, y);
+                continue;
             }
+
+            all_cells.extend(grid);
         }
 
-        ctx.set("table_structures", serde_json::json!(all_structures));
+        ctx.artifacts.table_structures = all_cells;
         log::info!(
             "TableStructure: parsed {} tables via '{}'",
-            all_structures.len(),
+            ctx.artifacts.table_structures.len(),
             self.backend
         );
         Ok(())

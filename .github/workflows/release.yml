@@ -193,17 +193,71 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Model version: $VERSION"
 
+      - name: Validate model manifests
+        run: |
+          echo "Validating model manifests..."
+          for dir in models/*/; do
+            if [ -f "$dir/manifest.toml" ]; then
+              echo "  Found manifest: $dir/manifest.toml"
+              # Basic validation: check required fields
+              python3 -c "
+          import tomllib
+          with open('${dir}manifest.toml', 'rb') as f:
+              m = tomllib.load(f)
+          assert 'id' in m, 'Missing id'
+          assert 'task' in m, 'Missing task'
+          assert 'adapter' in m, 'Missing adapter'
+          print(f'    Valid: {m[\"id\"]} ({m[\"task\"]})')
+          "
+            else
+              echo "  No manifest: $dir (skipping validation)"
+            fi
+          done
+
+      - name: Generate checksums
+        run: |
+          echo "Generating SHA-256 checksums..."
+          cd models
+          find . -name "*.onnx" -o -name "*.json" -o -name "*.txt" -o -name "*.toml" | \
+            sort | xargs sha256sum > CHECKSUMS.sha256
+          echo "Checksums generated:"
+          cat CHECKSUMS.sha256 | head -10
+
       - name: Package models directory
         run: |
-          # Create tar.gz from models/ directory (already in repo)
           VERSION="${{ steps.manifest.outputs.version }}"
-          tar czf latexsnipper-models-v${VERSION}.tar.gz models/
+
+          # Create structured package
+          mkdir -p package/models
+
+          # Copy model directories with manifests
+          for dir in models/*/; do
+            if [ -d "$dir" ]; then
+              MODEL_NAME=$(basename "$dir")
+              mkdir -p "package/models/$MODEL_NAME"
+              cp -r "$dir"* "package/models/$MODEL_NAME/"
+
+              # Ensure manifest exists (generate minimal if missing)
+              if [ ! -f "package/models/$MODEL_NAME/manifest.toml" ]; then
+                echo "Warning: No manifest.toml in $MODEL_NAME"
+              fi
+            fi
+          done
+
+          # Copy checksums
+          cp models/CHECKSUMS.sha256 package/models/ 2>/dev/null || true
+
+          # Copy model-manifest.json
+          cp models/model-manifest.json package/models/ 2>/dev/null || true
+
+          # Create tar.gz
+          tar czf latexsnipper-models-v${VERSION}.tar.gz -C package models
 
           echo "Package created:"
           ls -lh latexsnipper-models-*.tar.gz
 
           echo "Contents:"
-          tar tzf latexsnipper-models-*.tar.gz | head -20
+          tar tzf latexsnipper-models-*.tar.gz | head -30
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -7,7 +7,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
 [![Status](https://img.shields.io/badge/Status-Core%20Pipeline%20Working-brightgreen)]()
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20WASM-lightgrey)]()
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)]()
 
 **One line of code, images to LaTeX/Markdown/Typst**
 
@@ -22,7 +22,7 @@
 ## Quick Start
 
 ```rust
-use latexsnipper_pipeline::sdk::Snipper;
+use latexsnipper_engine::sdk::Snipper;
 
 // One line: image → detect → recognize → AST → export
 let snipper = Snipper::from_file("input.png")?;
@@ -195,18 +195,21 @@ Engine
 | Capability | Status | Details |
 |-----------|--------|---------|
 | **Inference** | ✅ | YOLOv8 detection + TrOCR formula recognition + CRNN+CTC text recognition |
-| **Runtime** | ✅ | ONNX Runtime (session caching, GPU auto-detect) + Stub |
-| **Engine** | ✅ | JobQueue, Service trait, Request/Response Builder, Streaming API |
-| **Model** | ✅ | Manifest, Config, SHA256 verification |
+| **Runtime** | ✅ | ONNX Runtime (session caching, GPU auto-detect) + Tract (WASM) + Stub |
+| **Engine** | ✅ | SnipperEngine + JobQueue + Model hot-reload + SHA-256 validation + Metrics + ModelPackage |
+| **Model** | ✅ | Manifest (TOML), Config, SHA256 verification, ModelRegistry |
+| **ModelPackage** | ✅ | `ModelPackage`/`ModelExecutor` traits, lazy session loading, pipeline integration |
+| **Pipeline** | ✅ | Node-based async pipeline with ModelTask abstraction + ReadingOrder + ModelPackage fallback |
 | **Plugin** | ✅ | Plugin trait, Registry, TransformPlugin |
 | **FFI** | ✅ | Android JNI + iOS C FFI |
-| **WASM** | ✅ | Full parse/render/convert/recognize bindings |
-| **CLI** | ✅ | recognize/parse/render/version commands, file export (`-o output.tex`), format hints, hidden minigame (`snipper play`) |
+| **WASM** | ✅ | Full parse/render/convert/recognize bindings with Tract backend |
+| **CLI** | ✅ | recognize/parse/render/version commands, file export, format hints, minigame |
 | **Export** | ✅ | SVG/Text/PDF with printpdf, headings, tables, lists, code, formulas, page selection |
 | **Table Recognition** | ✅ | SLANet+ table structure + PP-DocLayout v3 layout detection |
 | **Handwriting** | ✅ | Handwriting detection + TrOCR recognition + postprocessing |
-| **Formula Layout** | ✅ | LaTeX AST parsing + symbol-level detection + konwn issue: layout not written back to Formula object |
-| **Multi-page** | ✅ | PDF decoding + multi-page pipeline; PDF rendering not yet implemented (returns error) |
+| **Formula Layout** | ✅ | LaTeX AST parsing + symbol-level detection |
+| **Multi-page** | ✅ | PDF decoding + multi-page pipeline; PDF rendering via pdftoppm/mutool |
+| **PDF Rendering** | ✅ | Page rendering via pdftoppm (poppler) or mutool (MuPDF) |
 
 ---
 
@@ -217,21 +220,23 @@ crates/
 ├── foundation/     ✅ Error, Result, Logger, Config, EventBus
 ├── ast/            ✅ Document AST — single source of truth
 ├── tensor/         ✅ Inference I/O tensors
-├── image/          ✅ Platform-independent image processing
-├── runtime/        ✅ RuntimeBackend + InferenceSession traits (ONNX + Stub)
+├── image/          ✅ Platform-independent image processing + PDF rendering
+├── runtime/        ✅ RuntimeBackend + InferenceSession + ModelResolver + ModelPackage + ModelRegistry + Validation
 ├── model/          ✅ Model manifest, config, SHA256 verification
-├── inference/      ✅ Detection + Recognition pipelines (YOLOv8/TrOCR/CRNN)
-├── pipeline/       ✅ Node-based async pipeline
+├── inference/      ✅ Detection + Recognition pipelines + ModelPackage adapters
+├── pipeline/       ✅ Node-based async pipeline + PipelineArtifacts + ReadingOrder
 ├── syntax/         ✅ LaTeX/Typst/Markdown Parser + Renderer
 ├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
 ├── export/         ✅ RenderTree → SVG/Text/PDF (printpdf), page selection
-├── engine/         ✅ SnipperEngine + JobQueue + Service
+├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
+├── api-types/      ✅ Public API types (RecognizeMode, Request, Response, StreamItem)
+├── tract/          ✅ Tract-based WASM RuntimeBackend
 ├── plugin/         ✅ Plugin trait, Registry
 ├── mock/           ✅ Fake implementations for testing
 ├── ffi/            ✅ Android JNI + iOS C FFI
-├── wasm/           ✅ WebAssembly bindings
+├── wasm/           ✅ WebAssembly bindings with Tract backend
 ├── cli/            ✅ CLI tool (recognize/parse/render/version/play)
-└── tests/          ✅ Integration tests (64+ tests)
+└── tests/          ✅ Integration tests (15+ tests with real models)
 ```
 
 ---
@@ -241,25 +246,70 @@ crates/
 ### Install CLI
 
 ```bash
-# From crates.io
-cargo install latexsnipper-cli
+# From git (recommended)
+cargo install --git https://github.com/strangelion/latexsnipper-core snipper
 
 # Or build from source
+git clone https://github.com/strangelion/latexsnipper-core
+cd latexsnipper-core
 cargo build --release -p latexsnipper-cli
+```
+
+### PDF Support
+
+PDF page rendering requires one of these external tools:
+
+```bash
+# Linux
+sudo apt install poppler-utils    # provides pdftoppm
+# or
+sudo apt install mupdf-tools      # provides mutool
+
+# macOS
+brew install poppler
+# or
+brew install mupdf
+
+# Windows
+choco install poppler
+# or
+choco install mupdf
 ```
 
 ### Use as Library
 
 ```toml
 [dependencies]
-latexsnipper-pipeline = "1.0"
+latexsnipper-engine = "1.0"
 ```
 
 ```rust
-use latexsnipper_pipeline::sdk::Snipper;
+use latexsnipper_engine::sdk::Snipper;
 
 let snipper = Snipper::from_file("input.png")?;
 let latex = snipper.to_latex()?;
+```
+
+### Custom Model Integration
+
+```rust
+use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
+use latexsnipper_inference::adapters::YoloV8DetectorPackage;
+use latexsnipper_runtime::{ModelId, ModelTask};
+use std::sync::Arc;
+
+// Create engine
+let config = EngineConfig::with_models_dir("models".into());
+let backend = OnnxRuntimeBackend::new("models".into())?;
+let mut engine = SnipperEngine::new(config, Box::new(backend));
+
+// Register custom model package (optional — falls back to built-in inference)
+let package = YoloV8DetectorPackage::from_config(&config, ModelId::new("formula-det", "yolov8"))
+    .with_model_path("models/formula-det/yolov8-mfd/mathcraft-mfd.onnx".into());
+engine.register_model_package(ModelTask::FormulaDetection, Arc::new(package));
+
+// Recognize — will use ModelPackage if registered, otherwise direct function calls
+let doc = engine.recognize(image, RecognizeMode::Formula).await?;
 ```
 
 ### Run Examples
@@ -321,6 +371,7 @@ See [docs/getting-started.md](docs/getting-started.md) for details.
 - **Composable** — Everything is a Node, everything is a Pipeline
 - **Platform Independent** — Business logic in Rust, UI outside
 - **Pluggable Runtime** — ONNX, TensorRT, NCNN — all interchangeable
+- **Pluggable Models** — `ModelPackage` trait allows custom model integrations without changing pipeline code
 
 ---
 

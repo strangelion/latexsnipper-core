@@ -54,6 +54,10 @@ pub struct ModelConfig {
     /// Extra metadata (flexible key-value for model-specific params)
     #[serde(default)]
     pub extra: Option<serde_json::Value>,
+
+    /// Pipeline-specific configuration — tells the pipeline how to use this model.
+    #[serde(default)]
+    pub pipeline: Option<PipelineConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -225,6 +229,46 @@ pub struct QuantizationConfig {
     pub quantized_size_bytes: Option<u64>,
 }
 
+/// Pipeline configuration — tells the pipeline how to use this model.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineConfig {
+    /// Detection filter: minimum area in pixels
+    #[serde(default)]
+    pub min_area: Option<f32>,
+    /// Detection filter: minimum confidence threshold
+    #[serde(default)]
+    pub min_confidence: Option<f32>,
+    /// Detection filter: maximum number of detections
+    #[serde(default)]
+    pub max_detections: Option<usize>,
+    /// Model files to load (relative to model dir)
+    #[serde(default)]
+    pub model_files: Option<ModelFiles>,
+    /// Fallback model directories (for models with multiple versions)
+    #[serde(default)]
+    pub fallback_dirs: Option<Vec<String>>,
+    /// Additional model-specific parameters
+    #[serde(default)]
+    pub params: Option<serde_json::Value>,
+}
+
+/// Model file paths relative to the model directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelFiles {
+    /// Primary model file (e.g., "model.onnx", "mathcraft-mfd.onnx")
+    #[serde(default)]
+    pub primary: Option<String>,
+    /// Encoder model (for encoder-decoder models like TrOCR)
+    #[serde(default)]
+    pub encoder: Option<String>,
+    /// Decoder model
+    #[serde(default)]
+    pub decoder: Option<String>,
+    /// Tokenizer/keys file
+    #[serde(default)]
+    pub tokenizer: Option<String>,
+}
+
 impl ModelConfig {
     /// Load config.json from a model directory.
     pub fn load(model_dir: &Path) -> Result<Self> {
@@ -239,6 +283,31 @@ impl ModelConfig {
     pub fn parse(json: &str) -> Result<Self> {
         serde_json::from_str(json)
             .map_err(|e| SnipperError::Model(format!("Invalid config.json: {}", e)))
+    }
+
+    /// Create a minimal config with default values.
+    ///
+    /// Used when no config.json exists but a model needs to be loaded.
+    pub fn minimal() -> Self {
+        Self {
+            model_type: "unknown".into(),
+            model_family: None,
+            license: None,
+            task_type: None,
+            num_classes: None,
+            dynamic_shapes: None,
+            input: None,
+            output: None,
+            encoder: None,
+            decoder: None,
+            preprocessing: None,
+            postprocessing: None,
+            decoding: None,
+            quantization: None,
+            outputs: None,
+            extra: None,
+            pipeline: None,
+        }
     }
 
     /// Build a minimal config for Paddle inference packages.
@@ -301,6 +370,7 @@ impl ModelConfig {
             quantization: None,
             outputs: None,
             extra: None,
+            pipeline: None,
         })
     }
 
@@ -438,5 +508,126 @@ impl ModelConfig {
                 "pplcnet" => "classification",
                 _ => "unknown",
             })
+    }
+
+    /// Get minimum area filter from pipeline config.
+    pub fn pipeline_min_area(&self) -> f32 {
+        self.pipeline
+            .as_ref()
+            .and_then(|p| p.min_area)
+            .unwrap_or(100.0)
+    }
+
+    /// Get minimum confidence filter from pipeline config.
+    pub fn pipeline_min_confidence(&self) -> f32 {
+        self.pipeline
+            .as_ref()
+            .and_then(|p| p.min_confidence)
+            .unwrap_or(0.2)
+    }
+
+    /// Get the primary model file path from pipeline config.
+    pub fn pipeline_model_path(&self, model_dir: &Path) -> Option<std::path::PathBuf> {
+        if let Some(files) = self.pipeline.as_ref().and_then(|p| p.model_files.as_ref()) {
+            if let Some(primary) = &files.primary {
+                let path = model_dir.join(primary);
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+        self.find_model_file(model_dir)
+    }
+
+    /// Get the encoder model file path from pipeline config.
+    pub fn pipeline_encoder_path(&self, model_dir: &Path) -> Option<std::path::PathBuf> {
+        if let Some(files) = self.pipeline.as_ref().and_then(|p| p.model_files.as_ref()) {
+            if let Some(encoder) = &files.encoder {
+                let path = model_dir.join(encoder);
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+        self.find_encoder_file(model_dir)
+    }
+
+    /// Get the decoder model file path from pipeline config.
+    pub fn pipeline_decoder_path(&self, model_dir: &Path) -> Option<std::path::PathBuf> {
+        if let Some(files) = self.pipeline.as_ref().and_then(|p| p.model_files.as_ref()) {
+            if let Some(decoder) = &files.decoder {
+                let path = model_dir.join(decoder);
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+        self.find_decoder_file(model_dir)
+    }
+
+    /// Get the tokenizer file path from pipeline config.
+    pub fn pipeline_tokenizer_path(&self, model_dir: &Path) -> Option<std::path::PathBuf> {
+        if let Some(files) = self.pipeline.as_ref().and_then(|p| p.model_files.as_ref()) {
+            if let Some(tokenizer) = &files.tokenizer {
+                let path = model_dir.join(tokenizer);
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+        self.find_tokenizer_file(model_dir)
+    }
+
+    /// Get fallback directories from pipeline config.
+    pub fn pipeline_fallback_dirs(&self, models_dir: &Path) -> Vec<std::path::PathBuf> {
+        self.pipeline
+            .as_ref()
+            .and_then(|p| p.fallback_dirs.as_ref())
+            .map(|dirs| dirs.iter().map(|d| models_dir.join(d)).collect())
+            .unwrap_or_default()
+    }
+
+    /// Discover all models in a category directory.
+    /// Returns Vec of (variant_name, ModelConfig, variant_dir) tuples.
+    pub fn discover_all(
+        models_dir: &Path,
+        category: &str,
+    ) -> Vec<(String, ModelConfig, std::path::PathBuf)> {
+        let cat_dir = models_dir.join(category);
+        if !cat_dir.is_dir() {
+            return Vec::new();
+        }
+
+        std::fs::read_dir(&cat_dir)
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .filter_map(|e| {
+                let dir = e.path();
+                let variant = dir.file_name()?.to_str()?;
+                let config = if dir.join("config.json").exists() {
+                    ModelConfig::load(&dir).ok()?
+                } else {
+                    ModelConfig::from_paddle_inference_dir(&dir).ok()?
+                };
+                Some((variant.to_string(), config, dir))
+            })
+            .collect()
+    }
+
+    /// Find the best model in a category, trying variants in order.
+    /// Returns (ModelConfig, model_file_path, variant_dir).
+    pub fn find_best(
+        models_dir: &Path,
+        category: &str,
+    ) -> Option<(ModelConfig, std::path::PathBuf, std::path::PathBuf)> {
+        let variants = Self::discover_all(models_dir, category);
+        for (_variant, config, variant_dir) in variants {
+            if let Some(path) = config.pipeline_model_path(&variant_dir) {
+                return Some((config, path, variant_dir));
+            }
+        }
+        None
     }
 }

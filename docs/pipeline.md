@@ -7,17 +7,17 @@
 1. **Pipeline 是 Node Graph，不是 if/else**
 2. **每个 Node 独立处理 Context**
 3. **支持取消（cancelled flag）**
+4. **节点表达能力（ModelTask），不表达实现**
 
 ## 模块
 
 | 模块 | 文件 | 说明 |
 |---|---|---|
 | `node` | node.rs | PipelineNode trait + TransformNode |
-| `context` | context.rs | PipelineContext（image + document + metadata） |
-| `graph` | graph.rs | PipelineGraph（节点编排） |
-| `formula_pipeline` | formula_pipeline.rs | 公式格式化 + Document 构建 |
-| `text_pipeline` | text_pipeline.rs | 文字格式化 + Document 构建 |
-| `mixed_pipeline` | mixed_pipeline.rs | 混合格式化 + Document 构建 |
+| `context` | context.rs | PipelineContext（image + artifacts + metadata + sessions） |
+| `graph` | graph.rs | PipelineGraph（拓扑排序 + 显式依赖） |
+| `artifacts` | artifacts.rs | PipelineArtifacts 强类型数据 |
+| `reading_order` | reading_order.rs | 阅读顺序排序（y-bucket + x tie-breaker） |
 
 ## 关键类型
 
@@ -31,70 +31,50 @@ pub trait PipelineNode: Send + Sync {
 }
 ```
 
-### TransformNode
-
-```rust
-pub struct TransformNode {
-    name: String,
-    transform: Box<dyn Fn(&mut PipelineContext) -> Result<()> + Send + Sync>,
-}
-// 便捷构造：TransformNode::new("name", |ctx| { ... })
-```
-
 ### PipelineContext
 
 ```rust
 pub struct PipelineContext {
     pub image: Option<SnipperImage>,
-    pub document: Document,
+    pub artifacts: PipelineArtifacts,
     pub metadata: HashMap<String, serde_json::Value>,
+    pub backend: Option<Arc<dyn RuntimeBackend>>,
+    pub model_resolver: Option<SharedModelResolver>,
+    pub sessions: HashMap<String, CachedSession>,
+    pub diagnostics: Vec<DiagnosticEvent>,
     pub cancelled: bool,
+    pub models_dir: Option<PathBuf>,
 }
-// methods: new(), with_image(), set(), get(), cancel()
+```
+
+### PipelineArtifacts
+
+```rust
+pub struct PipelineArtifacts {
+    pub formula_detections: Vec<DetectionBox>,
+    pub text_detections: Vec<DetectionBox>,
+    pub handwriting_detections: Vec<DetectionBox>,
+    pub table_detections: Vec<DetectionBox>,
+    pub formula_blocks: Vec<Block>,
+    pub text_blocks: Vec<Block>,
+    pub handwriting_blocks: Vec<Block>,
+    pub table_blocks: Vec<Block>,
+}
 ```
 
 ### PipelineGraph
 
 ```rust
-pub struct PipelineGraph { name, nodes: Vec<Box<dyn PipelineNode>> }
-// methods: new(), add_node(), run(), len(), is_empty(), name()
+pub struct PipelineGraph { name, entries: Vec<NodeEntry> }
+// methods: new(), add_node(), add_node_with_deps(), run(), len()
 ```
 
-`run()` 按顺序执行所有节点，遇 `cancelled` 则中断。
-
-## Pipeline 函数
-
-### formula_pipeline
-
-| 函数 | 说明 |
-|------|------|
-| `format_formula_output(ctx)` | 从 Document 提取所有公式，存入 metadata |
-| `build_document(formulas, texts)` | 从公式+文字列表构建 Document |
-
-### text_pipeline
-
-| 函数 | 说明 |
-|------|------|
-| `format_text_output(ctx)` | 从 Document 提取所有文字，存入 metadata |
-| `build_document_from_text(lines)` | 从文字行列表构建 Document |
-
-### mixed_pipeline
-
-| 函数 | 说明 |
-|------|------|
-| `format_mixed_output(ctx)` | 格式化混合内容（公式用 `$$`，文字直接输出） |
-| `build_document_from_mixed(regions)` | 从混合区域列表构建 Document |
-
-### RegionType
-
-```rust
-pub enum RegionType { Formula, Text }
-```
+`run()` 按拓扑排序执行节点，显式依赖保证正确顺序。
 
 ## 依赖关系
 
 ```
 Pipeline
-↑ 依赖 AST, Image
+↑ 依赖 AST, Image, Runtime
 ↓ 被 Engine 依赖
 ```

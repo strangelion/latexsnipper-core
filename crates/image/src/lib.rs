@@ -3,6 +3,7 @@ pub mod decode;
 pub mod image;
 pub mod operations;
 pub mod pdf;
+pub mod pdf_render;
 pub mod view;
 
 pub use color::PixelFormat;

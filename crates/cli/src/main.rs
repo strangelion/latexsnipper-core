@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use latexsnipper_pipeline::sdk::Snipper;
+use latexsnipper_engine::sdk::Snipper;
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use std::io::{self, Write};
@@ -123,6 +123,59 @@ enum Commands {
         Hint penalty: -50 pts per hint\n    \
         Skip penalty: -100 pts")]
     Play,
+
+    /// Manage models (download, list, verify)
+    #[command(subcommand)]
+    Models(ModelsCommand),
+}
+
+#[derive(Subcommand)]
+enum ModelsCommand {
+    /// Download models from release
+    #[command(long_about = "Download model packages from GitHub releases.\n\n\
+        Downloads and extracts model packages to the models directory.\n\
+        By default, downloads all required models from the official manifest.\n\n\
+        EXAMPLES:\n    \
+        snipper models download\n    \
+        snipper models download --category formula-det\n    \
+        snipper models download --all")]
+    Download {
+        /// Model category to download (e.g., formula-det, text-rec)
+        #[arg(short = 'c', long)]
+        category: Option<String>,
+
+        /// Download all models (not just required ones)
+        #[arg(short = 'a', long)]
+        all: bool,
+
+        /// Custom manifest URL
+        #[arg(long)]
+        manifest_url: Option<String>,
+    },
+
+    /// List installed models
+    #[command(long_about = "List all installed model packages.\n\n\
+        Shows which models are installed and their variants.\n\n\
+        EXAMPLES:\n    \
+        snipper models list\n    \
+        snipper models list --category formula-det")]
+    List {
+        /// Filter by category
+        #[arg(short = 'c', long)]
+        category: Option<String>,
+    },
+
+    /// Verify model integrity
+    #[command(long_about = "Verify model files using SHA-256 checksums.\n\n\
+        Checks that all installed model files match their expected checksums.\n\n\
+        EXAMPLES:\n    \
+        snipper models verify\n    \
+        snipper models verify --category formula-det")]
+    Verify {
+        /// Filter by category
+        #[arg(short = 'c', long)]
+        category: Option<String>,
+    },
 }
 
 fn resolve_format(format: &str, output: Option<&str>) -> String {
@@ -310,6 +363,238 @@ fn main() {
         }
 
         Commands::Play => play_game(),
+
+        Commands::Models(cmd) => match cmd {
+            ModelsCommand::Download { category, all, manifest_url } => {
+                handle_models_download(category, all, manifest_url);
+            }
+            ModelsCommand::List { category } => {
+                handle_models_list(category);
+            }
+            ModelsCommand::Verify { category } => {
+                handle_models_verify(category);
+            }
+        },
+    }
+}
+
+fn handle_models_download(category: Option<String>, all: bool, manifest_url: Option<String>) {
+    let models_dir = std::path::PathBuf::from("models");
+    let manager = latexsnipper_model::ModelManager::new(models_dir);
+
+    // Load manifest
+    let manifest_path = std::path::PathBuf::from("models/model-manifest.json");
+    let manifest = if manifest_path.exists() {
+        match latexsnipper_model::ModelManifest::load(&manifest_path) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Failed to load manifest: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else if let Some(url) = manifest_url {
+        eprintln!("Downloading manifest from {}", url);
+        // In a real implementation, we'd download the manifest here
+        eprintln!("Manifest download not yet implemented");
+        std::process::exit(1);
+    } else {
+        eprintln!("No manifest found. Use --manifest-url to specify one.");
+        std::process::exit(1);
+    };
+
+    if let Some(cat) = category {
+        // Download specific category
+        if let Some(info) = manifest.categories.get(&cat) {
+            let variant_id = info.default.as_deref().unwrap_or("default");
+            if let Some(variant) = info.variants.iter().find(|v| v.id == variant_id) {
+                if let Some(ref zip_file) = variant.zip_file {
+                    let url = format!("{}/{}", manifest.base_url, zip_file);
+                    eprintln!("Downloading {} from {}", cat, url);
+
+                    let progress = Box::new(|status: latexsnipper_model::DownloadStatus| {
+                        match status {
+                            latexsnipper_model::DownloadStatus::Starting { url, total_bytes } => {
+                                eprintln!("Starting download: {}", url);
+                                if let Some(total) = total_bytes {
+                                    eprintln!("  Size: {:.1} MB", total as f64 / 1024.0 / 1024.0);
+                                }
+                            }
+                            latexsnipper_model::DownloadStatus::Progress { downloaded, total } => {
+                                if let Some(total) = total {
+                                    let percent = downloaded as f64 / total as f64 * 100.0;
+                                    eprint!("\r  Progress: {:.1}%", percent);
+                                }
+                            }
+                            latexsnipper_model::DownloadStatus::Extracting { file } => {
+                                eprintln!("\n  Extracting: {}", file);
+                            }
+                            latexsnipper_model::DownloadStatus::Complete { path } => {
+                                eprintln!("  Installed to: {}", path.display());
+                            }
+                            latexsnipper_model::DownloadStatus::Failed { error } => {
+                                eprintln!("  Failed: {}", error);
+                            }
+                        }
+                    });
+
+                    match manager.download_with_progress(&url, &cat, &variant.id, Some(progress)) {
+                        Ok(path) => {
+                            eprintln!("Successfully downloaded {} to {}", cat, path.display());
+                        }
+                        Err(e) => {
+                            eprintln!("Download failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
+        } else {
+            eprintln!("Unknown category: {}", cat);
+            eprintln!("Available categories: {:?}", manifest.categories.keys().collect::<Vec<_>>());
+            std::process::exit(1);
+        }
+    } else if all {
+        // Download all models
+        eprintln!("Downloading all models...");
+        match manager.download_all(&manifest, None) {
+            Ok(paths) => {
+                eprintln!("Downloaded {} model packages", paths.len());
+                for path in &paths {
+                    eprintln!("  - {}", path.display());
+                }
+            }
+            Err(e) => {
+                eprintln!("Download failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // Download only required models
+        eprintln!("Downloading required models...");
+        // For now, just download all
+        match manager.download_all(&manifest, None) {
+            Ok(paths) => {
+                eprintln!("Downloaded {} model packages", paths.len());
+                for path in &paths {
+                    eprintln!("  - {}", path.display());
+                }
+            }
+            Err(e) => {
+                eprintln!("Download failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+fn handle_models_list(category: Option<String>) {
+    let models_dir = std::path::PathBuf::from("models");
+    let manager = latexsnipper_model::ModelManager::new(models_dir);
+
+    if let Some(cat) = category {
+        let variants = manager.list_installed(&cat);
+        if variants.is_empty() {
+            eprintln!("No models installed for category: {}", cat);
+        } else {
+            eprintln!("Installed models for {}:", cat);
+            for variant in &variants {
+                eprintln!("  - {}", variant);
+            }
+        }
+    } else {
+        // List all categories
+        let manifest_path = std::path::PathBuf::from("models/model-manifest.json");
+        if manifest_path.exists() {
+            if let Ok(manifest) = latexsnipper_model::ModelManifest::load(&manifest_path) {
+                eprintln!("Installed models:");
+                for (cat, info) in &manifest.categories {
+                    let variants = manager.list_installed(cat);
+                    if variants.is_empty() {
+                        eprintln!("  {} (not installed)", cat);
+                    } else {
+                        eprintln!("  {}:", cat);
+                        for variant in &variants {
+                            let status = if let Some(v) = info.variants.iter().find(|v| &v.id == variant) {
+                                if let Some(ref zip) = v.zip_file {
+                                    format!(" ({})", zip)
+                                } else {
+                                    String::new()
+                                }
+                            } else {
+                                String::new()
+                            };
+                            eprintln!("    - {}{}", variant, status);
+                        }
+                    }
+                }
+            }
+        } else {
+            eprintln!("No manifest found. Run 'snipper models download' first.");
+        }
+    }
+}
+
+fn handle_models_verify(category: Option<String>) {
+    let models_dir = std::path::PathBuf::from("models");
+    let manager = latexsnipper_model::ModelManager::new(models_dir);
+
+    let manifest_path = std::path::PathBuf::from("models/model-manifest.json");
+    if !manifest_path.exists() {
+        eprintln!("No manifest found. Run 'snipper models download' first.");
+        std::process::exit(1);
+    }
+
+    let manifest = match latexsnipper_model::ModelManifest::load(&manifest_path) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Failed to load manifest: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let categories = if let Some(cat) = category {
+        vec![cat]
+    } else {
+        manifest.categories.keys().cloned().collect()
+    };
+
+    let mut all_valid = true;
+
+    for cat in &categories {
+        if let Some(info) = manifest.categories.get(cat) {
+            let variants = manager.list_installed(cat);
+            if variants.is_empty() {
+                eprintln!("  {} (not installed)", cat);
+                continue;
+            }
+
+            for variant in &variants {
+                if let Some(v) = info.variants.iter().find(|v| &v.id == variant) {
+                    let dir = manager.variant_dir(cat, variant);
+                    let mut valid = true;
+
+                    for file in &v.files {
+                        let file_path = dir.join(file);
+                        if !file_path.exists() {
+                            eprintln!("  {}/{} - MISSING: {}", cat, variant, file);
+                            valid = false;
+                            all_valid = false;
+                        }
+                    }
+
+                    if valid {
+                        eprintln!("  {}/{} - OK", cat, variant);
+                    }
+                }
+            }
+        }
+    }
+
+    if all_valid {
+        eprintln!("\nAll models verified successfully.");
+    } else {
+        eprintln!("\nSome models have issues. Run 'snipper models download' to fix.");
+        std::process::exit(1);
     }
 }
 

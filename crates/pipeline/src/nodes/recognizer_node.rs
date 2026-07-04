@@ -6,11 +6,11 @@ use latexsnipper_inference::formula_lines::split_formula_line_groups;
 use latexsnipper_inference::{
     load_keys, recognize_formula, recognize_text_with_keys, RecognitionParams, TextRecParams,
 };
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
-use std::sync::Arc;
+use latexsnipper_runtime::{InferenceContext, ModelInput, ModelOutput, ModelTask};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
+use crate::nodes::utils::{get_backend, get_or_create_session, load_config, resolve_model_handle};
 
 struct TextRecModel {
     config: latexsnipper_model::ModelConfig,
@@ -18,36 +18,34 @@ struct TextRecModel {
     keys_path: std::path::PathBuf,
 }
 
-/// Recognizes content in cropped regions stored in context metadata.
+/// Recognizes content in cropped regions stored in context artifacts.
+///
+/// The `task` field determines which recognition logic to use.
 pub struct RecognizerNode {
     name: String,
-    recognizer_type: RecognizerType,
-}
-
-pub enum RecognizerType {
-    Formula,
-    Text,
+    task: ModelTask,
 }
 
 impl RecognizerNode {
+    /// Create a recognizer for a specific task.
+    pub fn for_task(task: ModelTask) -> Self {
+        let name = format!("recognize_{:?}", task).to_lowercase();
+        Self { name, task }
+    }
+
+    /// Create a formula recognition node.
     pub fn formula() -> Self {
-        Self {
-            name: "recognize_formula".into(),
-            recognizer_type: RecognizerType::Formula,
-        }
+        Self::for_task(ModelTask::FormulaRecognition)
     }
 
+    /// Create a text recognition node.
     pub fn text() -> Self {
-        Self {
-            name: "recognize_text".into(),
-            recognizer_type: RecognizerType::Text,
-        }
+        Self::for_task(ModelTask::TextRecognition)
     }
 
-    fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
-        ctx.backend
-            .clone()
-            .ok_or_else(|| SnipperError::Runtime("No backend configured".into()))
+    /// Get the model task this node performs.
+    pub fn task(&self) -> ModelTask {
+        self.task
     }
 }
 
@@ -58,147 +56,214 @@ impl PipelineNode for RecognizerNode {
     }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
+        // Try using ModelPackage if available
+        if let Some(package) = ctx.get_model_package(&self.task) {
+            return self.recognize_via_package(ctx, &*package).await;
+        }
+
+        // Fall back to direct function calls
         let models = match &ctx.models_dir {
             Some(d) => d.clone(),
             None => return Ok(()),
         };
 
-        match &self.recognizer_type {
-            RecognizerType::Formula => self.recognize_formulas(ctx, &models).await,
-            RecognizerType::Text => self.recognize_texts(ctx, &models).await,
+        match self.task {
+            ModelTask::FormulaRecognition => self.recognize_formulas(ctx, &models).await,
+            ModelTask::TextRecognition => self.recognize_texts(ctx, &models).await,
+            _ => {
+                ctx.diagnostic_warn(
+                    &self.name,
+                    format!("Unsupported recognition task: {:?}", self.task),
+                );
+                Ok(())
+            }
         }
     }
 }
 
 impl RecognizerNode {
+    /// Recognize using ModelPackage abstraction.
+    async fn recognize_via_package(
+        &self,
+        ctx: &mut PipelineContext,
+        package: &dyn latexsnipper_runtime::ModelPackage,
+    ) -> Result<()> {
+        let image = match &ctx.image {
+            Some(img) => img.clone(),
+            None => return Ok(()),
+        };
+
+        let backend = get_backend(ctx)?;
+        let mut executor = package.create_executor(backend)?;
+
+        let mut blocks = Vec::new();
+
+        match self.task {
+            ModelTask::FormulaRecognition => {
+                let detections = ctx.artifacts.formula_detections.clone();
+                for det in &detections {
+                    let x = det.rect.x as u32;
+                    let y = det.rect.y as u32;
+                    let w = det.rect.width as u32;
+                    let h = det.rect.height as u32;
+
+                    if w >= 4 && h >= 4 {
+                        let cropped = operations::crop(
+                            &image,
+                            Rect::new(x as f32, y as f32, w as f32, h as f32),
+                        );
+
+                        let pixels = cropped.pixels().to_vec();
+                        let shape = vec![cropped.height() as usize, cropped.width() as usize, 3];
+                        let input = ModelInput {
+                            name: "image".to_string(),
+                            data: pixels,
+                            shape,
+                            dtype: latexsnipper_runtime::TensorDtype::UInt8,
+                        };
+
+                        let mut inf_ctx = InferenceContext::new();
+                        let output = executor.run(input, &mut inf_ctx)?;
+
+                        if let ModelOutput::Formula(results) = output {
+                            for result in results {
+                                let mut f = Formula::latex(result.latex);
+                                f.confidence = result.confidence;
+                                blocks.push(Block::Formula(FormulaBlock {
+                                    formula: f,
+                                    geometry: Some(det.rect),
+                                    source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                }));
+                            }
+                        }
+                    }
+                }
+                ctx.artifacts.formula_blocks = blocks;
+            }
+            ModelTask::TextRecognition => {
+                let detections = ctx.artifacts.text_detections.clone();
+                for det in &detections {
+                    let x = det.rect.x as u32;
+                    let y = det.rect.y as u32;
+                    let w = det.rect.width as u32;
+                    let h = det.rect.height as u32;
+
+                    if w >= 4 && h >= 4 {
+                        let cropped = operations::crop(
+                            &image,
+                            Rect::new(x as f32, y as f32, w as f32, h as f32),
+                        );
+
+                        let pixels = cropped.pixels().to_vec();
+                        let shape = vec![cropped.height() as usize, cropped.width() as usize, 3];
+                        let input = ModelInput {
+                            name: "image".to_string(),
+                            data: pixels,
+                            shape,
+                            dtype: latexsnipper_runtime::TensorDtype::UInt8,
+                        };
+
+                        let mut inf_ctx = InferenceContext::new();
+                        let output = executor.run(input, &mut inf_ctx)?;
+
+                        if let ModelOutput::Text(results) = output {
+                            for result in results {
+                                if !result.text.is_empty() {
+                                    blocks.push(Block::Paragraph(ParagraphBlock {
+                                        inlines: vec![Inline::Text(TextRun::new(result.text))],
+                                        geometry: Some(det.rect),
+                                        source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                    }));
+                                }
+                            }
+                        }
+                    }
+                }
+                ctx.artifacts.text_blocks = blocks;
+            }
+            _ => {
+                ctx.diagnostic_warn(
+                    &self.name,
+                    format!("Unsupported recognition task via ModelPackage: {:?}", self.task),
+                );
+            }
+        }
+
+        log::info!(
+            "Pipeline: {} recognized {} blocks via ModelPackage",
+            self.name,
+            ctx.artifacts.formula_blocks.len() + ctx.artifacts.text_blocks.len()
+        );
+        Ok(())
+    }
+
     async fn recognize_formulas(
         &self,
         ctx: &mut PipelineContext,
         models: &std::path::Path,
     ) -> Result<()> {
-        let crop_key = "formula_crops";
-        let crops = match ctx.get(crop_key) {
-            Some(v) => v.clone(),
-            None => return Ok(()),
-        };
-
-        let crop_array = match crops.as_array() {
-            Some(a) => a.clone(),
-            None => return Ok(()),
-        };
-
-        if crop_array.is_empty() {
+        let detections = ctx.artifacts.formula_detections.clone();
+        if detections.is_empty() {
             return Ok(());
         }
 
         let rec_config = match load_config(models, "formula-rec") {
             Ok(c) => c,
             Err(_) => {
-                log::warn!("Formula rec model not found");
+                ctx.diagnostic_warn("recognize_formula", "Formula recognition model config not found, skipping");
                 return Ok(());
             }
         };
 
-        let rec_dir = models.join("formula-rec/trocr-deit");
+        let (_variant_config, rec_dir, _variant_dir) =
+            latexsnipper_model::ModelConfig::find_best(models, "formula-rec").ok_or_else(|| {
+                SnipperError::Model("Formula recognition model not found".into())
+            })?;
         let encoder_path = rec_config
-            .find_encoder_file(&rec_dir)
+            .pipeline_encoder_path(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Encoder not found".into()))?;
         let decoder_path = rec_config
-            .find_decoder_file(&rec_dir)
+            .pipeline_decoder_path(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Decoder not found".into()))?;
         let tokenizer_path = rec_config
-            .find_tokenizer_file(&rec_dir)
+            .pipeline_tokenizer_path(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
 
-        let backend = Self::get_backend(ctx)?;
-        let enc_handle = ModelHandle::with_path("encoder", encoder_path);
-        let dec_handle = ModelHandle::with_path("decoder", decoder_path);
+        let backend = get_backend(ctx)?;
+        let enc_handle = resolve_model_handle(ctx, "formula-rec/encoder", encoder_path)?;
+        let dec_handle = resolve_model_handle(ctx, "formula-rec/decoder", decoder_path)?;
 
-        let enc_session = if let Some(s) = ctx.get_session("formula_encoder") {
-            s
-        } else {
-            let s = backend.create_session(&enc_handle, AccelerationMode::Cpu)?;
-            ctx.cache_session("formula_encoder", s);
-            ctx.get_session("formula_encoder").ok_or_else(|| {
-                SnipperError::Runtime("Failed to cache formula encoder session".into())
-            })?
-        };
-        let dec_session = if let Some(s) = ctx.get_session("formula_decoder") {
-            s
-        } else {
-            let s = backend.create_session(&dec_handle, AccelerationMode::Cpu)?;
-            ctx.cache_session("formula_decoder", s);
-            ctx.get_session("formula_decoder").ok_or_else(|| {
-                SnipperError::Runtime("Failed to cache formula decoder session".into())
-            })?
-        };
+        let enc_session = get_or_create_session(ctx, "formula_encoder", &backend, &enc_handle)?;
+        let dec_session = get_or_create_session(ctx, "formula_decoder", &backend, &dec_handle)?;
 
         let params = RecognitionParams::default();
         let mut blocks = Vec::new();
 
-        for crop_val in &crop_array {
-            if let Some(rect_val) = crop_val.get("rect") {
-                let x = rect_val.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let y = rect_val.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let w = rect_val.get("w").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let h = rect_val.get("h").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
+        for det in detections {
+            let x = det.rect.x as u32;
+            let y = det.rect.y as u32;
+            let w = det.rect.width as u32;
+            let h = det.rect.height as u32;
 
-                if let Some(ref image) = ctx.image {
-                    if w >= 4 && h >= 4 {
-                        let cropped = operations::crop(
-                            image,
-                            Rect::new(x as f32, y as f32, w as f32, h as f32),
-                        );
-                        let line_groups = split_formula_line_groups(&cropped);
+            if let Some(ref image) = ctx.image {
+                if w >= 4 && h >= 4 {
+                    let cropped = operations::crop(
+                        image,
+                        Rect::new(x as f32, y as f32, w as f32, h as f32),
+                    );
+                    let line_groups = split_formula_line_groups(&cropped);
 
-                        if line_groups.is_empty() {
-                            match recognize_formula(
-                                &cropped,
-                                &*enc_session,
-                                &*dec_session,
-                                &tokenizer_path,
-                                &params,
-                            ) {
-                                Ok(result) => {
-                                    let mut f = Formula::latex(result.text);
-                                    f.confidence = result.confidence;
-                                    blocks.push(Block::Formula(FormulaBlock {
-                                        formula: f,
-                                        geometry: Some(Rect::new(
-                                            x as f32, y as f32, w as f32, h as f32,
-                                        )),
-                                        source: Some(SourceInfo::new().with_page(ctx.current_page)),
-                                    }));
-                                }
-                                Err(e) => log::warn!("Formula rec failed: {}", e),
-                            }
-                        } else {
-                            let mut all_results = Vec::new();
-                            for group in &line_groups {
-                                for crop in &group.crops {
-                                    let crop_img = latexsnipper_image::SnipperImage::new(
-                                        crop.width,
-                                        crop.height,
-                                        latexsnipper_image::color::PixelFormat::Rgb,
-                                        crop.pixels.clone(),
-                                    );
-                                    match recognize_formula(
-                                        &crop_img,
-                                        &*enc_session,
-                                        &*dec_session,
-                                        &tokenizer_path,
-                                        &params,
-                                    ) {
-                                        Ok(result) => all_results.push(result.text),
-                                        Err(e) => log::warn!("Formula line rec failed: {}", e),
-                                    }
-                                }
-                            }
-
-                            if !all_results.is_empty() {
-                                let merged = all_results.join(" ");
-                                let mut f = Formula::latex(merged);
-                                f.confidence = 0.9;
+                    if line_groups.is_empty() {
+                        match recognize_formula(
+                            &cropped,
+                            &*enc_session,
+                            &*dec_session,
+                            &tokenizer_path,
+                            &params,
+                        ) {
+                            Ok(result) => {
+                                let mut f = Formula::latex(result.text);
+                                f.confidence = result.confidence;
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
                                     geometry: Some(Rect::new(
@@ -207,17 +272,50 @@ impl RecognizerNode {
                                     source: Some(SourceInfo::new().with_page(ctx.current_page)),
                                 }));
                             }
+                            Err(e) => log::warn!("Formula rec failed: {}", e),
+                        }
+                    } else {
+                        let mut all_results = Vec::new();
+                        for group in &line_groups {
+                            for crop in &group.crops {
+                                let crop_img = latexsnipper_image::SnipperImage::new(
+                                    crop.width,
+                                    crop.height,
+                                    latexsnipper_image::color::PixelFormat::Rgb,
+                                    crop.pixels.clone(),
+                                );
+                                match recognize_formula(
+                                    &crop_img,
+                                    &*enc_session,
+                                    &*dec_session,
+                                    &tokenizer_path,
+                                    &params,
+                                ) {
+                                    Ok(result) => all_results.push(result.text),
+                                    Err(e) => log::warn!("Formula line rec failed: {}", e),
+                                }
+                            }
+                        }
+
+                        if !all_results.is_empty() {
+                            let merged = all_results.join(" ");
+                            let mut f = Formula::latex(merged);
+                            f.confidence = 0.9;
+                            blocks.push(Block::Formula(FormulaBlock {
+                                formula: f,
+                                geometry: Some(Rect::new(
+                                    x as f32, y as f32, w as f32, h as f32,
+                                )),
+                                source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                            }));
                         }
                     }
                 }
             }
         }
 
-        ctx.set(
-            "formula_blocks",
-            serde_json::to_value(&blocks).unwrap_or_default(),
-        );
-        log::info!("Recognized {} formula blocks", blocks.len());
+        ctx.artifacts.formula_blocks = blocks;
+        log::info!("Recognized {} formula blocks", ctx.artifacts.formula_blocks.len());
         Ok(())
     }
 
@@ -226,41 +324,23 @@ impl RecognizerNode {
         ctx: &mut PipelineContext,
         models: &std::path::Path,
     ) -> Result<()> {
-        let crop_key = "text_crops";
-        let crops = match ctx.get(crop_key) {
-            Some(v) => v.clone(),
-            None => return Ok(()),
-        };
-
-        let crop_array = match crops.as_array() {
-            Some(a) => a.clone(),
-            None => return Ok(()),
-        };
-
-        if crop_array.is_empty() {
+        let detections = ctx.artifacts.text_detections.clone();
+        if detections.is_empty() {
             return Ok(());
         }
 
         let rec_model = match select_text_rec_model(models) {
             Ok(m) => m,
             Err(e) => {
-                log::warn!("Text rec model not found: {}", e);
+                ctx.diagnostic_warn("recognize_text", format!("Text recognition model not found: {}", e));
                 return Ok(());
             }
         };
 
-        let backend = Self::get_backend(ctx)?;
-        let handle = ModelHandle::with_path("text-rec", rec_model.model_path);
+        let backend = get_backend(ctx)?;
+        let handle = resolve_model_handle(ctx, "text-rec", rec_model.model_path)?;
 
-        let session = if let Some(s) = ctx.get_session("text_rec") {
-            s
-        } else {
-            let s = backend.create_session(&handle, AccelerationMode::Cpu)?;
-            ctx.cache_session("text_rec", s);
-            ctx.get_session("text_rec").ok_or_else(|| {
-                SnipperError::Runtime("Failed to cache text recognition session".into())
-            })?
-        };
+        let session = get_or_create_session(ctx, "text_rec", &backend, &handle)?;
 
         let params = TextRecParams::from_config(&rec_model.config);
         let (keys, first_char_id) = if let Some(chars) = session.get_character_list() {
@@ -271,88 +351,97 @@ impl RecognizerNode {
 
         let mut blocks = Vec::new();
 
-        for crop_val in &crop_array {
-            if let Some(rect_val) = crop_val.get("rect") {
-                let x = rect_val.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let y = rect_val.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let w = rect_val.get("w").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
-                let h = rect_val.get("h").and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
+        for det in detections {
+            let x = det.rect.x as u32;
+            let y = det.rect.y as u32;
+            let w = det.rect.width as u32;
+            let h = det.rect.height as u32;
 
-                if let Some(ref image) = ctx.image {
-                    if w >= 4 && h >= 4 {
-                        let pad_y = (h as f32 * 0.2).max(4.0) as u32;
-                        let crop_y = y.saturating_sub(pad_y);
-                        let crop_h = h + pad_y * 2;
-                        let crop_y_end = (crop_y + crop_h).min(image.height());
-                        let final_h = crop_y_end - crop_y;
-                        let cropped = operations::crop(
-                            image,
-                            Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32),
-                        );
-                        match recognize_text_with_keys(
-                            &cropped,
-                            &*session,
-                            &keys,
-                            first_char_id,
-                            &params,
-                        ) {
-                            Ok(result) => {
-                                if !result.text.is_empty() {
-                                    blocks.push(Block::Paragraph(ParagraphBlock {
-                                        inlines: vec![Inline::Text(TextRun::new(result.text))],
-                                        geometry: Some(Rect::new(
-                                            x as f32, y as f32, w as f32, h as f32,
-                                        )),
-                                        source: Some(SourceInfo::new().with_page(ctx.current_page)),
-                                    }));
-                                }
+            if let Some(ref image) = ctx.image {
+                if w >= 4 && h >= 4 {
+                    let pad_y = (h as f32 * 0.2).max(4.0) as u32;
+                    let crop_y = y.saturating_sub(pad_y);
+                    let crop_h = h + pad_y * 2;
+                    let crop_y_end = (crop_y + crop_h).min(image.height());
+                    let final_h = crop_y_end - crop_y;
+                    let cropped = operations::crop(
+                        image,
+                        Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32),
+                    );
+                    match recognize_text_with_keys(
+                        &cropped,
+                        &*session,
+                        &keys,
+                        first_char_id,
+                        &params,
+                    ) {
+                        Ok(result) => {
+                            if !result.text.is_empty() {
+                                blocks.push(Block::Paragraph(ParagraphBlock {
+                                    inlines: vec![Inline::Text(TextRun::new(result.text))],
+                                    geometry: Some(Rect::new(
+                                        x as f32, y as f32, w as f32, h as f32,
+                                    )),
+                                    source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                }));
                             }
-                            Err(e) => log::warn!("Text rec failed: {}", e),
                         }
+                        Err(e) => log::warn!("Text rec failed: {}", e),
                     }
                 }
             }
         }
 
-        ctx.set(
-            "text_blocks",
-            serde_json::to_value(&blocks).unwrap_or_default(),
-        );
-        log::info!("Recognized {} text blocks", blocks.len());
+        ctx.artifacts.text_blocks = blocks;
+        log::info!("Recognized {} text blocks", ctx.artifacts.text_blocks.len());
         Ok(())
     }
 }
 
-fn load_config(
-    models: &std::path::Path,
-    category: &str,
-) -> Result<latexsnipper_model::ModelConfig> {
-    let cat_dir = models.join(category);
-    let variant_dir = std::fs::read_dir(&cat_dir)
-        .map_err(|e| SnipperError::Model(format!("Cannot read {}: {}", cat_dir.display(), e)))?
-        .filter_map(|e| e.ok())
-        .find(|e| e.path().is_dir())
-        .ok_or_else(|| SnipperError::Model(format!("No variant in {}", cat_dir.display())))?;
-    latexsnipper_model::ModelConfig::load(&variant_dir.path())
-}
-
 fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
-    let candidates = [
+    let variants = latexsnipper_model::ModelConfig::discover_all(models, "text-rec");
+    let mut unsupported = Vec::new();
+
+    for (variant, config, variant_dir) in variants {
+        let Some(model_path) = config.pipeline_model_path(&variant_dir) else {
+            unsupported.push(format!(
+                "{}/{} has no ONNX model",
+                models.display(),
+                variant
+            ));
+            continue;
+        };
+
+        let keys_path = config.pipeline_tokenizer_path(&variant_dir).ok_or_else(|| {
+            SnipperError::Model(format!(
+                "Text keys not found in {}/{}",
+                models.display(),
+                variant
+            ))
+        })?;
+
+        return Ok(TextRecModel {
+            config,
+            model_path,
+            keys_path,
+        });
+    }
+
+    let fallback_dirs = [
         models.join("v6_models/PP-OCRv6_small_rec_infer"),
         models.join("v6_models/PP-OCRv6_medium_rec_infer"),
         models.join("text-rec/ppocrv5-mobile"),
     ];
 
-    let mut unsupported = Vec::new();
-    for dir in candidates {
+    for dir in &fallback_dirs {
         if !dir.is_dir() {
             continue;
         }
 
         let config = match if dir.join("config.json").exists() {
-            latexsnipper_model::ModelConfig::load(&dir)
+            latexsnipper_model::ModelConfig::load(dir)
         } else {
-            latexsnipper_model::ModelConfig::from_paddle_inference_dir(&dir)
+            latexsnipper_model::ModelConfig::from_paddle_inference_dir(dir)
         } {
             Ok(config) => config,
             Err(e) => {
@@ -361,12 +450,12 @@ fn select_text_rec_model(models: &std::path::Path) -> Result<TextRecModel> {
             }
         };
 
-        let Some(model_path) = config.find_model_file(&dir) else {
+        let Some(model_path) = config.find_model_file(dir) else {
             unsupported.push(format!("{} has no ONNX model", dir.display()));
             continue;
         };
 
-        let keys_path = config.find_tokenizer_file(&dir).ok_or_else(|| {
+        let keys_path = config.find_tokenizer_file(dir).ok_or_else(|| {
             SnipperError::Model(format!("Text keys not found in {}", dir.display()))
         })?;
 

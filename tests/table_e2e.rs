@@ -96,7 +96,7 @@ fn full_pipeline() {
             }
         }
     };
-    let table_image = operations::crop(&image, table_rect.clone());
+    let table_image = operations::crop(&image, table_rect);
     eprintln!(
         "Table crop: {}x{}",
         table_image.width(),
@@ -127,8 +127,7 @@ fn full_pipeline() {
     let (keys, first_char_id) = if let Some(chars) = tr_session.get_character_list() {
         (chars, 1)
     } else {
-        let k = load_keys(&models.join("text-rec/v6-small/inference.yml")).unwrap_or_default();
-        k
+        load_keys(&models.join("text-rec/v6-small/inference.yml")).unwrap_or_default()
     };
     let tr_params = TextRecParams::default();
 

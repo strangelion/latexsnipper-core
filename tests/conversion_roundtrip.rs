@@ -2,7 +2,6 @@ use latexsnipper_conversion::{DocumentConverter, OutputFormat};
 
 /// 5x6 roundtrip matrix: 5 input formats x 6 output formats = 30 combinations
 /// Each formula must survive every path without symbol loss.
-
 const FORMULAS: &[(&str, &str)] = &[
     ("basic_frac", r"\frac{a+b}{c-d}"),
     ("nested_frac", r"\frac{\frac{1}{2}}{\frac{3}{4}}"),

@@ -2,7 +2,7 @@
 //!
 //! Run: cargo run --example sdk_demo
 
-use latexsnipper_pipeline::sdk::Snipper;
+use latexsnipper_engine::sdk::Snipper;
 
 fn main() {
     println!("=== LaTeXSnipper SDK Demo ===\n");
