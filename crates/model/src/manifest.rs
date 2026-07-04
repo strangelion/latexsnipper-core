@@ -88,4 +88,30 @@ impl ModelManifest {
             Ok(true) // No checksum to verify
         }
     }
+
+    /// Download manifest from a remote URL.
+    pub fn download(url: &str) -> Result<Self> {
+        let response = ureq::get(url)
+            .call()
+            .map_err(|e| SnipperError::Model(format!("Failed to download manifest: {}", e)))?;
+
+        let body = response
+            .into_string()
+            .map_err(|e| SnipperError::Model(format!("Failed to read manifest response: {}", e)))?;
+
+        Self::parse(&body)
+    }
+
+    /// Save manifest to a file.
+    pub fn save(&self, path: &Path) -> Result<()> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| SnipperError::Model(format!("Failed to serialize manifest: {}", e)))?;
+        std::fs::write(path, json)
+            .map_err(|e| SnipperError::Model(format!("Failed to write manifest: {}", e)))?;
+        Ok(())
+    }
 }
+
+/// Default manifest URL for the official release.
+pub const DEFAULT_MANIFEST_URL: &str =
+    "https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/model-manifest.json";

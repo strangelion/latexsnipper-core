@@ -70,21 +70,19 @@ pub fn recognize_formula(
         .to_vec();
     let hidden_shape = encoder_outputs.first().unwrap().shape().to_vec();
 
-    let text = if params.greedy {
+    let (decoded_text, confidence) = if params.greedy {
         greedy_decode(decoder, &hidden_states, &hidden_shape, &tokenizer, params)?
     } else {
         beam_search(decoder, &hidden_states, &hidden_shape, &tokenizer, params)?
     };
 
-    let text = latex_repair::repair_latex(&text);
+    let text = latex_repair::repair_latex(&decoded_text);
 
-    Ok(RecognitionResult {
-        text,
-        confidence: 0.9,
-    })
+    Ok(RecognitionResult { text, confidence })
 }
 
 /// Greedy decoding: at each step, pick the token with highest probability.
+/// Returns (decoded_text, mean_confidence).
 /// Matches desktop app behavior.
 fn greedy_decode(
     decoder_session: &dyn latexsnipper_runtime::InferenceSession,
@@ -92,7 +90,7 @@ fn greedy_decode(
     hidden_shape: &[usize],
     tokenizer: &HashMap<i64, String>,
     params: &RecognitionParams,
-) -> Result<String> {
+) -> Result<(String, f32)> {
     let mut token_ids: Vec<i64> = vec![params.decoder_start_id];
     let mut scores: Vec<f32> = Vec::new();
 
@@ -173,7 +171,14 @@ fn greedy_decode(
         .collect::<Vec<_>>()
         .join("");
 
-    Ok(text)
+    // Compute mean confidence from per-step probabilities
+    let confidence = if scores.is_empty() {
+        0.0
+    } else {
+        scores.iter().sum::<f32>() / scores.len() as f32
+    };
+
+    Ok((text, confidence))
 }
 
 fn load_tokenizer(path: &Path) -> Result<HashMap<i64, String>> {
@@ -208,7 +213,7 @@ fn beam_search(
     hidden_shape: &[usize],
     tokenizer: &HashMap<i64, String>,
     params: &RecognitionParams,
-) -> Result<String> {
+) -> Result<(String, f32)> {
     let mut beams: Vec<(Vec<i64>, f32)> = vec![(vec![params.decoder_start_id], 0.0)];
 
     for _ in 0..params.max_tokens {
@@ -291,7 +296,228 @@ fn beam_search(
         .collect::<Vec<_>>()
         .join("");
 
-    Ok(text)
+    // Convert the log probability to a per-token confidence (geometric mean)
+    // The beam log_prob is the sum of log probs of each token. Divide by sequence length
+    // to get average log prob, then exponentiate to get a number in [0, 1].
+    let avg_log_prob = if best.0.len() > 1 {
+        best.1 / (best.0.len() - 1) as f32  // exclude start token
+    } else {
+        0.0
+    };
+    let confidence = avg_log_prob.exp();
+
+    Ok((text, confidence))
 }
 
 // Old repair_latex removed — now using latex_repair::repair_latex
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A mock session that returns fixed logits for testing confidence computation.
+    struct FixedLogitSession {
+        /// The logit values to return for the decoder output (single step).
+        /// Shape: [batch=1, seq_len=1, vocab_size=N]
+        logits: Vec<f32>,
+        vocab_size: usize,
+    }
+
+    impl FixedLogitSession {
+        fn new(logits: Vec<f32>) -> Self {
+            let vocab_size = logits.len();
+            Self { logits, vocab_size }
+        }
+    }
+
+    impl latexsnipper_runtime::InferenceSession for FixedLogitSession {
+        fn run(&self, _inputs: &[Tensor]) -> Result<Vec<Tensor>> {
+            // Return fixed logits as the decoder output tensor
+            let shape = vec![1usize, 1, self.vocab_size];
+            let t = Tensor::float32("logits".to_string(), shape, self.logits.clone());
+            Ok(vec![t])
+        }
+
+        fn input_names(&self) -> Vec<String> {
+            vec!["input_ids".into(), "encoder_hidden_states".into()]
+        }
+
+        fn output_names(&self) -> Vec<String> {
+            vec!["logits".into()]
+        }
+
+        fn release(&mut self) {}
+    }
+
+    /// Write a minimal tokenizer JSON to a temp file and return the path.
+    fn tokenizer_path(path: &std::path::Path) -> std::path::PathBuf {
+        let json = serde_json::json!({
+            "model": {
+                "vocab": {
+                    "<pad>": 0,
+                    "a": 1,
+                    "<sos>": 2,
+                    "b": 3,
+                    "c": 4,
+                    " ": 5
+                }
+            }
+        });
+        let content = serde_json::to_string(&json).unwrap();
+        std::fs::write(path, content).unwrap();
+        path.to_path_buf()
+    }
+
+    #[test]
+    fn test_confidence_high_probability() {
+        // When one token has near-certain probability, confidence should be high.
+        // 10 tokens in vocab, token 3 ("b") gets logit 100, others get 0.
+        // softmax(100,0,0,0,0,0,0,0,0,0) ≈ 1.0 for the first token.
+        let mut logits = vec![0.0f32; 10];
+        logits[3] = 100.0;
+
+        let encoder = FixedLogitSession::new(vec![0.0f32; 10]); // dummy encoder (not really used)
+        let decoder = FixedLogitSession::new(logits);
+        let params = RecognitionParams {
+            decoder_start_id: 2,
+            eos_token_id: 2,
+            pad_token_id: 0,
+            max_tokens: 5,
+            ..Default::default()
+        };
+
+        let tmp = std::env::temp_dir().join("test_conf_high.json");
+        let tok_path = tokenizer_path(&tmp);
+
+        let result = recognize_formula(
+            &latexsnipper_image::SnipperImage::new(10, 10, latexsnipper_image::PixelFormat::Rgb, vec![0u8; 300]),
+            &encoder,
+            &decoder,
+            &tok_path,
+            &params,
+        );
+
+        let _ = std::fs::remove_file(&tmp);
+
+        assert!(result.is_ok());
+        let confidence = result.unwrap().confidence;
+        assert!(
+            confidence > 0.99,
+            "Expected confidence near 1.0 for certain token, got {}",
+            confidence
+        );
+    }
+
+    #[test]
+    fn test_confidence_low_probability() {
+        // When all tokens have equal logits, confidence = 1/vocab_size = 0.1.
+        // With logits[3]=1 slightly favored, softmax gives ~0.23 for that token.
+        let logits = vec![0.0f32; 10]; // perfectly uniform → confidence ≈ 0.1
+
+        let encoder = FixedLogitSession::new(vec![0.0f32; 10]);
+        let decoder = FixedLogitSession::new(logits);
+        let params = RecognitionParams {
+            decoder_start_id: 2,
+            eos_token_id: 2,
+            pad_token_id: 0,
+            max_tokens: 5,
+            ..Default::default()
+        };
+
+        let result = recognize_formula(
+            &latexsnipper_image::SnipperImage::new(10, 10, latexsnipper_image::PixelFormat::Rgb, vec![0u8; 300]),
+            &encoder,
+            &decoder,
+            &{
+                let p = std::env::temp_dir().join("test_conf_low.json");
+                tokenizer_path(&p);
+                p
+            },
+            &params,
+        );
+
+        let _ = std::fs::remove_file(&std::env::temp_dir().join("test_conf_low.json"));
+
+        assert!(result.is_ok());
+        let confidence = result.unwrap().confidence;
+        assert!(
+            confidence < 0.15,
+            "Expected low confidence (~0.1) for uniform distribution, got {}",
+            confidence
+        );
+    }
+
+    #[test]
+    fn test_confidence_uses_scores() {
+        // After the fix, confidence must NOT be the hardcoded 0.9.
+        // Create a scenario where it would clearly differ from 0.9.
+        let logits = vec![0.0f32; 10]; // uniform → confidence ≈ 0.1
+
+        let encoder = FixedLogitSession::new(vec![0.0f32; 10]);
+        let decoder = FixedLogitSession::new(logits);
+        let params = RecognitionParams {
+            decoder_start_id: 2,
+            eos_token_id: 2,
+            pad_token_id: 0,
+            max_tokens: 5,
+            ..Default::default()
+        };
+
+        let result = recognize_formula(
+            &latexsnipper_image::SnipperImage::new(10, 10, latexsnipper_image::PixelFormat::Rgb, vec![0u8; 300]),
+            &encoder,
+            &decoder,
+            &{
+                let p = std::env::temp_dir().join("test_conf_not_0_9.json");
+                tokenizer_path(&p);
+                p
+            },
+            &params,
+        );
+
+        let _ = std::fs::remove_file(&std::env::temp_dir().join("test_conf_not_0_9.json"));
+
+        assert!(result.is_ok());
+        let confidence = result.unwrap().confidence;
+        assert!(
+            (confidence - 0.9).abs() > 0.01,
+            "Confidence must not be hardcoded 0.9. Got {}",
+            confidence
+        );
+    }
+
+    #[test]
+    fn test_formula_repaired_with_confidence() {
+        // Test that latex_repair still runs and confidence is present
+        let logits = vec![0.0f32; 10];
+
+        let encoder = FixedLogitSession::new(vec![0.0f32; 10]);
+        let decoder = FixedLogitSession::new(logits);
+        let params = RecognitionParams {
+            decoder_start_id: 2,
+            eos_token_id: 2,
+            pad_token_id: 0,
+            max_tokens: 5,
+            ..Default::default()
+        };
+
+        let result = recognize_formula(
+            &latexsnipper_image::SnipperImage::new(10, 10, latexsnipper_image::PixelFormat::Rgb, vec![0u8; 300]),
+            &encoder,
+            &decoder,
+            &{
+                let p = std::env::temp_dir().join("test_formula_repaired.json");
+                tokenizer_path(&p);
+                p
+            },
+            &params,
+        );
+
+        let _ = std::fs::remove_file(&std::env::temp_dir().join("test_formula_repaired.json"));
+
+        assert!(result.is_ok());
+        let res = result.unwrap();
+        // Even with uniform logits, the text should be decodable
+        assert!(res.confidence >= 0.0 && res.confidence <= 1.0);
+    }
+}

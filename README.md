@@ -415,13 +415,26 @@ LaTeXSnipper Core uses ONNX models for formula detection/recognition and text de
 
 ```
 models/
-├── formula-det/yolov8-mfd/     # Formula detection (YOLOv8)
-├── formula-rec/trocr-deit/     # Formula recognition (TrOCR)
-├── text-det/v6-small/          # Text detection (PP-OCRv6)
-├── text-rec/v6-small/          # Text recognition (PP-OCRv6)
-├── table-det/pp-doc-layoutv3/  # Layout detection (PP-DocLayout v3)
-└── table-struct/slanet-plus/   # Table structure (SLANet Plus)
+├── formula-det/yolov8-mfd/     # Formula detection (YOLOv8) — Stable
+├── formula-rec/trocr-deit/     # Formula recognition (TrOCR) — Stable
+├── text-det/v6-small/          # Text detection (PP-OCRv6) — Experimental
+├── text-rec/v6-small/          # Text recognition (PP-OCRv6) — Experimental
+├── table-det/tatr-detection/   # Table detection (TATR) — Experimental
+└── table-struct/
+    ├── tatr-structure/         # Table structure (TATR) — Experimental
+    └── slanet-plus/            # Legacy — not included in v2.0.0 release
 ```
+
+### Model Support Status
+
+| Model | Status | Default | Release |
+|---|---|---|---|
+| YOLOv8-MFD | Stable | Yes | models-v2.0.0 |
+| TrOCR-DeiT | Stable | Yes | models-v2.0.0 |
+| TATR Detection | Experimental | No | models-v2.0.0 |
+| TATR Structure | Experimental | No | models-v2.0.0 |
+| v6-small (text) | Experimental | No | models-v2.0.0 |
+| PP-DocLayout / SLANet+ | Legacy | No | Historical |
 
 > Note: `test-models/` directory contains models under active testing and should not be modified.
 

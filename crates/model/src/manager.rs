@@ -123,16 +123,19 @@ impl ModelManager {
     /// Download a model package from a URL and extract it.
     ///
     /// This is a blocking operation. For async usage, see `download_async`.
+    /// Note: No SHA-256 verification is performed.
+    /// Use `download_with_progress` with an `expected_sha256` for verified downloads.
     pub fn download(&self, url: &str, category: &str, variant: &str) -> Result<PathBuf> {
-        self.download_with_progress(url, category, variant, None)
+        self.download_with_progress(url, category, variant, None, None)
     }
 
-    /// Download with progress reporting.
+    /// Download with progress reporting and SHA-256 integrity verification.
     pub fn download_with_progress(
         &self,
         url: &str,
         category: &str,
         variant: &str,
+        expected_sha256: Option<&str>,
         progress: Option<DownloadProgress>,
     ) -> Result<PathBuf> {
         validate_name(category)?;
@@ -215,6 +218,29 @@ impl ModelManager {
 
         drop(file);
 
+        // Verify SHA-256 checksum if provided
+        if let Some(expected) = expected_sha256 {
+            if let Some(ref cb) = progress {
+                cb(DownloadStatus::Extracting {
+                    file: "verifying checksum".into(),
+                });
+            }
+            let zip_bytes = std::fs::read(&zip_path).map_err(|e| {
+                SnipperError::Model(format!("Failed to read downloaded file for verification: {}", e))
+            })?;
+            let actual = {
+                use sha2::{Digest, Sha256};
+                hex::encode(Sha256::digest(&zip_bytes))
+            };
+            if actual != expected {
+                let _ = std::fs::remove_file(&zip_path);
+                return Err(SnipperError::Model(format!(
+                    "SHA-256 checksum mismatch for {}.\n  Expected: {}\n  Actual:   {}\n  The download may be corrupted or tampered with.",
+                    filename, expected, actual
+                )));
+            }
+        }
+
         // Extract
         if let Some(ref cb) = progress {
             cb(DownloadStatus::Extracting {
@@ -241,6 +267,17 @@ impl ModelManager {
 
         std::fs::rename(&extracted_dir, &target_dir)
             .map_err(|e| SnipperError::Model(format!("Failed to move to target: {}", e)))?;
+
+        // Validate installation: target dir must contain at least one model file
+        if !self.dir_contains_model_files(&target_dir) {
+            let _ = std::fs::remove_dir_all(&target_dir);
+            return Err(SnipperError::Model(format!(
+                "Installation validation failed: no model files found in {}.\n\
+                 The ZIP may have an unexpected directory layout. \
+                 Check that the ZIP root contains the variant directory directly.",
+                target_dir.display()
+            )));
+        }
 
         // Cleanup temp
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -290,33 +327,63 @@ impl ModelManager {
         Ok(())
     }
 
-    /// Find the extracted directory in temp folder.
+    /// Find the extracted variant directory in temp folder.
+    ///
+    /// ZIP contents are `{variant}/files...`. This finds the single variant directory
+    /// that contains model files (not metadata dirs like __MACOSX).
     fn find_extracted_dir(&self, temp_dir: &Path, _zip_filename: &str) -> Result<PathBuf> {
-        // Look for directories in temp_dir
+        let mut best: Option<PathBuf> = None;
+
         for entry in std::fs::read_dir(temp_dir)
             .map_err(|e| SnipperError::Model(format!("Failed to read temp dir: {}", e)))?
         {
             let entry =
                 entry.map_err(|e| SnipperError::Model(format!("Failed to read entry: {}", e)))?;
 
-            if entry.path().is_dir() && !entry.file_name().to_string_lossy().starts_with('.') {
+            if !entry.path().is_dir() || entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+
+            // Prefer a directory that contains model files
+            if self.dir_contains_model_files(&entry.path()) {
                 return Ok(entry.path());
+            }
+
+            if best.is_none() {
+                best = Some(entry.path());
             }
         }
 
-        Err(SnipperError::Model("No extracted directory found".into()))
+        best.ok_or_else(|| SnipperError::Model("No extracted directory found".into()))
     }
 
-    /// Download all required models from a manifest.
+    /// Check if a directory contains ONNX model files or config.json.
+    fn dir_contains_model_files(&self, dir: &Path) -> bool {
+        std::fs::read_dir(dir)
+            .map(|entries| {
+                entries.filter_map(|e| e.ok()).any(|e| {
+                    let name = e.file_name();
+                    let name = name.to_string_lossy();
+                    name.ends_with(".onnx") || name == "config.json"
+                })
+            })
+            .unwrap_or(false)
+    }
+
+    /// Download models from a manifest.
+    ///
+    /// If `all` is true, downloads all categories. Otherwise, downloads only `required` ones.
+    /// SHA-256 checksums from the manifest are enforced on every download.
     pub fn download_all(
         &self,
         manifest: &super::manifest::ModelManifest,
-        progress: Option<DownloadProgress>,
+        all: bool,
+        _progress: Option<DownloadProgress>,
     ) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
         for (category, info) in &manifest.categories {
-            if !info.required {
+            if !all && !info.required {
                 continue;
             }
 
@@ -326,16 +393,13 @@ impl ModelManager {
             if let Some(variant) = variant {
                 if let Some(ref zip_file) = variant.zip_file {
                     let url = format!("{}/{}", manifest.base_url, zip_file);
+                    let expected_sha256 = manifest.checksums.get(zip_file).map(|s| s.as_str());
                     let path = self.download_with_progress(
                         &url,
                         category,
                         &variant.id,
-                        progress.as_ref().map(|_p| {
-                            // Create a new progress callback for this download
-                            Box::new(move |_status| {
-                                // In a real implementation, we'd prefix the status with category info
-                            }) as DownloadProgress
-                        }),
+                        expected_sha256,
+                        None,
                     )?;
                     paths.push(path);
                 }

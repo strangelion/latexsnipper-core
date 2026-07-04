@@ -66,7 +66,7 @@ foreach ($cat in $categories.Keys) {
     if (Test-Path $tempDir) {
         Remove-Item -Recurse -Force $tempDir
     }
-    $tempVariantDir = Join-Path (Join-Path $tempDir $cat) $info.variant
+    $tempVariantDir = Join-Path $tempDir $info.variant
     New-Item -ItemType Directory -Path $tempVariantDir -Force | Out-Null
 
     # Copy files

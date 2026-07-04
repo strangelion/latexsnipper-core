@@ -90,12 +90,23 @@ pub fn normalize(image: &SnipperImage, mean: &[f32], std: &[f32]) -> Vec<f32> {
     output
 }
 
-/// Crop a rectangular region from the image.
+/// Crop a rectangular region from the image, clamped to image bounds.
+/// Returns a 1x1 black pixel if the rect is entirely outside the image.
 pub fn crop(image: &SnipperImage, rect: Rect) -> SnipperImage {
-    let x = rect.x.round().max(0.0) as u32;
-    let y = rect.y.round().max(0.0) as u32;
-    let w = rect.width.round() as u32;
-    let h = rect.height.round() as u32;
+    let img_w = image.width() as f32;
+    let img_h = image.height() as f32;
+
+    // Clamp to image bounds
+    let x = rect.x.round().clamp(0.0, img_w) as u32;
+    let y = rect.y.round().clamp(0.0, img_h) as u32;
+    let w = (rect.width.round() as u32).min(image.width() - x);
+    let h = (rect.height.round() as u32).min(image.height() - y);
+
+    if w == 0 || h == 0 {
+        // Return minimal valid image instead of panicking
+        return SnipperImage::new(1, 1, image.format(), vec![0u8; image.bytes_per_pixel()]);
+    }
+
     let bpp = image.bytes_per_pixel();
 
     let mut pixels = Vec::with_capacity((w * h * bpp as u32) as usize);

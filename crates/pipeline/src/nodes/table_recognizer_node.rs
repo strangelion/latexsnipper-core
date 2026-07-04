@@ -6,7 +6,7 @@ use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, load_keys,
-    recognize_formula, recognize_text_with_keys, DetectionParams, GridCell, RecognitionParams,
+    recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams,
     TextRecParams,
 };
 use latexsnipper_runtime::{AccelerationMode, RuntimeBackend};
@@ -14,6 +14,7 @@ use latexsnipper_runtime::{AccelerationMode, RuntimeBackend};
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::nodes::utils::{get_backend, resolve_model_handle};
+use crate::artifacts::RecognizedTable;
 
 type InferenceArc = Arc<Box<dyn latexsnipper_runtime::InferenceSession>>;
 type FormulaRecSession = (InferenceArc, InferenceArc, std::path::PathBuf);
@@ -69,8 +70,8 @@ impl TableRecognizerNode {
         ctx: &mut PipelineContext,
         models: &std::path::Path,
     ) -> Result<()> {
-        let cells = ctx.artifacts.table_structures.clone();
-        if cells.is_empty() {
+        let tables = ctx.artifacts.table_structures.clone();
+        if tables.is_empty() {
             return Ok(());
         }
 
@@ -79,17 +80,7 @@ impl TableRecognizerNode {
             None => return Ok(()),
         };
 
-        log::info!("TableRecognizer: processing {} table cells", cells.len());
-
-        // Group cells by their table rect (cells from same table share the same rect)
-        // For simplicity, treat all cells as belonging to one table
-        // TODO: Group cells by table rect for proper multi-table support
-        let table_rect = cells
-            .first()
-            .map(|c| c.rect)
-            .unwrap_or(Rect::new(0.0, 0.0, 0.0, 0.0));
-
-        let mut table_blocks = Vec::new();
+        log::info!("TableRecognizer: processing {} tables", tables.len());
 
         // Load models ONCE (with ctx session caching) for all tables
         let backend = get_backend(ctx)?;
@@ -97,18 +88,22 @@ impl TableRecognizerNode {
         let formula_rec_session = self.load_formula_rec_session(ctx, &*backend, models)?;
         let text_rec_session = self.load_text_rec_session(ctx, &*backend, models)?;
 
-        if let Some(table_block) = self
-            .recognize_single_table(
-                image.clone(),
-                &cells,
-                table_rect,
-                &formula_det_session,
-                &formula_rec_session,
-                &text_rec_session,
-            )
-            .await?
-        {
-            table_blocks.push(table_block);
+        let mut table_blocks = Vec::new();
+
+        for table in &tables {
+            if let Some(table_block) = self
+                .recognize_single_table(
+                    ctx,
+                    image.clone(),
+                    table,
+                    &formula_det_session,
+                    &formula_rec_session,
+                    &text_rec_session,
+                )
+                .await?
+            {
+                table_blocks.push(table_block);
+            }
         }
 
         ctx.artifacts.table_blocks = table_blocks;
@@ -122,13 +117,16 @@ impl TableRecognizerNode {
 
     async fn recognize_single_table(
         &self,
+        ctx: &mut PipelineContext,
         image: latexsnipper_image::SnipperImage,
-        cells: &[GridCell],
-        table_rect: Rect,
+        table: &RecognizedTable,
         formula_det_session: &Option<InferenceArc>,
         formula_rec_session: &Option<FormulaRecSession>,
         text_rec_session: &Option<TextRecSession>,
     ) -> Result<Option<Block>> {
+        let cells = &table.cells;
+        let table_rect = table.table_rect;
+
         if cells.is_empty() {
             return Ok(None);
         }
@@ -151,6 +149,7 @@ impl TableRecognizerNode {
             // Recognize cell content
             let inlines = self
                 .recognize_cell_content(
+                    ctx,
                     &image,
                     &cell_rect,
                     formula_det_session,
@@ -345,6 +344,7 @@ impl TableRecognizerNode {
 
     async fn recognize_cell_content(
         &self,
+        ctx: &mut PipelineContext,
         image: &latexsnipper_image::SnipperImage,
         rect: &Rect,
         formula_det: &Option<InferenceArc>,
@@ -363,43 +363,59 @@ impl TableRecognizerNode {
         // Try formula detection first
         if let Some(ref det_session) = formula_det {
             let det_params = DetectionParams::default();
-            if let Ok(mut detections) = detect_formulas(&cropped, &**det_session, &det_params) {
-                group_formula_detections(&mut detections);
-                filter_formula_detections(&mut detections, 20.0, 0.2);
+            match detect_formulas(&cropped, &**det_session, &det_params) {
+                Ok(mut detections) => {
+                    group_formula_detections(&mut detections);
+                    filter_formula_detections(&mut detections, 20.0, 0.2);
 
-                if !detections.is_empty() {
-                    if let Some((ref enc, ref dec, ref tok)) = formula_rec {
-                        let rec_params = RecognitionParams::default();
-                        let mut inlines: Vec<Inline> = Vec::new();
-                        let mut has_formula = false;
-                        for det in &detections {
-                            let dx = det.rect.x as u32;
-                            let dy = det.rect.y as u32;
-                            let dw = det.rect.width as u32;
-                            let dh = det.rect.height as u32;
+                    if !detections.is_empty() {
+                        if let Some((ref enc, ref dec, ref tok)) = formula_rec {
+                            let rec_params = RecognitionParams::default();
+                            let mut inlines: Vec<Inline> = Vec::new();
+                            let mut has_formula = false;
+                            for det in &detections {
+                                let dx = det.rect.x as u32;
+                                let dy = det.rect.y as u32;
+                                let dw = det.rect.width as u32;
+                                let dh = det.rect.height as u32;
 
-                            if dw >= 4 && dh >= 4 {
-                                let formula_crop = operations::crop(
-                                    &cropped,
-                                    Rect::new(dx as f32, dy as f32, dw as f32, dh as f32),
-                                );
-                                if let Ok(result) = recognize_formula(
-                                    &formula_crop,
-                                    &**enc,
-                                    &**dec,
-                                    tok,
-                                    &rec_params,
-                                ) {
-                                    let formula = Formula::latex(result.text);
-                                    inlines.push(Inline::Formula(formula));
-                                    has_formula = true;
+                                if dw >= 4 && dh >= 4 {
+                                    let formula_crop = operations::crop(
+                                        &cropped,
+                                        Rect::new(dx as f32, dy as f32, dw as f32, dh as f32),
+                                    );
+                                    match recognize_formula(
+                                        &formula_crop,
+                                        &**enc,
+                                        &**dec,
+                                        tok,
+                                        &rec_params,
+                                    ) {
+                                        Ok(result) => {
+                                            let formula = Formula::latex(result.text);
+                                            inlines.push(Inline::Formula(formula));
+                                            has_formula = true;
+                                        }
+                                        Err(e) => {
+                                            ctx.diagnostic_error(
+                                                "recognize_table",
+                                                format!("Formula recognition failed in cell at ({:.0},{:.0}): {}", dx, dy, e),
+                                            );
+                                        }
+                                    }
                                 }
                             }
-                        }
-                        if has_formula {
-                            return inlines;
+                            if has_formula {
+                                return inlines;
+                            }
                         }
                     }
+                }
+                Err(e) => {
+                    ctx.diagnostic_error(
+                        "recognize_table",
+                        format!("Formula detection failed in table: {}", e),
+                    );
                 }
             }
         }
@@ -412,15 +428,17 @@ impl TableRecognizerNode {
                 load_keys(keys_path).unwrap_or_default()
             };
             let rec_params = TextRecParams::default();
-            if let Ok(result) = recognize_text_with_keys(
-                &cropped,
-                &**rec_session,
-                &keys,
-                first_char_id,
-                &rec_params,
-            ) {
-                if !result.text.trim().is_empty() {
-                    return vec![Inline::Text(TextRun::new(result.text))];
+            match recognize_text_with_keys(&cropped, &**rec_session, &keys, first_char_id, &rec_params) {
+                Ok(result) => {
+                    if !result.text.trim().is_empty() {
+                        return vec![Inline::Text(TextRun::new(result.text))];
+                    }
+                }
+                Err(e) => {
+                    ctx.diagnostic_error(
+                        "recognize_table",
+                        format!("Text recognition failed in cell: {}", e),
+                    );
                 }
             }
         }

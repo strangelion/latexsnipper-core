@@ -17,8 +17,8 @@ pub struct PipelineArtifacts {
     pub text_crops: Vec<CropRegion>,
     pub handwriting_crops: Vec<CropRegion>,
 
-    // Table structures (grid cells from table structure recognition)
-    pub table_structures: Vec<GridCell>,
+    // Table structures (grid cells from table structure recognition, with absolute coords)
+    pub table_structures: Vec<RecognizedTable>,
 
     // Blocks (from recognizer nodes)
     pub formula_blocks: Vec<Block>,
@@ -28,6 +28,23 @@ pub struct PipelineArtifacts {
 
     // Page-level results (for multi-page)
     pub page_results: Vec<Vec<Block>>,
+}
+
+/// A recognized table with its bounding box and grid cells.
+/// Cells use absolute page coordinates (not relative to the table rect).
+#[derive(Debug, Clone)]
+pub struct RecognizedTable {
+    pub table_rect: Rect,
+    pub cells: Vec<GridCell>,
+}
+
+impl RecognizedTable {
+    pub fn new(table_rect: Rect) -> Self {
+        Self {
+            table_rect,
+            cells: Vec::new(),
+        }
+    }
 }
 
 /// A cropped region with its bounding box and image data.

@@ -12,7 +12,7 @@ pub mod reading_order;
 pub mod sdk;
 pub mod simple;
 
-pub use artifacts::{CropRegion, PipelineArtifacts};
+pub use artifacts::{CropRegion, PipelineArtifacts, RecognizedTable};
 pub use context::PipelineContext;
 pub use graph::PipelineGraph;
 pub use manifest::PipelineManifest;

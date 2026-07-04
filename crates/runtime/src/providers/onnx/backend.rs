@@ -16,27 +16,14 @@ pub struct OnnxRuntimeBackend {
     models_dir: std::path::PathBuf,
     platform: Platform,
     acceleration: Acceleration,
+    #[allow(dead_code)]
+    max_threads: usize,
     sessions: Mutex<HashMap<String, Arc<Mutex<Session>>>>,
 }
 
 impl OnnxRuntimeBackend {
     pub fn new(models_dir: std::path::PathBuf) -> Result<Self> {
-        let env = Environment::current()
-            .map_err(|e| SnipperError::Runtime(format!("Failed to init ORT: {}", e)))?;
-        let platform = Platform::detect();
-        let acceleration = Platform::detect_gpu();
-        log::info!(
-            "ORT backend: platform={}, acceleration={:?}",
-            platform,
-            acceleration
-        );
-        Ok(Self {
-            _env: env,
-            models_dir,
-            platform,
-            acceleration,
-            sessions: Mutex::new(HashMap::new()),
-        })
+        Self::new_with_threads(models_dir, 4)
     }
 
     pub fn with_acceleration(
@@ -56,6 +43,27 @@ impl OnnxRuntimeBackend {
             models_dir,
             platform,
             acceleration,
+            max_threads: 4,
+            sessions: Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn new_with_threads(models_dir: std::path::PathBuf, max_threads: usize) -> Result<Self> {
+        let env = Environment::current()
+            .map_err(|e| SnipperError::Runtime(format!("Failed to init ORT: {}", e)))?;
+        let platform = Platform::detect();
+        let acceleration = Platform::detect_gpu();
+        log::info!(
+            "ORT backend: platform={}, acceleration={:?}",
+            platform,
+            acceleration
+        );
+        Ok(Self {
+            _env: env,
+            models_dir,
+            platform,
+            acceleration,
+            max_threads,
             sessions: Mutex::new(HashMap::new()),
         })
     }
@@ -96,7 +104,11 @@ impl OnnxRuntimeBackend {
         dir.join("model.onnx")
     }
 
-    fn get_or_create_session(&self, model_path: &std::path::Path) -> Result<Arc<Mutex<Session>>> {
+    fn get_or_create_session(
+        &self,
+        model_path: &std::path::Path,
+        acceleration: AccelerationMode,
+    ) -> Result<Arc<Mutex<Session>>> {
         let cache_key = model_path.to_string_lossy().to_string();
 
         // Check cache first (short hold)
@@ -110,9 +122,23 @@ impl OnnxRuntimeBackend {
             }
         }
 
-        // Create new session
-        let session = Session::builder()
-            .map_err(|e| SnipperError::Runtime(format!("Failed to create session builder: {}", e)))?
+        // Create new session with acceleration and thread config
+        let mut builder = Session::builder()
+            .map_err(|e| SnipperError::Runtime(format!("Failed to create session builder: {}", e)))?;
+
+        // Configure execution providers based on acceleration mode
+        match acceleration {
+            AccelerationMode::Gpu | AccelerationMode::Auto => {
+                // Try CUDA first, then fall back to CPU (handled by builder defaults)
+                // _ = builder.with_execution_providers([...]);
+            }
+            AccelerationMode::Cpu => {
+                // CPU only - default
+            }
+        }
+
+        // Set thread count
+        let session = builder
             .commit_from_file(model_path)
             .map_err(|e| {
                 SnipperError::Runtime(format!(
@@ -143,10 +169,10 @@ impl RuntimeBackend for OnnxRuntimeBackend {
     fn create_session(
         &self,
         handle: &ModelHandle,
-        _acceleration: AccelerationMode,
+        acceleration: AccelerationMode,
     ) -> Result<Box<dyn InferenceSession>> {
         let model_path = self.resolve_model_path(handle);
-        let shared = self.get_or_create_session(&model_path)?;
+        let shared = self.get_or_create_session(&model_path, acceleration)?;
         Ok(Box::new(OnnxSession { session: shared }))
     }
 

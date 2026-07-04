@@ -8,6 +8,7 @@ use latexsnipper_runtime::{AccelerationMode, InferenceSession};
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::nodes::utils::resolve_model_handle;
+use crate::artifacts::RecognizedTable;
 
 /// Parses table structure using a configurable backend.
 ///
@@ -109,7 +110,7 @@ impl PipelineNode for TableStructureNode {
             self.backend
         );
 
-        let mut all_cells = Vec::new();
+        let mut all_tables: Vec<RecognizedTable> = Vec::new();
 
         for det in &detections {
             let x = det.rect.x;
@@ -126,20 +127,25 @@ impl PipelineNode for TableStructureNode {
                 recognize_table_structure(&cropped, "projection", None)?
             };
 
-            let grid = match grid {
-                Some(g) => g,
+            match grid {
+                Some(mut cells) if !cells.is_empty() => {
+                    // Convert cell coordinates from child (cropped) space to parent (image) space
+                    for cell in &mut cells {
+                        cell.rect.x += x;
+                        cell.rect.y += y;
+                    }
+                    let mut table = RecognizedTable::new(table_rect);
+                    table.cells = cells;
+                    all_tables.push(table);
+                }
+                Some(_) => {
+                    log::warn!("Grid is empty for table at ({}, {})", x, y);
+                }
                 None => continue,
-            };
-
-            if grid.is_empty() {
-                log::warn!("Grid is empty for table at ({}, {})", x, y);
-                continue;
             }
-
-            all_cells.extend(grid);
         }
 
-        ctx.artifacts.table_structures = all_cells;
+        ctx.artifacts.table_structures = all_tables;
         log::info!(
             "TableStructure: parsed {} tables via '{}'",
             ctx.artifacts.table_structures.len(),

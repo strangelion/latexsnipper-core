@@ -387,23 +387,39 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
     let manager = latexsnipper_model::ModelManager::new(models_dir);
 
     // Load manifest
+    use latexsnipper_model::manifest::DEFAULT_MANIFEST_URL;
     let manifest_path = std::path::PathBuf::from("models/model-manifest.json");
     let manifest = if manifest_path.exists() {
         match latexsnipper_model::ModelManifest::load(&manifest_path) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("Failed to load manifest: {}", e);
+                eprintln!("Failed to load local manifest: {}", e);
+                eprintln!("Try --manifest-url to download a fresh manifest.");
                 std::process::exit(1);
             }
         }
-    } else if let Some(url) = manifest_url {
-        eprintln!("Downloading manifest from {}", url);
-        // In a real implementation, we'd download the manifest here
-        eprintln!("Manifest download not yet implemented");
-        std::process::exit(1);
     } else {
-        eprintln!("No manifest found. Use --manifest-url to specify one.");
-        std::process::exit(1);
+        let url = manifest_url.unwrap_or_else(|| DEFAULT_MANIFEST_URL.to_string());
+        eprintln!("Local manifest not found, downloading from {}", url);
+
+        match latexsnipper_model::ModelManifest::download(&url) {
+            Ok(m) => {
+                // Save the downloaded manifest for future use
+                if let Err(e) = m.save(&manifest_path) {
+                    eprintln!("Warning: could not save manifest locally: {}", e);
+                }
+                eprintln!("Manifest downloaded successfully.");
+                m
+            }
+            Err(e) => {
+                eprintln!("Failed to download manifest: {}", e);
+                eprintln!(
+                    "Ensure you have a network connection, or provide a local manifest at {}",
+                    manifest_path.display()
+                );
+                std::process::exit(1);
+            }
+        }
     };
 
     if let Some(cat) = category {
@@ -440,7 +456,9 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
                             }
                         });
 
-                    match manager.download_with_progress(&url, &cat, &variant.id, Some(progress)) {
+                    let expected_sha256 = manifest.checksums.get(zip_file).map(|s| s.as_str());
+
+                    match manager.download_with_progress(&url, &cat, &variant.id, expected_sha256, Some(progress)) {
                         Ok(path) => {
                             eprintln!("Successfully downloaded {} to {}", cat, path.display());
                         }
@@ -462,7 +480,7 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
     } else if all {
         // Download all models
         eprintln!("Downloading all models...");
-        match manager.download_all(&manifest, None) {
+        match manager.download_all(&manifest, true, None) {
             Ok(paths) => {
                 eprintln!("Downloaded {} model packages", paths.len());
                 for path in &paths {
@@ -477,8 +495,7 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
     } else {
         // Download only required models
         eprintln!("Downloading required models...");
-        // For now, just download all
-        match manager.download_all(&manifest, None) {
+        match manager.download_all(&manifest, false, None) {
             Ok(paths) => {
                 eprintln!("Downloaded {} model packages", paths.len());
                 for path in &paths {
@@ -566,6 +583,8 @@ fn handle_models_verify(category: Option<String>) {
     };
 
     let mut all_valid = true;
+    let mut total_files = 0;
+    let mut verified_files = 0;
 
     for cat in &categories {
         if let Some(info) = manifest.categories.get(cat) {
@@ -578,29 +597,42 @@ fn handle_models_verify(category: Option<String>) {
             for variant in &variants {
                 if let Some(v) = info.variants.iter().find(|v| &v.id == variant) {
                     let dir = manager.variant_dir(cat, variant);
-                    let mut valid = true;
+                    let mut missing = Vec::new();
+                    let mut present = Vec::new();
 
                     for file in &v.files {
+                        total_files += 1;
                         let file_path = dir.join(file);
                         if !file_path.exists() {
-                            eprintln!("  {}/{} - MISSING: {}", cat, variant, file);
-                            valid = false;
+                            missing.push(file.as_str());
                             all_valid = false;
+                        } else {
+                            present.push(file.as_str());
+                            verified_files += 1;
                         }
                     }
 
-                    if valid {
-                        eprintln!("  {}/{} - OK", cat, variant);
+                    if missing.is_empty() {
+                        eprintln!("  {}/{} - VERIFY_OK ({} files)", cat, variant, present.len());
+                    } else {
+                        for m in &missing {
+                            eprintln!("  {}/{} - MISSING: {}", cat, variant, m);
+                        }
                     }
                 }
             }
         }
     }
 
+    eprintln!(
+        "\nVerified {}/{} files across installed models.",
+        verified_files, total_files
+    );
     if all_valid {
-        eprintln!("\nAll models verified successfully.");
+        eprintln!("All model files present.");
+        eprintln!("Note: SHA-256 integrity is verified at download time. Re-download to re-verify.");
     } else {
-        eprintln!("\nSome models have issues. Run 'snipper models download' to fix.");
+        eprintln!("Some model files are missing. Run 'snipper models download' to re-download.");
         std::process::exit(1);
     }
 }

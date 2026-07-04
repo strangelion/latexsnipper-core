@@ -109,11 +109,11 @@ pub fn register_builtin_adapters(registry: &mut ModelRegistry) {
     // YOLOv8 Formula Detection
     registry.register_adapter("yolov8-detection-v1", |manifest, model_dir| {
         let model_id = ModelId::from_composite_key(&manifest.id);
-        let config_path = model_dir.join("config.json");
+        let config_exists = model_dir.join("config.json").exists();
 
         // Try config.json first, fall back to manifest
-        let config = if config_path.exists() {
-            latexsnipper_model::ModelConfig::load(&config_path).ok()
+        let config = if config_exists {
+            latexsnipper_model::ModelConfig::load(model_dir).ok()
         } else {
             Some(manifest_to_config(manifest))
         };
@@ -138,11 +138,11 @@ pub fn register_builtin_adapters(registry: &mut ModelRegistry) {
     // TrOCR Formula Recognition
     registry.register_adapter("trocr-recognition-v1", |manifest, model_dir| {
         let model_id = ModelId::from_composite_key(&manifest.id);
-        let config_path = model_dir.join("config.json");
+        let config_exists = model_dir.join("config.json").exists();
 
         // Try config.json first, fall back to manifest
-        let config = if config_path.exists() {
-            latexsnipper_model::ModelConfig::load(&config_path).ok()
+        let config = if config_exists {
+            latexsnipper_model::ModelConfig::load(model_dir).ok()
         } else {
             Some(manifest_to_config(manifest))
         };
@@ -174,11 +174,11 @@ pub fn register_builtin_adapters(registry: &mut ModelRegistry) {
     // CRNN CTC Text Recognition
     registry.register_adapter("ctc-recognition-v1", |manifest, model_dir| {
         let model_id = ModelId::from_composite_key(&manifest.id);
-        let config_path = model_dir.join("config.json");
+        let config_exists = model_dir.join("config.json").exists();
 
         // Try config.json first, fall back to manifest
-        let config = if config_path.exists() {
-            latexsnipper_model::ModelConfig::load(&config_path).ok()
+        let config = if config_exists {
+            latexsnipper_model::ModelConfig::load(model_dir).ok()
         } else {
             Some(manifest_to_config(manifest))
         };

@@ -24,14 +24,17 @@ pub struct PdfPageInfo {
 /// canonical PDF page order and may differ from internal object IDs.
 pub fn get_pdf_page_info(source: PdfSource) -> Result<Vec<PdfPageInfo>> {
     let doc = load_document(source)?;
-    let page_ids: Vec<u32> = doc.get_pages().keys().cloned().collect();
-    let mut pages = Vec::with_capacity(page_ids.len());
+    // lopdf returns BTreeMap<page_number, ObjectId> where
+    // page_number is a u32 key and ObjectId is a (u32, u16) tuple value.
+    let pages_map = doc.get_pages();
+    let mut pages = Vec::with_capacity(pages_map.len());
 
-    for (idx, &page_id) in page_ids.iter().enumerate() {
-        if let Ok(page_obj) = doc.dereference(&lopdf::Object::Reference((page_id, 0))) {
+    for (page_number, object_id) in &pages_map {
+        // object_id = &(id: u32, generation: u16) — the PDF object reference
+        if let Ok(page_obj) = doc.dereference(&lopdf::Object::Reference(*object_id)) {
             if let Ok(media_box) = extract_media_box(page_obj.1) {
                 pages.push(PdfPageInfo {
-                    page_number: (idx + 1) as u32,
+                    page_number: *page_number,
                     width: media_box[2] - media_box[0],
                     height: media_box[3] - media_box[1],
                 });
@@ -39,11 +42,7 @@ pub fn get_pdf_page_info(source: PdfSource) -> Result<Vec<PdfPageInfo>> {
         }
     }
 
-    // lopdf::get_pages returns BTreeMap<ObjectId, PageNumber> keyed by
-    // internal object IDs, not page order. Sort by page_number to ensure
-    // canonical PDF page ordering.
-    pages.sort_by_key(|a| a.page_number);
-
+    // pages_map is BTreeMap, already sorted by page_number key.
     Ok(pages)
 }
 

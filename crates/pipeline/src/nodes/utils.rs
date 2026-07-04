@@ -13,17 +13,24 @@ pub fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
 }
 
 /// Load model config from the first variant directory under a category.
+/// Uses alphabetical ordering for deterministic selection.
 pub fn load_config(models: &Path, category: &str) -> Result<latexsnipper_model::ModelConfig> {
     let cat_dir = models.join(category);
-    let variant_dir = std::fs::read_dir(&cat_dir)
+    let mut entries: Vec<_> = std::fs::read_dir(&cat_dir)
         .map_err(|e| SnipperError::Model(format!("Cannot read {}: {}", cat_dir.display(), e)))?
         .filter_map(|e| e.ok())
-        .find(|e| e.path().is_dir())
+        .filter(|e| e.path().is_dir())
+        .collect();
+    // Deterministic: sort by name so behavior is stable across filesystems
+    entries.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    let variant_dir = entries
+        .first()
         .ok_or_else(|| SnipperError::Model(format!("No variant in {}", cat_dir.display())))?;
     latexsnipper_model::ModelConfig::load(&variant_dir.path())
 }
 
 /// Resolve a model handle using the model resolver if available, otherwise fall back to file path.
+/// If the resolver fails, falls back to the provided path instead of returning an error.
 pub fn resolve_model_handle(
     ctx: &PipelineContext,
     id: &str,
@@ -31,10 +38,20 @@ pub fn resolve_model_handle(
 ) -> Result<ModelHandle> {
     if let Some(resolver) = &ctx.model_resolver {
         let model_id = latexsnipper_runtime::ModelId::from_composite_key(id);
-        resolver.resolve(&model_id)
-    } else {
-        Ok(ModelHandle::with_path(id, fallback_path))
+        // Try resolver first
+        match resolver.resolve(&model_id) {
+            Ok(handle) => return Ok(handle),
+            Err(e) => {
+                log::info!(
+                    "Model resolver failed for '{}': {}. Falling back to path {}",
+                    id,
+                    e,
+                    fallback_path.display()
+                );
+            }
+        }
     }
+    Ok(ModelHandle::with_path(id, fallback_path))
 }
 
 /// Get or create a cached session.
