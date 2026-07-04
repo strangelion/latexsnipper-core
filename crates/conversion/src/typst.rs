@@ -67,6 +67,20 @@ fn render_block(block: &Block) -> String {
             let text = render_inlines(&hw.inlines);
             format!("#text(\"{}\")", text)
         }
+        Block::DescriptionList(dl) => render_description_list(dl),
+        Block::TableOfContents => "目录".to_string(),
+        Block::Theorem(t) => render_theorem(t),
+        Block::Proof(p) => render_proof(p),
+        Block::Minipage(m) => render_blocks(&m.content),
+        Block::Float(f) => {
+            let content = render_blocks(&f.content);
+            if let Some(caption) = &f.caption {
+                let caption_text = render_inlines(caption);
+                format!("{}\n_{}_", content, caption_text)
+            } else {
+                content
+            }
+        }
     }
 }
 
@@ -82,6 +96,9 @@ fn render_inlines(inlines: &[Inline]) -> String {
                 if t.italic == Some(true) {
                     text = format!("_{}_", text);
                 }
+                if t.underline == Some(true) {
+                    text = format!("#underline[{}]", text);
+                }
                 parts.push(text);
             }
             Inline::Formula(f) => {
@@ -95,6 +112,19 @@ fn render_inlines(inlines: &[Inline]) -> String {
             }
             Inline::Image(_) => {
                 parts.push("#image(\"image.png\")".to_string());
+            }
+            Inline::Footnote { content } => {
+                let inner = render_inlines(&[*content.clone()]);
+                parts.push(format!("#footnote({})", inner));
+            }
+            Inline::Label { key } => {
+                parts.push(format!("<label={}>", key));
+            }
+            Inline::Reference { key, .. } => {
+                parts.push(format!("@{}", key));
+            }
+            Inline::Citation { key, .. } => {
+                parts.push(format!("@{}", key));
             }
         }
     }
@@ -131,6 +161,34 @@ fn render_list(l: &latexsnipper_ast::ListBlock) -> String {
         }
     }
     items.join("\n")
+}
+
+fn render_description_list(dl: &latexsnipper_ast::DescriptionListBlock) -> String {
+    let mut items = Vec::new();
+    for item in &dl.items {
+        let content = render_blocks(&item.content);
+        if let Some(label) = &item.label {
+            let label_text = render_inlines(label);
+            items.push(format!("/ {}\n  {}", label_text, content));
+        } else {
+            items.push(format!("/ {}\n", content));
+        }
+    }
+    items.join("\n\n")
+}
+
+fn render_theorem(t: &latexsnipper_ast::TheoremBlock) -> String {
+    let content = render_blocks(&t.content);
+    format!("*{}.* {}", t.name, content)
+}
+
+fn render_proof(p: &latexsnipper_ast::ProofBlock) -> String {
+    let content = render_blocks(&p.content);
+    format!("*Proof.* {} □", content)
+}
+
+fn render_blocks(blocks: &[latexsnipper_ast::Block]) -> String {
+    blocks.iter().map(render_block).collect::<Vec<_>>().join("\n")
 }
 
 fn render_quote(q: &latexsnipper_ast::QuoteBlock) -> String {

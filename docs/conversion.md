@@ -48,6 +48,7 @@ Document AST ───────├─→ OmmlConverter         ─→ <m:oMat
 | `omml_parser` | omml_parser.rs | OMML → LaTeX |
 | `mathml_parser` | mathml_parser.rs | MathML → LaTeX |
 | `markdown_parser` | markdown_parser.rs | Markdown → AST |
+| `html_parser` | html_parser.rs | HTML → AST |
 | `typst_parser` | typst_parser.rs | Typst → LaTeX |
 | `table_export` | table_export.rs | 表格导出 |
 
@@ -287,6 +288,61 @@ Microsoft Word 对 OMML 处理有严格要求：
 `Sequence` 节点处理时会自动抑制以下情况前的空格：
 - 上标/下标（`^`/`_`）
 - 闭括号、逗号、句点等标点符号
+
+## LaTeX 语法扩展
+
+### 文本格式命令
+
+| 命令 | 说明 | OMML | LaTeX | HTML | Typst |
+|------|------|------|-------|------|-------|
+| `\underline{text}` | 下划线 | `<w:u>` | `\underline{}` | `<u>` | `#underline[]` |
+| `\textbf{text}` | 粗体 | `<w:b/>` | `\textbf{}` | `<strong>` | `*text*` |
+| `\textit{text}` | 斜体 | 自动 italic | `\textit{}` | `<em>` | `_text_` |
+
+### 环境支持
+
+| 环境 | 说明 | 输出策略 |
+|------|------|----------|
+| `\begin{description}` | 定义列表 | OMML: 粗体 label + content |
+| `\begin{theorem}` 等 | 定理环境 | OMML: 粗体标题 + content |
+| `\begin{proof}` | 证明环境 | OMML: 粗体 "Proof." + content + □ |
+| `\begin{minipage}{w}` | 小页 | 直接输出 content |
+| `\begin{figure}` / `\begin{table}` | 浮动体 | 直接输出 content |
+
+### 占位符命令（OMML 输出）
+
+| 命令 | OMML 输出 | 说明 |
+|------|-----------|------|
+| `\footnote{text}` | `[^footnote]` | 需要 Word API 插入实际脚注 |
+| `\label{key}` | (空) | 标签不渲染 |
+| `\ref{key}` | `(?key)` 或 `(key)` | 交叉引用占位符 |
+| `\eqref{key}` | `(?key)` | 公式引用占位符 |
+| `\cite{key}` | `[key]` | 参考文献占位符 |
+| `\tableofcontents` | 目录 | 目录占位符 |
+
+## 多格式输入解析器
+
+### Markdown 解析器
+
+```rust
+use latexsnipper_conversion::parse_markdown_to_document;
+
+let md = "# Title\n\n**bold** text with $x^2$ math.\n\n- item1\n- item2";
+let doc = parse_markdown_to_document(md);
+```
+
+支持：标题、段落、粗体/斜体、行内/块级代码、有序/无序列表、引用块、水平线、数学公式。
+
+### HTML 解析器
+
+```rust
+use latexsnipper_conversion::parse_html_to_document;
+
+let html = "<h1>Title</h1><p>Hello <strong>world</strong>!</p>";
+let doc = parse_html_to_document(html);
+```
+
+支持：`<h1>`-`<h6>`、`<p>`、`<strong>`/`<b>`、`<em>`/`<i>`、`<u>`、`<code>`、`<pre>`、`<ul>`/`<ol>`、`<blockquote>`、`<hr>`、`<math>`。
 
 ## 已知局限
 

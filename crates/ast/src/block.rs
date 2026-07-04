@@ -29,6 +29,18 @@ pub enum Block {
     HorizontalRule(HorizontalRuleBlock),
     /// A handwritten text block.
     Handwriting(HandwritingBlock),
+    /// A description list (\begin{description}).
+    DescriptionList(DescriptionListBlock),
+    /// A table of contents (\tableofcontents).
+    TableOfContents,
+    /// A theorem-like environment (\begin{theorem}).
+    Theorem(TheoremBlock),
+    /// A proof environment (\begin{proof}).
+    Proof(ProofBlock),
+    /// A minipage environment (\begin{minipage}).
+    Minipage(MinipageBlock),
+    /// A float environment (\begin{figure} or \begin{table}).
+    Float(FloatBlock),
 }
 
 impl Block {
@@ -45,6 +57,12 @@ impl Block {
             Block::Code(c) => c.source.as_ref(),
             Block::HorizontalRule(h) => h.source.as_ref(),
             Block::Handwriting(hw) => hw.source.as_ref(),
+            Block::DescriptionList(dl) => dl.source.as_ref(),
+            Block::TableOfContents => None,
+            Block::Theorem(t) => t.source.as_ref(),
+            Block::Proof(p) => p.source.as_ref(),
+            Block::Minipage(m) => m.source.as_ref(),
+            Block::Float(f) => f.source.as_ref(),
         }
     }
 
@@ -66,6 +84,12 @@ impl Block {
             Block::Code(c) => c.source.as_mut(),
             Block::HorizontalRule(h) => h.source.as_mut(),
             Block::Handwriting(hw) => hw.source.as_mut(),
+            Block::DescriptionList(dl) => dl.source.as_mut(),
+            Block::TableOfContents => None,
+            Block::Theorem(t) => t.source.as_mut(),
+            Block::Proof(p) => p.source.as_mut(),
+            Block::Minipage(m) => m.source.as_mut(),
+            Block::Float(f) => f.source.as_mut(),
         }
     }
 
@@ -82,6 +106,12 @@ impl Block {
             Block::Code(c) => c.geometry.as_ref(),
             Block::HorizontalRule(h) => h.geometry.as_ref(),
             Block::Handwriting(hw) => hw.geometry.as_ref(),
+            Block::DescriptionList(dl) => dl.geometry.as_ref(),
+            Block::TableOfContents => None,
+            Block::Theorem(t) => t.geometry.as_ref(),
+            Block::Proof(p) => p.geometry.as_ref(),
+            Block::Minipage(m) => m.geometry.as_ref(),
+            Block::Float(f) => f.geometry.as_ref(),
         }
     }
 
@@ -107,6 +137,17 @@ impl Block {
             Block::Code(_) => vec![],
             Block::HorizontalRule(_) => vec![],
             Block::Handwriting(hw) => hw.inlines.iter().collect(),
+            Block::DescriptionList(dl) => dl
+                .items
+                .iter()
+                .filter_map(|item| item.label.as_ref())
+                .flat_map(|label| label.iter())
+                .collect(),
+            Block::TableOfContents => vec![],
+            Block::Theorem(t) => t.content.iter().flat_map(|b| b.inlines()).collect(),
+            Block::Proof(p) => p.content.iter().flat_map(|b| b.inlines()).collect(),
+            Block::Minipage(m) => m.content.iter().flat_map(|b| b.inlines()).collect(),
+            Block::Float(f) => f.content.iter().flat_map(|b| b.inlines()).collect(),
         }
     }
 
@@ -123,6 +164,12 @@ impl Block {
             Block::Code(_) => "code",
             Block::HorizontalRule(_) => "horizontal_rule",
             Block::Handwriting(_) => "handwriting",
+            Block::DescriptionList(_) => "description_list",
+            Block::TableOfContents => "table_of_contents",
+            Block::Theorem(_) => "theorem",
+            Block::Proof(_) => "proof",
+            Block::Minipage(_) => "minipage",
+            Block::Float(_) => "float",
         }
     }
 }
@@ -350,6 +397,86 @@ pub struct HandwritingBlock {
     pub inlines: Vec<Inline>,
     /// Confidence score for the handwriting detection/recognition.
     pub confidence: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// An item in a description list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DescriptionItem {
+    /// Optional label (e.g., term in a glossary).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<Vec<Inline>>,
+    /// Content associated with the label.
+    pub content: Vec<Block>,
+}
+
+/// A description list block (\begin{description}).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DescriptionListBlock {
+    /// List items with optional labels.
+    pub items: Vec<DescriptionItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A theorem-like block (\begin{theorem}, \begin{lemma}, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TheoremBlock {
+    /// Theorem name (e.g., "Theorem", "Lemma", "Corollary").
+    pub name: String,
+    /// Optional theorem number.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub number: Option<String>,
+    /// Theorem content.
+    pub content: Vec<Block>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A proof block (\begin{proof}).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProofBlock {
+    /// Proof content.
+    pub content: Vec<Block>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A minipage block (\begin{minipage}{width}).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MinipageBlock {
+    /// Width of the minipage (e.g., "0.5\textwidth").
+    pub width: String,
+    /// Content inside the minipage.
+    pub content: Vec<Block>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A float block (\begin{figure} or \begin{table}).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FloatBlock {
+    /// Float environment name ("figure" or "table").
+    pub env: String,
+    /// Optional caption.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caption: Option<Vec<Inline>>,
+    /// Content inside the float.
+    pub content: Vec<Block>,
+    /// Optional placement specifier (e.g., "htbp").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placement: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]

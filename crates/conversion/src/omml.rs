@@ -21,6 +21,17 @@ impl Converter for OmmlConverter {
                                 Inline::Text(t) => parts.push(wrap_mtext(&t.text)),
                                 Inline::Formula(f) => parts.push(convert_formula_to_omml(f)),
                                 Inline::Image(_) => {}
+                                Inline::Footnote { content: _ } => {
+                                    // Footnotes in OMML are represented as text markers
+                                    parts.push("[^footnote]".to_string());
+                                }
+                                Inline::Label { .. } => {}
+                                Inline::Reference { key, .. } => {
+                                    parts.push(format!("({})", key));
+                                }
+                                Inline::Citation { key, .. } => {
+                                    parts.push(format!("[{}]", key));
+                                }
                             }
                         }
                     }
@@ -354,6 +365,14 @@ fn ast_to_omml(node: &LatexNode) -> String {
                         xml_escape(&text)
                     )
                 }
+                "underline" => {
+                    if let Some(arg) = args.first() {
+                        let inner = ast_to_omml(arg);
+                        wrap_with_underline(&inner)
+                    } else {
+                        String::new()
+                    }
+                }
                 "textcolor" if args.len() >= 2 => {
                     let color_name = extract_text_from_omml(&ast_to_omml(&args[0]));
                     let hex = color_name_to_hex(&color_name);
@@ -387,6 +406,79 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     parts.join("")
                 }
             }
+        }
+
+        LatexNode::DescriptionItem { label, content } => {
+            let mut result = String::new();
+            // Add label in bold if present
+            if let Some(label_node) = label {
+                let label_omml = ast_to_omml(label_node);
+                result.push_str(&wrap_with_bold(&label_omml));
+            }
+            // Add content
+            let content_omml: Vec<String> = content.iter().map(ast_to_omml).collect();
+            result.push_str(&content_omml.join(""));
+            result
+        }
+
+        LatexNode::Description(items) => {
+            let parts: Vec<String> = items.iter().map(ast_to_omml).collect();
+            parts.join("")
+        }
+
+        LatexNode::Footnote { content } => {
+            let inner = ast_to_omml(content);
+            format!("[^{}]", inner)
+        }
+
+        LatexNode::Label { .. } => {
+            // Labels are not rendered
+            String::new()
+        }
+
+        LatexNode::Reference { key, eq_ref } => {
+            if *eq_ref {
+                format!("(?{})", key)
+            } else {
+                format!("({})", key)
+            }
+        }
+
+        LatexNode::Citation { key, .. } => {
+            format!("[{}]", key)
+        }
+
+        LatexNode::Bibliography { .. } => {
+            // Bibliography is not rendered in OMML
+            String::new()
+        }
+
+        LatexNode::TableOfContents => {
+            wrap_mtext("目录")
+        }
+
+        LatexNode::Theorem { name, content } => {
+            let inner = ast_to_omml(content);
+            format!(
+                "<m:r><m:rPr><w:rPr><w:b/></w:rPr></m:rPr><m:t>{}.</m:t></m:r> {}",
+                name, inner
+            )
+        }
+
+        LatexNode::Proof { content } => {
+            let inner = ast_to_omml(content);
+            format!(
+                "<m:r><m:rPr><w:rPr><w:b/></w:rPr></m:rPr><m:t>Proof.</m:t></m:r> {} □",
+                inner
+            )
+        }
+
+        LatexNode::Minipage { content, .. } => {
+            ast_to_omml(content)
+        }
+
+        LatexNode::Float { content, .. } => {
+            ast_to_omml(content)
         }
 
         LatexNode::Group(nodes) => {
@@ -561,6 +653,13 @@ fn wrap_with_color(omml_content: &str, hex: &str) -> String {
 fn wrap_with_bold(omml_content: &str) -> String {
     format!(
         "<m:r><m:rPr><w:rPr><w:b/></w:rPr></m:rPr>{}</m:r>",
+        omml_content
+    )
+}
+
+fn wrap_with_underline(omml_content: &str) -> String {
+    format!(
+        "<m:r><m:rPr><w:rPr><w:u w:val=\"single\"/></w:rPr></m:rPr>{}</m:r>",
         omml_content
     )
 }

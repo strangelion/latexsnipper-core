@@ -51,6 +51,36 @@ LaTeXSnipper Core 采用严格的**四层架构**：
 
 ---
 
+## LaTeX 语法支持
+
+| 特性 | LaTeX | OMML | HTML | Typst | Markdown |
+|------|-------|------|------|-------|----------|
+| 粗体 `\textbf{}` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 斜体 `\textit{}` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 下划线 `\underline{}` | ✅ | ✅ | ✅ | ✅ | — |
+| 脚注 `\footnote{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
+| 交叉引用 `\ref{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
+| 参考文献 `\cite{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
+| 定义列表 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 定理/证明 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 小页 minipage | ✅ | ✅ | ✅ | ✅ | — |
+| 浮动体 figure/table | ✅ | ✅ | ✅ | ✅ | — |
+
+⚡ = 占位符输出，需要 Word API 插入实际内容
+
+### 多格式输入解析器
+
+| 输入格式 | 解析器 | 说明 |
+|----------|--------|------|
+| LaTeX | `latex_parser.rs` | 完整 LaTeX 命令和环境解析 |
+| OMML | `omml_parser.rs` | Office Math ML 反向解析 |
+| MathML | `mathml_parser.rs` | MathML → LaTeX 转换 |
+| Markdown | `markdown_parser.rs` | 标题/粗体/斜体/代码/列表/引用/公式 |
+| HTML | `html_parser.rs` | 完整 HTML 标签解析 |
+| Typst | `typst_parser.rs` | Typst 数学语法转换 |
+
+---
+
 ## 模块依赖关系
 
 ```

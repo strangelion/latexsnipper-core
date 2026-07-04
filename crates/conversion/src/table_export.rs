@@ -91,6 +91,17 @@ fn extract_cell_text(inlines: &[Inline]) -> String {
                 parts.push(format!("${}$", f.as_latex()));
             }
             Inline::Image(_) => parts.push("[image]".to_string()),
+            Inline::Footnote { content } => {
+                let inner = render_cell_html(&[*content.clone()]);
+                parts.push(format!("[^{}]", inner));
+            }
+            Inline::Label { .. } => {}
+            Inline::Reference { key, .. } => {
+                parts.push(format!("({})", key));
+            }
+            Inline::Citation { key, .. } => {
+                parts.push(format!("[{}]", key));
+            }
         }
     }
     parts.join(" ")
@@ -115,6 +126,17 @@ fn render_cell_html(inlines: &[Inline]) -> String {
                 parts.push(format!("<i>{}</i>", xml_escape(latex)));
             }
             Inline::Image(_) => parts.push("[image]".to_string()),
+            Inline::Footnote { content } => {
+                let inner = render_cell_html(&[*content.clone()]);
+                parts.push(format!("<sup>{}</sup>", inner));
+            }
+            Inline::Label { .. } => {}
+            Inline::Reference { key, .. } => {
+                parts.push(format!("<a href=\"#{}\">{}</a>", key, key));
+            }
+            Inline::Citation { key, .. } => {
+                parts.push(format!("<cite>{}</cite>", key));
+            }
         }
     }
     parts.join(" ")

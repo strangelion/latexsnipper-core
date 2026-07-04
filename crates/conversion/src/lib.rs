@@ -1,6 +1,7 @@
 pub mod converter;
 pub mod document_converter;
 pub mod html;
+pub mod html_parser;
 pub mod latex;
 pub mod latex_ast;
 pub mod latex_parser;
@@ -20,6 +21,7 @@ pub mod typst_parser;
 pub use converter::Converter;
 pub use document_converter::{DocumentConverter, OutputFormat};
 pub use html::HtmlConverter;
+pub use html_parser::parse_html_to_document;
 pub use latex::{LatexConverter, LatexDisplayConverter, LatexEquationConverter};
 pub use markdown::{MarkdownBlockConverter, MarkdownInlineConverter};
 pub use markdown_parser::parse_markdown_to_document;
@@ -628,5 +630,138 @@ mod tests {
                 back
             );
         }
+    }
+
+    /// Test new LaTeX commands: underline, footnote, label, ref, cite, theorem, minipage, float
+    #[test]
+    fn new_latex_commands_pipeline() {
+        use crate::latex_parser::parse_latex;
+        use crate::latex_to_typst::latex_ast_to_typst;
+
+        // underline
+        let node = parse_latex("\\underline{x}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\underline{x}"), "underline roundtrip: {}", latex_out);
+        let typst_out = latex_ast_to_typst(&node);
+        assert!(typst_out.contains("underline"), "underline→typst: {}", typst_out);
+
+        // footnote
+        let node = parse_latex("\\footnote{text}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\footnote{text}"), "footnote roundtrip: {}", latex_out);
+
+        // label and ref
+        let node = parse_latex("\\label{eq:1} x \\ref{eq:1}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\label{eq:1}"), "label roundtrip: {}", latex_out);
+        assert!(latex_out.contains("\\ref{eq:1}"), "ref roundtrip: {}", latex_out);
+
+        // eqref
+        let node = parse_latex("\\eqref{eq:1}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\eqref{eq:1}"), "eqref roundtrip: {}", latex_out);
+
+        // cite family
+        let node = parse_latex("\\cite{knuth}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\cite{knuth}"), "cite roundtrip: {}", latex_out);
+
+        let node = parse_latex("\\citet{knuth}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\citet{knuth}"), "citet roundtrip: {}", latex_out);
+
+        let node = parse_latex("\\citep{knuth}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\citep{knuth}"), "citep roundtrip: {}", latex_out);
+
+        // bibliography
+        let node = parse_latex("\\bibliography{refs}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\bibliography{refs}"), "bibliography roundtrip: {}", latex_out);
+
+        // theorem environments
+        let node = parse_latex("\\begin{theorem}content\\end{theorem}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\begin{theorem}"), "theorem roundtrip: {}", latex_out);
+        assert!(latex_out.contains("content"), "theorem content: {}", latex_out);
+
+        let node = parse_latex("\\begin{proof}QED\\end{proof}");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\begin{proof}"), "proof roundtrip: {}", latex_out);
+
+        // tableofcontents
+        let node = parse_latex("\\tableofcontents");
+        let latex_out = format!("{}", node);
+        assert!(latex_out.contains("\\tableofcontents"), "toc roundtrip: {}", latex_out);
+    }
+
+    /// Test new AST node types through OMML conversion
+    #[test]
+    fn new_commands_to_omml() {
+        use crate::latex_parser::parse_latex;
+        use crate::omml::latex_to_omml;
+
+        // footnote renders as placeholder
+        let omml = latex_to_omml("\\footnote{text}");
+        assert!(omml.contains("[^"), "footnote OMML placeholder: {}", omml);
+
+        // label renders empty
+        let omml = latex_to_omml("\\label{key}");
+        assert!(!omml.contains("label"), "label should not render: {}", omml);
+
+        // ref renders as placeholder
+        let omml = latex_to_omml("\\ref{key}");
+        assert!(omml.contains("(key)") || omml.contains("(?)"), "ref OMML: {}", omml);
+
+        // cite renders as placeholder
+        let omml = latex_to_omml("\\cite{knuth}");
+        assert!(omml.contains("[knuth]"), "cite OMML: {}", omml);
+
+        // theorem renders bold title
+        let omml = latex_to_omml("\\begin{theorem}content\\end{theorem}");
+        assert!(omml.contains("theorem"), "theorem OMML: {}", omml);
+        assert!(omml.contains("content"), "theorem content OMML: {}", omml);
+
+        // toc renders as placeholder text
+        let ast = crate::latex_parser::parse_latex("\\tableofcontents");
+        let ast_str = format!("{:?}", ast);
+        let omml = latex_to_omml("\\tableofcontents");
+        assert!(omml.contains("目录") || omml.contains("<m:t>"), "toc OMML empty. ast: {}, omml: [{}]", ast_str, omml);
+    }
+
+    /// Test Markdown parser handles all block types
+    #[test]
+    fn markdown_parser_comprehensive() {
+        let md = "# Title\n\n**bold** and *italic* text.\n\n`code` here.\n\n- item1\n- item2\n\n1. first\n2. second\n\n> blockquote\n\n---\n\n$$E=mc^2$$\n\nInline $x^2$ math.";
+        let doc = parse_markdown_to_document(md);
+
+        let block_types: Vec<&str> = doc.pages[0].blocks.iter().map(|b| b.type_name()).collect();
+        assert!(block_types.contains(&"heading"), "should have heading, got: {:?}", block_types);
+        assert!(block_types.contains(&"paragraph"), "should have paragraph, got: {:?}", block_types);
+        assert!(block_types.contains(&"list"), "should have list, got: {:?}", block_types);
+        assert!(block_types.contains(&"horizontal_rule"), "should have hr, got: {:?}", block_types);
+        assert!(block_types.contains(&"formula"), "should have formula, got: {:?}", block_types);
+
+        // Check bold in paragraph
+        if let Block::Paragraph(p) = &doc.pages[0].blocks[1] {
+            let has_bold = p.inlines.iter().any(|i| {
+                matches!(i, Inline::Text(t) if t.bold == Some(true))
+            });
+            assert!(has_bold, "should have bold text");
+        }
+    }
+
+    /// Test HTML parser handles all block types
+    #[test]
+    fn html_parser_comprehensive() {
+        let html = "<h1>Title</h1><p>Hello <strong>world</strong>!</p><ul><li>A</li><li>B</li></ul><pre><code>fn x() {}</code></pre><hr>";
+        let doc = parse_html_to_document(html);
+
+        let block_types: Vec<&str> = doc.pages[0].blocks.iter().map(|b| b.type_name()).collect();
+        assert!(block_types.contains(&"heading"), "should have heading");
+        assert!(block_types.contains(&"paragraph"), "should have paragraph");
+        assert!(block_types.contains(&"list"), "should have list");
+        assert!(block_types.contains(&"code"), "should have code");
+        assert!(block_types.contains(&"horizontal_rule"), "should have hr");
     }
 }

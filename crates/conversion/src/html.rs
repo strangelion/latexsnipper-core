@@ -105,6 +105,25 @@ fn render_block(block: &Block) -> String {
             let text = render_inlines(&hw.inlines);
             format!("<div class=\"handwriting\">{}</div>", text)
         }
+        Block::DescriptionList(dl) => render_description_list(dl),
+        Block::TableOfContents => "<div class=\"toc\">目录</div>".to_string(),
+        Block::Theorem(t) => render_theorem(t),
+        Block::Proof(p) => render_proof(p),
+        Block::Minipage(m) => {
+            let content = render_blocks(&m.content);
+            format!("<div class=\"minipage\" style=\"width:{}\">{}</div>", m.width, content)
+        }
+        Block::Float(f) => {
+            let content = render_blocks(&f.content);
+            let mut result = format!("<div class=\"{}\">", f.env);
+            result.push_str(&content);
+            if let Some(caption) = &f.caption {
+                let caption_text = render_inlines(caption);
+                result.push_str(&format!("<figcaption>{}</figcaption>", caption_text));
+            }
+            result.push_str("</div>");
+            result
+        }
     }
 }
 
@@ -120,6 +139,9 @@ fn render_inlines(inlines: &[Inline]) -> String {
                 if t.italic == Some(true) {
                     text = format!("<em>{}</em>", text);
                 }
+                if t.underline == Some(true) {
+                    text = format!("<u>{}</u>", text);
+                }
                 parts.push(text);
             }
             Inline::Formula(f) => {
@@ -132,6 +154,23 @@ fn render_inlines(inlines: &[Inline]) -> String {
             }
             Inline::Image(_) => {
                 parts.push("<img src=\"image.png\" alt=\"image\">".to_string());
+            }
+            Inline::Footnote { content } => {
+                let inner = render_inlines(&[*content.clone()]);
+                parts.push(format!("<sup>{}</sup>", inner));
+            }
+            Inline::Label { key } => {
+                parts.push(format!("<a id=\"{}\"></a>", key));
+            }
+            Inline::Reference { key, eq_ref } => {
+                if *eq_ref {
+                    parts.push(format!("({})", key));
+                } else {
+                    parts.push(format!("<a href=\"#{}\">{}</a>", key, key));
+                }
+            }
+            Inline::Citation { key, .. } => {
+                parts.push(format!("<cite>{}</cite>", key));
             }
         }
     }
@@ -196,6 +235,37 @@ fn render_list(l: &latexsnipper_ast::ListBlock) -> String {
         items.push(format!("  <li>{}</li>", text));
     }
     format!("<{}>\n{}\n</{}>", tag, items.join("\n"), tag)
+}
+
+fn render_description_list(dl: &latexsnipper_ast::DescriptionListBlock) -> String {
+    let mut items = Vec::new();
+    for item in &dl.items {
+        let content = render_blocks(&item.content);
+        if let Some(label) = &item.label {
+            let label_text = render_inlines(label);
+            items.push(format!("  <dt><strong>{}</strong></dt>\n  <dd>{}</dd>", label_text, content));
+        } else {
+            items.push(format!("  <dd>{}</dd>", content));
+        }
+    }
+    format!("<dl>\n{}\n</dl>", items.join("\n"))
+}
+
+fn render_theorem(t: &latexsnipper_ast::TheoremBlock) -> String {
+    let content = render_blocks(&t.content);
+    format!(
+        "<div class=\"theorem\"><strong>{}.</strong> {}</div>",
+        t.name, content
+    )
+}
+
+fn render_proof(p: &latexsnipper_ast::ProofBlock) -> String {
+    let content = render_blocks(&p.content);
+    format!("<div class=\"proof\"><strong>Proof.</strong> {} □</div>", content)
+}
+
+fn render_blocks(blocks: &[latexsnipper_ast::Block]) -> String {
+    blocks.iter().map(render_block).collect::<Vec<_>>().join("\n")
 }
 
 fn render_quote(q: &latexsnipper_ast::QuoteBlock) -> String {
@@ -369,6 +439,13 @@ fn render_cell_content(inlines: &[Inline]) -> String {
                 }
             }
             Inline::Image(_) => "<img src=\"image.png\" alt=\"image\">".to_string(),
+            Inline::Footnote { content } => {
+                let inner = render_cell_content(&[*content.clone()]);
+                format!("<sup>{}</sup>", inner)
+            }
+            Inline::Label { key } => format!("<a id=\"{}\"></a>", key),
+            Inline::Reference { key, .. } => format!("<a href=\"#{}\">{}</a>", key, key),
+            Inline::Citation { key, .. } => format!("<cite>{}</cite>", key),
         })
         .collect();
     parts.join(" ")

@@ -140,6 +140,60 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             let inlines = convert_inlines(&hw.inlines);
             Some(RenderNode::Paragraph(inlines))
         }
+        Block::DescriptionList(dl) => {
+            let items: Vec<Vec<RenderNode>> = dl
+                .items
+                .iter()
+                .flat_map(|item| {
+                    let mut nodes = Vec::new();
+                    if let Some(label) = &item.label {
+                        nodes.extend(convert_inlines(label));
+                    }
+                    for block in &item.content {
+                        if let Some(node) = convert_block(block) {
+                            nodes.push(node);
+                        }
+                    }
+                    if nodes.is_empty() {
+                        None
+                    } else {
+                        Some(nodes)
+                    }
+                })
+                .collect();
+            Some(RenderNode::List {
+                ordered: false,
+                items,
+            })
+        }
+        Block::TableOfContents => Some(RenderNode::Paragraph(vec![RenderNode::Text("目录".to_string())])),
+        Block::Theorem(t) => {
+            let mut nodes = vec![RenderNode::Text(format!("{}.", t.name))];
+            for block in &t.content {
+                if let Some(node) = convert_block(block) {
+                    nodes.push(node);
+                }
+            }
+            Some(RenderNode::Paragraph(nodes))
+        }
+        Block::Proof(p) => {
+            let mut nodes = vec![RenderNode::Text("Proof.".to_string())];
+            for block in &p.content {
+                if let Some(node) = convert_block(block) {
+                    nodes.push(node);
+                }
+            }
+            nodes.push(RenderNode::Text("□".to_string()));
+            Some(RenderNode::Paragraph(nodes))
+        }
+        Block::Minipage(m) => {
+            let nodes: Vec<RenderNode> = m.content.iter().filter_map(convert_block).collect();
+            Some(RenderNode::Paragraph(nodes))
+        }
+        Block::Float(f) => {
+            let nodes: Vec<RenderNode> = f.content.iter().filter_map(convert_block).collect();
+            Some(RenderNode::Paragraph(nodes))
+        }
     }
 }
 
@@ -153,6 +207,16 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<RenderNode> {
                 display_mode: f.display_mode,
             },
             Inline::Image(_) => RenderNode::Text(String::new()),
+            Inline::Footnote { content } => {
+                let inner = convert_inlines(&[*content.clone()]);
+                RenderNode::Text(format!("[^{}]", inner.iter().map(|n| match n {
+                    RenderNode::Text(t) => t.clone(),
+                    _ => String::new(),
+                }).collect::<String>()))
+            }
+            Inline::Label { key } => RenderNode::Text(format!("[label={}]", key)),
+            Inline::Reference { key, .. } => RenderNode::Text(format!("({})", key)),
+            Inline::Citation { key, .. } => RenderNode::Text(format!("[{}]", key)),
         })
         .collect()
 }

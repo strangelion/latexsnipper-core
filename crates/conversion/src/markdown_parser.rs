@@ -1,69 +1,174 @@
 use latexsnipper_ast::{
-    Block, Document, Formula, FormulaBlock, FormulaSource, Inline, Metadata, NodeIdGenerator, Page,
-    ParagraphBlock, TextRun,
+    Block, CodeBlock, Document, Formula, FormulaBlock, FormulaSource, Inline, ListBlock, ListItem,
+    Metadata, NodeIdGenerator, Page, ParagraphBlock, QuoteBlock, TextRun,
 };
 
 /// Parse a Markdown string into a Document AST.
-/// `$$...$$` → display formula block, `$...$` → inline formula within paragraph.
+/// Supports: headings, paragraphs, display/inline math, bold, italic, code, lists, blockquotes, horizontal rules.
 pub fn parse_markdown_to_document(md: &str) -> Document {
     let mut blocks: Vec<Block> = Vec::new();
     let mut current_inlines: Vec<Inline> = Vec::new();
+    let mut blockquote_lines: Vec<String> = Vec::new();
 
-    let chars: Vec<char> = md.chars().collect();
-    let len = chars.len();
+    let lines: Vec<&str> = md.lines().collect();
     let mut i = 0;
 
-    while i < len {
-        if chars[i] == '$' {
-            if i + 1 < len && chars[i + 1] == '$' {
-                if let Some(end) = find_display_math_end(&chars, i + 2) {
-                    let formula_str: String = chars[i + 2..end].iter().collect();
-                    let formula_str = formula_str.trim();
-                    blocks.push(Block::Formula(FormulaBlock {
-                        formula: Formula::latex(formula_str),
-                        geometry: None,
-                        source: None,
-                    }));
-                    i = end + 2;
-                    continue;
-                }
-            }
+    while i < lines.len() {
+        let line = lines[i];
 
-            if let Some(end) = find_inline_math_end(&chars, i + 1) {
-                let formula_str: String = chars[i + 1..end].iter().collect();
-                let formula_str = formula_str.trim();
-                let mut f = Formula::latex(formula_str);
-                f.display_mode = false;
-                current_inlines.push(Inline::Formula(f));
-                i = end + 1;
-                continue;
-            }
-
-            push_text(&mut current_inlines, "$");
-            i += 1;
-        } else if chars[i] == '\n' && i + 1 < len && chars[i + 1] == '\n' {
+        // Display math: $$...$$
+        if line.trim().starts_with("$$") && line.trim().ends_with("$$") && line.trim().len() > 4 {
             flush_paragraph(&mut blocks, &mut current_inlines);
-            i += 2;
-        } else if chars[i] == '#' {
-            let (level, title, consumed) = parse_heading(&chars, i);
-            if level > 0 {
-                flush_paragraph(&mut blocks, &mut current_inlines);
-                blocks.push(Block::Heading(latexsnipper_ast::HeadingBlock {
-                    level,
-                    inlines: vec![Inline::Text(TextRun::new(title))],
-                    id: None,
+            let formula_str = line.trim()[2..line.trim().len() - 2].trim();
+            blocks.push(Block::Formula(FormulaBlock {
+                formula: Formula::latex(formula_str),
+                geometry: None,
+                source: None,
+            }));
+            i += 1;
+            continue;
+        }
+
+        // Display math block: $$ on its own line
+        if line.trim() == "$$" {
+            flush_paragraph(&mut blocks, &mut current_inlines);
+            i += 1;
+            let mut formula_lines = Vec::new();
+            while i < lines.len() && lines[i].trim() != "$$" {
+                formula_lines.push(lines[i]);
+                i += 1;
+            }
+            if i < lines.len() {
+                i += 1; // skip closing $$
+            }
+            let formula_str = formula_lines.join("\n").trim().to_string();
+            blocks.push(Block::Formula(FormulaBlock {
+                formula: Formula::latex(&formula_str),
+                geometry: None,
+                source: None,
+            }));
+            continue;
+        }
+
+        // Horizontal rule
+        if is_horizontal_rule(line) {
+            flush_paragraph(&mut blocks, &mut current_inlines);
+            blocks.push(Block::HorizontalRule(
+                latexsnipper_ast::HorizontalRuleBlock::new(),
+            ));
+            i += 1;
+            continue;
+        }
+
+        // Heading
+        if let Some((level, title)) = parse_heading_line(line) {
+            flush_paragraph(&mut blocks, &mut current_inlines);
+            blocks.push(Block::Heading(latexsnipper_ast::HeadingBlock {
+                level,
+                inlines: vec![Inline::Text(TextRun::new(title))],
+                id: None,
+                geometry: None,
+                source: None,
+            }));
+            i += 1;
+            continue;
+        }
+
+        // Code block
+        if line.trim_start().starts_with("```") {
+            flush_paragraph(&mut blocks, &mut current_inlines);
+            let lang = line.trim_start().trim_start_matches('`').trim().to_string();
+            let mut code_lines = Vec::new();
+            i += 1;
+            while i < lines.len() && !lines[i].trim_start().starts_with("```") {
+                code_lines.push(lines[i]);
+                i += 1;
+            }
+            if i < lines.len() {
+                i += 1; // skip closing ```
+            }
+            blocks.push(Block::Code(CodeBlock {
+                language: if lang.is_empty() { None } else { Some(lang) },
+                code: code_lines.join("\n"),
+                geometry: None,
+                source: None,
+            }));
+            continue;
+        }
+
+        // Blockquote
+        if line.trim_start().starts_with('>') {
+            flush_paragraph(&mut blocks, &mut current_inlines);
+            let content = line.trim_start().trim_start_matches('>').trim();
+            blockquote_lines.push(content.to_string());
+            i += 1;
+            // Check if next line is still blockquote
+            if i < lines.len() && lines[i].trim_start().starts_with('>') {
+                continue;
+            } else {
+                // Flush blockquote
+                let quote_text = blockquote_lines.join("\n");
+                let quote_doc = parse_markdown_to_document(&quote_text);
+                let quote_blocks: Vec<Block> = quote_doc
+                    .pages
+                    .into_iter()
+                    .flat_map(|p| p.blocks)
+                    .collect();
+                blocks.push(Block::Quote(QuoteBlock {
+                    blocks: quote_blocks,
+                    attribution: None,
                     geometry: None,
                     source: None,
                 }));
-                i = consumed;
+                blockquote_lines.clear();
                 continue;
             }
-            push_char(&mut current_inlines, chars[i]);
-            i += 1;
-        } else {
-            push_char(&mut current_inlines, chars[i]);
-            i += 1;
         }
+
+        // List item
+        if let Some((ordered, item_text)) = parse_list_item(line) {
+            flush_paragraph(&mut blocks, &mut current_inlines);
+            let mut items = vec![ListItem {
+                inlines: parse_inline_text(item_text),
+                checked: None,
+                source: None,
+            }];
+            i += 1;
+            // Collect consecutive list items
+            while i < lines.len() {
+                if let Some((o, t)) = parse_list_item(lines[i]) {
+                    if o == ordered {
+                        items.push(ListItem {
+                            inlines: parse_inline_text(t),
+                            checked: None,
+                            source: None,
+                        });
+                        i += 1;
+                        continue;
+                    }
+                }
+                break;
+            }
+            blocks.push(Block::List(ListBlock {
+                ordered,
+                items,
+                geometry: None,
+                source: None,
+            }));
+            continue;
+        }
+
+        // Empty line - flush paragraph
+        if line.trim().is_empty() {
+            flush_paragraph(&mut blocks, &mut current_inlines);
+            i += 1;
+            continue;
+        }
+
+        // Regular text - parse inline formatting
+        let inlines = parse_inline_line(line);
+        current_inlines.extend(inlines);
+        i += 1;
     }
 
     flush_paragraph(&mut blocks, &mut current_inlines);
@@ -102,33 +207,6 @@ fn flush_paragraph(blocks: &mut Vec<Block>, inlines: &mut Vec<Inline>) {
     inlines.clear();
 }
 
-fn push_text(inlines: &mut Vec<Inline>, text: &str) {
-    if let Some(Inline::Text(t)) = inlines.last_mut() {
-        t.text.push_str(text);
-    } else {
-        inlines.push(Inline::Text(TextRun::new(text)));
-    }
-}
-
-fn push_char(inlines: &mut Vec<Inline>, ch: char) {
-    if let Some(Inline::Text(t)) = inlines.last_mut() {
-        t.text.push(ch);
-    } else {
-        inlines.push(Inline::Text(TextRun::new(ch.to_string())));
-    }
-}
-
-fn find_display_math_end(chars: &[char], start: usize) -> Option<usize> {
-    let mut i = start;
-    while i + 1 < chars.len() {
-        if chars[i] == '$' && chars[i + 1] == '$' {
-            return Some(i);
-        }
-        i += 1;
-    }
-    None
-}
-
 fn find_inline_math_end(chars: &[char], start: usize) -> Option<usize> {
     let mut i = start;
     while i < chars.len() {
@@ -140,23 +218,182 @@ fn find_inline_math_end(chars: &[char], start: usize) -> Option<usize> {
     None
 }
 
-fn parse_heading(chars: &[char], start: usize) -> (u8, String, usize) {
+fn is_horizontal_rule(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.len() < 3 {
+        return false;
+    }
+    let chars: Vec<char> = trimmed.chars().collect();
+    let ch = chars[0];
+    if ch != '-' && ch != '*' && ch != '_' {
+        return false;
+    }
+    chars.iter().all(|&c| c == ch || c == ' ')
+}
+
+fn parse_heading_line(line: &str) -> Option<(u8, String)> {
+    let trimmed = line.trim();
     let mut level: u8 = 0;
+    for ch in trimmed.chars() {
+        if ch == '#' {
+            level += 1;
+        } else {
+            break;
+        }
+    }
+    if level == 0 || level > 6 {
+        return None;
+    }
+    let rest = trimmed[level as usize..].trim();
+    if rest.is_empty() {
+        return None;
+    }
+    Some((level, rest.to_string()))
+}
+
+fn parse_list_item(line: &str) -> Option<(bool, &str)> {
+    let trimmed = line.trim();
+    // Ordered list: "1. ", "2. ", etc.
+    if let Some(rest) = trimmed.strip_prefix(|c: char| c.is_ascii_digit()) {
+        if let Some(rest) = rest.strip_prefix('.') {
+            if let Some(rest) = rest.strip_prefix(' ') {
+                return Some((true, rest));
+            }
+        }
+    }
+    // Unordered list: "- ", "* ", "+ "
+    if let Some(rest) = trimmed.strip_prefix("- ") {
+        return Some((false, rest));
+    }
+    if let Some(rest) = trimmed.strip_prefix("* ") {
+        return Some((false, rest));
+    }
+    if let Some(rest) = trimmed.strip_prefix("+ ") {
+        return Some((false, rest));
+    }
+    None
+}
+
+fn parse_inline_text(text: &str) -> Vec<Inline> {
+    let mut inlines = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        // Inline math
+        if chars[i] == '$' {
+            if let Some(end) = find_inline_math_end(&chars, i + 1) {
+                let formula_str: String = chars[i + 1..end].iter().collect();
+                let formula_str = formula_str.trim();
+                let mut f = Formula::latex(formula_str);
+                f.display_mode = false;
+                inlines.push(Inline::Formula(f));
+                i = end + 1;
+                continue;
+            }
+        }
+
+        // Bold: **text** or __text__
+        if i + 1 < len && (chars[i] == '*' && chars[i + 1] == '*')
+            || (chars[i] == '_' && chars[i + 1] == '_')
+        {
+            let marker = chars[i];
+            if let Some(end) = find_double_marker_end(&chars, i + 2, marker) {
+                let inner: String = chars[i + 2..end].iter().collect();
+                let inner_inlines = parse_inline_text(&inner);
+                for mut inline in inner_inlines {
+                    if let Inline::Text(t) = &mut inline {
+                        t.bold = Some(true);
+                    }
+                    inlines.push(inline);
+                }
+                i = end + 2;
+                continue;
+            }
+        }
+
+        // Italic: *text* or _text_
+        if chars[i] == '*' || chars[i] == '_' {
+            let marker = chars[i];
+            if let Some(end) = find_single_marker_end(&chars, i + 1, marker) {
+                let inner: String = chars[i + 1..end].iter().collect();
+                let inner_inlines = parse_inline_text(&inner);
+                for mut inline in inner_inlines {
+                    if let Inline::Text(t) = &mut inline {
+                        t.italic = Some(true);
+                    }
+                    inlines.push(inline);
+                }
+                i = end + 1;
+                continue;
+            }
+        }
+
+        // Inline code: `code`
+        if chars[i] == '`' {
+            if let Some(end) = find_inline_code_end(&chars, i + 1) {
+                let code: String = chars[i + 1..end].iter().collect();
+                inlines.push(Inline::Text(TextRun {
+                    text: code,
+                    bold: None,
+                    italic: None,
+                    underline: None,
+                    strikethrough: None,
+                    source: None,
+                }));
+                i = end + 1;
+                continue;
+            }
+        }
+
+        // Regular character
+        if let Some(Inline::Text(t)) = inlines.last_mut() {
+            t.text.push(chars[i]);
+        } else {
+            inlines.push(Inline::Text(TextRun::new(chars[i].to_string())));
+        }
+        i += 1;
+    }
+
+    inlines
+}
+
+fn parse_inline_line(line: &str) -> Vec<Inline> {
+    parse_inline_text(line)
+}
+
+fn find_double_marker_end(chars: &[char], start: usize, marker: char) -> Option<usize> {
     let mut i = start;
-    while i < chars.len() && chars[i] == '#' {
-        level += 1;
+    while i + 1 < chars.len() {
+        if chars[i] == marker && chars[i + 1] == marker {
+            return Some(i);
+        }
         i += 1;
     }
-    if level > 6 || i >= chars.len() || chars[i] != ' ' {
-        return (0, String::new(), start);
-    }
-    i += 1;
-    let mut title = String::new();
-    while i < chars.len() && chars[i] != '\n' {
-        title.push(chars[i]);
+    None
+}
+
+fn find_single_marker_end(chars: &[char], start: usize, marker: char) -> Option<usize> {
+    let mut i = start;
+    while i < chars.len() {
+        if chars[i] == marker {
+            return Some(i);
+        }
         i += 1;
     }
-    (level, title.trim().to_string(), i)
+    None
+}
+
+fn find_inline_code_end(chars: &[char], start: usize) -> Option<usize> {
+    let mut i = start;
+    while i < chars.len() {
+        if chars[i] == '`' {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
 }
 
 /// Parse a Markdown string to LaTeX string (text + inline math).

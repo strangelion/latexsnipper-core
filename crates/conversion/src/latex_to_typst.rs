@@ -209,6 +209,56 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 (None, None) => arrow.to_string(),
             }
         }
+        LatexNode::DescriptionItem { label, content } => {
+            let mut result = String::new();
+            if let Some(l) = label {
+                result.push_str(&format!("/ {}", latex_ast_to_typst(l)));
+            }
+            for node in content {
+                result.push_str(&latex_ast_to_typst(node));
+            }
+            result
+        }
+        LatexNode::Description(items) => {
+            let mut result = String::new();
+            for item in items {
+                result.push_str(&latex_ast_to_typst(item));
+                result.push('\n');
+            }
+            result
+        }
+        LatexNode::Footnote { content } => {
+            let inner = latex_ast_to_typst(content);
+            format!("#footnote({})", inner)
+        }
+        LatexNode::Label { key } => {
+            format!("<label={}>", key)
+        }
+        LatexNode::Reference { key, .. } => {
+            format!("@{}", key)
+        }
+        LatexNode::Citation { key, .. } => {
+            format!("@{}", key)
+        }
+        LatexNode::Bibliography { .. } => {
+            // Bibliography is not rendered in Typst
+            String::new()
+        }
+        LatexNode::TableOfContents => "目录".to_string(),
+        LatexNode::Theorem { name, content } => {
+            let inner = latex_ast_to_typst(content);
+            format!("*{}.* {}", name, inner)
+        }
+        LatexNode::Proof { content } => {
+            let inner = latex_ast_to_typst(content);
+            format!("*Proof.* {} □", inner)
+        }
+        LatexNode::Minipage { content, .. } => {
+            latex_ast_to_typst(content)
+        }
+        LatexNode::Float { content, .. } => {
+            latex_ast_to_typst(content)
+        }
     }
 }
 

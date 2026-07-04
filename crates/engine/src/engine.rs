@@ -368,6 +368,83 @@ impl SnipperEngine {
                                 .collect::<Vec<_>>()
                                 .join(" "),
                             Block::HorizontalRule(_) => "---".to_string(),
+                            Block::DescriptionList(dl) => {
+                                let mut buf = String::new();
+                                for item in &dl.items {
+                                    if let Some(label) = &item.label {
+                                        for inline in label {
+                                            if let Inline::Text(t) = inline {
+                                                buf.push_str(&t.text);
+                                            }
+                                        }
+                                        buf.push_str(": ");
+                                    }
+                                    for block in &item.content {
+                                        if let Block::Paragraph(p) = block {
+                                            for inline in &p.inlines {
+                                                if let Inline::Text(t) = inline {
+                                                    buf.push_str(&t.text);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    buf.push('\n');
+                                }
+                                buf
+                            }
+                            Block::TableOfContents => "目录".to_string(),
+                            Block::Theorem(t) => {
+                                let mut buf = format!("{}: ", t.name);
+                                for block in &t.content {
+                                    if let Block::Paragraph(p) = block {
+                                        for inline in &p.inlines {
+                                            if let Inline::Text(t) = inline {
+                                                buf.push_str(&t.text);
+                                            }
+                                        }
+                                    }
+                                }
+                                buf
+                            }
+                            Block::Proof(p) => {
+                                let mut buf = "Proof: ".to_string();
+                                for block in &p.content {
+                                    if let Block::Paragraph(p) = block {
+                                        for inline in &p.inlines {
+                                            if let Inline::Text(t) = inline {
+                                                buf.push_str(&t.text);
+                                            }
+                                        }
+                                    }
+                                }
+                                buf
+                            }
+                            Block::Minipage(m) => {
+                                let mut buf = String::new();
+                                for block in &m.content {
+                                    if let Block::Paragraph(p) = block {
+                                        for inline in &p.inlines {
+                                            if let Inline::Text(t) = inline {
+                                                buf.push_str(&t.text);
+                                            }
+                                        }
+                                    }
+                                }
+                                buf
+                            }
+                            Block::Float(f) => {
+                                let mut buf = String::new();
+                                for block in &f.content {
+                                    if let Block::Paragraph(p) = block {
+                                        for inline in &p.inlines {
+                                            if let Inline::Text(t) = inline {
+                                                buf.push_str(&t.text);
+                                            }
+                                        }
+                                    }
+                                }
+                                buf
+                            }
                         };
 
                         let confidence = match block {

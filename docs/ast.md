@@ -17,12 +17,28 @@ Document
     ├── width, height, page_number
     └── Block[]
         ├── Paragraph → Inline[]
-        │   ├── Text → TextRun (text, bold, italic)
+        │   ├── Text → TextRun (text, bold, italic, underline, strikethrough)
         │   ├── Formula → FormulaSource
-        │   └── Image → ImageInline
+        │   ├── Image → ImageInline
+        │   ├── Footnote → Inline
+        │   ├── Label → key
+        │   ├── Reference → key, eq_ref
+        │   └── Citation → key, style
         ├── Formula → FormulaBlock
         ├── Table → TableCell[][] (colspan, rowspan)
-        └── Figure → FigureBlock (image_data, caption)
+        ├── Figure → FigureBlock (image_data, caption)
+        ├── List → ListItem[] (ordered)
+        ├── Quote → Block[]
+        ├── Code → language, code
+        ├── Heading → level, inlines, id
+        ├── HorizontalRule
+        ├── DescriptionList → DescriptionItem[] (label, content)
+        ├── Theorem → name, content
+        ├── Proof → content
+        ├── Minipage → width, content
+        ├── Float → env, caption, content
+        ├── TableOfContents
+        └── Handwriting → inlines, confidence
 ```
 
 ## 模块
@@ -89,6 +105,13 @@ pub enum Block {
     Quote(QuoteBlock),
     Code(CodeBlock),
     HorizontalRule(HorizontalRuleBlock),
+    Handwriting(HandwritingBlock),
+    DescriptionList(DescriptionListBlock),
+    TableOfContents,
+    Theorem(TheoremBlock),
+    Proof(ProofBlock),
+    Minipage(MinipageBlock),
+    Float(FloatBlock),
 }
 ```
 
@@ -131,6 +154,9 @@ pub struct TextRun {
     pub text: String,
     pub bold: Option<bool>,
     pub italic: Option<bool>,
+    pub underline: Option<bool>,
+    pub strikethrough: Option<bool>,
+    pub source: Option<SourceInfo>,
 }
 ```
 

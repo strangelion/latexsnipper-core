@@ -11,9 +11,10 @@ pub mod span;
 pub mod visitor;
 
 pub use block::{
-    Block, BorderStyle, CellAlignment, CodeBlock, FigureBlock, FormulaBlock, HandwritingBlock,
-    HeadingBlock, HorizontalRuleBlock, ListBlock, ListItem, ParagraphBlock, QuoteBlock, TableBlock,
-    TableCell,
+    Block, BorderStyle, CellAlignment, CodeBlock, DescriptionItem, DescriptionListBlock,
+    FigureBlock, FloatBlock, FormulaBlock, HandwritingBlock, HeadingBlock, HorizontalRuleBlock,
+    ListBlock, ListItem, MinipageBlock, ParagraphBlock, ProofBlock, QuoteBlock, TableBlock,
+    TableCell, TheoremBlock,
 };
 pub use builder::DocumentBuilder;
 pub use document::{Document, Page};
@@ -22,7 +23,7 @@ pub use formula_layout::{
     categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory, SymbolInfo,
 };
 pub use geometry::{Point, Rect, Size};
-pub use inline::{ImageInline, Inline, TextRun};
+pub use inline::{CiteStyle, ImageInline, Inline, TextRun};
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;
 pub use span::{NodeId, NodeIdGenerator, Position, SourceInfo, Span};

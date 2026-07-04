@@ -12,8 +12,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - recognize_pdf() missing RuntimeBackend injection
 - Test paths hardcoded to non-existent model directories
 - SDK duplicate inference logic (from_pdf returns clear NotImplemented error)
-- CropNode now actually performs image cropping instead of being a no-op
+- CropNode now actually performs image cropping instead be a no-op
 - ModelPackage executor `run()` methods now properly implement inference logic
+- `\tableofcontents` command not parsed correctly (only handled as environment, not standalone command)
+
+### Added
+- **LaTeX Syntax Extensions**
+  - `\underline{text}` — underline text formatting, output to OMML/LaTeX/HTML/Typst
+  - `\begin{description}` environment — definition lists with optional labels
+  - `\footnote{text}` — footnote (OMML outputs `[^content]` placeholder)
+  - `\label{key}`, `\ref{key}`, `\eqref{key}` — cross-references (OMML outputs `(?key)` placeholder)
+  - `\cite{key}`, `\citep{key}`, `\citet{key}` — citations (OMML outputs `[key]` placeholder)
+  - `\bibliography{file}` — bibliography reference (placeholder)
+  - `\tableofcontents` — table of contents (outputs "目录" placeholder)
+  - `\begin{theorem}`, `\begin{lemma}`, `\begin{proof}` etc. — theorem-like environments
+  - `\begin{minipage}{width}` — minipage layout
+  - `\begin{figure}`, `\begin{table}` — float environments
+
+- **AST Extensions**
+  - `TextRun.underline` and `TextRun.strikethrough` fields
+  - `Inline::Footnote`, `Inline::Label`, `Inline::Reference`, `Inline::Citation` variants
+  - `CiteStyle` enum (Plain/Author/Parenthetical)
+  - `Block::DescriptionList`, `Block::TableOfContents`, `Block::Theorem`, `Block::Proof`, `Block::Minipage`, `Block::Float` variants
+  - `DescriptionListBlock`, `DescriptionItem`, `TheoremBlock`, `ProofBlock`, `MinipageBlock`, `FloatBlock` structs
+
+- **Input Parsers**
+  - Enhanced Markdown parser: headings, paragraphs, bold/italic, code, lists, blockquotes, horizontal rules, display/inline math
+  - New HTML parser (`html_parser.rs`): headings, paragraphs, bold/italic/underline, code, lists, blockquotes, horizontal rules, math
+
+- **MathML Parser Enhancement**
+  - `<menclose>` tag support with notation attribute (strikethrough, box)
+
+- **Testing**
+  - 4 new integration tests for LaTeX commands pipeline, OMML conversion, Markdown parser, HTML parser
+
+### Changed
+- TextRun now has 6 fields: text, bold, italic, underline, strikethrough, source
+- Block enum expanded from 10 to 15 variants
 
 ### Added
 - **Pipeline Architecture**

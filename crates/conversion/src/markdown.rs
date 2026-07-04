@@ -102,6 +102,20 @@ fn render_block(block: &Block, mode: &MarkdownMode) -> String {
             let text = render_inlines(&hw.inlines, mode);
             format!("> *Handwriting:* {}", text)
         }
+        Block::DescriptionList(dl) => render_description_list(dl, mode),
+        Block::TableOfContents => "目录".to_string(),
+        Block::Theorem(t) => render_theorem(t, mode),
+        Block::Proof(p) => render_proof(p, mode),
+        Block::Minipage(m) => render_blocks(&m.content, mode),
+        Block::Float(f) => {
+            let content = render_blocks(&f.content, mode);
+            if let Some(caption) = &f.caption {
+                let caption_text = render_inlines(caption, mode);
+                format!("{}\n*{}*", content, caption_text)
+            } else {
+                content
+            }
+        }
     }
 }
 
@@ -130,6 +144,19 @@ fn render_inlines(inlines: &[Inline], _mode: &MarkdownMode) -> String {
             }
             Inline::Image(_) => {
                 parts.push("![image](image.png)".to_string());
+            }
+            Inline::Footnote { content } => {
+                let inner = render_inlines(&[*content.clone()], _mode);
+                parts.push(format!("[^{}]", inner));
+            }
+            Inline::Label { .. } => {
+                // Labels are not rendered in Markdown
+            }
+            Inline::Reference { key, .. } => {
+                parts.push(format!("[@{}]", key));
+            }
+            Inline::Citation { key, .. } => {
+                parts.push(format!("[@{}]", key));
             }
         }
     }
@@ -198,6 +225,34 @@ fn render_list(l: &latexsnipper_ast::ListBlock, mode: &MarkdownMode) -> String {
         items.push(format!("{} {}", prefix, text));
     }
     items.join("\n")
+}
+
+fn render_description_list(dl: &latexsnipper_ast::DescriptionListBlock, mode: &MarkdownMode) -> String {
+    let mut items = Vec::new();
+    for item in &dl.items {
+        let content = render_blocks(&item.content, mode);
+        if let Some(label) = &item.label {
+            let label_text = render_inlines(label, mode);
+            items.push(format!("**{}**\n: {}", label_text, content));
+        } else {
+            items.push(format!(": {}", content));
+        }
+    }
+    items.join("\n\n")
+}
+
+fn render_theorem(t: &latexsnipper_ast::TheoremBlock, mode: &MarkdownMode) -> String {
+    let content = render_blocks(&t.content, mode);
+    format!("**{}.** {}", t.name, content)
+}
+
+fn render_proof(p: &latexsnipper_ast::ProofBlock, mode: &MarkdownMode) -> String {
+    let content = render_blocks(&p.content, mode);
+    format!("**Proof.** {} □", content)
+}
+
+fn render_blocks(blocks: &[latexsnipper_ast::Block], mode: &MarkdownMode) -> String {
+    blocks.iter().map(|b| render_block(b, mode)).collect::<Vec<_>>().join("\n")
 }
 
 fn render_quote(q: &latexsnipper_ast::QuoteBlock, mode: &MarkdownMode) -> String {

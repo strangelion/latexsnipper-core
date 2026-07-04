@@ -279,6 +279,29 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
         "mphantom" => {
             format!("\\phantom{{{}}}", children.join(""))
         }
+        "menclose" => {
+            let inner = children.join("");
+            // Check for notation attribute
+            let notation = attrs.split_whitespace()
+                .find(|p| p.starts_with("notation="))
+                .and_then(|p| p.strip_prefix("notation="));
+            match notation {
+                Some("updiagonalstrike") | Some("downdiagonalstrike") => {
+                    format!("\\cancel{{{}}}", inner)
+                }
+                Some("horizontalstrike") => {
+                    format!("\\cancel{{{}}}", inner)
+                }
+                Some("verticalstrike") => {
+                    format!("\\cancel{{{}}}", inner)
+                }
+                Some("madruwb") => {
+                    // Box notation
+                    format!("\\boxed{{{}}}", inner)
+                }
+                _ => inner,
+            }
+        }
         "mlabeledtr" => children.join(" & "),
 
         "mprescripts" => "\\mpscripts".to_string(),

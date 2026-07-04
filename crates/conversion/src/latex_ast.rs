@@ -60,6 +60,13 @@ pub enum LatexNode {
     },
     /// Cases: \begin{cases} ... \end{cases}
     Cases(Vec<Vec<LatexNode>>),
+    /// Description list item: \item[label] content
+    DescriptionItem {
+        label: Option<Box<LatexNode>>,
+        content: Vec<LatexNode>,
+    },
+    /// Description list: \begin{description} ... \end{description}
+    Description(Vec<LatexNode>),
     /// Accent: \hat{x}, \vec{v}, \bar{x}, etc.
     Accent {
         chr: String,
@@ -93,6 +100,26 @@ pub enum LatexNode {
         above: Option<Box<LatexNode>>,
         below: Option<Box<LatexNode>>,
     },
+    /// Footnote: \footnote{content}
+    Footnote { content: Box<LatexNode> },
+    /// Label: \label{key}
+    Label { key: String },
+    /// Reference: \ref{key} or \eqref{key}
+    Reference { key: String, eq_ref: bool },
+    /// Citation: \cite{key}, \citep{key}, \citet{key}
+    Citation { key: String, style: String },
+    /// Bibliography: \bibliography{file}
+    Bibliography { file: String },
+    /// Table of contents: \tableofcontents
+    TableOfContents,
+    /// Theorem-like environment: \begin{theorem}...\end{theorem}
+    Theorem { name: String, content: Box<LatexNode> },
+    /// Proof environment: \begin{proof}...\end{proof}
+    Proof { content: Box<LatexNode> },
+    /// Minipage: \begin{minipage}{width}...\end{minipage}
+    Minipage { width: String, content: Box<LatexNode> },
+    /// Float: \begin{figure}...\end{figure} or \begin{table}...\end{table}
+    Float { env: String, caption: Option<String>, content: Box<LatexNode> },
     /// List of nodes
     Sequence(Vec<LatexNode>),
 }
@@ -300,6 +327,73 @@ impl std::fmt::Display for LatexNode {
                     (None, Some(b)) => write!(f, "\\{}[{}]{{}}", cmd, b),
                     (None, None) => write!(f, "\\{}{{}}", cmd),
                 }
+            }
+            LatexNode::DescriptionItem { label, content } => {
+                write!(f, "\\item")?;
+                if let Some(l) = label {
+                    write!(f, "[{}]", l)?;
+                }
+                for node in content {
+                    write!(f, "{}", node)?;
+                }
+                Ok(())
+            }
+            LatexNode::Description(items) => {
+                writeln!(f, "\\begin{{description}}")?;
+                for item in items {
+                    writeln!(f, "{}", item)?;
+                }
+                write!(f, "\\end{{description}}")
+            }
+            LatexNode::Footnote { content } => {
+                write!(f, "\\footnote{{{}}}", content)
+            }
+            LatexNode::Label { key } => {
+                write!(f, "\\label{{{}}}", key)
+            }
+            LatexNode::Reference { key, eq_ref } => {
+                if *eq_ref {
+                    write!(f, "\\eqref{{{}}}", key)
+                } else {
+                    write!(f, "\\ref{{{}}}", key)
+                }
+            }
+            LatexNode::Citation { key, style } => {
+                let cmd = match style.as_str() {
+                    "author" => "citet",
+                    "parenthetical" => "citep",
+                    _ => "cite",
+                };
+                write!(f, "\\{}{{{}}}", cmd, key)
+            }
+            LatexNode::Bibliography { file } => {
+                write!(f, "\\bibliography{{{}}}", file)
+            }
+            LatexNode::TableOfContents => {
+                write!(f, "\\tableofcontents")
+            }
+            LatexNode::Theorem { name, content } => {
+                writeln!(f, "\\begin{{{}}}", name)?;
+                write!(f, "{}", content)?;
+                write!(f, "\\end{{{}}}", name)
+            }
+            LatexNode::Proof { content } => {
+                writeln!(f, "\\begin{{proof}}")?;
+                write!(f, "{}", content)?;
+                write!(f, "\\end{{proof}}")
+            }
+            LatexNode::Minipage { width, content } => {
+                writeln!(f, "\\begin{{minipage}}{{{}}}", width)?;
+                write!(f, "{}", content)?;
+                write!(f, "\\end{{minipage}}")
+            }
+            LatexNode::Float { env, caption, content } => {
+                writeln!(f, "\\begin{{{}}}", env)?;
+                write!(f, "{}", content)?;
+                if let Some(cap) = caption {
+                    writeln!(f, "\\caption{{{}}}", cap)?;
+                }
+                write!(f, "\\end{{{}}}", env)
             }
         }
     }

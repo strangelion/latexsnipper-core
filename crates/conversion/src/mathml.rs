@@ -89,6 +89,17 @@ fn convert_mathml(doc: &Document, mode: MathmlMode) -> Result<String> {
                             }
                             Inline::Formula(f) => parts.push(convert_formula_to_mathml(f, &mode)),
                             Inline::Image(_) => {}
+                            Inline::Footnote { content } => {
+                                let inner = convert_inline_to_mathml(content, &mode);
+                                parts.push(inner);
+                            }
+                            Inline::Label { .. } => {}
+                            Inline::Reference { key, .. } => {
+                                parts.push(format!("<mtext>({})</mtext>", key));
+                            }
+                            Inline::Citation { key, .. } => {
+                                parts.push(format!("<mtext>[{}]</mtext>", key));
+                            }
                         }
                     }
                 }
@@ -128,6 +139,14 @@ fn convert_formula_to_mathml(f: &Formula, _mode: &MathmlMode) -> String {
         format!("<displaymath>\n{}\n</displaymath>", content)
     } else {
         format!("<inlinemath>\n{}\n</inlinemath>", content)
+    }
+}
+
+fn convert_inline_to_mathml(inline: &Inline, mode: &MathmlMode) -> String {
+    match inline {
+        Inline::Text(t) => format!("<mtext>{}</mtext>", xml_escape(&t.text)),
+        Inline::Formula(f) => convert_formula_to_mathml(f, mode),
+        _ => String::new(),
     }
 }
 

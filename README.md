@@ -73,6 +73,28 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **AST → HTML** | ✅ | MathJax rendering |
 | **AST → MathML** | ✅ | Office compatible |
 | **AST → OMML** | ✅ | Word compatible |
+| **Markdown → AST** | ✅ | Headings, bold/italic, code, lists, math |
+| **HTML → AST** | ✅ | Full tag support, MathJax compatible |
+| **LaTeX Extended** | ✅ | underline, footnote, cite, theorem, minipage |
+
+---
+
+## LaTeX Syntax Support
+
+| Feature | LaTeX | OMML | HTML | Typst | Markdown |
+|---------|-------|------|------|-------|----------|
+| Bold `\textbf{}` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Italic `\textit{}` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Underline `\underline{}` | ✅ | ✅ | ✅ | ✅ | — |
+| Footnote `\footnote{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
+| Cross-ref `\ref{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
+| Citation `\cite{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
+| Description list | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Theorem/proof | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Minipage | ✅ | ✅ | ✅ | ✅ | — |
+| Float (figure/table) | ✅ | ✅ | ✅ | ✅ | — |
+
+⚡ = 占位符输出，需要 Word API 插入实际内容
 
 ---
 

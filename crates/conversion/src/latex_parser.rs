@@ -150,6 +150,30 @@ impl LatexParser {
         }
     }
 
+    fn parse_group_text(&mut self) -> String {
+        self.skip_whitespace();
+        if self.pos >= self.chars.len() || self.chars[self.pos] != '{' {
+            return String::new();
+        }
+        self.pos += 1;
+        let start = self.pos;
+        let mut depth = 0i32;
+        while self.pos < self.chars.len() {
+            match self.chars[self.pos] {
+                '{' => depth += 1,
+                '}' if depth == 0 => break,
+                '}' => depth -= 1,
+                _ => {}
+            }
+            self.pos += 1;
+        }
+        let text: String = self.chars[start..self.pos].iter().collect();
+        if self.pos < self.chars.len() {
+            self.pos += 1; // consume '}'
+        }
+        text
+    }
+
     fn parse_text(&mut self) -> Option<LatexNode> {
         let start = self.pos;
         while self.pos < self.chars.len() {
@@ -371,7 +395,7 @@ impl LatexParser {
                 })
             }
             // Text commands
-            "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" => {
+            "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" | "underline" => {
                 let mut content_str = String::new();
                 if self.pos < self.chars.len() && self.chars[self.pos] == '{' {
                     self.pos += 1;
@@ -411,6 +435,49 @@ impl LatexParser {
                     Vec::new()
                 };
                 Some(LatexNode::Command { name: cmd, args })
+            }
+            // Footnote
+            "footnote" => {
+                let content = self.parse_single();
+                Some(LatexNode::Footnote {
+                    content: Box::new(content),
+                })
+            }
+            // Label and references
+            "label" => {
+                let key = self.parse_group_text();
+                Some(LatexNode::Label { key })
+            }
+            "ref" => {
+                let key = self.parse_group_text();
+                Some(LatexNode::Reference {
+                    key,
+                    eq_ref: false,
+                })
+            }
+            "eqref" => {
+                let key = self.parse_group_text();
+                Some(LatexNode::Reference {
+                    key,
+                    eq_ref: true,
+                })
+            }
+            // Citations
+            "cite" | "citep" | "citet" | "citealp" | "citealt" => {
+                let key = self.parse_group_text();
+                let style = match cmd.as_str() {
+                    "citet" => "author",
+                    "citep" => "parenthetical",
+                    _ => "plain",
+                };
+                Some(LatexNode::Citation {
+                    key,
+                    style: style.to_string(),
+                })
+            }
+            "bibliography" => {
+                let file = self.parse_group_text();
+                Some(LatexNode::Bibliography { file })
             }
             // Two-argument commands
             "textcolor" | "colorbox" | "fcolorbox" | "color" => {
@@ -453,6 +520,8 @@ impl LatexParser {
             "begin" => self.parse_environment(),
             // \left ... \right
             "left" => self.parse_delimited(),
+            // Standalone commands
+            "tableofcontents" => Some(LatexNode::TableOfContents),
             // Unknown command — store as Command node
             _ => Some(LatexNode::Command {
                 name: cmd,
@@ -509,6 +578,45 @@ impl LatexParser {
                     rows,
                 })
             }
+            "description" => {
+                let items = Self::parse_description_content(&content);
+                Some(LatexNode::Description(items))
+            }
+            "tableofcontents" => Some(LatexNode::TableOfContents),
+            "theorem" | "lemma" | "corollary" | "proposition" | "definition" | "example"
+            | "remark" => {
+                let mut parser = LatexParser::new(&content);
+                let nodes = parser.parse();
+                Some(LatexNode::Theorem {
+                    name: env_name,
+                    content: Box::new(nodes),
+                })
+            }
+            "proof" => {
+                let mut parser = LatexParser::new(&content);
+                let nodes = parser.parse();
+                Some(LatexNode::Proof {
+                    content: Box::new(nodes),
+                })
+            }
+            "minipage" => {
+                let width = self.parse_group_text();
+                let mut parser = LatexParser::new(&content);
+                let nodes = parser.parse();
+                Some(LatexNode::Minipage {
+                    width,
+                    content: Box::new(nodes),
+                })
+            }
+            "figure" | "table" => {
+                let mut parser = LatexParser::new(&content);
+                let nodes = parser.parse();
+                Some(LatexNode::Float {
+                    env: env_name,
+                    caption: None,
+                    content: Box::new(nodes),
+                })
+            }
             _ => {
                 // Unknown environment — treat content as a group
                 let mut parser = LatexParser::new(&content);
@@ -519,6 +627,66 @@ impl LatexParser {
                 })
             }
         }
+    }
+
+    fn parse_description_content(content: &str) -> Vec<LatexNode> {
+        let mut items = Vec::new();
+        let mut current_item = String::new();
+        let mut chars = content.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '\\' {
+                let cmd: String = chars.by_ref().take_while(|&c| c.is_alphabetic()).collect();
+                if cmd == "item" {
+                    // Save previous item if any
+                    if !current_item.is_empty() {
+                        let mut parser = LatexParser::new(&current_item);
+                        let node = parser.parse();
+                        items.push(LatexNode::DescriptionItem {
+                            label: None,
+                            content: vec![node],
+                        });
+                        current_item.clear();
+                    }
+                    // Check for optional [label]
+                    let remaining: String = chars.clone().collect();
+                    let remaining = remaining.trim_start().to_string();
+                    if remaining.starts_with('[') {
+                        // Find closing bracket
+                        let mut depth = 0i32;
+                        let mut label_content = String::new();
+                        chars.next(); // consume '['
+                        for c in chars.by_ref() {
+                            match c {
+                                '[' => depth += 1,
+                                ']' if depth == 0 => break,
+                                ']' => depth -= 1,
+                                _ => label_content.push(c),
+                            }
+                        }
+                        // Store label for next item
+                        current_item.push_str(&format!("[{}]", label_content));
+                    }
+                } else {
+                    current_item.push('\\');
+                    current_item.push_str(&cmd);
+                }
+            } else {
+                current_item.push(ch);
+            }
+        }
+
+        // Add last item
+        if !current_item.is_empty() {
+            let mut parser = LatexParser::new(&current_item);
+            let node = parser.parse();
+            items.push(LatexNode::DescriptionItem {
+                label: None,
+                content: vec![node],
+            });
+        }
+
+        items
     }
 
     fn parse_delimited(&mut self) -> Option<LatexNode> {

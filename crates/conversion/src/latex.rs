@@ -1,4 +1,4 @@
-use latexsnipper_ast::{Block, Document, Inline};
+use latexsnipper_ast::{Block, CiteStyle, Document, Inline};
 use latexsnipper_foundation::Result;
 
 use crate::converter::Converter;
@@ -146,7 +146,17 @@ fn render_block(block: &Block) -> String {
             let text = render_inlines(&hw.inlines);
             format!("\\texttt{{{}}}", text)
         }
+        Block::DescriptionList(dl) => render_description_list(dl),
+        Block::TableOfContents => "\\tableofcontents".to_string(),
+        Block::Theorem(t) => render_theorem(t),
+        Block::Proof(p) => render_proof(p),
+        Block::Minipage(m) => render_minipage(m),
+        Block::Float(f) => render_float(f),
     }
+}
+
+fn render_blocks(blocks: &[Block]) -> String {
+    blocks.iter().map(render_block).collect::<Vec<_>>().join("\n")
 }
 
 fn render_block_display(block: &Block) -> String {
@@ -181,6 +191,9 @@ fn render_inlines(inlines: &[Inline]) -> String {
                 if t.italic == Some(true) {
                     text = format!("\\textit{{{}}}", text);
                 }
+                if t.underline == Some(true) {
+                    text = format!("\\underline{{{}}}", text);
+                }
                 parts.push(text);
             }
             Inline::Formula(f) => {
@@ -195,6 +208,28 @@ fn render_inlines(inlines: &[Inline]) -> String {
             Inline::Image(_) => {
                 parts.push("\\includegraphics{}".to_string());
             }
+            Inline::Footnote { content } => {
+                let inner = render_inlines(&[*content.clone()]);
+                parts.push(format!("\\footnote{{{}}}", inner));
+            }
+            Inline::Label { key } => {
+                parts.push(format!("\\label{{{}}}", key));
+            }
+            Inline::Reference { key, eq_ref } => {
+                if *eq_ref {
+                    parts.push(format!("\\eqref{{{}}}", key));
+                } else {
+                    parts.push(format!("\\ref{{{}}}", key));
+                }
+            }
+            Inline::Citation { key, style } => {
+                let cmd = match style {
+                    CiteStyle::Author => "citet",
+                    CiteStyle::Parenthetical => "citep",
+                    CiteStyle::Plain => "cite",
+                };
+                parts.push(format!("\\{}{{{}}}", cmd, key));
+            }
         }
     }
     parts.join(" ")
@@ -208,6 +243,55 @@ fn render_list(l: &latexsnipper_ast::ListBlock) -> String {
         items.push(format!("  \\item {}", text));
     }
     format!("\\begin{{{}}}\n{}\n\\end{{{}}}", env, items.join("\n"), env)
+}
+
+fn render_description_list(dl: &latexsnipper_ast::DescriptionListBlock) -> String {
+    let mut items = Vec::new();
+    for item in &dl.items {
+        let content = render_blocks(&item.content);
+        if let Some(label) = &item.label {
+            let label_text = render_inlines(label);
+            items.push(format!("  \\item[{}] {}", label_text, content));
+        } else {
+            items.push(format!("  \\item {}", content));
+        }
+    }
+    format!(
+        "\\begin{{description}}\n{}\n\\end{{description}}",
+        items.join("\n")
+    )
+}
+
+fn render_theorem(t: &latexsnipper_ast::TheoremBlock) -> String {
+    let content = render_blocks(&t.content);
+    format!(
+        "\\begin{{{}}}\n{}\n\\end{{{}}}",
+        t.name, content, t.name
+    )
+}
+
+fn render_proof(p: &latexsnipper_ast::ProofBlock) -> String {
+    let content = render_blocks(&p.content);
+    format!("\\begin{{proof}}\n{}\n\\end{{proof}}", content)
+}
+
+fn render_minipage(m: &latexsnipper_ast::MinipageBlock) -> String {
+    let content = render_blocks(&m.content);
+    format!(
+        "\\begin{{minipage}}{{{}}}\n{}\n\\end{{minipage}}",
+        m.width, content
+    )
+}
+
+fn render_float(f: &latexsnipper_ast::FloatBlock) -> String {
+    let content = render_blocks(&f.content);
+    let mut result = format!("\\begin{{{}}}\n{}", f.env, content);
+    if let Some(caption) = &f.caption {
+        let caption_text = render_inlines(caption);
+        result.push_str(&format!("\n\\caption{{{}}}", caption_text));
+    }
+    result.push_str(&format!("\n\\end{{{}}}", f.env));
+    result
 }
 
 fn render_quote(q: &latexsnipper_ast::QuoteBlock) -> String {
