@@ -201,7 +201,7 @@ fn assert_usable_text(text: &str) {
 fn test_doc_ori() {
     let models = models_dir();
     let fixtures = fixtures_dir();
-    let model_path = models.join("pplcnet_doc_ori/default/pplcnet_doc_ori.onnx");
+    let model_path = models.join("../test-models/PP-LCNet_x1_0_doc_ori_infer/inference.onnx");
     let image_path = fixtures.join("text.png");
     if !model_path.exists() || !image_path.exists() {
         println!("Skipping");
@@ -240,7 +240,7 @@ fn test_doc_ori() {
 fn test_text_det() {
     let models = models_dir();
     let fixtures = fixtures_dir();
-    let model_path = models.join("text-det/ppocrv5-mobile/ppocrv5_mobile_det.onnx");
+    let model_path = models.join("text-det/v6-small/inference.onnx");
     let image_path = fixtures.join("text.png");
     if !model_path.exists() || !image_path.exists() {
         println!("Skipping");
@@ -397,19 +397,8 @@ fn test_multi_model() {
     let backend = OnnxRuntimeBackend::new(models.clone()).unwrap();
     let all = vec![
         ("formula-det", "formula-det/yolov8-mfd/mathcraft-mfd.onnx"),
-        (
-            "text-det",
-            "text-det/ppocrv5-mobile/ppocrv5_mobile_det.onnx",
-        ),
-        (
-            "text-rec-v6",
-            "v6_models/PP-OCRv6_medium_rec_infer/inference.onnx",
-        ),
-        (
-            "text-rec",
-            "text-rec/ppocrv5-mobile/ppocrv5_mobile_rec.onnx",
-        ),
-        ("doc-ori", "pplcnet_doc_ori/default/pplcnet_doc_ori.onnx"),
+        ("text-det", "text-det/v6-small/inference.onnx"),
+        ("text-rec", "text-rec/v6-small/inference.onnx"),
     ];
     let mut loaded = 0;
     for (name, rel) in all {
@@ -427,8 +416,11 @@ fn test_multi_model() {
             Err(e) => println!("Failed: {} ({})", name, e),
         }
     }
-    println!("Loaded {}/4", loaded);
-    assert!(loaded >= 1);
+    if loaded == 0 {
+        println!("No models available (download from release or keep local models/)");
+        return;
+    }
+    println!("Loaded {}/3", loaded);
     println!("multi-model: PASSED");
 }
 

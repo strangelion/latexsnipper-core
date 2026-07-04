@@ -17,6 +17,8 @@ pub mod table_export;
 pub mod table_parser;
 pub mod typst;
 pub mod typst_parser;
+pub mod word_ooxml_table_parser;
+pub mod word_ooxml_table_writer;
 
 pub use converter::Converter;
 pub use document_converter::{DocumentConverter, OutputFormat};
@@ -35,6 +37,8 @@ pub use table_parser::{
 };
 pub use typst::TypstConverter;
 pub use typst_parser::parse_typst_to_latex;
+pub use word_ooxml_table_parser::parse_word_table_ooxml;
+pub use word_ooxml_table_writer::write_word_table_ooxml;
 
 #[cfg(test)]
 mod tests {

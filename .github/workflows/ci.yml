@@ -27,6 +27,35 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+
+      - name: Cache models
+        id: cache-models
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: models-v2.0.0
+
+      - name: Download and extract models
+        if: steps.cache-models.outputs.cache-hit != 'true'
+        run: |
+          BASE_URL="https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0"
+          ZIPS=(
+            latexsnipper-formula-det
+            latexsnipper-formula-rec
+            latexsnipper-text-det
+            latexsnipper-text-rec
+            latexsnipper-table-det
+            latexsnipper-table-struct
+          )
+          mkdir -p models
+          for zip in "${ZIPS[@]}"; do
+            echo "Downloading $zip..."
+            curl -sSL "$BASE_URL/$zip.zip" -o "/tmp/$zip.zip"
+            unzip -q -o "/tmp/$zip.zip" -d models/
+            rm "/tmp/$zip.zip"
+          done
+          echo "Models extracted to models/"
+
       - run: cargo test --workspace
       - run: cargo test --workspace --all-features
 
