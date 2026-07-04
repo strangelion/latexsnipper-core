@@ -18,13 +18,11 @@ fn simple_table(rows: usize, cols: usize, prefix: &str) -> TableBlock {
     for r in 0..rows {
         let mut row = Vec::new();
         for c in 0..cols {
-            row.push(TableCell {
-                inlines: vec![Inline::Text(TextRun::new(format!("{}{}{}", prefix, r + 1, c + 1)))],
-                colspan: 1,
-                rowspan: 1,
-                geometry: None,
-                source: None,
-            });
+            row.push(make_cell(
+                &format!("{}{}{}", prefix, r + 1, c + 1),
+                1,
+                1,
+            ));
         }
         table_rows.push(row);
     }
@@ -35,49 +33,28 @@ fn simple_table(rows: usize, cols: usize, prefix: &str) -> TableBlock {
     }
 }
 
+/// Helper to create a TableCell with default styling.
+fn make_cell(text: &str, colspan: u32, rowspan: u32) -> TableCell {
+    TableCell {
+        inlines: vec![Inline::Text(TextRun::new(text.to_string()))],
+        colspan,
+        rowspan,
+        border_style: None,
+        border_width: None,
+        border_color: None,
+        background: None,
+        alignment: None,
+        geometry: None,
+        source: None,
+    }
+}
+
 /// Helper to create a table with merged cells.
 fn merged_table() -> TableBlock {
     TableBlock {
         rows: vec![
-            vec![
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("AB".to_string()))],
-                    colspan: 2,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("C".to_string()))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-            ],
-            vec![
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("D".to_string()))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("E".to_string()))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("F".to_string()))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-            ],
+            vec![make_cell("AB", 2, 1), make_cell("C", 1, 1)],
+            vec![make_cell("D", 1, 1), make_cell("E", 1, 1), make_cell("F", 1, 1)],
         ],
         geometry: None,
         source: None,
@@ -86,40 +63,25 @@ fn merged_table() -> TableBlock {
 
 /// Helper to create a table with formulas.
 fn formula_table() -> TableBlock {
+    fn formula_cell(text: &str) -> TableCell {
+        TableCell {
+            inlines: vec![Inline::Formula(Formula::latex(text))],
+            colspan: 1,
+            rowspan: 1,
+            border_style: None,
+            border_width: None,
+            border_color: None,
+            background: None,
+            alignment: None,
+            geometry: None,
+            source: None,
+        }
+    }
+
     TableBlock {
         rows: vec![
-            vec![
-                TableCell {
-                    inlines: vec![Inline::Formula(Formula::latex("E=mc^2"))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-                TableCell {
-                    inlines: vec![Inline::Formula(Formula::latex(r"\frac{a}{b}"))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-            ],
-            vec![
-                TableCell {
-                    inlines: vec![Inline::Formula(Formula::latex(r"\sum x_i"))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-                TableCell {
-                    inlines: vec![Inline::Formula(Formula::latex(r"\int f(x) dx"))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
-            ],
+            vec![formula_cell("E=mc^2"), formula_cell(r"\frac{a}{b}")],
+            vec![formula_cell(r"\sum x_i"), formula_cell(r"\int f(x) dx")],
         ],
         geometry: None,
         source: None,
@@ -135,29 +97,27 @@ fn empty_cells_table() -> TableBlock {
                     inlines: vec![],
                     colspan: 1,
                     rowspan: 1,
+                    border_style: None,
+                    border_width: None,
+                    border_color: None,
+                    background: None,
+                    alignment: None,
                     geometry: None,
                     source: None,
                 },
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("B".to_string()))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
+                make_cell("B", 1, 1),
             ],
             vec![
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("C".to_string()))],
-                    colspan: 1,
-                    rowspan: 1,
-                    geometry: None,
-                    source: None,
-                },
+                make_cell("C", 1, 1),
                 TableCell {
                     inlines: vec![],
                     colspan: 1,
                     rowspan: 1,
+                    border_style: None,
+                    border_width: None,
+                    border_color: None,
+                    background: None,
+                    alignment: None,
                     geometry: None,
                     source: None,
                 },
@@ -314,4 +274,66 @@ fn roundtrip_merged_cells() {
     let converter = DocumentConverter::new(OutputFormat::Html);
     let html = converter.convert(&doc).unwrap();
     assert!(html.contains("colspan"), "HTML should contain colspan for merged cells");
+}
+
+/// Test table with styling.
+#[test]
+fn roundtrip_styled_table() {
+    let table = TableBlock {
+        rows: vec![
+            vec![
+                TableCell {
+                    inlines: vec![Inline::Text(TextRun::new("Bold".to_string()))],
+                    colspan: 1,
+                    rowspan: 1,
+                    border_style: Some(latexsnipper_ast::BorderStyle::Solid),
+                    border_width: Some(2),
+                    border_color: Some("red".to_string()),
+                    background: Some("#ffff00".to_string()),
+                    alignment: Some(latexsnipper_ast::CellAlignment::Center),
+                    geometry: None,
+                    source: None,
+                },
+                TableCell {
+                    inlines: vec![Inline::Text(TextRun::new("Normal".to_string()))],
+                    colspan: 1,
+                    rowspan: 1,
+                    border_style: Some(latexsnipper_ast::BorderStyle::Dashed),
+                    border_width: Some(1),
+                    border_color: Some("blue".to_string()),
+                    background: None,
+                    alignment: Some(latexsnipper_ast::CellAlignment::Right),
+                    geometry: None,
+                    source: None,
+                },
+            ],
+        ],
+        geometry: None,
+        source: None,
+    };
+
+    let doc = Document {
+        metadata: Metadata::default(),
+        pages: vec![Page {
+            width: 800.0,
+            height: 600.0,
+            blocks: vec![Block::Table(table)],
+            page_number: Some(1),
+        }],
+        id_gen: NodeIdGenerator::new(),
+    };
+
+    // HTML output should contain styling
+    let converter = DocumentConverter::new(OutputFormat::Html);
+    let html = converter.convert(&doc).unwrap();
+    assert!(html.contains("border: 2px solid red"), "HTML should contain border style");
+    assert!(html.contains("background-color: #ffff00"), "HTML should contain background color");
+    assert!(html.contains("text-align: center"), "HTML should contain text alignment");
+    assert!(html.contains("border: 1px dashed blue"), "HTML should contain dashed border");
+    assert!(html.contains("text-align: right"), "HTML should contain right alignment");
+
+    // LaTeX output should contain alignment
+    let converter = DocumentConverter::new(OutputFormat::Latex);
+    let latex = converter.convert(&doc).unwrap();
+    assert!(latex.contains("\\begin{tabular}"), "LaTeX should contain tabular environment");
 }

@@ -163,6 +163,11 @@ impl TableRecognizerNode {
                 inlines,
                 colspan,
                 rowspan,
+                border_style: None,
+                border_width: None,
+                border_color: None,
+                background: None,
+                alignment: None,
                 geometry,
                 source,
             };

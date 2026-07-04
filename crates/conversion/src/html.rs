@@ -250,6 +250,39 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
             if cell.rowspan > 1 {
                 attrs.push_str(&format!(" rowspan=\"{}\"", cell.rowspan));
             }
+            // Add style attribute for border, background, alignment
+            let mut style_parts = Vec::new();
+            if let Some(ref border) = cell.border_style {
+                let border_str = match border {
+                    latexsnipper_ast::BorderStyle::None => "none",
+                    latexsnipper_ast::BorderStyle::Solid => "solid",
+                    latexsnipper_ast::BorderStyle::Dashed => "dashed",
+                    latexsnipper_ast::BorderStyle::Dotted => "dotted",
+                    latexsnipper_ast::BorderStyle::Double => "double",
+                    latexsnipper_ast::BorderStyle::Groove => "groove",
+                    latexsnipper_ast::BorderStyle::Ridge => "ridge",
+                    latexsnipper_ast::BorderStyle::Inset => "inset",
+                    latexsnipper_ast::BorderStyle::Outset => "outset",
+                };
+                let width = cell.border_width.unwrap_or(1);
+                let color = cell.border_color.as_deref().unwrap_or("black");
+                style_parts.push(format!("border: {}px {} {}", width, border_str, color));
+            }
+            if let Some(ref bg) = cell.background {
+                style_parts.push(format!("background-color: {}", bg));
+            }
+            if let Some(ref align) = cell.alignment {
+                let align_str = match align {
+                    latexsnipper_ast::CellAlignment::Left => "left",
+                    latexsnipper_ast::CellAlignment::Center => "center",
+                    latexsnipper_ast::CellAlignment::Right => "right",
+                    latexsnipper_ast::CellAlignment::Justify => "justify",
+                };
+                style_parts.push(format!("text-align: {}", align_str));
+            }
+            if !style_parts.is_empty() {
+                attrs.push_str(&format!(" style=\"{}\"", style_parts.join("; ")));
+            }
             lines.push(format!("      <th{}>{}</th>", attrs, content));
         }
         lines.push("    </tr>".to_string());
@@ -268,6 +301,39 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
                 }
                 if cell.rowspan > 1 {
                     attrs.push_str(&format!(" rowspan=\"{}\"", cell.rowspan));
+                }
+                // Add style attribute for border, background, alignment
+                let mut style_parts = Vec::new();
+                if let Some(ref border) = cell.border_style {
+                    let border_str = match border {
+                        latexsnipper_ast::BorderStyle::None => "none",
+                        latexsnipper_ast::BorderStyle::Solid => "solid",
+                        latexsnipper_ast::BorderStyle::Dashed => "dashed",
+                        latexsnipper_ast::BorderStyle::Dotted => "dotted",
+                        latexsnipper_ast::BorderStyle::Double => "double",
+                        latexsnipper_ast::BorderStyle::Groove => "groove",
+                        latexsnipper_ast::BorderStyle::Ridge => "ridge",
+                        latexsnipper_ast::BorderStyle::Inset => "inset",
+                        latexsnipper_ast::BorderStyle::Outset => "outset",
+                    };
+                    let width = cell.border_width.unwrap_or(1);
+                    let color = cell.border_color.as_deref().unwrap_or("black");
+                    style_parts.push(format!("border: {}px {} {}", width, border_str, color));
+                }
+                if let Some(ref bg) = cell.background {
+                    style_parts.push(format!("background-color: {}", bg));
+                }
+                if let Some(ref align) = cell.alignment {
+                    let align_str = match align {
+                        latexsnipper_ast::CellAlignment::Left => "left",
+                        latexsnipper_ast::CellAlignment::Center => "center",
+                        latexsnipper_ast::CellAlignment::Right => "right",
+                        latexsnipper_ast::CellAlignment::Justify => "justify",
+                    };
+                    style_parts.push(format!("text-align: {}", align_str));
+                }
+                if !style_parts.is_empty() {
+                    attrs.push_str(&format!(" style=\"{}\"", style_parts.join("; ")));
                 }
                 lines.push(format!("      <td{}>{}</td>", attrs, content));
             }

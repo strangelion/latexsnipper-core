@@ -259,31 +259,80 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
     }
 
     let mut lines = Vec::new();
-    lines.push(format!("\\begin{{tabular}}{{|{}|}}", "c|".repeat(cols)));
+
+    // Build column spec based on alignment
+    let col_spec: String = t
+        .rows
+        .first()
+        .map(|row| {
+            row.iter()
+                .map(|cell| {
+                    let align = cell.alignment.as_ref().unwrap_or(&latexsnipper_ast::CellAlignment::Center);
+                    match align {
+                        latexsnipper_ast::CellAlignment::Left => "l",
+                        latexsnipper_ast::CellAlignment::Center => "c",
+                        latexsnipper_ast::CellAlignment::Right => "r",
+                        latexsnipper_ast::CellAlignment::Justify => "p{5cm}",
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("|")
+        })
+        .unwrap_or_else(|| "c|".repeat(cols));
+
+    lines.push(format!("\\begin{{tabular}}{{|{}|}}", col_spec));
     lines.push("\\hline".to_string());
 
     for row in &t.rows {
         let cells: Vec<String> = row
             .iter()
             .map(|cell| {
-                let text: String = cell
-                    .inlines
-                    .iter()
-                    .filter_map(|i| {
-                        if let Inline::Text(t) = i {
-                            Some(t.text.as_str())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                text
+                let mut parts = Vec::new();
+                // Handle colspan with \multicolumn
+                if cell.colspan > 1 {
+                    let align = cell.alignment.as_ref().unwrap_or(&latexsnipper_ast::CellAlignment::Center);
+                    let align_char = match align {
+                        latexsnipper_ast::CellAlignment::Left => "l",
+                        latexsnipper_ast::CellAlignment::Center => "c",
+                        latexsnipper_ast::CellAlignment::Right => "r",
+                        latexsnipper_ast::CellAlignment::Justify => "p{5cm}",
+                    };
+                    let text: String = cell
+                        .inlines
+                        .iter()
+                        .filter_map(|i| {
+                            if let Inline::Text(t) = i {
+                                Some(t.text.as_str())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    parts.push(format!(
+                        "\\multicolumn{{{}}}{{|{}|}}{{{}}}",
+                        cell.colspan, align_char, text
+                    ));
+                } else {
+                    let text: String = cell
+                        .inlines
+                        .iter()
+                        .filter_map(|i| {
+                            if let Inline::Text(t) = i {
+                                Some(t.text.as_str())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    parts.push(text);
+                }
+                parts.join("")
             })
             .collect();
         lines.push(format!("{} \\\\", cells.join(" & ")));
         lines.push("\\hline".to_string());
     }
 
-    lines.push("\\end{tabular}".to_string());
+    lines.push("\\end{{tabular}}".to_string());
     lines.join("\n")
 }

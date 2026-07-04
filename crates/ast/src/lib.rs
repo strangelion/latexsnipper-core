@@ -11,8 +11,9 @@ pub mod span;
 pub mod visitor;
 
 pub use block::{
-    Block, CodeBlock, FigureBlock, FormulaBlock, HandwritingBlock, HeadingBlock,
-    HorizontalRuleBlock, ListBlock, ListItem, ParagraphBlock, QuoteBlock, TableBlock, TableCell,
+    Block, BorderStyle, CellAlignment, CodeBlock, FigureBlock, FormulaBlock, HandwritingBlock,
+    HeadingBlock, HorizontalRuleBlock, ListBlock, ListItem, ParagraphBlock, QuoteBlock, TableBlock,
+    TableCell,
 };
 pub use builder::DocumentBuilder;
 pub use document::{Document, Page};

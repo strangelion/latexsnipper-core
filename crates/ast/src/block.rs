@@ -184,6 +184,41 @@ pub struct TableBlock {
     pub source: Option<SourceInfo>,
 }
 
+/// Border style for table cells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BorderStyle {
+    None,
+    Solid,
+    Dashed,
+    Dotted,
+    Double,
+    Groove,
+    Ridge,
+    Inset,
+    Outset,
+}
+
+impl Default for BorderStyle {
+    fn default() -> Self {
+        Self::Solid
+    }
+}
+
+/// Text alignment for table cells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CellAlignment {
+    Left,
+    Center,
+    Right,
+    Justify,
+}
+
+impl Default for CellAlignment {
+    fn default() -> Self {
+        Self::Left
+    }
+}
+
 /// A table cell.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableCell {
@@ -193,6 +228,21 @@ pub struct TableCell {
     pub colspan: u32,
     /// Number of rows this cell spans.
     pub rowspan: u32,
+    /// Border style for this cell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub border_style: Option<BorderStyle>,
+    /// Border width in pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub border_width: Option<u32>,
+    /// Border color (hex or name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub border_color: Option<String>,
+    /// Background color (hex or name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<String>,
+    /// Text alignment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignment: Option<CellAlignment>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
