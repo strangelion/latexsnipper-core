@@ -129,6 +129,105 @@ let pages = DocumentConverter::new(OutputFormat::Typst)
 let all = DocumentConverter::convert_all(&doc)?;
 ```
 
+## 表格支持
+
+### 输入解析
+
+支持从四种格式解析表格：
+
+```rust
+use latexsnipper_conversion::{
+    parse_latex_table, parse_markdown_table,
+    parse_html_table, parse_typst_table,
+};
+
+// LaTeX tabular 环境
+let latex = r"\begin{tabular}{|c|c|} A & B \\ C & D \end{tabular}";
+let table = parse_latex_table(latex).unwrap();
+
+// Markdown 管道表格
+let md = "| A | B |\n|---|---|\n| C | D |";
+let table = parse_markdown_table(md).unwrap();
+
+// HTML table 标签
+let html = "<table><tr><td>A</td><td>B</td></tr></table>";
+let table = parse_html_table(html).unwrap();
+
+// Typst table 语法
+let typst = "#table(columns: 2, [A], [B], [C], [D])";
+let table = parse_typst_table(typst).unwrap();
+```
+
+### 输出格式
+
+| 格式 | 合并单元格 | 样式支持 |
+|------|-----------|---------|
+| LaTeX | ✅ `\multicolumn` | ✅ alignment |
+| HTML | ✅ colspan/rowspan | ✅ border/background/alignment |
+| Typst | ✅ `cell()` 函数 | ✅ stroke |
+| Markdown | ❌ 语法不支持 | ❌ 语法不支持 |
+
+### TableCell 样式字段
+
+```rust
+pub struct TableCell {
+    pub inlines: Vec<Inline>,
+    pub colspan: u32,
+    pub rowspan: u32,
+    pub border_style: Option<BorderStyle>,   // Solid/Dashed/Dotted/Double/...
+    pub border_width: Option<u32>,           // 像素
+    pub border_color: Option<String>,        // hex 或颜色名
+    pub background: Option<String>,          // 背景色
+    pub alignment: Option<CellAlignment>,    // Left/Center/Right/Justify
+    pub geometry: Option<Rect>,
+    pub source: Option<SourceInfo>,
+}
+```
+
+## LaTeX 支持情况
+
+### 已支持的 LaTeX 结构
+
+**数学公式（核心强项）**：
+
+| 类别 | 支持的命令/环境 |
+|------|----------------|
+| 分数 | `\frac`, `\dfrac`, `\tfrac` |
+| 根号 | `\sqrt`, `\sqrt[n]` |
+| 上下标 | `x^{n}`, `x_{i}` |
+| 求和/积分/连乘 | `\sum`, `\int`, `\prod`, `\lim` |
+| 矩阵 | `matrix`, `pmatrix`, `bmatrix`, `vmatrix`, `smallmatrix` |
+| 对齐 | `cases`, `aligned`, `align`, `gather` |
+| 重音 | `\hat`, `\bar`, `\vec`, `\dot`, `\ddot`, `\tilde` |
+| 希腊字母 | 全部小写和大写 |
+| 运算符 | `\sin`, `\cos`, `\log`, `\operatorname` |
+| 二项式 | `\binom` |
+| 定界符 | `\left`, `\right` |
+| 装饰 | `\overbrace`, `\underbrace`, `\overset`, `\underset` |
+
+**文档块**：
+
+| Block 类型 | LaTeX 输出 |
+|-----------|-----------|
+| Heading | `\section` ~ `\subparagraph`（5 级） |
+| Paragraph | 纯文本 + 内联公式 |
+| Formula | `$...$` / `$$...$$` |
+| Table | `\begin{tabular}` + 对齐 + `\multicolumn` |
+| Figure | `\includegraphics` + `\caption` |
+| List | `\begin{itemize}` / `\begin{enumerate}` |
+| Quote | `\begin{quote}` |
+| Code | `lstlisting` / `verbatim` |
+
+### 已知限制
+
+| 限制 | 说明 |
+|------|------|
+| 输入解析 | 仅提取数学公式，不解析 `\section` 等文档命令 |
+| 表格内公式 | 输出时只渲染文本内容，不保留公式格式 |
+| 交叉引用 | 无 `\ref`/`\cite`/`\label` 支持 |
+| 脚注 | 无 `\footnote` 支持 |
+| 浮动体 | 无 `\begin{figure}`/`\begin{table}` 环境解析 |
+
 ## OMML 注意事项
 
 Microsoft Word 对 OMML 处理有严格要求：

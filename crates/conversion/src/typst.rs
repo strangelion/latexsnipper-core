@@ -165,6 +165,21 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
     let mut lines = Vec::new();
     lines.push(format!("table(columns: {},", cols));
 
+    // Check if any styling is needed
+    let has_style = t.rows.iter().any(|row| {
+        row.iter().any(|cell| {
+            cell.border_style.is_some()
+                || cell.background.is_some()
+                || cell.alignment.is_some()
+                || cell.colspan > 1
+                || cell.rowspan > 1
+        })
+    });
+
+    if has_style {
+        lines.push("  stroke: 1pt,".to_string());
+    }
+
     for row in &t.rows {
         let cells: Vec<String> = row
             .iter()
@@ -180,7 +195,20 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
                         }
                     })
                     .collect();
-                format!("[{}]", text)
+
+                // Handle colspan/rowspan with cell() function
+                if cell.colspan > 1 || cell.rowspan > 1 {
+                    let mut args = vec![format!("[{}]", text)];
+                    if cell.colspan > 1 {
+                        args.push(format!("colspan: {}", cell.colspan));
+                    }
+                    if cell.rowspan > 1 {
+                        args.push(format!("rowspan: {}", cell.rowspan));
+                    }
+                    format!("cell({})", args.join(", "))
+                } else {
+                    format!("[{}]", text)
+                }
             })
             .collect();
         lines.push(format!("  ({}),", cells.join(", ")));
