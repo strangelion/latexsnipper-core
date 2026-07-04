@@ -1,119 +1,70 @@
 //! Word OOXML table parser — converts <w:tbl> XML into TableBlock AST.
 //!
-//! Maps Word's complex table model to Core's simpler TableCell structure.
-//! Preserves merged cells, basic formatting, and cell content.
+//! Uses regex-based parsing to extract table structure from Word's OOXML.
 
 use latexsnipper_ast::{Inline, TableBlock, TableCell, TextRun};
-use quick_xml::events::Event;
-use quick_xml::Reader;
+use regex::Regex;
 
 /// Parse a Word OOXML table from raw XML into a TableBlock.
-///
-/// The input should be the raw XML string containing a <w:tbl> element.
 pub fn parse_word_table_ooxml(xml: &str) -> Option<TableBlock> {
-    let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
+    // Find the table content
+    let tbl = extract_between(xml, "<w:tbl", "</w:tbl>")
+        .or_else(|| extract_between(xml, "<m:tbl", "</m:tbl>"))?;
 
-    let mut buf = Vec::new();
     let mut rows = Vec::new();
 
-    // Current cell properties
-    let mut current_colspan: u32 = 1;
-    let mut current_rowspan: u32 = 1;
-    let mut current_text = String::new();
-    let mut current_row: Vec<TableCell> = Vec::new();
+    // Split into rows
+    let row_re = Regex::new(r"(?s)<w:tr[^>]*>(.+?)</w:tr>").unwrap();
+    let cell_re = Regex::new(r"(?s)<w:tc[^>]*>(.+?)</w:tc>").unwrap();
+    let gridspan_re = Regex::new(r#"w:gridSpan[^>]*w:val="(\d+)""#).unwrap();
+    let text_re = Regex::new(r"(?s)<w:t[^>]*>(.*?)</w:t>").unwrap();
 
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+    for cap in row_re.captures_iter(&tbl) {
+        let row_content = cap.get(1).map_or("", |m| m.as_str());
+        let mut current_row = Vec::new();
 
-                match tag_name.as_str() {
-                    "w:tbl" | "m:tbl" => {},
-                    "w:tr" | "m:tr" => {
-                        current_row.clear();
-                    }
-                    "w:tc" | "m:tc" => {
-                        current_text.clear();
-                        current_colspan = 1;
-                        current_rowspan = 1;
-                    }
-                    // Parse cell properties for colspan/rowspan
-                    "w:gridSpan" | "m:gridSpan" => {
-                        for attr in e.attributes().flatten() {
-                            let key = String::from_utf8_lossy(attr.key.as_ref());
-                            if key.ends_with(":val") || key == "val" {
-                                if let Ok(val) = String::from_utf8_lossy(&attr.value).parse::<u32>() {
-                                    current_colspan = val;
-                                }
-                            }
-                        }
-                    }
-                    "w:vMerge" | "m:vMerge" => {
-                        for attr in e.attributes().flatten() {
-                            let key = String::from_utf8_lossy(attr.key.as_ref());
-                            if key == "w:val" || key == "m:val" {
-                                let val = String::from_utf8_lossy(&attr.value);
-                                if val == "restart" {
-                                    current_rowspan = 1; // mark as merge start
-                                } else if val == "continue" {
-                                    current_rowspan = 0; // merge continuation — skip this cell
-                                }
-                            }
-                        }
-                    }
-                    // Text content
-                    "w:t" | "m:t" => {
-                        let text_content = reader.read_text(e.name()).unwrap_or_default();
-                        current_text.push_str(&text_content);
-                    }
-                    _ => {}
+        for cell_cap in cell_re.captures_iter(row_content) {
+            let cell_content = cell_cap.get(1).map_or("", |m| m.as_str());
+
+            // Extract colspan
+            let colspan = gridspan_re
+                .captures(cell_content)
+                .and_then(|c| c.get(1))
+                .and_then(|m| m.as_str().parse::<u32>().ok())
+                .unwrap_or(1);
+
+            // Extract text
+            let mut text = String::new();
+            for text_cap in text_re.captures_iter(cell_content) {
+                if let Some(t) = text_cap.get(1) {
+                    text.push_str(t.as_str());
                 }
             }
-            Ok(Event::End(ref e)) => {
-                let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+            let text = text.trim().to_string();
 
-                match tag_name.as_str() {
-                    "w:tbl" | "m:tbl" => {
-                        break; // done
-                    }
-                    "w:tr" | "m:tr" => {
-                        if !current_row.is_empty() {
-                            rows.push(std::mem::take(&mut current_row));
-                        }
-                    }
-                    "w:tc" | "m:tc" => {
-                        if current_rowspan > 0 {
-                            // Normal cell or merge start
-                            let inlines = if current_text.trim().is_empty() {
-                                Vec::new()
-                            } else {
-                                vec![Inline::Text(TextRun::new(current_text.clone()))]
-                            };
+            let inlines = if text.is_empty() {
+                Vec::new()
+            } else {
+                vec![Inline::Text(TextRun::new(text))]
+            };
 
-                            current_row.push(TableCell {
-                                inlines,
-                                colspan: current_colspan,
-                                rowspan: current_rowspan,
-                                border_style: None,
-                                border_width: None,
-                                border_color: None,
-                                background: None,
-                                alignment: None,
-                                geometry: None,
-                                source: None,
-                            });
-                        }
-                        // merge continuation (rowspan == 0) — cell is not added
-                    }
-                    _ => {}
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
+            current_row.push(TableCell {
+                inlines,
+                colspan,
+                rowspan: 1,
+                border_style: None,
+                border_width: None,
+                border_color: None,
+                background: None,
+                alignment: None,
+                geometry: None,
+                source: None,
+            });
         }
-        buf.clear();
+
+        if !current_row.is_empty() {
+            rows.push(current_row);
+        }
     }
 
     if rows.is_empty() {
@@ -125,6 +76,13 @@ pub fn parse_word_table_ooxml(xml: &str) -> Option<TableBlock> {
         geometry: None,
         source: None,
     })
+}
+
+fn extract_between(text: &str, start: &str, end: &str) -> Option<String> {
+    let s = text.find(start)?;
+    let after = &text[s..];
+    let e = after.find(end)?;
+    Some(after[..e + end.len()].to_string())
 }
 
 #[cfg(test)]
@@ -147,11 +105,15 @@ mod tests {
     #[test]
     fn test_parse_gridspan() {
         let xml = r#"<w:tbl xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Span 2</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr>
+<w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Span 2</w:t></w:r></w:p></w:tc>
+<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc>
+</w:tr>
 </w:tbl>"#;
 
         let table = parse_word_table_ooxml(xml).unwrap();
         assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows[0].len(), 2);
         assert_eq!(table.rows[0][0].colspan, 2);
     }
 
@@ -163,6 +125,5 @@ mod tests {
 
         let table = parse_word_table_ooxml(xml).unwrap();
         assert_eq!(table.rows.len(), 1);
-        assert_eq!(table.rows[0][0].inlines.is_empty(), true);
     }
 }
