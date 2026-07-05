@@ -190,8 +190,17 @@ impl RuntimeBackend for OnnxRuntimeBackend {
     fn name(&self) -> &str {
         "onnxruntime"
     }
+
     fn is_available(&self) -> bool {
         true
+    }
+
+    fn clear_sessions(&self) {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            let count = sessions.len();
+            sessions.clear();
+            log::info!("Cleared {} cached ONNX sessions", count);
+        }
     }
 }
 

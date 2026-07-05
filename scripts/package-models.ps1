@@ -123,6 +123,6 @@ Get-ChildItem $outputDir -Filter "*.zip" | ForEach-Object {
 
 Write-Host "`nTo upload to GitHub releases:" -ForegroundColor Yellow
 Write-Host "  1. Run: gh auth login" -ForegroundColor White
-Write-Host "  2. Run: gh release create models-v1.3.0 --title 'Models v1.3.0' --notes 'Model packages for LaTeXSnipper Core'" -ForegroundColor White
-Write-Host "  3. Upload the zip files from $outputDir/" -ForegroundColor White
-Write-Host "  4. Or use: gh release upload models-v1.3.0 $outputDir/*.zip" -ForegroundColor White
+Write-Host "  2. Run: gh release create models-v2.0.0 --title 'Models v2.0.0' --notes 'Model packages for LaTeXSnipper Core'" -ForegroundColor White
+Write-Host "  3. Upload the zip files from $outputDir/ + SHA256SUMS + model-manifest.json" -ForegroundColor White
+Write-Host "  4. Or use: gh release upload models-v2.0.0 $outputDir/*.zip $outputDir/SHA256SUMS $outputDir/model-manifest.json" -ForegroundColor White

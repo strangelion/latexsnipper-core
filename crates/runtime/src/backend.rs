@@ -14,7 +14,6 @@ pub trait RuntimeBackend: Send + Sync {
     ) -> Result<Box<dyn InferenceSession>>;
 
     /// Create an inference session with thread count hint.
-    /// Default implementation ignores max_threads and calls create_session.
     fn create_session_with_threads(
         &self,
         handle: &ModelHandle,
@@ -22,6 +21,12 @@ pub trait RuntimeBackend: Send + Sync {
         _max_threads: usize,
     ) -> Result<Box<dyn InferenceSession>> {
         self.create_session(handle, acceleration)
+    }
+
+    /// Clear all cached sessions, forcing fresh model loads on next inference.
+    /// This is the mechanism for model hot-reload.
+    fn clear_sessions(&self) {
+        // Default: no-op for backends without session cache
     }
 
     /// Get the name of this runtime (e.g., "onnxruntime", "tensorrt").

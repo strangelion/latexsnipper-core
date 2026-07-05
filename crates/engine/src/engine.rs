@@ -93,18 +93,18 @@ impl SnipperEngine {
     // Model Hot-Reload API
     // ========================================================================
 
-    /// Reload a specific model by invalidating its cached sessions.
-    /// Next inference call will create a fresh session with the new model.
+    /// Reload a specific model by clearing all cached sessions.
+    /// Next inference call will create fresh sessions with the new model files.
     pub fn reload_model(&self, session_key: &str) -> Result<()> {
         info!("Reloading model: {}", session_key);
-        // Session invalidation happens at PipelineContext level
-        // This method signals that the model should be reloaded
+        self.runtime.clear_sessions();
         Ok(())
     }
 
     /// Reload all cached sessions, forcing fresh model loads on next inference.
     pub fn reload_all_models(&self) -> Result<()> {
         info!("Reloading all models");
+        self.runtime.clear_sessions();
         Ok(())
     }
 
@@ -527,13 +527,7 @@ impl SnipperEngine {
     /// Recognize content in a PDF file — Multi-page support.
     ///
     /// Each page is processed independently through the pipeline.
-    ///
-    /// # Note
-    ///
-    /// **PDF page rendering is not yet implemented.** Calling `decode_pdf` will
-    /// return an error (`SnipperError::Image`) until a PDF renderer (pdfium/poppler)
-    /// is integrated. Convert PDF pages to images externally (e.g. pdftoppm, pdfium)
-    /// and process each page individually.
+    /// Uses `pdftoppm` (poppler) or `mutool` (MuPDF) for rendering.
     pub async fn recognize_pdf(&self, pdf_path: &Path, mode: RecognizeMode) -> Result<Document> {
         info!("Recognizing PDF {:?} in {:?} mode", pdf_path, mode);
 
