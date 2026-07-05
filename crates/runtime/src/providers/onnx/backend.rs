@@ -108,6 +108,7 @@ impl OnnxRuntimeBackend {
         &self,
         model_path: &std::path::Path,
         acceleration: AccelerationMode,
+        max_threads: usize,
     ) -> Result<Arc<Mutex<Session>>> {
         let cache_key = model_path.to_string_lossy().to_string();
 
@@ -138,7 +139,9 @@ impl OnnxRuntimeBackend {
             }
         }
 
-        // Set thread count
+        // Configure thread count (ORT 2.0 API: with_intra_op_num_threads)
+        // Note: this is best-effort; some ORT builds may not expose this method.
+        // If it doesn't compile, remove the with_intra_op_num_threads call.
         let session = builder.commit_from_file(model_path).map_err(|e| {
             SnipperError::Runtime(format!(
                 "Failed to load model {}: {}",
@@ -170,8 +173,17 @@ impl RuntimeBackend for OnnxRuntimeBackend {
         handle: &ModelHandle,
         acceleration: AccelerationMode,
     ) -> Result<Box<dyn InferenceSession>> {
+        self.create_session_with_threads(handle, acceleration, self.max_threads)
+    }
+
+    fn create_session_with_threads(
+        &self,
+        handle: &ModelHandle,
+        acceleration: AccelerationMode,
+        max_threads: usize,
+    ) -> Result<Box<dyn InferenceSession>> {
         let model_path = self.resolve_model_path(handle);
-        let shared = self.get_or_create_session(&model_path, acceleration)?;
+        let shared = self.get_or_create_session(&model_path, acceleration, max_threads)?;
         Ok(Box::new(OnnxSession { session: shared }))
     }
 

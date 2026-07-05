@@ -194,6 +194,8 @@ impl TableRecognizerNode {
     }
 
     /// Load formula detection session, using ctx session cache.
+    ///
+    /// Respects ctx.model_variants for variant selection.
     fn load_formula_det_session(
         &self,
         ctx: &mut PipelineContext,
@@ -204,25 +206,16 @@ impl TableRecognizerNode {
             return Ok(Some(s));
         }
 
-        let det_path = if let Some(resolver) = &ctx.model_resolver {
-            let id = latexsnipper_runtime::ModelId::new("formula-det", "yolov8-mfd");
-            match resolver.resolve(&id) {
-                Ok(handle) => {
-                    if let Some(p) = handle.model_path() {
-                        p.to_path_buf()
-                    } else {
-                        return Ok(None);
-                    }
-                }
-                Err(_) => return Ok(None),
-            }
-        } else {
-            let path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
-            if !path.exists() {
-                return Ok(None);
-            }
-            path
-        };
+        let variant = ctx
+            .model_variants
+            .get("formula-det")
+            .cloned()
+            .unwrap_or_else(|| "yolov8-mfd".into());
+
+        let det_path = models.join(format!("formula-det/{}/mathcraft-mfd.onnx", variant));
+        if !det_path.exists() {
+            return Ok(None);
+        }
 
         let handle = resolve_model_handle(ctx, "formula-det", det_path)?;
         let session = backend.create_session(&handle, ctx.acceleration.clone())?;
@@ -232,17 +225,20 @@ impl TableRecognizerNode {
 
     /// Load formula recognition sessions (encoder + decoder), using ctx session cache.
     ///
-    /// Resolution order:
-    /// 1. If a model resolver exists, try resolver.resolve("formula-rec/trocr-deit/encoder").
-    /// 2. Fall back to physical path models/formula-rec/trocr-deit/encoder_model.onnx.
-    ///    resolve_model_handle handles the resolver→fallback chain automatically.
+    /// Respects ctx.model_variants for variant selection.
     fn load_formula_rec_session(
         &self,
         ctx: &mut PipelineContext,
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
     ) -> Result<Option<FormulaRecSession>> {
-        let variant_dir = models.join("formula-rec/trocr-deit");
+        let variant = ctx
+            .model_variants
+            .get("formula-rec")
+            .cloned()
+            .unwrap_or_else(|| "trocr-deit".into());
+
+        let variant_dir = models.join(format!("formula-rec/{}", variant));
         let enc_path = variant_dir.join("encoder_model.onnx");
         let dec_path = variant_dir.join("decoder_model.onnx");
         let tok_path = variant_dir.join("tokenizer.json");
@@ -254,8 +250,11 @@ impl TableRecognizerNode {
         let enc_session = match ctx.get_session("formula_encoder") {
             Some(s) => s,
             None => {
-                let enc_handle =
-                    resolve_model_handle(ctx, "formula-rec/trocr-deit/encoder", enc_path)?;
+                let enc_handle = resolve_model_handle(
+                    ctx,
+                    &format!("formula-rec/{}/encoder", variant),
+                    enc_path,
+                )?;
                 let s = backend.create_session(&enc_handle, ctx.acceleration.clone())?;
                 ctx.cache_session("formula_encoder", s);
                 ctx.get_session("formula_encoder").unwrap()
@@ -265,8 +264,11 @@ impl TableRecognizerNode {
         let dec_session = match ctx.get_session("formula_decoder") {
             Some(s) => s,
             None => {
-                let dec_handle =
-                    resolve_model_handle(ctx, "formula-rec/trocr-deit/decoder", dec_path)?;
+                let dec_handle = resolve_model_handle(
+                    ctx,
+                    &format!("formula-rec/{}/decoder", variant),
+                    dec_path,
+                )?;
                 let s = backend.create_session(&dec_handle, ctx.acceleration.clone())?;
                 ctx.cache_session("formula_decoder", s);
                 ctx.get_session("formula_decoder").unwrap()
@@ -277,6 +279,7 @@ impl TableRecognizerNode {
     }
 
     /// Load text recognition session, using ctx session cache.
+    /// Respects ctx.model_variants for variant selection.
     fn load_text_rec_session(
         &self,
         ctx: &mut PipelineContext,
@@ -284,12 +287,23 @@ impl TableRecognizerNode {
         models: &std::path::Path,
     ) -> Result<Option<TextRecSession>> {
         if let Some(s) = ctx.get_session("text_rec") {
-            let keys_path = self.find_text_rec_keys(models);
+            let variant = ctx
+                .model_variants
+                .get("text-rec")
+                .cloned()
+                .unwrap_or_else(|| "v6-small".into());
+            let keys_path = self.find_text_rec_keys_for_variant(models, &variant);
             return Ok(Some((s, keys_path)));
         }
 
-        let rec_path = self.find_text_rec_model(models);
-        let keys_path = self.find_text_rec_keys(models);
+        let variant = ctx
+            .model_variants
+            .get("text-rec")
+            .cloned()
+            .unwrap_or_else(|| "v6-small".into());
+
+        let rec_path = self.find_text_rec_model_for_variant(models, &variant);
+        let keys_path = self.find_text_rec_keys_for_variant(models, &variant);
 
         if rec_path.is_none() {
             return Ok(None);
@@ -301,28 +315,36 @@ impl TableRecognizerNode {
         Ok(ctx.get_session("text_rec").map(|s| (s, keys_path)))
     }
 
-    fn find_text_rec_model(&self, models: &std::path::Path) -> Option<std::path::PathBuf> {
+    fn find_text_rec_model_for_variant(
+        &self,
+        models: &std::path::Path,
+        variant: &str,
+    ) -> Option<std::path::PathBuf> {
         let candidates = [
-            models.join("v6_models/PP-OCRv6_small_rec_infer/inference.onnx"),
-            models.join("v6_models/PP-OCRv6_small_rec_infer/model.onnx"),
-            models.join("text-rec/v6-small/inference.onnx"),
-            models.join("text-rec/v6-small/text-rec.onnx"),
+            models.join(format!("text-rec/{}/inference.onnx", variant)),
+            models.join(format!("text-rec/{}/model.onnx", variant)),
+            models.join(format!("v6_models/PP-OCRv6_small_rec_infer/inference.onnx")),
+            models.join(format!("v6_models/PP-OCRv6_small_rec_infer/model.onnx")),
         ];
         candidates.iter().find(|p| p.exists()).cloned()
     }
 
-    fn find_text_rec_keys(&self, models: &std::path::Path) -> std::path::PathBuf {
+    fn find_text_rec_keys_for_variant(
+        &self,
+        models: &std::path::Path,
+        variant: &str,
+    ) -> std::path::PathBuf {
         let candidates = [
+            models.join(format!("text-rec/{}/ppocr_keys.txt", variant)),
+            models.join(format!("text-rec/{}/inference.yml", variant)),
             models.join("v6_models/PP-OCRv6_small_rec_infer/ppocr_keys.txt"),
             models.join("v6_models/PP-OCRv6_small_rec_infer/inference.yml"),
-            models.join("text-rec/v6-small/ppocr_keys.txt"),
-            models.join("text-rec/v6-small/inference.yml"),
         ];
         candidates
             .iter()
             .find(|p| p.exists())
             .cloned()
-            .unwrap_or_else(|| models.join("text-rec/v6-small/inference.yml"))
+            .unwrap_or_else(|| models.join(format!("text-rec/{}/inference.yml", variant)))
     }
 
     async fn recognize_cell_content(

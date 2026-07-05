@@ -63,6 +63,8 @@ pub struct PipelineContext {
     pub model_variants: HashMap<String, String>,
     /// Acceleration mode requested by EngineConfig (injected by engine).
     pub acceleration: latexsnipper_runtime::AccelerationMode,
+    /// Max intra-op threads for ORT session (injected by engine).
+    pub max_threads: usize,
     /// Cached ONNX sessions for reuse across nodes.
     pub sessions: HashMap<String, CachedSession>,
     /// Diagnostic events collected during pipeline execution.
@@ -85,6 +87,7 @@ impl PipelineContext {
             model_packages: HashMap::new(),
             model_variants: HashMap::new(),
             acceleration: latexsnipper_runtime::AccelerationMode::Cpu,
+            max_threads: 4,
             sessions: HashMap::new(),
             diagnostics: Vec::new(),
         }

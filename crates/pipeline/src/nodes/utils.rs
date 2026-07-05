@@ -128,7 +128,8 @@ pub fn get_or_create_session(
     if let Some(s) = ctx.get_session(key) {
         return Ok(s);
     }
-    let session = backend.create_session(handle, ctx.acceleration.clone())?;
+    let session =
+        backend.create_session_with_threads(handle, ctx.acceleration.clone(), ctx.max_threads)?;
     ctx.cache_session(key, session);
     ctx.get_session(key)
         .ok_or_else(|| SnipperError::Runtime(format!("Failed to cache session: {}", key)))

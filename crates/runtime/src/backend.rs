@@ -7,12 +7,22 @@ use latexsnipper_foundation::Result;
 /// Core only knows this trait, never OrtSession directly.
 pub trait RuntimeBackend: Send + Sync {
     /// Create an inference session from a model handle.
-    /// Runtime doesn't know about file paths — ModelManager handles that.
     fn create_session(
         &self,
         handle: &ModelHandle,
         acceleration: AccelerationMode,
     ) -> Result<Box<dyn InferenceSession>>;
+
+    /// Create an inference session with thread count hint.
+    /// Default implementation ignores max_threads and calls create_session.
+    fn create_session_with_threads(
+        &self,
+        handle: &ModelHandle,
+        acceleration: AccelerationMode,
+        _max_threads: usize,
+    ) -> Result<Box<dyn InferenceSession>> {
+        self.create_session(handle, acceleration)
+    }
 
     /// Get the name of this runtime (e.g., "onnxruntime", "tensorrt").
     fn name(&self) -> &str;
