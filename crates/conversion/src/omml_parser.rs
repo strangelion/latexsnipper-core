@@ -166,6 +166,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             let mut bold = false;
             let mut italic = false;
             let mut size = String::new();
+            let mut sty = String::new();
             for (tag, val) in children {
                 if tag == "rPr" {
                     for part in val.split(',') {
@@ -181,6 +182,9 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                         if let Some(s) = part.strip_prefix("sz=") {
                             size = s.to_string();
                         }
+                        if let Some(s) = part.strip_prefix("sty=") {
+                            sty = s.to_string();
+                        }
                     }
                 }
             }
@@ -191,11 +195,21 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 .collect::<Vec<_>>()
                 .concat();
             let mut result = text;
-            if italic {
-                result = format!("\\mathit{{{}}}", result);
-            }
-            if bold {
-                result = format!("\\mathbf{{{}}}", result);
+            // Apply math style (m:sty) — overrides individual bold/italic
+            if !sty.is_empty() {
+                result = match sty.as_str() {
+                    "b" => format!("\\mathbf{{{}}}", result),
+                    "d" => format!("\\mathbb{{{}}}", result),
+                    "c" => format!("\\mathcal{{{}}}", result),
+                    "f" => format!("\\mathfrak{{{}}}", result),
+                    "i" => format!("\\mathit{{{}}}", result),
+                    "s" => format!("\\mathsf{{{}}}", result),
+                    "t" => format!("\\mathtt{{{}}}", result),
+                    _ => result,
+                };
+            } else {
+                if italic { result = format!("\\mathit{{{}}}", result); }
+                if bold { result = format!("\\mathbf{{{}}}", result); }
             }
             if !size.is_empty() {
                 result = format!("\\{}{{{}}}", half_points_to_latex_size(&size), result);
@@ -327,7 +341,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .map(|(_, v)| v.clone())
             .collect::<Vec<_>>()
             .join(""),
-        // Run properties: extract color/bold/italic for parent <m:r>
+        // Run properties: extract color/bold/italic/style for parent <m:r>
         "rPr" | "w:rPr" => {
             let mut parts = Vec::new();
             for (tag, val) in children {
@@ -342,6 +356,9 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 }
                 if tag == "sz" || tag == "w:sz" {
                     parts.push(format!("sz={}", val));
+                }
+                if tag == "sty" && !val.is_empty() {
+                    parts.push(format!("sty={}", val));
                 }
                 // Handle nested w:rPr inside rPr
                 if (tag == "w:rPr" || tag == "rPr") && !val.is_empty() {
