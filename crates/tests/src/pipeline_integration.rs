@@ -166,8 +166,8 @@ fn test_text_detection_with_real_model() {
     } else {
         1.0
     };
-    let nw = ((w as f32 * scale).ceil() as u32 + 31) / 32 * 32;
-    let nh = ((h as f32 * scale).ceil() as u32 + 31) / 32 * 32;
+    let nw = ((w as f32 * scale).ceil() as u32).div_ceil(32) * 32;
+    let nh = ((h as f32 * scale).ceil() as u32).div_ceil(32) * 32;
     let resized = operations::resize(&rgb, nw, nh);
     let padded = operations::pad_to_stride(&resized, 32);
     let pixels = operations::normalize(&padded, &[0.0, 0.0, 0.0], &[1.0, 1.0, 1.0]);

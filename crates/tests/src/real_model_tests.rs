@@ -5,7 +5,7 @@ use latexsnipper_image::operations;
 use latexsnipper_inference::{recognize_formula, RecognitionParams};
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 use latexsnipper_tensor::Tensor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn models_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -73,7 +73,7 @@ fn prepare_rec_input(img: &SnipperImage, _max_w: u32) -> (Vec<f32>, u32) {
     (data, target_w)
 }
 
-fn text_rec_model(models: &PathBuf) -> Option<(PathBuf, PathBuf, u32)> {
+fn text_rec_model(models: &Path) -> Option<(PathBuf, PathBuf, u32)> {
     let candidates = [
         (
             models.join("text-rec/v6-small/inference.onnx"),
@@ -163,7 +163,7 @@ fn load_paddle_character_dict(content: &str) -> Vec<String> {
 
 fn run_text_rec(
     backend: &OnnxRuntimeBackend,
-    models: &PathBuf,
+    models: &Path,
     crop: &SnipperImage,
 ) -> Option<String> {
     let (rec_path, keys_path, max_w) = text_rec_model(models)?;
@@ -217,8 +217,13 @@ fn test_doc_ori() {
     let session = backend
         .create_session(&handle, AccelerationMode::Cpu)
         .unwrap();
+    let input_name = session
+        .input_names()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "input".to_string());
     let output = session
-        .run(&[Tensor::float32("input", vec![1, 3, 224, 224], pixels)])
+        .run(&[Tensor::float32(&input_name, vec![1, 3, 224, 224], pixels)])
         .unwrap();
     if let Some(data) = output[0].as_f32_slice() {
         let max_idx = data
@@ -257,8 +262,8 @@ fn test_text_det() {
     } else {
         1.0
     };
-    let nw = ((w as f32 * scale).ceil() as u32 + 31) / 32 * 32;
-    let nh = ((h as f32 * scale).ceil() as u32 + 31) / 32 * 32;
+    let nw = ((w as f32 * scale).ceil() as u32).div_ceil(32) * 32;
+    let nh = ((h as f32 * scale).ceil() as u32).div_ceil(32) * 32;
     let resized = operations::resize(&rgb, nw, nh);
     let padded = operations::pad_to_stride(&resized, 32);
     let handle = ModelHandle::with_path("text-det", model_path);
@@ -447,8 +452,8 @@ fn test_text_e2e() {
     } else {
         1.0
     };
-    let nw = ((w as f32 * scale).ceil() as u32 + 31) / 32 * 32;
-    let nh = ((h as f32 * scale).ceil() as u32 + 31) / 32 * 32;
+    let nw = ((w as f32 * scale).ceil() as u32).div_ceil(32) * 32;
+    let nh = ((h as f32 * scale).ceil() as u32).div_ceil(32) * 32;
     let resized = operations::resize(&rgb, nw, nh);
     let padded = operations::pad_to_stride(&resized, 32);
 
@@ -487,7 +492,7 @@ fn test_text_e2e() {
                 let mut max_y = y;
                 let mut queue: std::collections::VecDeque<(usize, usize)> =
                     std::collections::VecDeque::new();
-                queue.push_back((x as usize, y as usize));
+                queue.push_back((x, y));
                 visited[y * det_w + x] = true;
                 while let Some((cx, cy)) = queue.pop_front() {
                     min_x = min_x.min(cx);

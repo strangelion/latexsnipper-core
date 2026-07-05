@@ -157,7 +157,7 @@ fn runtime_stub_preserves_input_shape_for_mock_output() {
     let session = runtime
         .create_session(&handle, AccelerationMode::Cpu)
         .unwrap();
-    let input = Tensor::float32("x", vec![1, 3, 48, 320], vec![0.0; 1 * 3 * 48 * 320]);
+    let input = Tensor::float32("x", vec![1, 3, 48, 320], vec![0.0; 3 * 48 * 320]);
 
     let outputs = session.run(&[input]).unwrap();
     assert_eq!(outputs.len(), 1);

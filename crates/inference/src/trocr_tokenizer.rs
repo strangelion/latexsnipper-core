@@ -104,7 +104,7 @@ mod tests {
 
         if path.exists() {
             let tok = TrOCRTokenizer::load(&path).unwrap();
-            assert!(tok.vocab.len() > 0);
+            assert!(!tok.vocab.is_empty());
             assert_eq!(tok.decode_token(0), Some("<pad>"));
             assert_eq!(tok.decode_token(5), Some("!"));
         }

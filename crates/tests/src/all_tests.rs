@@ -41,7 +41,7 @@ mod foundation_tests {
     #[test]
     fn result_ok() {
         let r: Result<i32> = Ok(42);
-        assert_eq!(r.unwrap(), 42);
+        assert!(matches!(r, Ok(42)));
     }
 
     #[test]
@@ -278,7 +278,7 @@ mod model_tests {
         }"#;
         let config = ModelConfig::parse(json).unwrap();
         assert_eq!(config.model_type, "dbnet");
-        assert!(config.has_dynamic_shapes() == false);
+        assert!(!config.has_dynamic_shapes());
     }
 
     #[test]

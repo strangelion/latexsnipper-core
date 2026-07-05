@@ -634,7 +634,7 @@ mod tests {
     fn test_paragraph() {
         let html = "<p>Hello <strong>world</strong>!</p>";
         let doc = parse_html_to_document(html);
-        assert!(doc.pages[0].blocks.len() >= 1);
+        assert!(!doc.pages[0].blocks.is_empty());
         let para = doc.pages[0]
             .blocks
             .iter()

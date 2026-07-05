@@ -950,11 +950,8 @@ mod tests {
     #[test]
     fn test_complex() {
         let node = parse_latex("\\frac{a}{b} + \\sqrt{c}");
-        match node {
-            LatexNode::Sequence(nodes) => {
-                assert!(!nodes.is_empty());
-            }
-            _ => {}
+        if let LatexNode::Sequence(nodes) = node {
+            assert!(!nodes.is_empty());
         }
     }
 
@@ -1001,11 +998,8 @@ mod tests {
     fn test_complex_expression() {
         // E=mc^2\operatorname{Spec}(4{})
         let node = parse_latex("E=mc^2\\operatorname{Spec}(4{})");
-        match node {
-            LatexNode::Sequence(nodes) => {
-                assert!(nodes.len() >= 3);
-            }
-            _ => {}
+        if let LatexNode::Sequence(nodes) = node {
+            assert!(nodes.len() >= 3);
         }
     }
 

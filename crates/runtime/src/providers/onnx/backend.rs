@@ -108,7 +108,7 @@ impl OnnxRuntimeBackend {
         &self,
         model_path: &std::path::Path,
         acceleration: AccelerationMode,
-        _max_threads: usize,
+        max_threads: usize,
     ) -> Result<Arc<Mutex<Session>>> {
         let cache_key = model_path.to_string_lossy().to_string();
 
@@ -139,9 +139,13 @@ impl OnnxRuntimeBackend {
             }
         }
 
-        // Configure thread count (ORT 2.0 API: with_intra_op_num_threads)
-        // Note: this is best-effort; some ORT builds may not expose this method.
-        // If it doesn't compile, remove the with_intra_op_num_threads call.
+        let thread_count = max_threads.max(1);
+
+        // Configure thread count via ORT 2.0 API
+        builder = builder
+            .with_intra_threads(thread_count)
+            .map_err(|e| SnipperError::Runtime(format!("Failed to set thread count: {}", e)))?;
+
         let session = builder.commit_from_file(model_path).map_err(|e| {
             SnipperError::Runtime(format!(
                 "Failed to load model {}: {}",
@@ -300,11 +304,29 @@ impl InferenceSession for OnnxSession {
     }
 
     fn input_names(&self) -> Vec<String> {
-        vec![]
+        self.session
+            .lock()
+            .map(|session| {
+                session
+                    .inputs()
+                    .iter()
+                    .map(|input| input.name().to_string())
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn output_names(&self) -> Vec<String> {
-        vec![]
+        self.session
+            .lock()
+            .map(|session| {
+                session
+                    .outputs()
+                    .iter()
+                    .map(|output| output.name().to_string())
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn get_character_list(&self) -> Option<Vec<String>> {

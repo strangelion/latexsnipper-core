@@ -758,7 +758,6 @@ mod tests {
     /// Test new AST node types through OMML conversion
     #[test]
     fn new_commands_to_omml() {
-        use crate::latex_parser::parse_latex;
         use crate::omml::latex_to_omml;
 
         // footnote renders as placeholder

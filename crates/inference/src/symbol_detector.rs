@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_symbol_detection_sorting() {
-        let mut detections = vec![
+        let mut detections = [
             SymbolDetection {
                 symbol: "b".into(),
                 rect: Rect::new(100.0, 0.0, 10.0, 10.0),

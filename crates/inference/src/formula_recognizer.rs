@@ -446,7 +446,7 @@ mod tests {
             &params,
         );
 
-        let _ = std::fs::remove_file(&std::env::temp_dir().join("test_conf_low.json"));
+        let _ = std::fs::remove_file(std::env::temp_dir().join("test_conf_low.json"));
 
         assert!(result.is_ok());
         let confidence = result.unwrap().confidence;
@@ -490,7 +490,7 @@ mod tests {
             &params,
         );
 
-        let _ = std::fs::remove_file(&std::env::temp_dir().join("test_conf_not_0_9.json"));
+        let _ = std::fs::remove_file(std::env::temp_dir().join("test_conf_not_0_9.json"));
 
         assert!(result.is_ok());
         let confidence = result.unwrap().confidence;
@@ -533,7 +533,7 @@ mod tests {
             &params,
         );
 
-        let _ = std::fs::remove_file(&std::env::temp_dir().join("test_formula_repaired.json"));
+        let _ = std::fs::remove_file(std::env::temp_dir().join("test_formula_repaired.json"));
 
         assert!(result.is_ok());
         let res = result.unwrap();
