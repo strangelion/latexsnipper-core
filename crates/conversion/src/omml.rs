@@ -624,7 +624,7 @@ fn wrap_with_underline(omml_content: &str) -> String {
     omml_content.to_string()
 }
 
-fn wrap_with_size(omml_content: &str, half_points: u16) -> String {
+fn wrap_with_size(omml_content: &str, _half_points: u16) -> String {
     omml_content.to_string()
 }
 
