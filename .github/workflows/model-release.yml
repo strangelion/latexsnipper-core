@@ -47,6 +47,45 @@ jobs:
           fi
           echo "Manifest template OK"
 
+      - name: Acquire model sources from release tag
+        run: |
+          BASE_TAG="models-v2.0.0"
+          echo "Downloading model ZIPs from $BASE_TAG release..."
+          mkdir -p models
+
+          for zip_name in \
+            latexsnipper-formula-det.zip \
+            latexsnipper-formula-rec.zip \
+            latexsnipper-text-det.zip \
+            latexsnipper-text-rec.zip \
+            latexsnipper-table-det.zip \
+            latexsnipper-table-struct.zip; do
+
+            URL="https://github.com/strangelion/latexsnipper-core/releases/download/$BASE_TAG/$zip_name"
+            echo "Downloading $zip_name..."
+            curl -fsSL -o "$zip_name" "$URL" || {
+              echo "FAIL: Could not download $zip_name from $BASE_TAG"
+              echo "Ensure the $BASE_TAG release exists with all model assets."
+              exit 1
+            }
+            unzip -q -o "$zip_name" -d models/
+            rm -f "$zip_name"
+          done
+
+          # Verify all 6 category directories exist
+          count=0
+          for cat in formula-det formula-rec text-det text-rec table-det table-struct; do
+            if [ -d "models/$cat" ]; then
+              count=$((count + 1))
+              echo "  OK: models/$cat"
+            fi
+          done
+          if [ "$count" -ne 6 ]; then
+            echo "FAIL: Only $count/6 model categories extracted."
+            exit 1
+          fi
+          echo "All 6 model categories acquired."
+
       - name: Package models (Unix)
         run: |
           mkdir -p release_models

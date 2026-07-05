@@ -18,7 +18,7 @@
     "categories":  {
                        "formula-det":  {
                                            "label":  "Formula Detection",
-                                           "required":  false,
+                                           "required":  true,
                                            "default":  "yolov8-mfd",
                                            "variants":  [
                                                             {
@@ -36,7 +36,7 @@
                                        },
                        "formula-rec":  {
                                            "label":  "Formula Recognition",
-                                           "required":  false,
+                                           "required":  true,
                                            "default":  "trocr-deit",
                                            "variants":  [
                                                             {

@@ -10,7 +10,7 @@ use latexsnipper_runtime::{InferenceContext, ModelInput, ModelOutput, ModelTask}
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::nodes::utils::{
-    find_best_with_fallback, get_backend, get_or_create_session, load_config, resolve_model_handle,
+    get_backend, get_or_create_session, resolve_model_handle, resolve_variant,
 };
 
 /// Detects regions (formulas, text, handwriting, or tables) in the image.
@@ -188,22 +188,19 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let det_config = match load_config(ctx, models, "formula-det") {
-            Ok(c) => c,
-            Err(_) => {
-                ctx.diagnostic_warn(
-                    "detect_formula",
-                    "Formula detection model config not found, skipping",
-                );
-                return Ok(());
-            }
-        };
+        let (det_config, det_model_path, _variant_dir) =
+            match resolve_variant(ctx, models, "formula-det") {
+                Ok(r) => r,
+                Err(_) => {
+                    ctx.diagnostic_warn(
+                        "detect_formula",
+                        "Formula detection model not found, skipping",
+                    );
+                    return Ok(());
+                }
+            };
 
         let det_params = DetectionParams::from_config(&det_config);
-
-        let (variant_config, det_model_path, _variant_dir) =
-            latexsnipper_model::ModelConfig::find_best(models, "formula-det")
-                .ok_or_else(|| SnipperError::Model("Formula detection model not found".into()))?;
         let det_handle = resolve_model_handle(ctx, "formula-det", det_model_path)?;
 
         let backend = get_backend(ctx)?;
@@ -213,8 +210,8 @@ impl DetectorNode {
 
         group_formula_detections(&mut detections);
 
-        let min_area = variant_config.pipeline_min_area();
-        let min_conf = variant_config.pipeline_min_confidence();
+        let min_area = det_config.pipeline_min_area();
+        let min_conf = det_config.pipeline_min_confidence();
         filter_formula_detections(&mut detections, min_area, min_conf);
 
         let count = detections.len();
@@ -233,23 +230,16 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let det_config = match load_config(ctx, models, "text-det") {
-            Ok(c) => c,
-            Err(_) => {
-                ctx.diagnostic_warn(
-                    "detect_text",
-                    "Text detection model config not found, skipping",
-                );
-                return Ok(());
-            }
-        };
+        let (det_config, det_model_path, _variant_dir) =
+            match resolve_variant(ctx, models, "text-det") {
+                Ok(r) => r,
+                Err(_) => {
+                    ctx.diagnostic_warn("detect_text", "Text detection model not found, skipping");
+                    return Ok(());
+                }
+            };
 
         let det_params = TextDetParams::default();
-
-        let (_variant_config, det_model_path, _variant_dir) =
-            find_best_with_fallback(models, "text-det", &det_config)
-                .ok_or_else(|| SnipperError::Model("Text detection model not found".into()))?;
-
         let det_handle = resolve_model_handle(ctx, "text-det", det_model_path)?;
 
         let backend = get_backend(ctx)?;
@@ -269,23 +259,19 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let det_config = match load_config(ctx, models, "handwriting-det") {
-            Ok(c) => c,
-            Err(_) => {
-                ctx.diagnostic_warn(
-                    "detect_handwriting",
-                    "Handwriting detection model config not found, skipping",
-                );
-                return Ok(());
-            }
-        };
+        let (det_config, det_model_path, _variant_dir) =
+            match resolve_variant(ctx, models, "handwriting-det") {
+                Ok(r) => r,
+                Err(_) => {
+                    ctx.diagnostic_warn(
+                        "detect_handwriting",
+                        "Handwriting detection model not found, skipping",
+                    );
+                    return Ok(());
+                }
+            };
 
         let det_params = HandwritingDetParams::from_config(&det_config);
-
-        let (variant_config, det_model_path, _variant_dir) =
-            latexsnipper_model::ModelConfig::find_best(models, "handwriting-det").ok_or_else(
-                || SnipperError::Model("Handwriting detection model not found".into()),
-            )?;
         let det_handle = resolve_model_handle(ctx, "handwriting-det", det_model_path)?;
 
         let backend = get_backend(ctx)?;
@@ -293,8 +279,8 @@ impl DetectorNode {
 
         let mut detections = detect_handwriting(image, &*session, &det_params)?;
 
-        let min_area = variant_config.pipeline_min_area();
-        let min_conf = variant_config.pipeline_min_confidence();
+        let min_area = det_config.pipeline_min_area();
+        let min_conf = det_config.pipeline_min_confidence();
         filter_handwriting_detections(&mut detections, min_area, min_conf);
 
         let count = detections.len();
@@ -310,22 +296,19 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let det_config = match load_config(ctx, models, "table-det") {
-            Ok(c) => c,
-            Err(_) => {
-                ctx.diagnostic_warn(
-                    "detect_table",
-                    "Table detection model config not found, skipping",
-                );
-                return Ok(());
-            }
-        };
+        let (det_config, det_model_path, _variant_dir) =
+            match resolve_variant(ctx, models, "table-det") {
+                Ok(r) => r,
+                Err(_) => {
+                    ctx.diagnostic_warn(
+                        "detect_table",
+                        "Table detection model not found, skipping",
+                    );
+                    return Ok(());
+                }
+            };
 
         let det_params = TableDetParams::from_config(&det_config);
-
-        let (variant_config, det_model_path, _variant_dir) =
-            latexsnipper_model::ModelConfig::find_best(models, "table-det")
-                .ok_or_else(|| SnipperError::Model("Table detection model not found".into()))?;
         let det_handle = resolve_model_handle(ctx, "table-det", det_model_path)?;
 
         let backend = get_backend(ctx)?;
@@ -333,8 +316,8 @@ impl DetectorNode {
 
         let mut detections = detect_tables(image, &*session, &det_params)?;
 
-        let min_area = variant_config.pipeline_min_area();
-        let min_conf = variant_config.pipeline_min_confidence();
+        let min_area = det_config.pipeline_min_area();
+        let min_conf = det_config.pipeline_min_confidence();
         filter_table_detections(&mut detections, min_area, min_conf);
 
         let count = detections.len();

@@ -495,8 +495,7 @@ impl SnipperEngine {
         ctx.models_dir = Some(self.config.models_dir.clone());
         ctx.backend = Some(self.runtime.clone());
         ctx.model_resolver = self.model_resolver.clone();
-
-        // Inject user-requested model variants from EngineConfig
+        ctx.acceleration = self.config.acceleration.clone();
         if let Some(v) = &self.config.formula_det_model {
             ctx.model_variants.insert("formula-det".into(), v.clone());
         }

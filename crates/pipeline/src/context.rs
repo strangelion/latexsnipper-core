@@ -61,6 +61,8 @@ pub struct PipelineContext {
     /// Category → variant name, e.g. "formula-det" → "custom-model".
     /// Nodes should prefer this over auto-discovery when set.
     pub model_variants: HashMap<String, String>,
+    /// Acceleration mode requested by EngineConfig (injected by engine).
+    pub acceleration: latexsnipper_runtime::AccelerationMode,
     /// Cached ONNX sessions for reuse across nodes.
     pub sessions: HashMap<String, CachedSession>,
     /// Diagnostic events collected during pipeline execution.
@@ -82,6 +84,7 @@ impl PipelineContext {
             model_resolver: None,
             model_packages: HashMap::new(),
             model_variants: HashMap::new(),
+            acceleration: latexsnipper_runtime::AccelerationMode::Cpu,
             sessions: HashMap::new(),
             diagnostics: Vec::new(),
         }

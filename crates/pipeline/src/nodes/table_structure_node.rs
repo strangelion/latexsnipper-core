@@ -88,12 +88,13 @@ impl PipelineNode for TableStructureNode {
         };
 
         // Load backend model if needed
+        let acc = ctx.acceleration.clone();
         let backend_session: Option<Box<dyn InferenceSession>> =
             (|| -> Option<Box<dyn InferenceSession>> {
                 let model_path = self.backend_model_path(&models)?;
                 let handle = resolve_model_handle(ctx, &self.backend, model_path).ok()?;
                 let backend = ctx.backend.as_ref()?;
-                backend.create_session(&handle, AccelerationMode::Cpu).ok()
+                backend.create_session(&handle, acc).ok()
             })();
 
         if self.backend.as_str() != "projection" && backend_session.is_none() {

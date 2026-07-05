@@ -48,6 +48,51 @@ pub fn load_config(
     latexsnipper_model::ModelConfig::load(&variant_dir)
 }
 
+/// Unified model variant resolution.
+///
+/// Returns (ModelConfig, model_file_path, variant_dir) for a category,
+/// respecting EngineConfig variant selection when present.
+///
+/// Resolution order:
+/// 1. If ctx.model_variants has a specific variant → use it, error if not found
+/// 2. Otherwise → auto-discover with stable alphabetical ordering
+///
+/// The caller must always use the returned variant_dir for paths (encoder,
+/// decoder, tokenizer etc.), ensuring config and ONNX come from the same variant.
+pub fn resolve_variant(
+    ctx: &PipelineContext,
+    models: &Path,
+    category: &str,
+) -> Result<(
+    latexsnipper_model::ModelConfig,
+    std::path::PathBuf,
+    std::path::PathBuf,
+)> {
+    if let Some(variant) = ctx.model_variants.get(category) {
+        let variant_dir = models.join(category).join(variant);
+        if !variant_dir.is_dir() {
+            return Err(SnipperError::Model(format!(
+                "Requested variant '{}' not found in {}/{}",
+                variant,
+                models.display(),
+                category,
+            )));
+        }
+        let config = latexsnipper_model::ModelConfig::load(&variant_dir)?;
+        let path = config.pipeline_model_path(&variant_dir).ok_or_else(|| {
+            SnipperError::Model(format!(
+                "No ONNX model in {}/{}/{}",
+                models.display(),
+                category,
+                variant
+            ))
+        })?;
+        return Ok((config, path, variant_dir));
+    }
+    latexsnipper_model::ModelConfig::find_best(models, category)
+        .ok_or_else(|| SnipperError::Model(format!("No model found for category '{}'", category)))
+}
+
 /// Resolve a model handle using the model resolver if available, otherwise fall back to file path.
 /// If the resolver fails, falls back to the provided path instead of returning an error.
 pub fn resolve_model_handle(
@@ -83,7 +128,7 @@ pub fn get_or_create_session(
     if let Some(s) = ctx.get_session(key) {
         return Ok(s);
     }
-    let session = backend.create_session(handle, latexsnipper_runtime::AccelerationMode::Cpu)?;
+    let session = backend.create_session(handle, ctx.acceleration.clone())?;
     ctx.cache_session(key, session);
     ctx.get_session(key)
         .ok_or_else(|| SnipperError::Runtime(format!("Failed to cache session: {}", key)))

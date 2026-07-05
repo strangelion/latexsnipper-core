@@ -225,7 +225,7 @@ impl TableRecognizerNode {
         };
 
         let handle = resolve_model_handle(ctx, "formula-det", det_path)?;
-        let session = backend.create_session(&handle, AccelerationMode::Cpu)?;
+        let session = backend.create_session(&handle, ctx.acceleration.clone())?;
         ctx.cache_session("formula_det", session);
         Ok(ctx.get_session("formula_det"))
     }
@@ -256,7 +256,7 @@ impl TableRecognizerNode {
             None => {
                 let enc_handle =
                     resolve_model_handle(ctx, "formula-rec/trocr-deit/encoder", enc_path)?;
-                let s = backend.create_session(&enc_handle, AccelerationMode::Cpu)?;
+                let s = backend.create_session(&enc_handle, ctx.acceleration.clone())?;
                 ctx.cache_session("formula_encoder", s);
                 ctx.get_session("formula_encoder").unwrap()
             }
@@ -267,7 +267,7 @@ impl TableRecognizerNode {
             None => {
                 let dec_handle =
                     resolve_model_handle(ctx, "formula-rec/trocr-deit/decoder", dec_path)?;
-                let s = backend.create_session(&dec_handle, AccelerationMode::Cpu)?;
+                let s = backend.create_session(&dec_handle, ctx.acceleration.clone())?;
                 ctx.cache_session("formula_decoder", s);
                 ctx.get_session("formula_decoder").unwrap()
             }
@@ -296,7 +296,7 @@ impl TableRecognizerNode {
         }
 
         let handle = resolve_model_handle(ctx, "text-rec", rec_path.unwrap())?;
-        let session = backend.create_session(&handle, AccelerationMode::Cpu)?;
+        let session = backend.create_session(&handle, ctx.acceleration.clone())?;
         ctx.cache_session("text_rec", session);
         Ok(ctx.get_session("text_rec").map(|s| (s, keys_path)))
     }
