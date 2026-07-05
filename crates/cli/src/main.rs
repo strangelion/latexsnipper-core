@@ -165,12 +165,15 @@ enum ModelsCommand {
         category: Option<String>,
     },
 
-    /// Verify model integrity
-    #[command(long_about = "Verify model files using SHA-256 checksums.\n\n\
-        Checks that all installed model files match their expected checksums.\n\n\
-        EXAMPLES:\n    \
-        snipper models verify\n    \
-        snipper models verify --category formula-det")]
+    /// Verify model file existence against manifest
+    #[command(
+        long_about = "Verify that all model files listed in the manifest exist.\n\n\
+SHA-256 integrity is checked at download time. This command only confirms\n\
+that expected files are present after extraction.\n\n\
+Examples:\n    \
+snipper models verify\n    \
+snipper models verify --category formula-det"
+    )]
     Verify {
         /// Filter by category
         #[arg(short = 'c', long)]
@@ -389,7 +392,24 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
     // Load manifest
     use latexsnipper_model::manifest::DEFAULT_MANIFEST_URL;
     let manifest_path = std::path::PathBuf::from("models/model-manifest.json");
-    let manifest = if manifest_path.exists() {
+
+    // --manifest-url overrides local manifest: always download fresh
+    let manifest = if let Some(url) = manifest_url {
+        eprintln!("Downloading manifest from {}", url);
+        match latexsnipper_model::ModelManifest::download(&url) {
+            Ok(m) => {
+                if let Err(e) = m.save(&manifest_path) {
+                    eprintln!("Warning: could not save manifest locally: {}", e);
+                }
+                eprintln!("Manifest downloaded successfully.");
+                m
+            }
+            Err(e) => {
+                eprintln!("Failed to download manifest: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else if manifest_path.exists() {
         match latexsnipper_model::ModelManifest::load(&manifest_path) {
             Ok(m) => m,
             Err(e) => {
@@ -399,12 +419,11 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
             }
         }
     } else {
-        let url = manifest_url.unwrap_or_else(|| DEFAULT_MANIFEST_URL.to_string());
+        let url = DEFAULT_MANIFEST_URL.to_string();
         eprintln!("Local manifest not found, downloading from {}", url);
 
         match latexsnipper_model::ModelManifest::download(&url) {
             Ok(m) => {
-                // Save the downloaded manifest for future use
                 if let Err(e) = m.save(&manifest_path) {
                     eprintln!("Warning: could not save manifest locally: {}", e);
                 }

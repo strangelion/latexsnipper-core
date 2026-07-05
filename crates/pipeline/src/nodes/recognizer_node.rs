@@ -10,7 +10,7 @@ use latexsnipper_runtime::{InferenceContext, ModelInput, ModelOutput, ModelTask}
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
-use crate::nodes::utils::{get_backend, get_or_create_session, load_config, resolve_model_handle};
+use crate::nodes::utils::{get_backend, get_or_create_session, resolve_model_handle};
 
 struct TextRecModel {
     config: latexsnipper_model::ModelConfig,
@@ -216,18 +216,7 @@ impl RecognizerNode {
             return Ok(());
         }
 
-        let rec_config = match load_config(models, "formula-rec") {
-            Ok(c) => c,
-            Err(_) => {
-                ctx.diagnostic_warn(
-                    "recognize_formula",
-                    "Formula recognition model config not found, skipping",
-                );
-                return Ok(());
-            }
-        };
-
-        let (_variant_config, rec_dir, _variant_dir) =
+        let (rec_config, _primary_path, rec_dir) =
             latexsnipper_model::ModelConfig::find_best(models, "formula-rec")
                 .ok_or_else(|| SnipperError::Model("Formula recognition model not found".into()))?;
         let encoder_path = rec_config

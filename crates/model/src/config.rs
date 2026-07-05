@@ -588,7 +588,8 @@ impl ModelConfig {
     }
 
     /// Discover all models in a category directory.
-    /// Returns Vec of (variant_name, ModelConfig, variant_dir) tuples.
+    /// Returns Vec of (variant_name, ModelConfig, variant_dir) tuples,
+    /// sorted alphabetically by variant name for deterministic selection.
     pub fn discover_all(
         models_dir: &Path,
         category: &str,
@@ -598,22 +599,34 @@ impl ModelConfig {
             return Vec::new();
         }
 
-        std::fs::read_dir(&cat_dir)
-            .into_iter()
-            .flatten()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().is_dir())
-            .filter_map(|e| {
-                let dir = e.path();
-                let variant = dir.file_name()?.to_str()?;
-                let config = if dir.join("config.json").exists() {
-                    ModelConfig::load(&dir).ok()?
-                } else {
-                    ModelConfig::from_paddle_inference_dir(&dir).ok()?
-                };
-                Some((variant.to_string(), config, dir))
-            })
-            .collect()
+        let mut variants: Vec<(String, ModelConfig, std::path::PathBuf)> = Vec::new();
+
+        for entry in std::fs::read_dir(&cat_dir).into_iter().flatten() {
+            let Ok(entry) = entry else { continue };
+            if !entry.path().is_dir() {
+                continue;
+            }
+            let dir = entry.path();
+            let Some(variant) = dir.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let config = if dir.join("config.json").exists() {
+                match ModelConfig::load(&dir) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                }
+            } else {
+                match ModelConfig::from_paddle_inference_dir(&dir) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                }
+            };
+            variants.push((variant.to_string(), config, dir));
+        }
+
+        // Deterministic: alphabetical by variant name
+        variants.sort_by(|a, b| a.0.cmp(&b.0));
+        variants
     }
 
     /// Find the best model in a category, trying variants in order.

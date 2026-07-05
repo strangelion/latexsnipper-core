@@ -102,8 +102,13 @@ impl ModelManifest {
         Self::parse(&body)
     }
 
-    /// Save manifest to a file.
+    /// Save manifest to a file, creating parent directories if needed.
     pub fn save(&self, path: &Path) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                SnipperError::Model(format!("Failed to create manifest directory: {}", e))
+            })?;
+        }
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| SnipperError::Model(format!("Failed to serialize manifest: {}", e)))?;
         std::fs::write(path, json)

@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use latexsnipper_foundation::{Result, SnipperError};
 
@@ -53,20 +54,7 @@ pub fn get_pdf_page_info(source: PdfSource) -> Result<Vec<PdfPageInfo>> {
 /// - `pdftoppm` from poppler-utils
 /// - `mutool` from MuPDF
 pub fn decode_pdf(source: PdfSource, dpi: u32) -> Result<Vec<SnipperImage>> {
-    let pdf_path = match source {
-        PdfSource::File(path) => path.to_path_buf(),
-        PdfSource::Memory(bytes) => {
-            // Write bytes to temp file for rendering
-            let tmp_dir =
-                std::env::temp_dir().join(format!("latexsnipper-pdf-{}", std::process::id()));
-            std::fs::create_dir_all(&tmp_dir)
-                .map_err(|e| SnipperError::Image(format!("Failed to create temp dir: {}", e)))?;
-            let tmp_path = tmp_dir.join("input.pdf");
-            std::fs::write(&tmp_path, bytes)
-                .map_err(|e| SnipperError::Image(format!("Failed to write temp PDF: {}", e)))?;
-            tmp_path
-        }
-    };
+    let (pdf_path, owns_temp) = prepare_pdf_path(source)?;
 
     let page_info = get_pdf_page_info(PdfSource::File(&pdf_path))?;
     let mut images = Vec::with_capacity(page_info.len());
@@ -82,8 +70,8 @@ pub fn decode_pdf(source: PdfSource, dpi: u32) -> Result<Vec<SnipperImage>> {
         }
     }
 
-    // Clean up temp file if we created one
-    if pdf_path.starts_with(std::env::temp_dir()) {
+    // Only clean up temp files we created, never user files
+    if owns_temp {
         let _ = std::fs::remove_file(&pdf_path);
     }
 
@@ -92,28 +80,36 @@ pub fn decode_pdf(source: PdfSource, dpi: u32) -> Result<Vec<SnipperImage>> {
 
 /// Decode a single page from a PDF source into an image.
 pub fn decode_pdf_page(source: PdfSource, page: u32, dpi: u32) -> Result<SnipperImage> {
-    let pdf_path = match source {
-        PdfSource::File(path) => path.to_path_buf(),
-        PdfSource::Memory(bytes) => {
-            let tmp_dir =
-                std::env::temp_dir().join(format!("latexsnipper-pdf-{}", std::process::id()));
-            std::fs::create_dir_all(&tmp_dir)
-                .map_err(|e| SnipperError::Image(format!("Failed to create temp dir: {}", e)))?;
-            let tmp_path = tmp_dir.join("input.pdf");
-            std::fs::write(&tmp_path, bytes)
-                .map_err(|e| SnipperError::Image(format!("Failed to write temp PDF: {}", e)))?;
-            tmp_path
-        }
-    };
+    let (pdf_path, owns_temp) = prepare_pdf_path(source)?;
 
     let result = crate::pdf_render::render_pdf_page(&pdf_path, page, dpi);
 
-    // Clean up temp file if we created one
-    if pdf_path.starts_with(std::env::temp_dir()) {
+    // Only clean up temp files we created, never user files
+    if owns_temp {
         let _ = std::fs::remove_file(&pdf_path);
     }
 
     result
+}
+
+/// Create a unique temporary file name to avoid collisions between concurrent PDF operations.
+fn create_unique_temp_pdf(bytes: &[u8]) -> Result<(PathBuf, bool)> {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let tmp_path = std::env::temp_dir().join(format!("latexsnipper-pdf-{}.pdf", stamp));
+    std::fs::write(&tmp_path, bytes)
+        .map_err(|e| SnipperError::Image(format!("Failed to write temp PDF: {}", e)))?;
+    Ok((tmp_path, true))
+}
+
+/// Prepare a PDF path from the source, tracking whether we own a temp file.
+fn prepare_pdf_path(source: PdfSource) -> Result<(PathBuf, bool)> {
+    match source {
+        PdfSource::File(path) => Ok((path.to_path_buf(), false)),
+        PdfSource::Memory(bytes) => create_unique_temp_pdf(bytes),
+    }
 }
 
 fn load_document(source: PdfSource) -> Result<lopdf::Document> {

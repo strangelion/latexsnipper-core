@@ -19,105 +19,56 @@ env:
 
 jobs:
   # ============================================================
-  # Job 1: Verify model fixtures are available
-  # ============================================================
-  check-models:
-    name: Check model fixtures
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build CLI
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build cli binary
-        run: cargo build --release -p latexsnipper-cli
-
-      - name: Verify model-manifest exists
-        run: |
-          if [ ! -f models/model-manifest.json ]; then
-            echo "ERROR: models/model-manifest.json not found"
-            exit 1
-          fi
-          echo "Manifest version: $(jq -r .version models/model-manifest.json)"
-          echo "Categories: $(jq -r '.categories | keys | join(", ")' models/model-manifest.json)"
-
-      - name: Verify model directories exist
-        run: |
-          for cat in formula-det formula-rec text-det text-rec table-det table-struct; do
-            if [ -d "models/$cat" ]; then
-              echo "  OK: models/$cat ($(ls models/$cat/ | wc -l) variants)"
-            else
-              echo "  WARNING: models/$cat not found - may need external download"
-            fi
-          done
-
-      - name: Run model verify
-        if: success()
-        run: |
-          ./target/release/snipper models verify || {
-            echo "::warning::Some models are not installed locally. CI will continue."
-          }
-
-  # ============================================================
-  # Job 2: Package models into release ZIPs
+  # Job 1: Package models into release ZIPs
   # ============================================================
   package:
     name: Package models
-    needs: check-models
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify manifest template exists
+        run: |
+          if [ ! -f scripts/model-manifest.template.json ]; then
+            echo "ERROR: scripts/model-manifest.template.json not found"
+            exit 1
+          fi
+          echo "Manifest version: $(jq -r .version scripts/model-manifest.template.json)"
+          echo "Categories: $(jq -r '.categories | keys | join(", ")' scripts/model-manifest.template.json)"
 
       - name: Package models (Unix)
         run: |
           mkdir -p release_models
-          # Package formula detection
-          if [ -d models/formula-det/yolov8-mfd ]; then
-            cd models/formula-det && zip -r ../../release_models/latexsnipper-formula-det.zip yolov8-mfd/ && cd ../..
-            sha256sum release_models/latexsnipper-formula-det.zip | cut -d' ' -f1 > release_models/latexsnipper-formula-det.zip.sha256
-          fi
-          # Package formula recognition
-          if [ -d models/formula-rec/trocr-deit ]; then
-            cd models/formula-rec && zip -r ../../release_models/latexsnipper-formula-rec.zip trocr-deit/ && cd ../..
-            sha256sum release_models/latexsnipper-formula-rec.zip | cut -d' ' -f1 > release_models/latexsnipper-formula-rec.zip.sha256
-          fi
-          # Package text detection
-          if [ -d models/text-det/v6-small ]; then
-            cd models/text-det && zip -r ../../release_models/latexsnipper-text-det.zip v6-small/ && cd ../..
-            sha256sum release_models/latexsnipper-text-det.zip | cut -d' ' -f1 > release_models/latexsnipper-text-det.zip.sha256
-          fi
-          # Package text recognition
-          if [ -d models/text-rec/v6-small ]; then
-            cd models/text-rec && zip -r ../../release_models/latexsnipper-text-rec.zip v6-small/ && cd ../..
-            sha256sum release_models/latexsnipper-text-rec.zip | cut -d' ' -f1 > release_models/latexsnipper-text-rec.zip.sha256
-          fi
-          # Package table detection
-          if [ -d models/table-det/tatr-detection ]; then
-            cd models/table-det && zip -r ../../release_models/latexsnipper-table-det.zip tatr-detection/ && cd ../..
-            sha256sum release_models/latexsnipper-table-det.zip | cut -d' ' -f1 > release_models/latexsnipper-table-det.zip.sha256
-          fi
-          # Package table structure
-          if [ -d models/table-struct/tatr-structure ]; then
-            cd models/table-struct && zip -r ../../release_models/latexsnipper-table-struct.zip tatr-structure/ && cd ../..
-            sha256sum release_models/latexsnipper-table-struct.zip | cut -d' ' -f1 > release_models/latexsnipper-table-struct.zip.sha256
-          fi
-          echo "Packaged models:"
+          for cat_pair in "formula-det:yolov8-mfd" "formula-rec:trocr-deit" "text-det:v6-small" "text-rec:v6-small" "table-det:tatr-detection" "table-struct:tatr-structure"; do
+            IFS=":" read -r cat variant <<< "$cat_pair"
+            if [ -d "models/$cat/$variant" ]; then
+              cd "models/$cat" && zip -r "../../release_models/latexsnipper-$cat.zip" "$variant/" && cd ../..
+              echo "Packaged: $cat/$variant"
+            else
+              echo "WARNING: models/$cat/$variant not found, skipping"
+            fi
+          done
+          echo "--- Release models ---"
           ls -la release_models/
 
-      - name: Generate SHA256SUMS
+      - name: Generate SHA256SUMS and update manifest
         run: |
           cd release_models
           sha256sum *.zip > SHA256SUMS
           cat SHA256SUMS
+          # Build a checksums JSON blob from SHA256SUMS
+          echo "Checksums:"
+          cat SHA256SUMS
 
-      - name: Update manifest checksums
+      - name: Generate final model-manifest.json with checksums
         run: |
-          # Generate checksums block for manifest
-          CHECKSUMS=$(cat release_models/SHA256SUMS | while read hash file; do
-            echo "    \"$file\": \"$hash\","
-          done)
-          echo "Computed checksums for $(echo "$CHECKSUMS" | wc -l) files"
+          jq '.checksums = $ch' \
+            --argjson ch "$(cat release_models/SHA256SUMS | while read hash file; do
+              echo "\"$file\": \"$hash\""
+            done | jq -Rn 'reduce inputs as $i ({}; . + ($i | split(": ") | { (.[0]): .[1] }))' )" \
+            scripts/model-manifest.template.json > release_models/model-manifest.json
+          echo "Generated manifest:"
+          jq '.checksums' release_models/model-manifest.json
 
       - name: Upload model assets
         uses: actions/upload-artifact@v4
@@ -125,16 +76,16 @@ jobs:
           name: model-zips
           path: release_models/*.zip
 
-      - name: Upload checksum artifacts
+      - name: Upload release metadata
         uses: actions/upload-artifact@v4
         with:
-          name: model-checksums
+          name: release-metadata
           path: |
             release_models/SHA256SUMS
-            release_models/*.sha256
+            release_models/model-manifest.json
 
   # ============================================================
-  # Job 3: Smoke test — download, verify, and run inference
+  # Job 2: Smoke test — extract, verify path structure, validate manifest
   # ============================================================
   smoke-test:
     name: Smoke test
@@ -142,8 +93,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
 
       - name: Download model artifacts
         uses: actions/download-artifact@v4
@@ -151,32 +100,46 @@ jobs:
           name: model-zips
           path: test_models
 
-      - name: Build CLI
-        run: cargo build --release -p latexsnipper-cli
+      - name: Download release metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: release-metadata
+          path: test_metadata
 
       - name: Smoke test — extract and verify path structure
         run: |
           cd test_models
-          # Extract each ZIP and verify expected file layout
           for zip in *.zip; do
             echo "Testing: $zip"
             unzip -q "$zip" -d extracted
-            # Verify the variant directory contains model files
-            find extracted -name "*.onnx" -o -name "config.json" | head -5
+            # Verify the variant directory contains model files (should have at least config.json)
+            found=$(find extracted -name "config.json" | wc -l)
+            if [ "$found" -eq 0 ]; then
+              echo "FAIL: $zip has no config.json!"
+              exit 1
+            fi
+            echo "  OK: $found config.json(s)"
             rm -rf extracted
           done
 
-      - name: Smoke test — models verify (if formula model available)
+      - name: Smoke test — validate manifest checksums
         run: |
-          echo "Note: Full inference smoke test requires ONNX Runtime and model files."
-          echo "        Run manually with: snipper models verify"
+          cat test_metadata/SHA256SUMS
+          # Verify that every ZIP in SHA256SUMS exists
+          while read -r hash file; do
+            if [ ! -f "test_models/$file" ]; then
+              echo "FAIL: $file from SHA256SUMS not found!"
+              exit 1
+            fi
+            echo "  OK: $file"
+          done < test_metadata/SHA256SUMS
 
   # ============================================================
-  # Job 4: Create Release
+  # Job 3: Create Release (only if packaging and smoke test both pass)
   # ============================================================
   create-release:
     name: Create GitHub Release
-    needs: [check-models, package]
+    needs: [package, smoke-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -198,14 +161,11 @@ jobs:
           name: model-zips
           path: release_assets
 
-      - name: Download checksums
+      - name: Download release metadata
         uses: actions/download-artifact@v4
         with:
-          name: model-checksums
+          name: release-metadata
           path: release_assets
-
-      - name: Copy manifest
-        run: cp models/model-manifest.json release_assets/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
