@@ -231,48 +231,31 @@ impl TableRecognizerNode {
     }
 
     /// Load formula recognition sessions (encoder + decoder), using ctx session cache.
+    ///
+    /// Resolution order:
+    /// 1. If a model resolver exists, try resolver.resolve("formula-rec/trocr-deit/encoder").
+    /// 2. Fall back to physical path models/formula-rec/trocr-deit/encoder_model.onnx.
+    ///    resolve_model_handle handles the resolver→fallback chain automatically.
     fn load_formula_rec_session(
         &self,
         ctx: &mut PipelineContext,
         backend: &dyn RuntimeBackend,
         models: &std::path::Path,
     ) -> Result<Option<FormulaRecSession>> {
-        let (enc_path, dec_path, tok_path) = if let Some(resolver) = &ctx.model_resolver {
-            let enc_id = latexsnipper_runtime::ModelId::new("formula-rec", "encoder");
-            let dec_id = latexsnipper_runtime::ModelId::new("formula-rec", "decoder");
-            let tok_id = latexsnipper_runtime::ModelId::new("formula-rec", "tokenizer");
+        let variant_dir = models.join("formula-rec/trocr-deit");
+        let enc_path = variant_dir.join("encoder_model.onnx");
+        let dec_path = variant_dir.join("decoder_model.onnx");
+        let tok_path = variant_dir.join("tokenizer.json");
 
-            let enc = resolver
-                .resolve(&enc_id)
-                .ok()
-                .and_then(|h| h.model_path().map(|p| p.to_path_buf()));
-            let dec = resolver
-                .resolve(&dec_id)
-                .ok()
-                .and_then(|h| h.model_path().map(|p| p.to_path_buf()));
-            let tok = resolver
-                .resolve(&tok_id)
-                .ok()
-                .and_then(|h| h.model_path().map(|p| p.to_path_buf()));
-
-            match (enc, dec, tok) {
-                (Some(e), Some(d), Some(t)) => (e, d, t),
-                _ => return Ok(None),
-            }
-        } else {
-            let enc = models.join("formula-rec/trocr-deit/encoder_model.onnx");
-            let dec = models.join("formula-rec/trocr-deit/decoder_model.onnx");
-            let tok = models.join("formula-rec/trocr-deit/tokenizer.json");
-            if !enc.exists() || !dec.exists() || !tok.exists() {
-                return Ok(None);
-            }
-            (enc, dec, tok)
-        };
+        if !enc_path.exists() || !dec_path.exists() || !tok_path.exists() {
+            return Ok(None);
+        }
 
         let enc_session = match ctx.get_session("formula_encoder") {
             Some(s) => s,
             None => {
-                let enc_handle = resolve_model_handle(ctx, "formula-rec/encoder", enc_path)?;
+                let enc_handle =
+                    resolve_model_handle(ctx, "formula-rec/trocr-deit/encoder", enc_path)?;
                 let s = backend.create_session(&enc_handle, AccelerationMode::Cpu)?;
                 ctx.cache_session("formula_encoder", s);
                 ctx.get_session("formula_encoder").unwrap()
@@ -282,7 +265,8 @@ impl TableRecognizerNode {
         let dec_session = match ctx.get_session("formula_decoder") {
             Some(s) => s,
             None => {
-                let dec_handle = resolve_model_handle(ctx, "formula-rec/decoder", dec_path)?;
+                let dec_handle =
+                    resolve_model_handle(ctx, "formula-rec/trocr-deit/decoder", dec_path)?;
                 let s = backend.create_session(&dec_handle, AccelerationMode::Cpu)?;
                 ctx.cache_session("formula_decoder", s);
                 ctx.get_session("formula_decoder").unwrap()
