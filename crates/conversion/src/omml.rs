@@ -233,13 +233,16 @@ fn ast_to_omml(node: &LatexNode) -> String {
 
         LatexNode::FontModifier { font, content } => {
             let inner = ast_to_omml(content);
+            let text = xml_escape(&extract_text_from_omml(&inner));
             match font.as_str() {
-                "mathbf" | "boldsymbol" | "bm" => wrap_with_bold(&inner),
-                "mathbb" => wrap_mtext(&extract_text_from_omml(&inner)),
-                "mathcal" | "mathfrak" | "mathit" | "mathsf" | "mathtt" | "mathrm" | "mathnormal" => {
-                    // For these, just render the content with appropriate font
-                    inner
-                }
+                "mathbf" | "boldsymbol" | "bm" => wrap_with_math_style(&text, "b"),
+                "mathbb" => wrap_with_math_style(&text, "d"),
+                "mathcal" => wrap_with_math_style(&text, "c"),
+                "mathfrak" => wrap_with_math_style(&text, "f"),
+                "mathit" | "mathnormal" => wrap_with_math_style(&text, "i"),
+                "mathsf" => wrap_with_math_style(&text, "s"),
+                "mathtt" => wrap_with_math_style(&text, "t"),
+                "mathrm" => wrap_mtext(&extract_text_from_omml(&inner)),
                 _ => inner,
             }
         }
@@ -611,9 +614,17 @@ fn map_greek_unicode(name: &str) -> &str {
 }
 
 fn wrap_with_color(omml_content: &str, _hex: &str) -> String {
-    // Color injection disabled for now — proper OMML color support
-    // requires m:rPr with m:sty element, not w:rPr with w:color
     omml_content.to_string()
+}
+
+/// Wrap a text string with a math style (<m:sty m:val="X"/>) inside <m:r>.
+/// Style values: b=bold, d=double-struck(mathbb), c=script(mathcal),
+/// f=fraktur(mathfrak), i=italic(mathit), s=sans-serif(mathsf), t=monospace(mathtt)
+fn wrap_with_math_style(text: &str, style: &str) -> String {
+    format!(
+        "<m:r><m:rPr><m:sty m:val=\"{}\"/></m:rPr><m:t>{}</m:t></m:r>",
+        style, text
+    )
 }
 
 fn wrap_with_bold(omml_content: &str) -> String {
