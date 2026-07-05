@@ -10,12 +10,12 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
-latexsnipper-ast = { path = "../ast" }
-latexsnipper-image = { path = "../image" }
-latexsnipper-runtime = { path = "../runtime" }
-latexsnipper-tensor = { path = "../tensor" }
-latexsnipper-model = { path = "../model" }
+latexsnipper-foundation.workspace = true
+latexsnipper-ast.workspace = true
+latexsnipper-image.workspace = true
+latexsnipper-runtime.workspace = true
+latexsnipper-tensor.workspace = true
+latexsnipper-model.workspace = true
 ndarray = "0.16"
 serde.workspace = true
 serde_json.workspace = true

@@ -6,7 +6,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
-latexsnipper-ast = { path = "../ast" }
+latexsnipper-foundation.workspace = true
+latexsnipper-ast.workspace = true
 serde_json.workspace = true
 log.workspace = true

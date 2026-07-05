@@ -5,9 +5,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
-latexsnipper-runtime = { path = "../runtime" }
-latexsnipper-tensor = { path = "../tensor" }
+latexsnipper-foundation.workspace = true
+latexsnipper-runtime.workspace = true
+latexsnipper-tensor.workspace = true
 tract-onnx = "0.21"
 tract-core = "0.21"
 ndarray = "0.16"

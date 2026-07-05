@@ -58,6 +58,10 @@ latexsnipper-api-types = { path = "crates/api-types", version = "1.0.0" }
 latexsnipper-mock = { path = "crates/mock", version = "1.0.0" }
 latexsnipper-plugin = { path = "crates/plugin", version = "1.0.0" }
 latexsnipper-tract = { path = "crates/tract", version = "1.0.0" }
+latexsnipper-ffi = { path = "crates/ffi", version = "1.0.0" }
+latexsnipper-wasm = { path = "crates/wasm", version = "1.0.0" }
+latexsnipper-cli = { path = "crates/cli", version = "1.0.0" }
+latexsnipper-tests = { path = "crates/tests", version = "1.0.0" }
 
 # Root package for examples and tests
 [package]

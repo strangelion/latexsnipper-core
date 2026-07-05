@@ -10,8 +10,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
-latexsnipper-ast = { path = "../ast" }
+latexsnipper-foundation.workspace = true
+latexsnipper-ast.workspace = true
 image = "0.25"
 imageproc = "0.25"
 ndarray = "0.16"

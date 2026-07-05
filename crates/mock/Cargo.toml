@@ -6,17 +6,17 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
-latexsnipper-ast = { path = "../ast" }
-latexsnipper-tensor = { path = "../tensor" }
-latexsnipper-image = { path = "../image" }
-latexsnipper-inference = { path = "../inference" }
-latexsnipper-runtime = { path = "../runtime" }
+latexsnipper-foundation.workspace = true
+latexsnipper-ast.workspace = true
+latexsnipper-tensor.workspace = true
+latexsnipper-image.workspace = true
+latexsnipper-inference.workspace = true
+latexsnipper-runtime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
-latexsnipper-syntax = { path = "../syntax" }
-latexsnipper-export = { path = "../export" }
+latexsnipper-syntax.workspace = true
+latexsnipper-export.workspace = true

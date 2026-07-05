@@ -10,9 +10,9 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
-latexsnipper-ast = { path = "../ast" }
-latexsnipper-syntax = { path = "../syntax" }
+latexsnipper-foundation.workspace = true
+latexsnipper-ast.workspace = true
+latexsnipper-syntax.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
@@ -20,4 +20,4 @@ thiserror.workspace = true
 printpdf = { version = "0.7", features = ["embedded_images"] }
 
 [dev-dependencies]
-latexsnipper-mock = { path = "../mock" }
+latexsnipper-mock.workspace = true

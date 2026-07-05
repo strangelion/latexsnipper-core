@@ -10,8 +10,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
-latexsnipper-tensor = { path = "../tensor" }
+latexsnipper-foundation.workspace = true
+latexsnipper-tensor.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
@@ -23,4 +23,4 @@ sha2 = "0.10"
 hex = "0.4"
 
 [dev-dependencies]
-latexsnipper-image = { path = "../image" }
+latexsnipper-image.workspace = true

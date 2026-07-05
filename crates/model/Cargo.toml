@@ -10,7 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-latexsnipper-foundation = { path = "../foundation" }
+latexsnipper-foundation.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
