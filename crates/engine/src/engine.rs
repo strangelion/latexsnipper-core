@@ -483,24 +483,7 @@ impl SnipperEngine {
         );
 
         let graph = self.build_pipeline(mode);
-        let mut ctx = PipelineContext::with_image(image);
-        ctx.models_dir = Some(self.config.models_dir.clone());
-        ctx.backend = Some(self.runtime.clone());
-        ctx.model_resolver = self.model_resolver.clone();
-        ctx.acceleration = self.config.acceleration;
-        ctx.max_threads = self.config.max_threads;
-        if let Some(v) = &self.config.formula_det_model {
-            ctx.model_variants.insert("formula-det".into(), v.clone());
-        }
-        if let Some(v) = &self.config.formula_rec_model {
-            ctx.model_variants.insert("formula-rec".into(), v.clone());
-        }
-        if let Some(v) = &self.config.text_det_model {
-            ctx.model_variants.insert("text-det".into(), v.clone());
-        }
-        if let Some(v) = &self.config.text_rec_model {
-            ctx.model_variants.insert("text-rec".into(), v.clone());
-        }
+        let mut ctx = self.configure_context(PipelineContext::with_image(image));
 
         // Register model packages with the context
         for (task, package) in &self.model_packages {
@@ -544,24 +527,7 @@ impl SnipperEngine {
                 info!("Processing page {}/{}", page_idx + 1, pages.len());
             }
 
-            let mut ctx = PipelineContext::with_image(page_img.clone());
-            ctx.models_dir = Some(self.config.models_dir.clone());
-            ctx.backend = Some(self.runtime.clone());
-            ctx.model_resolver = self.model_resolver.clone();
-
-            // Inject user-requested model variants
-            if let Some(v) = &self.config.formula_det_model {
-                ctx.model_variants.insert("formula-det".into(), v.clone());
-            }
-            if let Some(v) = &self.config.formula_rec_model {
-                ctx.model_variants.insert("formula-rec".into(), v.clone());
-            }
-            if let Some(v) = &self.config.text_det_model {
-                ctx.model_variants.insert("text-det".into(), v.clone());
-            }
-            if let Some(v) = &self.config.text_rec_model {
-                ctx.model_variants.insert("text-rec".into(), v.clone());
-            }
+            let mut ctx = self.configure_context(PipelineContext::with_image(page_img.clone()));
 
             // Register model packages with the context
             for (task, package) in &self.model_packages {
@@ -597,5 +563,27 @@ impl SnipperEngine {
     /// Collect blocks from artifacts in the pipeline context.
     fn collect_blocks_from_context(ctx: &PipelineContext) -> Vec<Block> {
         ctx.artifacts.all_blocks()
+    }
+
+    /// Configure a pipeline context with engine config (shared by image and PDF paths).
+    fn configure_context(&self, mut ctx: PipelineContext) -> PipelineContext {
+        ctx.models_dir = Some(self.config.models_dir.clone());
+        ctx.backend = Some(self.runtime.clone());
+        ctx.model_resolver = self.model_resolver.clone();
+        ctx.acceleration = self.config.acceleration;
+        ctx.max_threads = self.config.max_threads;
+        if let Some(v) = &self.config.formula_det_model {
+            ctx.model_variants.insert("formula-det".into(), v.clone());
+        }
+        if let Some(v) = &self.config.formula_rec_model {
+            ctx.model_variants.insert("formula-rec".into(), v.clone());
+        }
+        if let Some(v) = &self.config.text_det_model {
+            ctx.model_variants.insert("text-det".into(), v.clone());
+        }
+        if let Some(v) = &self.config.text_rec_model {
+            ctx.model_variants.insert("text-rec".into(), v.clone());
+        }
+        ctx
     }
 }

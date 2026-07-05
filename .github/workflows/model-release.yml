@@ -53,23 +53,34 @@ jobs:
           echo "Downloading model ZIPs from $BASE_TAG release..."
           mkdir -p models
 
-          for zip_name in \
-            latexsnipper-formula-det.zip \
-            latexsnipper-formula-rec.zip \
-            latexsnipper-text-det.zip \
-            latexsnipper-text-rec.zip \
-            latexsnipper-table-det.zip \
-            latexsnipper-table-struct.zip; do
+          # Each ZIP contains {variant}/ at the root.
+          # We need to place it under models/{category}/{variant}/.
+          declare -A ZIPS=(
+            ["latexsnipper-formula-det.zip"]="formula-det"
+            ["latexsnipper-formula-rec.zip"]="formula-rec"
+            ["latexsnipper-text-det.zip"]="text-det"
+            ["latexsnipper-text-rec.zip"]="text-rec"
+            ["latexsnipper-table-det.zip"]="table-det"
+            ["latexsnipper-table-struct.zip"]="table-struct"
+          )
 
+          for zip_name in "${!ZIPS[@]}"; do
+            cat="${ZIPS[$zip_name]}"
             URL="https://github.com/strangelion/latexsnipper-core/releases/download/$BASE_TAG/$zip_name"
-            echo "Downloading $zip_name..."
+            echo "Downloading $zip_name -> models/$cat/ ..."
             curl -fsSL -o "$zip_name" "$URL" || {
               echo "FAIL: Could not download $zip_name from $BASE_TAG"
-              echo "Ensure the $BASE_TAG release exists with all model assets."
               exit 1
             }
-            unzip -q -o "$zip_name" -d models/
-            rm -f "$zip_name"
+            tmp="$(mktemp -d)"
+            unzip -q -o "$zip_name" -d "$tmp"
+            # Find the variant directory inside the extracted ZIP (e.g. yolov8-mfd/)
+            variant_dir="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
+            variant="$(basename "$variant_dir")"
+            mkdir -p "models/$cat"
+            mv "$variant_dir" "models/$cat/$variant"
+            rm -rf "$tmp" "$zip_name"
+            echo "  OK: models/$cat/$variant"
           done
 
           # Verify all 6 category directories exist
@@ -77,7 +88,6 @@ jobs:
           for cat in formula-det formula-rec text-det text-rec table-det table-struct; do
             if [ -d "models/$cat" ]; then
               count=$((count + 1))
-              echo "  OK: models/$cat"
             fi
           done
           if [ "$count" -ne 6 ]; then

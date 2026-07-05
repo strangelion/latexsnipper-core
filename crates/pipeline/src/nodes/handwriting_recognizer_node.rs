@@ -6,7 +6,9 @@ use latexsnipper_inference::{postprocess_handwriting, recognize_formula, Recogni
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
-use crate::nodes::utils::{get_backend, get_or_create_session, load_config, resolve_model_handle};
+use crate::nodes::utils::{
+    get_backend, get_or_create_session, resolve_model_handle, resolve_variant,
+};
 
 /// Recognizes content in handwriting-detected regions.
 ///
@@ -57,8 +59,9 @@ impl HandwritingRecognizerNode {
             return Ok(());
         }
 
-        let rec_config = match load_config(ctx, models, "formula-rec") {
-            Ok(c) => c,
+        let (rec_config, _primary_path, rec_dir) = match resolve_variant(ctx, models, "formula-rec")
+        {
+            Ok(r) => r,
             Err(_) => {
                 ctx.diagnostic_warn(
                     "recognize_handwriting",
@@ -67,11 +70,6 @@ impl HandwritingRecognizerNode {
                 return Ok(());
             }
         };
-
-        let (_variant_config, rec_dir, _variant_dir) =
-            latexsnipper_model::ModelConfig::find_best(models, "formula-rec").ok_or_else(|| {
-                SnipperError::Model("TrOCR model not found for handwriting recognition".into())
-            })?;
 
         let enc_path = rec_config
             .pipeline_encoder_path(&rec_dir)
