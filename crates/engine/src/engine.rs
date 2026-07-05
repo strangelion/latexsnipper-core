@@ -1,7 +1,7 @@
 use log::info;
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use latexsnipper_ast::*;
 use latexsnipper_foundation::Result;
@@ -18,11 +18,6 @@ use crate::job::JobQueue;
 
 pub use latexsnipper_api_types::{RecognizeMode, RecognizeRequest, RecognizeResponse, StreamItem};
 
-/// Cached session wrapper.
-struct CachedSession {
-    _session: Box<dyn latexsnipper_runtime::InferenceSession>,
-}
-
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 /// Engine only assembles PipelineGraph and runs it — all logic lives in Nodes.
 pub struct SnipperEngine {
@@ -33,7 +28,6 @@ pub struct SnipperEngine {
     job_queue: JobQueue,
     /// Registered model packages for type-safe inference.
     model_packages: HashMap<ModelTask, Arc<dyn ModelPackage>>,
-    _sessions: Mutex<HashMap<String, CachedSession>>,
 }
 
 impl SnipperEngine {
@@ -49,7 +43,6 @@ impl SnipperEngine {
             model_manager,
             job_queue: JobQueue::new(),
             model_packages: HashMap::new(),
-            _sessions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -67,7 +60,6 @@ impl SnipperEngine {
             model_manager,
             job_queue: JobQueue::new(),
             model_packages: HashMap::new(),
-            _sessions: Mutex::new(HashMap::new()),
         }
     }
 

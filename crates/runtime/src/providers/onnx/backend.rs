@@ -108,7 +108,7 @@ impl OnnxRuntimeBackend {
         &self,
         model_path: &std::path::Path,
         acceleration: AccelerationMode,
-        max_threads: usize,
+        _max_threads: usize,
     ) -> Result<Arc<Mutex<Session>>> {
         let cache_key = model_path.to_string_lossy().to_string();
 
