@@ -139,7 +139,7 @@ Engine
 | **WASM** | ✅ | parse/render/convert/recognize 绑定 |
 | **CLI** | ✅ | recognize/parse/render/version，文件导出 (`-o output.tex`)，格式提示，隐藏小游戏 (`snipper play`) |
 | **导出** | ✅ | SVG/Text/PDF（printpdf），标题/表格/列表/代码/公式/页面选择 |
-| **表格识别** | ✅ | SLANet+ 表格结构 + PP-DocLayout v3 版式检测 |
+| **表格识别** | ✅ | SLANet+ / TATR 表格结构 + PP-DocLayout v3 版式检测 |
 | **手写识别** | ✅ | 手写检测 + TrOCR 识别 + 后处理（数字/字母混淆修复 + 标点归一化） |
 | **公式布局** | ✅ | LaTeX AST 解析 + 符号级检测 |
 | **多页处理** | ✅ | PDF 解码 + 多页流水线；PDF 渲染通过 pdftoppm/mutool |
@@ -268,25 +268,32 @@ LaTeXSnipper Core 使用 ONNX 模型进行公式检测/识别和文本检测/识
 
 ### 支持的模型
 
-| 模型 | 大小 | 用途 |
-|------|------|------|
-| YOLOv8-MFD | ~66 MB | 公式检测 |
-| TrOCR | ~104 MB | 公式识别（编码器+解码器） |
-| PP-OCRv6 Det | ~7-32 MB | 文本检测（small/medium 版本） |
-| PP-OCRv6 Rec | ~64 MB | 文本识别（18708 字符：中/英/数学/希腊） |
-| SLANet Plus | ~7 MB | 表格结构识别 |
+| 模型 | 大小 | 用途 | 来源 | 许可 |
+|------|------|------|------|------|
+| YOLOv8-MFD | ~66 MB | 公式检测 | [Mathcraft](https://github.com/SakuraMathcraft/LaTeXSnipper) | MIT |
+| TrOCR-DeiT | ~104 MB | 公式识别（编码器+解码器） | [Microsoft TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT |
+| PP-OCRv6 Det | ~10 MB | 文本检测 | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
+| PP-OCRv6 Rec | ~21 MB | 文本识别（18709 字符：中/英/数学/希腊） | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
+| PP-DocLayout v3 | ~13 MB | 文档版式分析（10 类） | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 |
+| TATR Detection | ~34 MB | 表格区域检测（DETR 架构） | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
+| TATR Structure | ~34 MB | 表格结构识别（行列单元格） | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
+| SLANet Plus | ~7 MB | 表格结构识别（替代后端） | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 |
 
 ### 模型目录结构
 
 ```
 models/
-├── formula-det/yolov8-mfd/     # 公式检测
-├── formula-rec/trocr-deit/     # 公式识别
-├── text-det/v6-small/          # 文本检测（轻量版）
-├── text-rec/v6-small/          # 文本识别
-├── table-det/pp-doc-layoutv3/  # 版式检测
-├── table-struct/slanet-plus/   # 表格结构
-└── release_models/             # 发布用模型清单
+├── formula-det/yolov8-mfd/     # 公式检测 — 稳定
+├── formula-rec/trocr-deit/     # 公式识别 — 稳定
+├── text-det/v6-small/          # 文本检测 — 稳定
+├── text-rec/v6-small/          # 文本识别 — 稳定
+├── table-det/
+│   ├── tatr-detection/         # 表格检测 — 实验
+│   └── doclayout-v3/           # 文档版式分析 — 实验
+├── table-struct/
+│   ├── tatr-structure/         # 表格结构 — 实验
+│   └── slanet-plus/            # 表格结构（替代后端）— 实验
+└── doc-ori/                    # 文档方向分类 — 实验
 ```
 
 > 注意：`test-models/` 目录包含正在测试的模型，请勿修改。

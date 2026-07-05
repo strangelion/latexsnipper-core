@@ -227,7 +227,7 @@ Engine
 | **WASM** | ✅ | Full parse/render/convert/recognize bindings with Tract backend |
 | **CLI** | ✅ | recognize/parse/render/version commands, file export, format hints, minigame |
 | **Export** | ✅ | SVG/Text/PDF with printpdf, headings, tables, lists, code, formulas, page selection |
-| **Table Recognition** | ✅ | SLANet+ table structure + PP-DocLayout v3 layout detection |
+| **Table Recognition** | ✅ | SLANet+ / TATR table structure + PP-DocLayout v3 layout detection |
 | **Handwriting** | ✅ | Handwriting detection + TrOCR recognition + postprocessing |
 | **Formula Layout** | ✅ | LaTeX AST parsing + symbol-level detection |
 | **Multi-page** | ✅ | PDF decoding + multi-page pipeline; PDF rendering via pdftoppm/mutool |
@@ -409,7 +409,10 @@ LaTeXSnipper Core uses ONNX models for formula detection/recognition and text de
 | TrOCR-DeiT | ~104 MB | Formula recognition (encoder+decoder) | [Microsoft TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT |
 | PP-OCRv6 Det | ~10 MB | Text detection | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
 | PP-OCRv6 Rec | ~21 MB | Text recognition (18709 chars: CN/EN/math/greek) | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
-| SLANet Plus | ~7 MB | Table structure recognition (cells/rows/cols) | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 |
+| PP-DocLayout v3 | ~13 MB | Document layout analysis (10 categories) | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 |
+| TATR Detection | ~34 MB | Table region detection (DETR-based) | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
+| TATR Structure | ~34 MB | Table structure recognition (rows/cols/cells) | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
+| SLANet Plus | ~7 MB | Table structure recognition (alternative backend) | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 |
 
 ### Model Directory Structure
 
@@ -417,12 +420,15 @@ LaTeXSnipper Core uses ONNX models for formula detection/recognition and text de
 models/
 ├── formula-det/yolov8-mfd/     # Formula detection (YOLOv8) — Stable
 ├── formula-rec/trocr-deit/     # Formula recognition (TrOCR) — Stable
-├── text-det/v6-small/          # Text detection (PP-OCRv6) — Experimental
-├── text-rec/v6-small/          # Text recognition (PP-OCRv6) — Experimental
-├── table-det/tatr-detection/   # Table detection (TATR) — Experimental
-└── table-struct/
-    ├── tatr-structure/         # Table structure (TATR) — Experimental
-    └── slanet-plus/            # Legacy — not included in v2.0.0 release
+├── text-det/v6-small/          # Text detection (PP-OCRv6) — Stable
+├── text-rec/v6-small/          # Text recognition (PP-OCRv6) — Stable
+├── table-det/
+│   ├── tatr-detection/         # Table detection (TATR) — Experimental
+│   └── doclayout-v3/           # Document layout analysis (PP-DocLayout) — Experimental
+├── table-struct/
+│   ├── tatr-structure/         # Table structure (TATR) — Experimental
+│   └── slanet-plus/            # Table structure (SLANet) — Experimental
+└── doc-ori/                    # Document orientation classification — Experimental
 ```
 
 ### Model Support Status
@@ -431,10 +437,13 @@ models/
 |---|---|---|---|
 | YOLOv8-MFD | Stable | Yes | models-v2.0.0 |
 | TrOCR-DeiT | Stable | Yes | models-v2.0.0 |
+| PP-OCRv6 Det (v6-small) | Stable | Yes | models-v2.0.0 |
+| PP-OCRv6 Rec (v6-small) | Stable | Yes | models-v2.0.0 |
+| PP-DocLayout v3 | Experimental | No | models-v2.0.0 |
 | TATR Detection | Experimental | No | models-v2.0.0 |
 | TATR Structure | Experimental | No | models-v2.0.0 |
-| v6-small (text) | Experimental | No | models-v2.0.0 |
-| PP-DocLayout / SLANet+ | Legacy | No | Historical |
+| SLANet Plus | Experimental | No | models-v2.0.0 |
+| PP-LCNet (doc/textline ori) | Experimental | No | test-models only |
 
 > Note: `test-models/` directory contains models under active testing and should not be modified.
 
@@ -510,6 +519,8 @@ This project uses third-party models. Their licenses are listed below for compli
 | TrOCR-DeiT | [microsoft/trocr-base-handwritten](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT | Transformer OCR encoder+decoder |
 | PP-OCRv6 | [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 | Text detection & recognition (v6-small variant) |
 | PP-DocLayout v3 | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 | PicoDet-based document layout analysis, 10 categories |
+| TATR Detection | [microsoft/table-transformer](https://github.com/microsoft/table-transformer) | MIT | DETR-based table region detection |
+| TATR Structure | [microsoft/table-transformer](https://github.com/microsoft/table-transformer) | MIT | DETR-based table structure recognition |
 | SLANet Plus | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 | Table structure recognition, 95.89% TEDS |
 
 **PaddleOCR / PP-Structure** models are developed by [Baidu PaddlePaddle](https://github.com/PaddlePaddle/PaddleOCR) under the Apache-2.0 license.
