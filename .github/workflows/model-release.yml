@@ -286,9 +286,12 @@ jobs:
             |---|---|---|
             | YOLOv8-MFD (formula-det) | Stable | Yes |
             | TrOCR-DeiT (formula-rec) | Stable | Yes |
+            | PP-OCRv6 Det (text-det) | Stable | Yes |
+            | PP-OCRv6 Rec (text-rec) | Stable | Yes |
             | TATR Detection (table-det) | Experimental | No |
             | TATR Structure (table-struct) | Experimental | No |
-            | v6-small (text-det/rec) | Experimental | No |
+            | SLANet Plus (table-struct) | Experimental | No |
+            | PP-DocLayout v3 | Experimental | No |
 
           files: |
             release_assets/*.zip
