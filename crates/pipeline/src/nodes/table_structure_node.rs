@@ -3,7 +3,7 @@ use latexsnipper_ast::Rect;
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_inference::recognize_table_structure;
-use latexsnipper_runtime::{AccelerationMode, InferenceSession};
+use latexsnipper_runtime::InferenceSession;
 
 use crate::artifacts::RecognizedTable;
 use crate::context::PipelineContext;
@@ -88,7 +88,7 @@ impl PipelineNode for TableStructureNode {
         };
 
         // Load backend model if needed
-        let acc = ctx.acceleration.clone();
+        let acc = ctx.acceleration;
         let backend_session: Option<Box<dyn InferenceSession>> =
             (|| -> Option<Box<dyn InferenceSession>> {
                 let model_path = self.backend_model_path(&models)?;

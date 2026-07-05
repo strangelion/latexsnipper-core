@@ -8,7 +8,7 @@ use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, load_keys,
     recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams, TextRecParams,
 };
-use latexsnipper_runtime::{AccelerationMode, RuntimeBackend};
+use latexsnipper_runtime::RuntimeBackend;
 
 use crate::artifacts::RecognizedTable;
 use crate::context::PipelineContext;
@@ -218,7 +218,7 @@ impl TableRecognizerNode {
         }
 
         let handle = resolve_model_handle(ctx, "formula-det", det_path)?;
-        let session = backend.create_session(&handle, ctx.acceleration.clone())?;
+        let session = backend.create_session(&handle, ctx.acceleration)?;
         ctx.cache_session("formula_det", session);
         Ok(ctx.get_session("formula_det"))
     }
@@ -255,7 +255,7 @@ impl TableRecognizerNode {
                     &format!("formula-rec/{}/encoder", variant),
                     enc_path,
                 )?;
-                let s = backend.create_session(&enc_handle, ctx.acceleration.clone())?;
+                let s = backend.create_session(&enc_handle, ctx.acceleration)?;
                 ctx.cache_session("formula_encoder", s);
                 ctx.get_session("formula_encoder").unwrap()
             }
@@ -269,7 +269,7 @@ impl TableRecognizerNode {
                     &format!("formula-rec/{}/decoder", variant),
                     dec_path,
                 )?;
-                let s = backend.create_session(&dec_handle, ctx.acceleration.clone())?;
+                let s = backend.create_session(&dec_handle, ctx.acceleration)?;
                 ctx.cache_session("formula_decoder", s);
                 ctx.get_session("formula_decoder").unwrap()
             }
@@ -310,7 +310,7 @@ impl TableRecognizerNode {
         }
 
         let handle = resolve_model_handle(ctx, "text-rec", rec_path.unwrap())?;
-        let session = backend.create_session(&handle, ctx.acceleration.clone())?;
+        let session = backend.create_session(&handle, ctx.acceleration)?;
         ctx.cache_session("text_rec", session);
         Ok(ctx.get_session("text_rec").map(|s| (s, keys_path)))
     }
@@ -323,8 +323,8 @@ impl TableRecognizerNode {
         let candidates = [
             models.join(format!("text-rec/{}/inference.onnx", variant)),
             models.join(format!("text-rec/{}/model.onnx", variant)),
-            models.join(format!("v6_models/PP-OCRv6_small_rec_infer/inference.onnx")),
-            models.join(format!("v6_models/PP-OCRv6_small_rec_infer/model.onnx")),
+            models.join("v6_models/PP-OCRv6_small_rec_infer/inference.onnx"),
+            models.join("v6_models/PP-OCRv6_small_rec_infer/model.onnx"),
         ];
         candidates.iter().find(|p| p.exists()).cloned()
     }

@@ -230,7 +230,7 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let (det_config, det_model_path, _variant_dir) =
+        let (_det_config, det_model_path, _variant_dir) =
             match resolve_variant(ctx, models, "text-det") {
                 Ok(r) => r,
                 Err(_) => {
