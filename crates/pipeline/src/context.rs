@@ -57,6 +57,10 @@ pub struct PipelineContext {
     pub model_resolver: Option<SharedModelResolver>,
     /// Model packages for type-safe inference (indexed by ModelTask).
     pub model_packages: HashMap<ModelTask, Arc<dyn ModelPackage>>,
+    /// User-requested model variant per category (from EngineConfig).
+    /// Category → variant name, e.g. "formula-det" → "custom-model".
+    /// Nodes should prefer this over auto-discovery when set.
+    pub model_variants: HashMap<String, String>,
     /// Cached ONNX sessions for reuse across nodes.
     pub sessions: HashMap<String, CachedSession>,
     /// Diagnostic events collected during pipeline execution.
@@ -77,6 +81,7 @@ impl PipelineContext {
             backend: None,
             model_resolver: None,
             model_packages: HashMap::new(),
+            model_variants: HashMap::new(),
             sessions: HashMap::new(),
             diagnostics: Vec::new(),
         }

@@ -57,7 +57,7 @@ impl HandwritingRecognizerNode {
             return Ok(());
         }
 
-        let rec_config = match load_config(models, "formula-rec") {
+        let rec_config = match load_config(ctx, models, "formula-rec") {
             Ok(c) => c,
             Err(_) => {
                 ctx.diagnostic_warn(

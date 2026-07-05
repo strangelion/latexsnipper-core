@@ -496,6 +496,20 @@ impl SnipperEngine {
         ctx.backend = Some(self.runtime.clone());
         ctx.model_resolver = self.model_resolver.clone();
 
+        // Inject user-requested model variants from EngineConfig
+        if let Some(v) = &self.config.formula_det_model {
+            ctx.model_variants.insert("formula-det".into(), v.clone());
+        }
+        if let Some(v) = &self.config.formula_rec_model {
+            ctx.model_variants.insert("formula-rec".into(), v.clone());
+        }
+        if let Some(v) = &self.config.text_det_model {
+            ctx.model_variants.insert("text-det".into(), v.clone());
+        }
+        if let Some(v) = &self.config.text_rec_model {
+            ctx.model_variants.insert("text-rec".into(), v.clone());
+        }
+
         // Register model packages with the context
         for (task, package) in &self.model_packages {
             ctx.register_model_package(*task, package.clone());
@@ -548,6 +562,20 @@ impl SnipperEngine {
             ctx.models_dir = Some(self.config.models_dir.clone());
             ctx.backend = Some(self.runtime.clone());
             ctx.model_resolver = self.model_resolver.clone();
+
+            // Inject user-requested model variants
+            if let Some(v) = &self.config.formula_det_model {
+                ctx.model_variants.insert("formula-det".into(), v.clone());
+            }
+            if let Some(v) = &self.config.formula_rec_model {
+                ctx.model_variants.insert("formula-rec".into(), v.clone());
+            }
+            if let Some(v) = &self.config.text_det_model {
+                ctx.model_variants.insert("text-det".into(), v.clone());
+            }
+            if let Some(v) = &self.config.text_rec_model {
+                ctx.model_variants.insert("text-rec".into(), v.clone());
+            }
 
             // Register model packages with the context
             for (task, package) in &self.model_packages {

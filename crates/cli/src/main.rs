@@ -482,6 +482,7 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
                         &cat,
                         &variant.id,
                         expected_sha256,
+                        &variant.files,
                         Some(progress),
                     ) {
                         Ok(path) => {

@@ -47,6 +47,40 @@ pub fn get_pdf_page_info(source: PdfSource) -> Result<Vec<PdfPageInfo>> {
     Ok(pages)
 }
 
+/// RAII guard to ensure temporary files are cleaned up on drop.
+struct TempFileGuard {
+    path: Option<PathBuf>,
+    owns_temp: bool,
+}
+
+impl TempFileGuard {
+    fn file(path: PathBuf) -> Self {
+        Self {
+            path: Some(path),
+            owns_temp: false,
+        }
+    }
+    fn temp(path: PathBuf) -> Self {
+        Self {
+            path: Some(path),
+            owns_temp: true,
+        }
+    }
+    fn path(&self) -> &Path {
+        self.path.as_ref().expect("TempFileGuard empty")
+    }
+}
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        if self.owns_temp {
+            if let Some(ref p) = self.path {
+                let _ = std::fs::remove_file(p);
+            }
+        }
+    }
+}
+
 /// Decode all pages from a PDF source into images.
 ///
 /// Uses external tools (pdftoppm or mutool) for rendering.
@@ -54,7 +88,8 @@ pub fn get_pdf_page_info(source: PdfSource) -> Result<Vec<PdfPageInfo>> {
 /// - `pdftoppm` from poppler-utils
 /// - `mutool` from MuPDF
 pub fn decode_pdf(source: PdfSource, dpi: u32) -> Result<Vec<SnipperImage>> {
-    let (pdf_path, owns_temp) = prepare_pdf_path(source)?;
+    let guard = prepare_pdf_path(source)?;
+    let pdf_path = guard.path().to_path_buf();
 
     let page_info = get_pdf_page_info(PdfSource::File(&pdf_path))?;
     let mut images = Vec::with_capacity(page_info.len());
@@ -64,51 +99,40 @@ pub fn decode_pdf(source: PdfSource, dpi: u32) -> Result<Vec<SnipperImage>> {
             Ok(img) => images.push(img),
             Err(e) => {
                 log::warn!("Failed to render page {}: {}", info.page_number, e);
-                // Return error instead of skipping
                 return Err(e);
             }
         }
     }
 
-    // Only clean up temp files we created, never user files
-    if owns_temp {
-        let _ = std::fs::remove_file(&pdf_path);
-    }
-
+    // Temp file is cleaned up automatically when `guard` drops
     Ok(images)
 }
 
 /// Decode a single page from a PDF source into an image.
 pub fn decode_pdf_page(source: PdfSource, page: u32, dpi: u32) -> Result<SnipperImage> {
-    let (pdf_path, owns_temp) = prepare_pdf_path(source)?;
+    let guard = prepare_pdf_path(source)?;
+    let pdf_path = guard.path().to_path_buf();
 
     let result = crate::pdf_render::render_pdf_page(&pdf_path, page, dpi);
 
-    // Only clean up temp files we created, never user files
-    if owns_temp {
-        let _ = std::fs::remove_file(&pdf_path);
-    }
-
+    // Temp file cleaned up on guard drop
     result
 }
 
-/// Create a unique temporary file name to avoid collisions between concurrent PDF operations.
-fn create_unique_temp_pdf(bytes: &[u8]) -> Result<(PathBuf, bool)> {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let tmp_path = std::env::temp_dir().join(format!("latexsnipper-pdf-{}.pdf", stamp));
-    std::fs::write(&tmp_path, bytes)
-        .map_err(|e| SnipperError::Image(format!("Failed to write temp PDF: {}", e)))?;
-    Ok((tmp_path, true))
-}
-
-/// Prepare a PDF path from the source, tracking whether we own a temp file.
-fn prepare_pdf_path(source: PdfSource) -> Result<(PathBuf, bool)> {
+/// Prepare a PDF path from the source.
+fn prepare_pdf_path(source: PdfSource) -> Result<TempFileGuard> {
     match source {
-        PdfSource::File(path) => Ok((path.to_path_buf(), false)),
-        PdfSource::Memory(bytes) => create_unique_temp_pdf(bytes),
+        PdfSource::File(path) => Ok(TempFileGuard::file(path.to_path_buf())),
+        PdfSource::Memory(bytes) => {
+            let stamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let tmp_path = std::env::temp_dir().join(format!("latexsnipper-pdf-{}.pdf", stamp));
+            std::fs::write(&tmp_path, bytes)
+                .map_err(|e| SnipperError::Image(format!("Failed to write temp PDF: {}", e)))?;
+            Ok(TempFileGuard::temp(tmp_path))
+        }
     }
 }
 

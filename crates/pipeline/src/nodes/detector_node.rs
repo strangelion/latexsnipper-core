@@ -188,7 +188,7 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let det_config = match load_config(models, "formula-det") {
+        let det_config = match load_config(ctx, models, "formula-det") {
             Ok(c) => c,
             Err(_) => {
                 ctx.diagnostic_warn(
@@ -233,7 +233,7 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let det_config = match load_config(models, "text-det") {
+        let det_config = match load_config(ctx, models, "text-det") {
             Ok(c) => c,
             Err(_) => {
                 ctx.diagnostic_warn(
@@ -269,7 +269,7 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let det_config = match load_config(models, "handwriting-det") {
+        let det_config = match load_config(ctx, models, "handwriting-det") {
             Ok(c) => c,
             Err(_) => {
                 ctx.diagnostic_warn(
@@ -310,7 +310,7 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let det_config = match load_config(models, "table-det") {
+        let det_config = match load_config(ctx, models, "table-det") {
             Ok(c) => c,
             Err(_) => {
                 ctx.diagnostic_warn(

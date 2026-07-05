@@ -27,48 +27,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.version_override }}" ]; then
+            TAG="${{ inputs.version_override }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=${TAG#models-v}" >> $GITHUB_OUTPUT
+          echo "Release tag: $TAG"
+
       - name: Verify manifest template exists
         run: |
           if [ ! -f scripts/model-manifest.template.json ]; then
             echo "ERROR: scripts/model-manifest.template.json not found"
             exit 1
           fi
-          echo "Manifest version: $(jq -r .version scripts/model-manifest.template.json)"
-          echo "Categories: $(jq -r '.categories | keys | join(", ")' scripts/model-manifest.template.json)"
+          echo "Manifest template OK"
 
       - name: Package models (Unix)
         run: |
           mkdir -p release_models
+          count=0
           for cat_pair in "formula-det:yolov8-mfd" "formula-rec:trocr-deit" "text-det:v6-small" "text-rec:v6-small" "table-det:tatr-detection" "table-struct:tatr-structure"; do
             IFS=":" read -r cat variant <<< "$cat_pair"
             if [ -d "models/$cat/$variant" ]; then
               cd "models/$cat" && zip -r "../../release_models/latexsnipper-$cat.zip" "$variant/" && cd ../..
-              echo "Packaged: $cat/$variant"
+              count=$((count + 1))
             else
               echo "WARNING: models/$cat/$variant not found, skipping"
             fi
           done
-          echo "--- Release models ---"
-          ls -la release_models/
+          # Assert exactly 6 models were packaged
+          if [ "$count" -ne 6 ]; then
+            echo "FAIL: Only $count/6 model packages built. All 6 categories required."
+            exit 1
+          fi
+          echo "Packaged $count/6 models"
 
-      - name: Generate SHA256SUMS and update manifest
+      - name: Generate SHA256SUMS
         run: |
           cd release_models
+          ls *.zip > /dev/null 2>&1 || { echo "FAIL: No ZIP files found"; exit 1; }
           sha256sum *.zip > SHA256SUMS
-          cat SHA256SUMS
-          # Build a checksums JSON blob from SHA256SUMS
-          echo "Checksums:"
           cat SHA256SUMS
 
       - name: Generate final model-manifest.json with checksums
         run: |
-          jq '.checksums = $ch' \
-            --argjson ch "$(cat release_models/SHA256SUMS | while read hash file; do
-              echo "\"$file\": \"$hash\""
-            done | jq -Rn 'reduce inputs as $i ({}; . + ($i | split(": ") | { (.[0]): .[1] }))' )" \
+          # Parse SHA256SUMS into a JSON object: {"file.zip": "sha256", ...}
+          CHECKSUMS=$(jq -c -Rn '
+            reduce inputs as $line
+              ({};
+               ($line | capture("^(?<sha>[0-9A-Fa-f]{64})\\s+\\*?(?<file>.+)$"))
+               as $m
+               | .[$m.file] = ($m.sha | ascii_downcase)
+              )
+          ' < release_models/SHA256SUMS)
+
+          VERSION="${{ steps.tag.outputs.version }}"
+          TAG="${{ steps.tag.outputs.tag }}"
+          BASE_URL="https://github.com/strangelion/latexsnipper-core/releases/download/$TAG"
+          MIRRORS=$(echo "[\"https://gh.zwy.one/$BASE_URL\",\"https://gh.xxooo.cf/$BASE_URL\"]" | jq -c '.')
+
+          jq \
+            --arg version "$VERSION" \
+            --arg baseUrl "$BASE_URL" \
+            --argjson mirrors "$MIRRORS" \
+            --argjson checksums "$CHECKSUMS" \
+            '.version = $version | .baseUrl = $baseUrl | .mirrors = $mirrors | .checksums = $checksums' \
             scripts/model-manifest.template.json > release_models/model-manifest.json
-          echo "Generated manifest:"
-          jq '.checksums' release_models/model-manifest.json
+
+          echo "Generated manifest checksums:"
+          jq -r '.checksums | to_entries[] | "\(.key): \(.value)"' release_models/model-manifest.json
+          echo "Version: $(jq -r .version release_models/model-manifest.json)"
+          echo "Base URL: $(jq -r .baseUrl release_models/model-manifest.json)"
 
       - name: Upload model assets
         uses: actions/upload-artifact@v4

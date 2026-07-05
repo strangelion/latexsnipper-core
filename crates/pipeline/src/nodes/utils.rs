@@ -12,21 +12,40 @@ pub fn get_backend(ctx: &PipelineContext) -> Result<Arc<dyn RuntimeBackend>> {
         .ok_or_else(|| SnipperError::Runtime("No backend configured".into()))
 }
 
-/// Load model config from the first variant directory under a category.
-/// Uses alphabetical ordering for deterministic selection.
-pub fn load_config(models: &Path, category: &str) -> Result<latexsnipper_model::ModelConfig> {
+/// Load model config from a category.
+/// If ctx specifies a variant for this category, use it directly.
+/// Otherwise, pick the first variant alphabetically (deterministic).
+pub fn load_config(
+    ctx: &PipelineContext,
+    models: &Path,
+    category: &str,
+) -> Result<latexsnipper_model::ModelConfig> {
     let cat_dir = models.join(category);
-    let mut entries: Vec<_> = std::fs::read_dir(&cat_dir)
-        .map_err(|e| SnipperError::Model(format!("Cannot read {}: {}", cat_dir.display(), e)))?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .collect();
-    // Deterministic: sort by name so behavior is stable across filesystems
-    entries.sort_by_key(|a| a.file_name());
-    let variant_dir = entries
-        .first()
-        .ok_or_else(|| SnipperError::Model(format!("No variant in {}", cat_dir.display())))?;
-    latexsnipper_model::ModelConfig::load(&variant_dir.path())
+    let variant_dir = if let Some(variant) = ctx.model_variants.get(category) {
+        let dir = cat_dir.join(variant);
+        if dir.is_dir() {
+            dir
+        } else {
+            return Err(SnipperError::Model(format!(
+                "Requested variant '{}' not found in {}",
+                variant,
+                cat_dir.display()
+            )));
+        }
+    } else {
+        let mut entries: Vec<_> = std::fs::read_dir(&cat_dir)
+            .map_err(|e| SnipperError::Model(format!("Cannot read {}: {}", cat_dir.display(), e)))?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .collect();
+        // Deterministic: sort by name so behavior is stable across filesystems
+        entries.sort_by_key(|a| a.file_name());
+        entries
+            .first()
+            .ok_or_else(|| SnipperError::Model(format!("No variant in {}", cat_dir.display())))?
+            .path()
+    };
+    latexsnipper_model::ModelConfig::load(&variant_dir)
 }
 
 /// Resolve a model handle using the model resolver if available, otherwise fall back to file path.

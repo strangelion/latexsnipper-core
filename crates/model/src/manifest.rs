@@ -5,6 +5,7 @@ use std::path::Path;
 
 /// Model manifest describing available models and their variants.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelManifest {
     pub source_id: String,
     pub source_label: String,
@@ -19,21 +20,37 @@ pub struct ModelManifest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CategoryInfo {
     #[serde(default)]
     pub required: bool,
     pub default: Option<String>,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
     pub variants: Vec<VariantInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VariantInfo {
     pub id: String,
     #[serde(default)]
     pub label: Option<String>,
+    #[serde(default)]
+    pub adapter: Option<String>,
+    #[serde(default)]
+    pub model_type: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub license: Option<String>,
     pub files: Vec<String>,
     #[serde(default)]
     pub zip_file: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 impl ModelManifest {
@@ -120,3 +137,48 @@ impl ModelManifest {
 /// Default manifest URL for the official release.
 pub const DEFAULT_MANIFEST_URL: &str =
     "https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/model-manifest.json";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_camelcase_manifest() {
+        // Verify that the template manifest (camelCase) parses correctly into snake_case fields.
+        let json = r#"{
+            "sourceId": "official",
+            "sourceLabel": "LaTeXSnipper Official",
+            "version": "2.0.0",
+            "baseUrl": "https://example.com",
+            "mirrors": [],
+            "checksums": { "model.zip": "abc123" },
+            "categories": {
+                "formula-det": {
+                    "label": "Formula Detection",
+                    "required": false,
+                    "default": "yolov8-mfd",
+                    "variants": [{
+                        "id": "yolov8-mfd",
+                        "label": "YOLOv8",
+                        "adapter": "yolov8-detection-v1",
+                        "modelType": "yolov8",
+                        "files": ["model.onnx", "config.json"],
+                        "zipFile": "latexsnipper-formula-det.zip",
+                        "notes": "Main formula detector"
+                    }]
+                }
+            }
+        }"#;
+        let manifest = ModelManifest::parse(json).expect("Failed to parse camelCase manifest");
+        assert_eq!(manifest.source_id, "official");
+        assert_eq!(manifest.source_label, "LaTeXSnipper Official");
+        assert_eq!(manifest.version, "2.0.0");
+        let fd = manifest.categories.get("formula-det").unwrap();
+        assert_eq!(fd.default.as_deref(), Some("yolov8-mfd"));
+        assert!(!fd.required);
+        let v = &fd.variants[0];
+        assert_eq!(v.id, "yolov8-mfd");
+        assert_eq!(v.zip_file.as_deref(), Some("latexsnipper-formula-det.zip"));
+        assert!(v.files.contains(&"model.onnx".to_string()));
+    }
+}

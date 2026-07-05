@@ -126,16 +126,17 @@ impl ModelManager {
     /// Note: No SHA-256 verification is performed.
     /// Use `download_with_progress` with an `expected_sha256` for verified downloads.
     pub fn download(&self, url: &str, category: &str, variant: &str) -> Result<PathBuf> {
-        self.download_with_progress(url, category, variant, None, None)
+        self.download_with_progress(url, category, variant, None, &[], None)
     }
 
-    /// Download with progress reporting and SHA-256 integrity verification.
+    /// Download with progress reporting, SHA-256 integrity verification, and file-level validation.
     pub fn download_with_progress(
         &self,
         url: &str,
         category: &str,
         variant: &str,
         expected_sha256: Option<&str>,
+        expected_files: &[String],
         progress: Option<DownloadProgress>,
     ) -> Result<PathBuf> {
         validate_name(category)?;
@@ -143,18 +144,22 @@ impl ModelManager {
 
         let target_dir = self.variant_dir(category, variant);
 
-        // Check if already installed
+        // Check if already installed with all expected files present
         if target_dir.exists()
             && std::fs::read_dir(&target_dir)
                 .map(|mut e| e.next().is_some())
                 .unwrap_or(false)
         {
-            if let Some(ref cb) = progress {
-                cb(DownloadStatus::Complete {
-                    path: target_dir.clone(),
-                });
+            if !expected_files.is_empty() && self.all_files_present(&target_dir, expected_files) {
+                if let Some(ref cb) = progress {
+                    cb(DownloadStatus::Complete {
+                        path: target_dir.clone(),
+                    });
+                }
+                return Ok(target_dir);
             }
-            return Ok(target_dir);
+            // Partial or corrupted installation — re-download
+            let _ = std::fs::remove_dir_all(&target_dir);
         }
 
         // Create temp directory for download
@@ -271,8 +276,24 @@ impl ModelManager {
         std::fs::rename(&extracted_dir, &target_dir)
             .map_err(|e| SnipperError::Model(format!("Failed to move to target: {}", e)))?;
 
-        // Validate installation: target dir must contain at least one model file
-        if !self.dir_contains_model_files(&target_dir) {
+        // Validate installation: check that all expected files exist
+        if !self.all_files_present(&target_dir, expected_files) {
+            let _ = std::fs::remove_dir_all(&target_dir);
+            let missing: Vec<&str> = expected_files
+                .iter()
+                .filter(|f| !target_dir.join(f).exists())
+                .map(|s| s.as_str())
+                .collect();
+            return Err(SnipperError::Model(format!(
+                "Installation validation failed: missing files in {}: {}\n\
+                 The ZIP may have an unexpected directory layout.",
+                target_dir.display(),
+                missing.join(", ")
+            )));
+        }
+
+        // Legacy fallback: at least one model file must exist
+        if expected_files.is_empty() && !self.dir_contains_model_files(&target_dir) {
             let _ = std::fs::remove_dir_all(&target_dir);
             return Err(SnipperError::Model(format!(
                 "Installation validation failed: no model files found in {}.\n\
@@ -373,6 +394,14 @@ impl ModelManager {
             .unwrap_or(false)
     }
 
+    /// Check that all expected files exist in the target directory.
+    fn all_files_present(&self, dir: &Path, expected: &[String]) -> bool {
+        if expected.is_empty() {
+            return true;
+        }
+        expected.iter().all(|f| dir.join(f).exists())
+    }
+
     /// Download models from a manifest.
     ///
     /// If `all` is true, downloads all categories. Otherwise, downloads only `required` ones.
@@ -402,6 +431,7 @@ impl ModelManager {
                         category,
                         &variant.id,
                         expected_sha256,
+                        &variant.files,
                         None,
                     )?;
                     paths.push(path);
