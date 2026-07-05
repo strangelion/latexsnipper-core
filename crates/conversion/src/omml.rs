@@ -60,7 +60,10 @@ fn convert_formula_to_omml(f: &Formula) -> String {
         FormulaSource::MathML(s) => format!("<m:oMath>\n{}\n</m:oMath>", s),
     };
     if f.display_mode {
-        format!("<m:oMathPara>\n<m:oMath>{}\n</m:oMath>\n</m:oMathPara>", content)
+        format!(
+            "<m:oMathPara>\n<m:oMath>{}\n</m:oMath>\n</m:oMathPara>",
+            content
+        )
     } else {
         format!("<m:oMath>{}\n</m:oMath>", content)
     }
@@ -1048,7 +1051,11 @@ mod tests {
     #[test]
     fn test_color() {
         let result = latex_to_omml("\\textcolor{red}{x}");
-        assert!(result.contains("<m:t>x</m:t>"), "color test should contain x: {}", result);
+        assert!(
+            result.contains("<m:t>x</m:t>"),
+            "color test should contain x: {}",
+            result
+        );
     }
 
     // ═══ Comprehensive: Greek Letters ═══
