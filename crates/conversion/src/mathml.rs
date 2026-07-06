@@ -594,18 +594,11 @@ fn cases_to_mathml(content: &str) -> String {
     let rows = split_matrix_rows(content);
     let mut rows_xml = Vec::new();
     for row in &rows {
-        let left = row
-            .first()
-            .map(|s| latex_to_mathml(s.trim()))
-            .unwrap_or_default();
-        let right = row
-            .get(1)
-            .map(|s| latex_to_mathml(s.trim()))
-            .unwrap_or_default();
-        rows_xml.push(format!(
-            "  <mtr><mtd><mrow>{}</mrow></mtd><mtd><mrow>{}</mrow></mtd></mtr>",
-            left, right
-        ));
+        let cells: Vec<String> = row
+            .iter()
+            .map(|cell| format!("<mtd><mrow>{}</mrow></mtd>", latex_to_mathml(cell.trim())))
+            .collect();
+        rows_xml.push(format!("  <mtr>{}</mtr>", cells.join("")));
     }
     format!(
         "<mrow><mo>{{</mo><mtable>\n{}\n</mtable><mo>}}</mo></mrow>",

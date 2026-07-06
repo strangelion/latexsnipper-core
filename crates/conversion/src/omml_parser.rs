@@ -161,6 +161,15 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .collect::<Vec<_>>()
             .join(""),
         "r" => {
+            let cells: Vec<String> = children
+                .iter()
+                .filter(|(t, _)| t == "e")
+                .map(|(_, v)| v.clone())
+                .collect();
+            if !cells.is_empty() {
+                return cells.join(" & ");
+            }
+
             // Extract run properties from rPr and apply them to all nested run content.
             let mut color = String::new();
             let mut bold = false;
@@ -208,8 +217,12 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     _ => result,
                 };
             } else {
-                if italic { result = format!("\\mathit{{{}}}", result); }
-                if bold { result = format!("\\mathbf{{{}}}", result); }
+                if italic {
+                    result = format!("\\mathit{{{}}}", result);
+                }
+                if bold {
+                    result = format!("\\mathbf{{{}}}", result);
+                }
             }
             if !size.is_empty() {
                 result = format!("\\{}{{{}}}", half_points_to_latex_size(&size), result);
@@ -269,16 +282,24 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
         }
         "d" => {
-            let beg = get_child(children, "begChr");
-            let end = get_child(children, "endChr");
+            let (beg, end) = get_delimiter_chars(children);
             let beg = if beg.is_empty() { "(".to_string() } else { beg };
             let end = if end.is_empty() { ")".to_string() } else { end };
             let rows: Vec<String> = children
                 .iter()
+                .filter(|(t, _)| t == "r")
+                .map(|(_, v)| v.clone())
+                .collect();
+            if !rows.is_empty() {
+                return format_delimited_rows(&beg, &end, &rows);
+            }
+
+            let content: Vec<String> = children
+                .iter()
                 .filter(|(t, _)| t == "e")
                 .map(|(_, v)| v.clone())
                 .collect();
-            format!("{}{}{}", beg, rows.join(" \\\\ "), end)
+            format!("{}{}{}", beg, content.join(" \\\\ "), end)
         }
         "bar" => {
             let pos = get_child(children, "pos");
@@ -434,6 +455,49 @@ fn get_child(children: &[(String, String)], tag: &str) -> String {
         .unwrap_or_default()
 }
 
+fn get_delimiter_chars(children: &[(String, String)]) -> (String, String) {
+    let beg = get_child(children, "begChr");
+    let end = get_child(children, "endChr");
+    if !beg.is_empty() || !end.is_empty() {
+        return (beg, end);
+    }
+
+    let dpr = get_child(children, "dPr");
+    let mut chars = dpr.chars();
+    let Some(first) = chars.next() else {
+        return (String::new(), String::new());
+    };
+    let last = chars.next_back().unwrap_or(first);
+    (first.to_string(), last.to_string())
+}
+
+fn format_delimited_rows(beg: &str, end: &str, rows: &[String]) -> String {
+    if beg == "{" && end == "}" && rows.iter().any(|row| row.contains(" & ")) {
+        return format!("\\begin{{cases}} {} \\end{{cases}}", rows.join(" \\\\ "));
+    }
+
+    if let Some(env) = matrix_env_from_delimiters(beg, end) {
+        return format!(
+            "\\begin{{{}}} {} \\end{{{}}}",
+            env,
+            rows.join(" \\\\ "),
+            env
+        );
+    }
+
+    format!("{}{}{}", beg, rows.join(" \\\\ "), end)
+}
+
+fn matrix_env_from_delimiters(beg: &str, end: &str) -> Option<&'static str> {
+    match (beg, end) {
+        ("(", ")") => Some("pmatrix"),
+        ("[", "]") => Some("bmatrix"),
+        ("{", "}") => Some("Bmatrix"),
+        ("|", "|") => Some("vmatrix"),
+        _ => None,
+    }
+}
+
 fn map_nary(chr: &str) -> &str {
     match chr {
         "\u{222B}" | "\u{222E}" => "\\int",
@@ -459,6 +523,48 @@ fn map_accent(chr: &str, content: &str) -> String {
         "\u{0303}" | "\u{02DC}" => format!("\\tilde{{{}}}", content),
         "\u{20D7}" => format!("\\vec{{{}}}", content),
         _ => format!("\\hat{{{}}}", content),
+    }
+}
+
+#[cfg(test)]
+mod structural_tests {
+    use super::*;
+
+    #[test]
+    fn nary_limit_keeps_nested_fraction() {
+        let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:sub><m:sup><m:r><m:t>n</m:t></m:r></m:sup><m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary></m:oMath>"#;
+        let result = parse_omml_to_latex(xml).unwrap();
+        assert!(
+            result.contains("\\sum") && result.contains("\\frac{a}{b}"),
+            "nested nary limit was lost: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn delimited_rows_become_matrix_environment() {
+        let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:d><m:dPr><m:begChr m:val="("/><m:endChr m:val=")"/></m:dPr><m:r><m:e><m:r><m:t>a</m:t></m:r></m:e><m:e><m:r><m:t>b</m:t></m:r></m:e></m:r><m:r><m:e><m:r><m:t>c</m:t></m:r></m:e><m:e><m:r><m:t>d</m:t></m:r></m:e></m:r></m:d></m:oMath>"#;
+        let result = parse_omml_to_latex(xml).unwrap();
+        assert!(
+            result.contains("\\begin{pmatrix}")
+                && result.contains("a & b")
+                && result.contains("c & d"),
+            "matrix row or column boundaries were lost: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn delimited_brace_rows_become_cases_environment() {
+        let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:d><m:dPr><m:begChr m:val="{"/><m:endChr m:val="}"/></m:dPr><m:r><m:e><m:r><m:t>x</m:t></m:r></m:e><m:e><m:r><m:t>a</m:t></m:r></m:e><m:e><m:r><m:t>b</m:t></m:r></m:e></m:r><m:r><m:e><m:r><m:t>y</m:t></m:r></m:e><m:e><m:r><m:t>c</m:t></m:r></m:e><m:e><m:r><m:t>d</m:t></m:r></m:e></m:r></m:d></m:oMath>"#;
+        let result = parse_omml_to_latex(xml).unwrap();
+        assert!(
+            result.contains("\\begin{cases}")
+                && result.contains("x & a & b")
+                && result.contains("y & c & d"),
+            "cases row or extra column boundaries were lost: {}",
+            result
+        );
     }
 }
 

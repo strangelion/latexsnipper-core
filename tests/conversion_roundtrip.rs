@@ -379,6 +379,11 @@ fn inline_style_preservation() {
     let omml = DocumentConverter::convert_latex_string(latex, OutputFormat::OMML).unwrap();
     assert!(omml.contains("<m:r>"), "OMML missing math runs: {}", omml);
     assert!(omml.contains("<m:t>"), "OMML missing text: {}", omml);
+    assert!(
+        omml.contains("<w:sz w:val=\"29\"/>"),
+        "OMML lost inline font size: {}",
+        omml
+    );
 
     let typst = DocumentConverter::convert_latex_string(latex, OutputFormat::Typst).unwrap();
     assert!(
@@ -418,8 +423,99 @@ fn inline_style_preservation() {
     let latex_from_omml =
         DocumentConverter::convert_omml_string(&omml, OutputFormat::Latex).unwrap();
     assert!(
-        latex_from_omml.contains("a+\\textcolor{FF0000}{x}+\\mathbf{y}+\\mathbb{R}+z"),
-        "OMML roundtrip lost formula content: {}",
+        latex_from_omml.contains("\\textcolor{FF0000}{x}"),
+        "OMML roundtrip lost inline color: {}",
         latex_from_omml
+    );
+    assert!(
+        latex_from_omml.contains("\\mathbf{y}"),
+        "OMML roundtrip lost inline bold: {}",
+        latex_from_omml
+    );
+    assert!(
+        latex_from_omml.contains("\\mathbb{R}"),
+        "OMML roundtrip lost blackboard style: {}",
+        latex_from_omml
+    );
+    assert!(
+        latex_from_omml.contains("\\Large{z}"),
+        "OMML roundtrip lost inline font size: {}",
+        latex_from_omml
+    );
+}
+
+#[test]
+fn structural_formula_preservation_sentinels() {
+    let cases = r"\begin{cases}x&a&b\\y&c&d\end{cases}";
+    let mathml = DocumentConverter::convert_latex_string(cases, OutputFormat::MathML).unwrap();
+    for value in ["a", "b", "c", "d"] {
+        assert!(
+            mathml.contains(&format!("<mi>{}</mi>", value)),
+            "MathML lost a cases column '{}': {}",
+            value,
+            mathml
+        );
+    }
+
+    let omml = DocumentConverter::convert_latex_string(cases, OutputFormat::OMML).unwrap();
+    for value in ["a", "b", "c", "d"] {
+        assert!(
+            omml.contains(&format!("<m:t>{}</m:t>", value)),
+            "OMML lost a cases column '{}': {}",
+            value,
+            omml
+        );
+    }
+
+    let styled = r"\mathbf{\frac{a}{b}}";
+    let styled_omml = DocumentConverter::convert_latex_string(styled, OutputFormat::OMML).unwrap();
+    assert!(
+        styled_omml.contains("<m:f>") && styled_omml.contains("<m:sty m:val=\"b\"/>"),
+        "OMML lost nested style structure: {}",
+        styled_omml
+    );
+
+    let color_bold = r"\textcolor{red}{\mathbf{x}}";
+    let color_bold_omml =
+        DocumentConverter::convert_latex_string(color_bold, OutputFormat::OMML).unwrap();
+    assert!(
+        color_bold_omml.contains("<w:color w:val=\"FF0000\"/>")
+            && color_bold_omml.contains("<m:sty m:val=\"b\"/>"),
+        "OMML lost combined color/bold formatting: {}",
+        color_bold_omml
+    );
+    let color_bold_latex =
+        DocumentConverter::convert_omml_string(&color_bold_omml, OutputFormat::Latex).unwrap();
+    assert!(
+        color_bold_latex.contains("\\textcolor{FF0000}{\\mathbf{x}}")
+            || color_bold_latex.contains("\\mathbf{\\textcolor{FF0000}{x}}"),
+        "OMML roundtrip lost combined color/bold formatting: {}",
+        color_bold_latex
+    );
+
+    let size_bold = r"\Large{\mathbf{x}}";
+    let size_bold_omml =
+        DocumentConverter::convert_latex_string(size_bold, OutputFormat::OMML).unwrap();
+    assert!(
+        size_bold_omml.contains("<w:sz w:val=\"29\"/>")
+            && size_bold_omml.contains("<m:sty m:val=\"b\"/>"),
+        "OMML lost combined size/bold formatting: {}",
+        size_bold_omml
+    );
+    let size_bold_latex =
+        DocumentConverter::convert_omml_string(&size_bold_omml, OutputFormat::Latex).unwrap();
+    assert!(
+        size_bold_latex.contains("\\Large{\\mathbf{x}}")
+            || size_bold_latex.contains("\\mathbf{\\Large{x}}"),
+        "OMML roundtrip lost combined size/bold formatting: {}",
+        size_bold_latex
+    );
+
+    let nary = r"\sum_{\frac{a}{b}}^{n} x";
+    let nary_omml = DocumentConverter::convert_latex_string(nary, OutputFormat::OMML).unwrap();
+    assert!(
+        nary_omml.contains("<m:sub><m:f>"),
+        "OMML flattened nested n-ary limit: {}",
+        nary_omml
     );
 }

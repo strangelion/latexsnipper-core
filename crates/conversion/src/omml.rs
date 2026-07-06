@@ -169,7 +169,9 @@ fn ast_to_omml(node: &LatexNode) -> String {
                         let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                         return format!(
                             "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
-                            sym, flat_text_run(sub), flat_text_run(exp)
+                            sym,
+                            nary_limit_omml(sub),
+                            nary_limit_omml(exp)
                         );
                     }
                 }
@@ -181,7 +183,8 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                     return format!(
                         "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
-                        sym, flat_text_run(exp)
+                        sym,
+                        nary_limit_omml(exp)
                     );
                 }
             }
@@ -203,7 +206,8 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let sym = map_large_op(&cmd).unwrap_or(name.as_str());
                     return format!(
                         "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
-                        sym, flat_text_run(sub)
+                        sym,
+                        nary_limit_omml(sub)
                     );
                 }
             }
@@ -233,15 +237,14 @@ fn ast_to_omml(node: &LatexNode) -> String {
 
         LatexNode::FontModifier { font, content } => {
             let inner = ast_to_omml(content);
-            let text = xml_escape(&extract_text_from_omml(&inner));
             match font.as_str() {
-                "mathbf" | "boldsymbol" | "bm" => wrap_with_math_style(&text, "b"),
-                "mathbb" => wrap_with_math_style(&text, "d"),
-                "mathcal" => wrap_with_math_style(&text, "c"),
-                "mathfrak" => wrap_with_math_style(&text, "f"),
-                "mathit" | "mathnormal" => wrap_with_math_style(&text, "i"),
-                "mathsf" => wrap_with_math_style(&text, "s"),
-                "mathtt" => wrap_with_math_style(&text, "t"),
+                "mathbf" | "boldsymbol" | "bm" => wrap_omml_runs_with_math_style(&inner, "b"),
+                "mathbb" => wrap_omml_runs_with_math_style(&inner, "d"),
+                "mathcal" => wrap_omml_runs_with_math_style(&inner, "c"),
+                "mathfrak" => wrap_omml_runs_with_math_style(&inner, "f"),
+                "mathit" | "mathnormal" => wrap_omml_runs_with_math_style(&inner, "i"),
+                "mathsf" => wrap_omml_runs_with_math_style(&inner, "s"),
+                "mathtt" => wrap_omml_runs_with_math_style(&inner, "t"),
                 "mathrm" => wrap_mtext(&extract_text_from_omml(&inner)),
                 _ => inner,
             }
@@ -513,40 +516,9 @@ fn is_large_op(name: &str) -> bool {
     )
 }
 
-/// Extract plain text from an AST node for use in nary sub/sup positions.
-/// Flattens nested structures to simple text runs.
-fn flatten_to_text(node: &LatexNode) -> String {
-    match node {
-        LatexNode::Text(s) => s.clone(),
-        LatexNode::Greek(name) => map_greek_unicode(name).to_string(),
-        LatexNode::Symbol(name) => {
-            let key = format!("\\{}", name);
-            map_symbol_unicode(&key)
-                .or_else(|| map_omml_symbol(&key))
-                .unwrap_or(name)
-                .to_string()
-        }
-        LatexNode::Group(nodes) => nodes.iter().map(flatten_to_text).collect(),
-        LatexNode::Sequence(nodes) => nodes.iter().map(flatten_to_text).collect(),
-        LatexNode::Subscript { base, sub } => {
-            format!("{}{}", flatten_to_text(base), flatten_to_text(sub))
-        }
-        LatexNode::Superscript { base, exp } => {
-            format!("{}{}", flatten_to_text(base), flatten_to_text(exp))
-        }
-        LatexNode::Math { content, .. } => content.iter().map(flatten_to_text).collect(),
-        _ => String::new(),
-    }
-}
-
-/// Render nary sub/sup content as flat text runs (avoids nested math in Word)
-fn flat_text_run(node: &LatexNode) -> String {
-    let text = flatten_to_text(node);
-    if text.is_empty() {
-        String::new()
-    } else {
-        wrap_mtext(&text)
-    }
+/// Render nary sub/sup content as OMML while preserving nested math structure.
+fn nary_limit_omml(node: &LatexNode) -> String {
+    ast_to_omml(node)
 }
 
 fn wrap_mtext(text: &str) -> String {
@@ -614,28 +586,23 @@ fn map_greek_unicode(name: &str) -> &str {
 }
 
 fn wrap_with_color(omml_content: &str, hex: &str) -> String {
-    // Inject color into bare <m:r><m:t> runs
     let color_tag = format!("<w:color w:val=\"{}\"/>", hex);
-    if omml_content.contains(&color_tag) {
+    wrap_omml_runs_with_word_rpr(omml_content, &color_tag)
+}
+
+/// Apply a math style to every text run inside an OMML fragment without flattening structures.
+fn wrap_omml_runs_with_math_style(omml_content: &str, style: &str) -> String {
+    let style_tag = format!("<m:sty m:val=\"{}\"/>", style);
+    if omml_content.contains(&style_tag) {
         return omml_content.to_string();
     }
 
-    let bare_run = "<m:r><m:t>";
-    if omml_content.contains(bare_run) {
-        omml_content.replace(bare_run, &format!("<m:r><m:rPr><w:rPr>{}</w:rPr></m:rPr><m:t>", color_tag))
-    } else {
-        omml_content.to_string()
-    }
-}
-
-/// Wrap a text string with a math style (<m:sty m:val="X"/>) inside <m:r>.
-/// Style values: b=bold, d=double-struck(mathbb), c=script(mathcal),
-/// f=fraktur(mathfrak), i=italic(mathit), s=sans-serif(mathsf), t=monospace(mathtt)
-fn wrap_with_math_style(text: &str, style: &str) -> String {
-    format!(
-        "<m:r><m:rPr><m:sty m:val=\"{}\"/></m:rPr><m:t>{}</m:t></m:r>",
-        style, text
-    )
+    omml_content
+        .replace("<m:r><m:rPr>", &format!("<m:r><m:rPr>{}", style_tag))
+        .replace(
+            "<m:r><m:t>",
+            &format!("<m:r><m:rPr>{}</m:rPr><m:t>", style_tag),
+        )
 }
 
 fn wrap_with_bold(omml_content: &str) -> String {
@@ -646,8 +613,23 @@ fn wrap_with_underline(omml_content: &str) -> String {
     omml_content.to_string()
 }
 
-fn wrap_with_size(omml_content: &str, _half_points: u16) -> String {
-    omml_content.to_string()
+fn wrap_with_size(omml_content: &str, half_points: u16) -> String {
+    let size_tag = format!("<w:sz w:val=\"{}\"/>", half_points);
+    wrap_omml_runs_with_word_rpr(omml_content, &size_tag)
+}
+
+fn wrap_omml_runs_with_word_rpr(omml_content: &str, word_rpr_tag: &str) -> String {
+    if omml_content.contains(word_rpr_tag) {
+        return omml_content.to_string();
+    }
+
+    let word_rpr = format!("<w:rPr>{}</w:rPr>", word_rpr_tag);
+    omml_content
+        .replace("<m:r><m:rPr>", &format!("<m:r><m:rPr>{}", word_rpr))
+        .replace(
+            "<m:r><m:t>",
+            &format!("<m:r><m:rPr>{}</m:rPr><m:t>", word_rpr),
+        )
 }
 
 fn latex_size_to_half_points(name: &str) -> u16 {
@@ -727,11 +709,17 @@ fn matrix_to_omml(rows: &[Vec<LatexNode>], env: &str) -> String {
 fn cases_to_omml(rows: &[Vec<LatexNode>]) -> String {
     let mut rows_xml = Vec::new();
     for row in rows {
-        let left = row.first().map(ast_to_omml).unwrap_or_default();
-        let right = row.get(1).map(ast_to_omml).unwrap_or_default();
+        let cells: Vec<String> = row
+            .iter()
+            .map(|cell| format!("    <m:e>{}</m:e>", ast_to_omml(cell)))
+            .collect();
         rows_xml.push(format!(
-            "  <m:r>\n    <m:e>{}</m:e>\n    <m:e>{}</m:e>\n  </m:r>",
-            left, right
+            "  <m:r>\n{}\n  </m:r>",
+            if cells.is_empty() {
+                "    <m:e></m:e>".to_string()
+            } else {
+                cells.join("\n")
+            }
         ));
     }
     format!(
@@ -1071,6 +1059,18 @@ mod tests {
     }
 
     #[test]
+    fn cases_keeps_extra_columns() {
+        let result = latex_to_omml("\\begin{cases}x&a&b\\\\y&c&d\\end{cases}");
+        for value in ["a", "b", "c", "d"] {
+            assert!(
+                result.contains(&format!("<m:t>{}</m:t>", value)),
+                "cases column was dropped: {}",
+                result
+            );
+        }
+    }
+
+    #[test]
     fn test_color() {
         let result = latex_to_omml("\\textcolor{red}{x}");
         assert!(
@@ -1262,6 +1262,17 @@ mod tests {
     }
 
     #[test]
+    fn mathbf_keeps_nested_fraction_structure() {
+        let r = latex_to_omml("\\mathbf{\\frac{a}{b}}");
+        assert!(r.contains("<m:f>"), "fraction was flattened: {}", r);
+        assert!(
+            r.contains("<m:sty m:val=\"b\"/>"),
+            "bold math style missing from nested runs: {}",
+            r
+        );
+    }
+
+    #[test]
     fn boldsymbol() {
         let r = latex_to_omml("\\boldsymbol{\\alpha}");
         assert!(r.contains("α"), "alpha missing: {}", r);
@@ -1318,6 +1329,18 @@ mod tests {
         let ast = parse_latex("\\int_{0}^{\\infty} f(x) dx");
         let omml = ast_to_omml(&ast);
         assert!(omml.contains("<m:nary>"), "nary: {}", omml);
+    }
+
+    #[test]
+    fn ast_omml_nary_limit_keeps_nested_fraction() {
+        let ast = parse_latex("\\sum_{\\frac{a}{b}}^{n} x");
+        let omml = ast_to_omml(&ast);
+        assert!(omml.contains("<m:nary>"), "nary: {}", omml);
+        assert!(
+            omml.contains("<m:sub><m:f>"),
+            "nested fraction in nary subscript was flattened: {}",
+            omml
+        );
     }
 
     #[test]
