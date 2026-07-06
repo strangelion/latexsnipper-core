@@ -1,4 +1,5 @@
 use crate::artifacts::PipelineArtifacts;
+use crate::opendoc_hybrid::DocumentParseMode;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::{
@@ -69,6 +70,9 @@ pub struct PipelineContext {
     pub sessions: HashMap<String, CachedSession>,
     /// Diagnostic events collected during pipeline execution.
     pub diagnostics: Vec<DiagnosticEvent>,
+    /// Document parsing mode (SpecializedStable, OpenOcrText, OpenDocHybrid).
+    /// Controls which models and heuristics are used during pipeline execution.
+    pub parse_mode: DocumentParseMode,
 }
 
 impl PipelineContext {
@@ -90,6 +94,7 @@ impl PipelineContext {
             max_threads: 4,
             sessions: HashMap::new(),
             diagnostics: Vec::new(),
+            parse_mode: DocumentParseMode::default(),
         }
     }
 

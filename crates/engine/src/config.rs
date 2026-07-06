@@ -1,3 +1,4 @@
+use latexsnipper_pipeline::DocumentParseMode;
 use latexsnipper_runtime::AccelerationMode;
 use std::path::PathBuf;
 
@@ -14,6 +15,9 @@ pub struct EngineConfig {
     pub text_det_model: Option<String>,
     pub text_rec_model: Option<String>,
     pub doc_ori_model: Option<String>,
+
+    /// Document parsing mode.
+    pub parse_mode: DocumentParseMode,
 }
 
 impl Default for EngineConfig {
@@ -27,6 +31,7 @@ impl Default for EngineConfig {
             text_det_model: None,
             text_rec_model: None,
             doc_ori_model: None,
+            parse_mode: DocumentParseMode::default(),
         }
     }
 }
@@ -61,6 +66,12 @@ impl EngineConfig {
     /// Set formula recognition model variant.
     pub fn set_formula_rec(mut self, variant: &str) -> Self {
         self.formula_rec_model = Some(variant.to_string());
+        self
+    }
+
+    /// Set document parsing mode.
+    pub fn set_parse_mode(mut self, mode: DocumentParseMode) -> Self {
+        self.parse_mode = mode;
         self
     }
 }

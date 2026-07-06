@@ -572,6 +572,7 @@ impl SnipperEngine {
         ctx.model_resolver = self.model_resolver.clone();
         ctx.acceleration = self.config.acceleration;
         ctx.max_threads = self.config.max_threads;
+        ctx.parse_mode = self.config.parse_mode;
         if let Some(v) = &self.config.formula_det_model {
             ctx.model_variants.insert("formula-det".into(), v.clone());
         }

@@ -4,6 +4,7 @@ pub mod graph;
 pub mod manifest;
 pub mod node;
 pub mod nodes;
+pub mod opendoc_hybrid;
 pub mod reading_order;
 pub mod region_graph;
 pub mod text_recognition_service;
@@ -14,6 +15,7 @@ pub mod text_recognition_service;
 pub mod sdk;
 pub mod simple;
 
+pub use crate::opendoc_hybrid::DocumentParseMode;
 pub use artifacts::{CropRegion, PipelineArtifacts, RecognizedTable};
 pub use context::PipelineContext;
 pub use graph::PipelineGraph;
