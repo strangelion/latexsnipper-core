@@ -4,17 +4,12 @@ use std::fmt;
 use std::path::Path;
 
 /// DBNet output box type: quad (4-point polygon) or poly (full contour).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DbNetBoxType {
+    #[default]
     Quad,
     Poly,
-}
-
-impl Default for DbNetBoxType {
-    fn default() -> Self {
-        Self::Quad
-    }
 }
 
 impl fmt::Display for DbNetBoxType {
@@ -27,17 +22,12 @@ impl fmt::Display for DbNetBoxType {
 }
 
 /// DBNet box score calculation mode: fast (bounding-box mask) or slow (polygon mask).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DbNetScoreMode {
+    #[default]
     Fast,
     Slow,
-}
-
-impl Default for DbNetScoreMode {
-    fn default() -> Self {
-        Self::Fast
-    }
 }
 
 impl fmt::Display for DbNetScoreMode {
@@ -50,17 +40,12 @@ impl fmt::Display for DbNetScoreMode {
 }
 
 /// CTC output tensor layout: ntc (batch, time, channel) or tnc (time, batch, channel).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CtcOutputLayout {
+    #[default]
     Ntc,
     Tnc,
-}
-
-impl Default for CtcOutputLayout {
-    fn default() -> Self {
-        Self::Ntc
-    }
 }
 
 impl fmt::Display for CtcOutputLayout {
@@ -73,18 +58,13 @@ impl fmt::Display for CtcOutputLayout {
 }
 
 /// Type of logits in CTC output tensor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogitsKind {
+    #[default]
     Logits,
     Probabilities,
     LogProbabilities,
-}
-
-impl Default for LogitsKind {
-    fn default() -> Self {
-        Self::Logits
-    }
 }
 
 impl fmt::Display for LogitsKind {
