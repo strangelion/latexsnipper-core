@@ -25,17 +25,12 @@ use crate::nodes::{layout_node::LayoutNode, region_resolve_node::RegionResolveNo
 /// - `OpenDocHybrid`: runs layout analysis as a frontend (PP-DocLayout),
 ///   routes regions to specialized recognizers based on layout label.
 ///   Falls back to SpecializedStable if layout model is unavailable.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DocumentParseMode {
+    #[default]
     SpecializedStable,
     OpenOcrText,
     OpenDocHybrid,
-}
-
-impl Default for DocumentParseMode {
-    fn default() -> Self {
-        Self::SpecializedStable
-    }
 }
 
 impl DocumentParseMode {

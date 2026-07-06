@@ -244,7 +244,7 @@ impl RegionGraph {
                     }
                 }
                 // If not in a cell, check if inside table rect
-                if child_assignments.last().map_or(true, |&(ci, _)| ci != i) {
+                if child_assignments.last().is_none_or(|&(ci, _)| ci != i) {
                     for &tbl_idx in &table_ids {
                         let tbl_rect = resolved[tbl_idx].candidate.rect;
                         if contains_ratio(&tbl_rect, &rect) > 0.5 {

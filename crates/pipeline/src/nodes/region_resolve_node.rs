@@ -102,7 +102,7 @@ impl PipelineNode for RegionResolveNode {
             .iter()
             .enumerate()
             .filter(|(i, _)| {
-                ctx.artifacts.resolved_regions.get(*i).map_or(true, |r| {
+                ctx.artifacts.resolved_regions.get(*i).is_none_or(|r| {
                     r.owner != crate::region_graph::RegionOwner::Discarded
                 })
             })
@@ -118,7 +118,7 @@ impl PipelineNode for RegionResolveNode {
             .iter()
             .enumerate()
             .filter(|(i, _)| {
-                ctx.artifacts.resolved_regions.get(*i).map_or(true, |r| {
+                ctx.artifacts.resolved_regions.get(*i).is_none_or(|r| {
                     r.owner != crate::region_graph::RegionOwner::Discarded
                 })
             })
