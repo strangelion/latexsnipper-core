@@ -418,7 +418,7 @@ fn inline_style_preservation() {
     let latex_from_omml =
         DocumentConverter::convert_omml_string(&omml, OutputFormat::Latex).unwrap();
     assert!(
-        latex_from_omml.contains("a+x+\\mathbf{y}+\\mathbb{R}+z"),
+        latex_from_omml.contains("a+\\textcolor{FF0000}{x}+\\mathbf{y}+\\mathbb{R}+z"),
         "OMML roundtrip lost formula content: {}",
         latex_from_omml
     );

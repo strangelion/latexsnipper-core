@@ -328,7 +328,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             if cells.len() <= 1 {
                 cells.first().cloned().unwrap_or_default()
             } else {
-                cells.join("")
+                cells.join(" & ")
             }
         }
         "e" | "sub" | "sup" | "num" | "den" | "deg" | "limLow" | "limUpp" => children

@@ -613,8 +613,19 @@ fn map_greek_unicode(name: &str) -> &str {
     }
 }
 
-fn wrap_with_color(omml_content: &str, _hex: &str) -> String {
-    omml_content.to_string()
+fn wrap_with_color(omml_content: &str, hex: &str) -> String {
+    // Inject color into bare <m:r><m:t> runs
+    let color_tag = format!("<w:color w:val=\"{}\"/>", hex);
+    if omml_content.contains(&color_tag) {
+        return omml_content.to_string();
+    }
+
+    let bare_run = "<m:r><m:t>";
+    if omml_content.contains(bare_run) {
+        omml_content.replace(bare_run, &format!("<m:r><m:rPr><w:rPr>{}</w:rPr></m:rPr><m:t>", color_tag))
+    } else {
+        omml_content.to_string()
+    }
 }
 
 /// Wrap a text string with a math style (<m:sty m:val="X"/>) inside <m:r>.
