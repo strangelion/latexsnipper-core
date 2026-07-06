@@ -1,22 +1,17 @@
 //! Region resolution node — collects all detections into a unified graph,
 //! resolves conflicts, and projects results back into legacy artifact fields.
+//!
+//! Correctly imports existing `region_candidates` (from LayoutNode) and uses
+//! `ArtifactRef` for correct legacy projection (instead of array indexing).
 
 use async_trait::async_trait;
 use latexsnipper_foundation::Result;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
-use crate::region_graph::{RegionGraph, RegionKind, RegionProducer};
+use crate::region_graph::{ArtifactRef, RegionCandidate, RegionGraph, RegionKind, RegionProducer};
 
 /// Pipeline node that resolves region conflicts across detectors.
-///
-/// This node runs AFTER all detection nodes and BEFORE recognizer nodes.
-/// It unifies text_detections, formula_detections, table_detections etc.
-/// into a single region graph, resolves overlaps (table > formula > text),
-/// and writes resolved regions into PipelineArtifacts.
-///
-/// Legacy vectors are preserved — downstream recognizers still read from
-/// their original artifact fields during migration.
 pub struct RegionResolveNode {
     name: String,
 }
@@ -45,94 +40,136 @@ impl PipelineNode for RegionResolveNode {
         let page = ctx.current_page;
         let mut graph = RegionGraph::new();
 
-        // ── Step 1: collect all detection candidates ────────────────
+        // ── Step 1a: import pre-existing region_candidates (from LayoutNode) ──
+        for candidate in ctx.artifacts.region_candidates.drain(..) {
+            graph.add_candidate(candidate);
+        }
 
-        for det in &ctx.artifacts.formula_detections {
-            graph.add_detection(
-                det,
-                RegionKind::FormulaDisplay,
-                RegionProducer::FormulaDetector,
+        // ── Step 1b: add detection candidates with ArtifactRef ───────────────
+        for (idx, det) in ctx.artifacts.formula_detections.iter().enumerate() {
+            graph.add_candidate(RegionCandidate {
+                id: 0,
+                kind: RegionKind::FormulaDisplay,
+                rect: det.rect,
+                quad: det.quad,
+                confidence: det.confidence,
+                producer: RegionProducer::FormulaDetector,
                 page,
-            );
+                artifact_ref: ArtifactRef::FormulaDetection(idx),
+            });
         }
-
-        for det in &ctx.artifacts.text_detections {
-            graph.add_detection(
-                det,
-                RegionKind::TextLine,
-                RegionProducer::TextDetector,
+        for (idx, det) in ctx.artifacts.text_detections.iter().enumerate() {
+            graph.add_candidate(RegionCandidate {
+                id: 0,
+                kind: RegionKind::TextLine,
+                rect: det.rect,
+                quad: det.quad,
+                confidence: det.confidence,
+                producer: RegionProducer::TextDetector,
                 page,
-            );
+                artifact_ref: ArtifactRef::TextDetection(idx),
+            });
         }
-
-        for det in &ctx.artifacts.table_detections {
-            graph.add_detection(det, RegionKind::Table, RegionProducer::TableDetector, page);
-        }
-
-        for det in &ctx.artifacts.handwriting_detections {
-            graph.add_detection(
-                det,
-                RegionKind::Unknown,
-                RegionProducer::HandwritingDetector,
+        for (idx, det) in ctx.artifacts.table_detections.iter().enumerate() {
+            graph.add_candidate(RegionCandidate {
+                id: 0,
+                kind: RegionKind::Table,
+                rect: det.rect,
+                quad: det.quad,
+                confidence: det.confidence,
+                producer: RegionProducer::TableDetector,
                 page,
-            );
+                artifact_ref: ArtifactRef::TableDetection(idx),
+            });
+        }
+        for (idx, det) in ctx.artifacts.handwriting_detections.iter().enumerate() {
+            graph.add_candidate(RegionCandidate {
+                id: 0,
+                kind: RegionKind::Unknown,
+                rect: det.rect,
+                quad: det.quad,
+                confidence: det.confidence,
+                producer: RegionProducer::HandwritingDetector,
+                page,
+                artifact_ref: ArtifactRef::HandwritingDetection(idx),
+            });
+        }
+        for (tbl_idx, table) in ctx.artifacts.table_structures.iter().enumerate() {
+            graph.add_candidate(RegionCandidate {
+                id: 0,
+                kind: RegionKind::Table,
+                rect: table.table_rect,
+                quad: None,
+                confidence: 1.0,
+                producer: RegionProducer::TableDetector,
+                page,
+                artifact_ref: ArtifactRef::LayoutRegion(tbl_idx),
+            });
+            for (cell_idx, cell) in table.cells.iter().enumerate() {
+                graph.add_candidate(RegionCandidate {
+                    id: 0,
+                    kind: RegionKind::TableCell,
+                    rect: cell.rect,
+                    quad: None,
+                    confidence: 1.0,
+                    producer: RegionProducer::TableDetector,
+                    page,
+                    artifact_ref: ArtifactRef::TableCell {
+                        table: tbl_idx,
+                        cell: cell_idx,
+                    },
+                });
+            }
         }
 
-        for table in &ctx.artifacts.table_structures {
-            graph.add_table(table, page);
-        }
-
-        // ── Step 2: resolve conflicts ───────────────────────────────
-
+        // ── Step 2: resolve conflicts ───────────────────────────────────────
         let resolved = graph.resolve();
 
-        // Store in artifacts
-        let candidates: Vec<_> = graph.candidates().cloned().collect();
-        ctx.artifacts.region_candidates = candidates;
-        ctx.artifacts.resolved_regions = resolved;
+        // ── Step 3: project back to legacy fields using ArtifactRef ──────────
+        // Collect which formula detection indices were discarded
+        let mut discarded_formula = std::collections::HashSet::new();
+        let mut discarded_text = std::collections::HashSet::new();
 
-        // ── Step 3: project back to legacy fields ───────────────────
-        // This ensures downstream recognizers can still read from their
-        // original artifact vectors during the migration period.
+        for r in &resolved {
+            if r.owner != crate::region_graph::RegionOwner::Discarded {
+                continue;
+            }
+            match r.candidate.artifact_ref {
+                ArtifactRef::FormulaDetection(idx) => {
+                    discarded_formula.insert(idx);
+                }
+                ArtifactRef::TextDetection(idx) => {
+                    discarded_text.insert(idx);
+                }
+                _ => {}
+            }
+        }
 
-        // Filter out text detections that were discarded (overlapped by formula/table)
-        let kept_text: Vec<_> = ctx
-            .artifacts
-            .text_detections
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| {
-                ctx.artifacts
-                    .resolved_regions
-                    .get(*i)
-                    .is_none_or(|r| r.owner != crate::region_graph::RegionOwner::Discarded)
-            })
-            .map(|(_, d)| d.clone())
-            .collect();
-
-        // Replace text detections with only non-discarded ones
-        ctx.artifacts.text_detections = kept_text;
-
-        let kept_formula: Vec<_> = ctx
+        ctx.artifacts.formula_detections = ctx
             .artifacts
             .formula_detections
-            .iter()
+            .drain(..)
             .enumerate()
-            .filter(|(i, _)| {
-                ctx.artifacts
-                    .resolved_regions
-                    .get(*i)
-                    .is_none_or(|r| r.owner != crate::region_graph::RegionOwner::Discarded)
-            })
-            .map(|(_, d)| d.clone())
+            .filter(|(i, _)| !discarded_formula.contains(i))
+            .map(|(_, d)| d)
             .collect();
 
-        ctx.artifacts.formula_detections = kept_formula;
+        ctx.artifacts.text_detections = ctx
+            .artifacts
+            .text_detections
+            .drain(..)
+            .enumerate()
+            .filter(|(i, _)| !discarded_text.contains(i))
+            .map(|(_, d)| d)
+            .collect();
+
+        // ── Step 4: store resolved regions ─────────────────────────────────
+        ctx.artifacts.resolved_regions = resolved;
 
         log::info!(
-            "RegionResolveNode: {} candidates → {} resolved regions",
-            ctx.artifacts.region_candidates.len(),
-            ctx.artifacts.resolved_regions.len(),
+            "RegionResolveNode: discarded {} formula + {} text detections",
+            discarded_formula.len(),
+            discarded_text.len(),
         );
 
         Ok(())

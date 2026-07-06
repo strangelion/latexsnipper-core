@@ -93,6 +93,7 @@ impl LayoutNode {
                         confidence: r.confidence,
                         producer: RegionProducer::LayoutAnalysis,
                         page,
+                        artifact_ref: crate::region_graph::ArtifactRef::LayoutRegion(i),
                     });
                 }
 

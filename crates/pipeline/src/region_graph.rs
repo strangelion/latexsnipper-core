@@ -39,6 +39,18 @@ pub enum RegionProducer {
     LayoutAnalysis,
 }
 
+/// Reference back into the original artifact vector — enables correct
+/// legacy projection without assuming array index ordering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArtifactRef {
+    FormulaDetection(usize),
+    TextDetection(usize),
+    TableDetection(usize),
+    HandwritingDetection(usize),
+    LayoutRegion(usize),
+    TableCell { table: usize, cell: usize },
+}
+
 /// A candidate region before conflict resolution.
 #[derive(Debug, Clone)]
 pub struct RegionCandidate {
@@ -49,6 +61,8 @@ pub struct RegionCandidate {
     pub confidence: f32,
     pub producer: RegionProducer,
     pub page: usize,
+    /// Reference back to the source artifact vector/index.
+    pub artifact_ref: ArtifactRef,
 }
 
 /// Resolved ownership of a region after conflict resolution.
@@ -139,6 +153,13 @@ impl RegionGraph {
         }
     }
 
+    /// Add a pre-existing candidate (from layout analysis or other prior stage).
+    pub fn add_candidate(&mut self, candidate: RegionCandidate) {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.candidates.push(RegionCandidate { id, ..candidate });
+    }
+
     /// Add a detection with a given kind.
     pub fn add_detection(
         &mut self,
@@ -149,6 +170,13 @@ impl RegionGraph {
     ) {
         let id = self.next_id;
         self.next_id += 1;
+        let artifact_ref = match producer {
+            RegionProducer::FormulaDetector => ArtifactRef::FormulaDetection(0),
+            RegionProducer::TextDetector => ArtifactRef::TextDetection(0),
+            RegionProducer::TableDetector => ArtifactRef::TableDetection(0),
+            RegionProducer::HandwritingDetector => ArtifactRef::HandwritingDetection(0),
+            RegionProducer::LayoutAnalysis => ArtifactRef::LayoutRegion(0),
+        };
         self.candidates.push(RegionCandidate {
             id,
             kind,
@@ -157,6 +185,7 @@ impl RegionGraph {
             confidence: det.confidence,
             producer,
             page,
+            artifact_ref,
         });
     }
 
@@ -172,9 +201,10 @@ impl RegionGraph {
             confidence: 1.0,
             producer: RegionProducer::TableDetector,
             page,
+            artifact_ref: ArtifactRef::LayoutRegion(0),
         });
 
-        for cell in &table.cells {
+        for (cell_idx, cell) in table.cells.iter().enumerate() {
             let cell_id = self.next_id;
             self.next_id += 1;
             self.candidates.push(RegionCandidate {
@@ -185,6 +215,10 @@ impl RegionGraph {
                 confidence: 1.0,
                 producer: RegionProducer::TableDetector,
                 page,
+                artifact_ref: ArtifactRef::TableCell {
+                    table: table_id,
+                    cell: cell_idx,
+                },
             });
         }
 
