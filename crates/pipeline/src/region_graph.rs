@@ -65,6 +65,20 @@ pub struct RegionCandidate {
     pub artifact_ref: ArtifactRef,
 }
 
+/// Explicit routing target produced by RegionResolveNode.
+/// Tells each recognizer exactly which regions it should process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecognitionTarget {
+    /// Top-level text region, index into text_detections.
+    TopLevelText { detection_index: usize },
+    /// Top-level formula region, index into formula_detections.
+    TopLevelFormula { detection_index: usize },
+    /// Top-level handwriting region, index into handwriting_detections.
+    TopLevelHandwriting { detection_index: usize },
+    /// Table cell that needs text recognition: (table_index, cell_index).
+    TableCell { table_index: usize, cell_index: usize },
+}
+
 /// Resolved ownership of a region after conflict resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegionOwner {

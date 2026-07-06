@@ -9,7 +9,9 @@ use latexsnipper_foundation::Result;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
-use crate::region_graph::{ArtifactRef, RegionCandidate, RegionGraph, RegionKind, RegionProducer};
+use crate::region_graph::{
+    ArtifactRef, RecognitionTarget, RegionCandidate, RegionGraph, RegionKind, RegionProducer,
+};
 
 /// Pipeline node that resolves region conflicts across detectors.
 pub struct RegionResolveNode {
@@ -125,32 +127,70 @@ impl PipelineNode for RegionResolveNode {
         // ── Step 2: resolve conflicts ───────────────────────────────────────
         let resolved = graph.resolve();
 
-        // ── Step 3: project back to legacy fields using ArtifactRef ──────────
-        // Collect which formula detection indices were discarded
-        let mut discarded_formula = std::collections::HashSet::new();
-        let mut discarded_text = std::collections::HashSet::new();
+        // ── Step 3: build RecognitionTarget list from resolved regions ──────
+        // Only Independent regions become top-level recognition targets.
+        // Child regions (table cell children) are recognized by the table path.
+        let mut targets = Vec::new();
 
         for r in &resolved {
-            if r.owner != crate::region_graph::RegionOwner::Discarded {
+            if r.owner != crate::region_graph::RegionOwner::Independent {
                 continue;
             }
             match r.candidate.artifact_ref {
-                ArtifactRef::FormulaDetection(idx) => {
-                    discarded_formula.insert(idx);
-                }
                 ArtifactRef::TextDetection(idx) => {
-                    discarded_text.insert(idx);
+                    targets.push(RecognitionTarget::TopLevelText {
+                        detection_index: idx,
+                    });
                 }
+                ArtifactRef::FormulaDetection(idx) => {
+                    targets.push(RecognitionTarget::TopLevelFormula {
+                        detection_index: idx,
+                    });
+                }
+                ArtifactRef::HandwritingDetection(idx) => {
+                    targets.push(RecognitionTarget::TopLevelHandwriting {
+                        detection_index: idx,
+                    });
+                }
+                // TableCell targets are added separately for table recognizer
                 _ => {}
             }
         }
+
+        // Add table cell recognition targets (these are handled by TableRecognizerNode)
+        for (tbl_idx, table) in ctx.artifacts.table_structures.iter().enumerate() {
+            for cell_idx in 0..table.cells.len() {
+                targets.push(RecognitionTarget::TableCell {
+                    table_index: tbl_idx,
+                    cell_index: cell_idx,
+                });
+            }
+        }
+
+        // ── Step 4: update legacy artifacts ────────────────────────────────
+        // Filter formula/text detections to only those that are top-level
+        let top_level_formula: std::collections::HashSet<usize> = targets
+            .iter()
+            .filter_map(|t| match t {
+                RecognitionTarget::TopLevelFormula { detection_index } => Some(*detection_index),
+                _ => None,
+            })
+            .collect();
+
+        let top_level_text: std::collections::HashSet<usize> = targets
+            .iter()
+            .filter_map(|t| match t {
+                RecognitionTarget::TopLevelText { detection_index } => Some(*detection_index),
+                _ => None,
+            })
+            .collect();
 
         ctx.artifacts.formula_detections = ctx
             .artifacts
             .formula_detections
             .drain(..)
             .enumerate()
-            .filter(|(i, _)| !discarded_formula.contains(i))
+            .filter(|(i, _)| top_level_formula.contains(i))
             .map(|(_, d)| d)
             .collect();
 
@@ -159,17 +199,17 @@ impl PipelineNode for RegionResolveNode {
             .text_detections
             .drain(..)
             .enumerate()
-            .filter(|(i, _)| !discarded_text.contains(i))
+            .filter(|(i, _)| top_level_text.contains(i))
             .map(|(_, d)| d)
             .collect();
 
-        // ── Step 4: store resolved regions ─────────────────────────────────
+        // ── Step 5: store resolved regions and targets ─────────────────────
         ctx.artifacts.resolved_regions = resolved;
+        ctx.artifacts.recognition_targets = targets;
 
         log::info!(
-            "RegionResolveNode: discarded {} formula + {} text detections",
-            discarded_formula.len(),
-            discarded_text.len(),
+            "RegionResolveNode: {} recognition targets generated",
+            ctx.artifacts.recognition_targets.len(),
         );
 
         Ok(())

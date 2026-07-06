@@ -2,7 +2,7 @@ use latexsnipper_ast::{Block, Rect};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_inference::{DetectionBox, GridCell};
 
-use crate::region_graph::{RegionCandidate, ResolvedRegion};
+use crate::region_graph::{RecognitionTarget, RegionCandidate, ResolvedRegion};
 
 /// Strongly-typed pipeline data artifacts.
 /// Replaces string-keyed metadata for type safety.
@@ -34,6 +34,9 @@ pub struct PipelineArtifacts {
     // Region graph (from region_resolve_node — P4 migration)
     pub region_candidates: Vec<RegionCandidate>,
     pub resolved_regions: Vec<ResolvedRegion>,
+
+    // Routing: what each recognizer should process
+    pub recognition_targets: Vec<RecognitionTarget>,
 }
 
 /// A recognized table with its bounding box and grid cells.
