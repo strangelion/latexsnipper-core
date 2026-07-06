@@ -85,7 +85,7 @@ impl TableRecognizerNode {
         let backend = get_backend(ctx)?;
         let formula_det_session = self.load_formula_det_session(ctx, &*backend, models)?;
         let formula_rec_session = self.load_formula_rec_session(ctx, &*backend, models)?;
-        let text_rec_service = TextRecognitionService::try_load(models);
+        let text_rec_service = ctx.get_or_init_text_rec_service();
 
         let mut table_blocks = Vec::new();
 
@@ -97,7 +97,7 @@ impl TableRecognizerNode {
                     table,
                     &formula_det_session,
                     &formula_rec_session,
-                    text_rec_service.as_ref(),
+                    text_rec_service.as_ref().map(|v| &**v),
                 )
                 .await?
             {

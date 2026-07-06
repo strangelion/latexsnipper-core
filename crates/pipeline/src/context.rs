@@ -1,5 +1,6 @@
 use crate::artifacts::PipelineArtifacts;
 use crate::opendoc_hybrid::DocumentParseMode;
+use crate::text_recognition_service::TextRecognitionService;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::{
@@ -73,6 +74,9 @@ pub struct PipelineContext {
     /// Document parsing mode (SpecializedStable, OpenOcrText, OpenDocHybrid).
     /// Controls which models and heuristics are used during pipeline execution.
     pub parse_mode: DocumentParseMode,
+    /// Shared text recognition service — created once, used by both main text
+    /// and table cell recognition. Respects variant selection, acceleration, and caching.
+    pub text_rec_service: Option<Arc<TextRecognitionService>>,
 }
 
 impl PipelineContext {
@@ -95,7 +99,27 @@ impl PipelineContext {
             sessions: HashMap::new(),
             diagnostics: Vec::new(),
             parse_mode: DocumentParseMode::default(),
+            text_rec_service: None,
         }
+    }
+
+    /// Get or initialize the shared text recognition service.
+    /// Uses ctx.backend, ctx.acceleration, and ctx.model_variants["text-rec"].
+    pub fn get_or_init_text_rec_service(&mut self) -> Option<Arc<TextRecognitionService>> {
+        if self.text_rec_service.is_some() {
+            return self.text_rec_service.clone();
+        }
+        let models_dir = self.models_dir.clone()?;
+        let variant = self.model_variants.get("text-rec").cloned();
+        let service = TextRecognitionService::try_load(
+            &models_dir,
+            variant.as_deref(),
+            self.backend.clone(),
+            self.acceleration,
+        )?;
+        let svc = Arc::new(service);
+        self.text_rec_service = Some(svc.clone());
+        Some(svc)
     }
 
     pub fn with_image(image: SnipperImage) -> Self {

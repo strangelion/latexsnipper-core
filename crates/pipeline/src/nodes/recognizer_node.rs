@@ -329,10 +329,8 @@ impl RecognizerNode {
             return Ok(());
         }
 
-        // Try shared text recognition service first
-        if let Some(service) =
-            crate::text_recognition_service::TextRecognitionService::try_load(models)
-        {
+        // Try shared text recognition service first (context-owned)
+        if let Some(service) = ctx.get_or_init_text_rec_service() {
             let mut blocks = Vec::new();
             if let Some(ref image) = ctx.image {
                 for det in &detections {

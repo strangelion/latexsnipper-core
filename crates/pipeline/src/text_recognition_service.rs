@@ -10,6 +10,7 @@ use latexsnipper_image::operations;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_inference::{load_keys, recognize_text_with_keys, TextRecParams};
 use latexsnipper_runtime::{AccelerationMode, InferenceSession, ModelHandle, RuntimeBackend};
+use std::path::Path;
 use std::sync::Arc;
 
 /// Shared text recognition service.
@@ -26,23 +27,60 @@ pub struct TextRecognitionService {
 impl TextRecognitionService {
     /// Try to load a text recognition model from the given models directory.
     ///
+    /// * `models_dir` — path to the models directory
+    /// * `variant` — optional variant name (e.g. "v6-small", "openocr-mobile").
+    ///   When None, auto-discovers the best available variant.
+    /// * `backend` — optional runtime backend from pipeline context.
+    ///   When None, creates a default CPU backend.
+    /// * `acceleration` — acceleration mode (only used when creating a new backend).
+    ///
     /// Returns `None` when no suitable model is found (caller should skip
     /// gracefully rather than fail).
-    pub fn try_load(models_dir: &std::path::Path) -> Option<Self> {
-        let (config, _model_path, variant_dir) =
-            latexsnipper_model::ModelConfig::find_best(models_dir, "text-rec")?;
+    pub fn try_load(
+        models_dir: &Path,
+        variant: Option<&str>,
+        backend: Option<Arc<dyn RuntimeBackend>>,
+        acceleration: AccelerationMode,
+    ) -> Option<Self> {
+        // Resolve variant
+        let (config, variant_dir) = match variant {
+            Some(v) => {
+                let variant_dir = models_dir.join("text-rec").join(v);
+                if !variant_dir.is_dir() {
+                    return None;
+                }
+                let config = latexsnipper_model::ModelConfig::load(&variant_dir)
+                    .ok()
+                    .or_else(|| {
+                        latexsnipper_model::ModelConfig::from_paddle_inference_dir(&variant_dir)
+                            .ok()
+                    })?;
+                (config, variant_dir)
+            }
+            None => {
+                let (config, _, vd) =
+                    latexsnipper_model::ModelConfig::find_best(models_dir, "text-rec")?;
+                (config, vd)
+            }
+        };
 
         let model_path = config.pipeline_model_path(&variant_dir)?;
 
-        let backend = latexsnipper_runtime::providers::onnx::OnnxRuntimeBackend::new(
-            models_dir.to_path_buf(),
-        )
-        .ok()?;
-
-        let handle = ModelHandle::with_path("text-rec", model_path);
-        let session: Box<dyn InferenceSession> = backend
-            .create_session(&handle, AccelerationMode::Cpu)
-            .ok()?;
+        // Create or use provided backend
+        let session: Box<dyn InferenceSession> = match backend {
+            Some(b) => {
+                let handle = ModelHandle::with_path("text-rec", model_path);
+                b.create_session(&handle, acceleration).ok()?
+            }
+            None => {
+                let b = latexsnipper_runtime::providers::onnx::OnnxRuntimeBackend::new(
+                    models_dir.to_path_buf(),
+                )
+                .ok()?;
+                let handle = ModelHandle::with_path("text-rec", model_path);
+                b.create_session(&handle, acceleration).ok()?
+            }
+        };
 
         let params = TextRecParams::from_config(&config);
 
