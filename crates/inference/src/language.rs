@@ -111,18 +111,18 @@ fn insert_latin_cjk_spaces(text: &str) -> String {
             let cur = chars[i];
             let next = chars[i + 1];
 
-            let should_space = match (char_category(cur), char_category(next)) {
-                (CharCat::Latin, CharCat::CJK)
-                | (CharCat::CJK, CharCat::Latin)
-                | (CharCat::Latin, CharCat::CjkPunct)
-                | (CharCat::CjkPunct, CharCat::Latin)
-                | (CharCat::Digit, CharCat::CJK)
-                | (CharCat::CJK, CharCat::Digit)
-                | (CharCat::Digit, CharCat::Latin)
-                | (CharCat::Punct, CharCat::CJK)
-                | (CharCat::CJK, CharCat::Punct) => true,
-                _ => false,
-            };
+            let should_space = matches!(
+                (char_category(cur), char_category(next)),
+                (CharCat::Latin, CharCat::Cjk)
+                    | (CharCat::Cjk, CharCat::Latin)
+                    | (CharCat::Latin, CharCat::CjkPunct)
+                    | (CharCat::CjkPunct, CharCat::Latin)
+                    | (CharCat::Digit, CharCat::Cjk)
+                    | (CharCat::Cjk, CharCat::Digit)
+                    | (CharCat::Digit, CharCat::Latin)
+                    | (CharCat::Punct, CharCat::Cjk)
+                    | (CharCat::Cjk, CharCat::Punct)
+            );
 
             if should_space {
                 result.push(' ');
@@ -176,7 +176,7 @@ fn normalize_english_text(text: &str) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CharCat {
     Latin,
-    CJK,
+    Cjk,
     Digit,
     Punct,
     CjkPunct,
@@ -195,7 +195,7 @@ fn char_category(ch: char) -> CharCat {
         if is_cjk_punct(ch) {
             CharCat::CjkPunct
         } else {
-            CharCat::CJK
+            CharCat::Cjk
         }
     } else if ch.is_ascii_punctuation() {
         CharCat::Punct

@@ -116,6 +116,7 @@ struct LayoutDetectorExecutor {
 }
 
 impl LayoutDetectorExecutor {
+    #[allow(clippy::unnecessary_unwrap)]
     fn ensure_loaded(&mut self) -> Result<&Arc<Box<dyn InferenceSession>>> {
         if self.session.is_some() {
             return Ok(self.session.as_ref().unwrap());
