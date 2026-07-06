@@ -57,15 +57,11 @@ impl PipelineNode for PostprocessNode {
         // Sort by reading order (y-bucket + x tie-breaker)
         ReadingOrder::sort(&mut blocks, self.y_threshold);
 
-        // Apply language-specific postprocessing to text blocks
+        // Apply language-specific postprocessing recursively to all text blocks.
+        // Recursively handles Paragraph, Heading, Table cells, List, Quote, etc.
+        // Skips Formula and Code blocks.
         for block in &mut blocks {
-            if let latexsnipper_ast::Block::Paragraph(ref mut p) = block {
-                for inline in &mut p.inlines {
-                    if let Inline::Text(ref mut text_run) = inline {
-                        text_run.text = LanguageDetector::postprocess(&text_run.text);
-                    }
-                }
-            }
+            normalize_block_inlines(block);
         }
 
         // Replace artifacts with sorted blocks
@@ -90,5 +86,54 @@ impl PipelineNode for PostprocessNode {
             count
         );
         Ok(())
+    }
+}
+
+/// Recursively apply CJK/Latin spacing normalization to all text inlines
+/// within a block. Skips Formula and Code blocks.
+fn normalize_block_inlines(block: &mut latexsnipper_ast::Block) {
+    use latexsnipper_ast::Block;
+    match block {
+        Block::Paragraph(ref mut p) => normalize_inlines(&mut p.inlines),
+        Block::Heading(ref mut h) => normalize_inlines(&mut h.inlines),
+        Block::Table(ref mut t) => {
+            for row in &mut t.rows {
+                for cell in row.iter_mut() {
+                    normalize_inlines(&mut cell.inlines);
+                }
+            }
+        }
+        Block::List(ref mut list) => {
+            for item in &mut list.items {
+                normalize_inlines(&mut item.inlines);
+            }
+        }
+        Block::Quote(ref mut q) => {
+            for content in &mut q.blocks {
+                normalize_block_inlines(content);
+            }
+        }
+        Block::DescriptionList(ref mut dl) => {
+            for item in &mut dl.items {
+                if let Some(ref mut label) = item.label {
+                    normalize_inlines(label);
+                }
+                for content in &mut item.content {
+                    normalize_block_inlines(content);
+                }
+            }
+        }
+        Block::Handwriting(ref mut hw) => normalize_inlines(&mut hw.inlines),
+        // Formula, CodeBlock, HorizontalRule, etc. — skip
+        _ => {}
+    }
+}
+
+/// Apply LanguageDetector::postprocess to all Text inlines.
+fn normalize_inlines(inlines: &mut [Inline]) {
+    for inline in inlines.iter_mut() {
+        if let Inline::Text(ref mut text_run) = inline {
+            text_run.text = LanguageDetector::postprocess(&text_run.text);
+        }
     }
 }
