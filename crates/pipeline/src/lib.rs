@@ -5,6 +5,7 @@ pub mod manifest;
 pub mod node;
 pub mod nodes;
 pub mod reading_order;
+pub mod region_graph;
 pub mod text_recognition_service;
 #[deprecated(
     since = "1.1.0",
@@ -27,6 +28,7 @@ pub use nodes::page_assembly_node::PageAssemblyNode;
 pub use nodes::page_iterator_node::PageIteratorNode;
 pub use nodes::postprocess_node::PostprocessNode;
 pub use nodes::recognizer_node::RecognizerNode;
+pub use nodes::region_resolve_node::RegionResolveNode;
 pub use nodes::resize_node::ResizeNode;
 pub use nodes::table_recognizer_node::TableRecognizerNode;
 pub use nodes::table_structure_node::TableStructureNode;

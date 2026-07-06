@@ -2,6 +2,8 @@ use latexsnipper_ast::{Block, Rect};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_inference::{DetectionBox, GridCell};
 
+use crate::region_graph::{RegionCandidate, ResolvedRegion};
+
 /// Strongly-typed pipeline data artifacts.
 /// Replaces string-keyed metadata for type safety.
 #[derive(Debug, Clone, Default)]
@@ -28,6 +30,10 @@ pub struct PipelineArtifacts {
 
     // Page-level results (for multi-page)
     pub page_results: Vec<Vec<Block>>,
+
+    // Region graph (from region_resolve_node — P4 migration)
+    pub region_candidates: Vec<RegionCandidate>,
+    pub resolved_regions: Vec<ResolvedRegion>,
 }
 
 /// A recognized table with its bounding box and grid cells.

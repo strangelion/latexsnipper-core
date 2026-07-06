@@ -7,6 +7,7 @@ pub mod page_assembly_node;
 pub mod page_iterator_node;
 pub mod postprocess_node;
 pub mod recognizer_node;
+pub mod region_resolve_node;
 pub mod resize_node;
 pub mod table_recognizer_node;
 pub mod table_structure_node;
