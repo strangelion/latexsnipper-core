@@ -174,6 +174,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             let mut color = String::new();
             let mut bold = false;
             let mut italic = false;
+            let mut normal_text = false;
             let mut size = String::new();
             let mut sty = String::new();
             for (tag, val) in children {
@@ -187,6 +188,9 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                         }
                         if part == "i=1" {
                             italic = true;
+                        }
+                        if part == "nor=1" {
+                            normal_text = true;
                         }
                         if let Some(s) = part.strip_prefix("sz=") {
                             size = s.to_string();
@@ -222,6 +226,9 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 }
                 if bold {
                     result = format!("\\mathbf{{{}}}", result);
+                }
+                if normal_text {
+                    result = format!("\\mathrm{{{}}}", result);
                 }
             }
             if !size.is_empty() {
@@ -281,10 +288,28 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 format!("{}^{{{}}}_{{{}}}{{{}}}", op, sup, sub, body)
             }
         }
+        "func" => {
+            let name = get_child(children, "fName");
+            let arg = get_child(children, "e");
+            let cmd = map_function_name(&name);
+            if arg.is_empty() {
+                cmd
+            } else {
+                format!("{}{{{}}}", cmd, arg)
+            }
+        }
+        "fName" => children
+            .iter()
+            .map(|(_, v)| v.clone())
+            .collect::<Vec<_>>()
+            .join(""),
         "d" => {
             let (beg, end) = get_delimiter_chars(children);
-            let beg = if beg.is_empty() { "(".to_string() } else { beg };
-            let end = if end.is_empty() { ")".to_string() } else { end };
+            let (beg, end) = if beg.is_empty() && end.is_empty() {
+                ("(".to_string(), ")".to_string())
+            } else {
+                (beg, end)
+            };
             let rows: Vec<String> = children
                 .iter()
                 .filter(|(t, _)| t == "r")
@@ -299,7 +324,16 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 .filter(|(t, _)| t == "e")
                 .map(|(_, v)| v.clone())
                 .collect();
-            format!("{}{}{}", beg, content.join(" \\\\ "), end)
+            let joined = content.join(" \\\\ ");
+            if beg == "{" && end.is_empty() && (joined.contains(" & ") || joined.contains("\\\\")) {
+                return format!("\\begin{{cases}} {} \\end{{cases}}", joined);
+            }
+            if let Some(env) = matrix_env_from_delimiters(&beg, &end) {
+                if joined.contains(" & ") || joined.contains("\\\\") {
+                    return format!("\\begin{{{}}} {} \\end{{{}}}", env, joined, env);
+                }
+            }
+            format!("{}{}{}", beg, joined, end)
         }
         "bar" => {
             let pos = get_child(children, "pos");
@@ -311,7 +345,14 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
         }
         "acc" => {
-            let chr = get_child(children, "chr");
+            let chr = {
+                let c = get_child(children, "chr");
+                if c.is_empty() {
+                    get_child(children, "accPr")
+                } else {
+                    c
+                }
+            };
             let content = get_child(children, "e");
             map_accent(&chr, &content)
         }
@@ -340,7 +381,24 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 rows.join(" \\\\ ")
             )
         }
-        "m" | "mRow" => {
+        "m" => {
+            let rows: Vec<String> = children
+                .iter()
+                .filter(|(t, _)| t == "mr" || t == "mRow")
+                .map(|(_, v)| v.clone())
+                .collect();
+            if !rows.is_empty() {
+                rows.join(" \\\\ ")
+            } else {
+                children
+                    .iter()
+                    .filter(|(t, _)| t == "e")
+                    .map(|(_, v)| v.clone())
+                    .collect::<Vec<_>>()
+                    .join(" & ")
+            }
+        }
+        "mr" | "mRow" => {
             let cells: Vec<String> = children
                 .iter()
                 .filter(|(t, _)| t == "e")
@@ -362,6 +420,11 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .map(|(_, v)| v.clone())
             .collect::<Vec<_>>()
             .join(""),
+        "dPr" => {
+            let beg = get_child(children, "begChr");
+            let end = get_child(children, "endChr");
+            format!("beg={},end={}", beg, end)
+        }
         // Run properties: extract color/bold/italic/style for parent <m:r>
         "rPr" | "w:rPr" => {
             let mut parts = Vec::new();
@@ -374,6 +437,9 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 }
                 if tag == "i" || tag == "w:i" {
                     parts.push("i=1".to_string());
+                }
+                if tag == "nor" {
+                    parts.push("nor=1".to_string());
                 }
                 if tag == "sz" || tag == "w:sz" {
                     parts.push(format!("sz={}", val));
@@ -463,16 +529,23 @@ fn get_delimiter_chars(children: &[(String, String)]) -> (String, String) {
     }
 
     let dpr = get_child(children, "dPr");
+    if let Some(rest) = dpr.strip_prefix("beg=") {
+        if let Some((beg, end_part)) = rest.split_once(",end=") {
+            return (beg.to_string(), end_part.to_string());
+        }
+    }
     let mut chars = dpr.chars();
     let Some(first) = chars.next() else {
         return (String::new(), String::new());
     };
-    let last = chars.next_back().unwrap_or(first);
+    let Some(last) = chars.next_back() else {
+        return (first.to_string(), String::new());
+    };
     (first.to_string(), last.to_string())
 }
 
 fn format_delimited_rows(beg: &str, end: &str, rows: &[String]) -> String {
-    if beg == "{" && end == "}" && rows.iter().any(|row| row.contains(" & ")) {
+    if beg == "{" && (end == "}" || end.is_empty()) && rows.iter().any(|row| row.contains(" & ")) {
         return format!("\\begin{{cases}} {} \\end{{cases}}", rows.join(" \\\\ "));
     }
 
@@ -512,6 +585,16 @@ fn map_nary(chr: &str) -> &str {
     }
 }
 
+fn map_function_name(name: &str) -> String {
+    match name.trim() {
+        "lim" | "limsup" | "liminf" | "max" | "min" | "sup" | "inf" | "log" | "ln" | "sin"
+        | "cos" | "tan" | "cot" | "sec" | "csc" | "arcsin" | "arccos" | "arctan" | "sinh"
+        | "cosh" | "tanh" | "det" | "gcd" => format!("\\{}", name.trim()),
+        other if !other.is_empty() => format!("\\operatorname{{{}}}", other),
+        _ => String::new(),
+    }
+}
+
 fn map_accent(chr: &str, content: &str) -> String {
     match chr {
         "\u{0302}" | "\u{02C6}" => format!("\\hat{{{}}}", content),
@@ -521,7 +604,7 @@ fn map_accent(chr: &str, content: &str) -> String {
         "\u{0308}" => format!("\\ddot{{{}}}", content),
         "\u{030C}" | "\u{02C7}" => format!("\\check{{{}}}", content),
         "\u{0303}" | "\u{02DC}" => format!("\\tilde{{{}}}", content),
-        "\u{20D7}" => format!("\\vec{{{}}}", content),
+        "\u{20D7}" | "\u{2192}" => format!("\\vec{{{}}}", content),
         _ => format!("\\hat{{{}}}", content),
     }
 }

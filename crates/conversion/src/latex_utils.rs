@@ -101,20 +101,62 @@ pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {
 
 /// Split superscript: a^{b} → (a, b)
 pub fn split_superscript(s: &str) -> Option<(&str, &str)> {
-    let pos = s.find("^{")?;
-    let base = &s[..pos];
-    let after = &s[pos + 2..];
-    let end = after.find('}')?;
-    Some((base, &after[..end]))
+    split_script(s, '^')
 }
 
 /// Split subscript: a_{b} → (a, b)
 pub fn split_subscript(s: &str) -> Option<(&str, &str)> {
-    let pos = s.find("_{")?;
+    split_script(s, '_')
+}
+
+fn split_script(s: &str, marker: char) -> Option<(&str, &str)> {
+    let pos = s.find(marker)?;
     let base = &s[..pos];
-    let after = &s[pos + 2..];
-    let end = after.find('}')?;
-    Some((base, &after[..end]))
+    let after_pos = pos + marker.len_utf8();
+    let rest = &s[after_pos..];
+    if rest.is_empty() {
+        return None;
+    }
+
+    if let Some(after_open) = rest.strip_prefix('{') {
+        let mut depth = 1i32;
+        for (idx, ch) in after_open.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some((base, &after_open[..idx]));
+                    }
+                }
+                _ => {}
+            }
+        }
+        return None;
+    }
+
+    if let Some(after_command) = rest.strip_prefix('\\') {
+        let end = after_command
+            .char_indices()
+            .take_while(|(_, ch)| ch.is_ascii_alphabetic())
+            .last()
+            .map(|(idx, ch)| idx + ch.len_utf8())
+            .unwrap_or_else(|| {
+                after_command
+                    .chars()
+                    .next()
+                    .map(char::len_utf8)
+                    .unwrap_or(0)
+            });
+        if end == 0 {
+            None
+        } else {
+            Some((base, &rest[..1 + end]))
+        }
+    } else {
+        let end = rest.chars().next()?.len_utf8();
+        Some((base, &rest[..end]))
+    }
 }
 
 /// Extract content from \begin{env}...\end{env}

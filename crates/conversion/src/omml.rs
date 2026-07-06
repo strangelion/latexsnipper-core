@@ -245,7 +245,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 "mathit" | "mathnormal" => wrap_omml_runs_with_math_style(&inner, "i"),
                 "mathsf" => wrap_omml_runs_with_math_style(&inner, "s"),
                 "mathtt" => wrap_omml_runs_with_math_style(&inner, "t"),
-                "mathrm" => wrap_mtext(&extract_text_from_omml(&inner)),
+                "mathrm" => wrap_normal_mtext(&extract_text_from_omml(&inner)),
                 _ => inner,
             }
         }
@@ -369,10 +369,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 }
                 "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" => {
                     let text = extract_text_from_args(args);
-                    format!(
-                        "<m:r><m:t>{}</m:t></m:r>",
-                        xml_escape(&text)
-                    )
+                    wrap_normal_mtext(&text)
                 }
                 "underline" => {
                     if let Some(arg) = args.first() {
@@ -536,6 +533,20 @@ fn wrap_mtext(text: &str) -> String {
     format!("<m:r><m:t>{}</m:t></m:r>", escaped)
 }
 
+fn wrap_normal_mtext(text: &str) -> String {
+    let escaped = text
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;");
+    let escaped: String = escaped
+        .chars()
+        .filter(|&c| c.is_ascii_graphic() || c.is_ascii_whitespace() || !c.is_ascii())
+        .collect();
+    format!("<m:r><m:rPr><m:nor/></m:rPr><m:t>{}</m:t></m:r>", escaped)
+}
+
 fn map_greek_unicode(name: &str) -> &str {
     match name {
         "alpha" => "α",
@@ -685,23 +696,31 @@ fn matrix_to_omml(rows: &[Vec<LatexNode>], env: &str) -> String {
         _ => ("", ""),
     };
 
-    let mut cells_xml = Vec::new();
+    let mut rows_xml = Vec::new();
     for row in rows {
         let cell_xml: Vec<String> = row
             .iter()
-            .map(|cell| format!("  <m:e>{}</m:e>", ast_to_omml(cell)))
+            .map(|cell| format!("    <m:e>{}</m:e>", ast_to_omml(cell)))
             .collect();
-        cells_xml.push(format!("  <m:r>\n{}\n  </m:r>", cell_xml.join("\n")));
+        rows_xml.push(format!(
+            "  <m:mr>\n{}\n  </m:mr>",
+            if cell_xml.is_empty() {
+                "    <m:e></m:e>".to_string()
+            } else {
+                cell_xml.join("\n")
+            }
+        ));
     }
 
+    let matrix = format!("<m:m>\n{}\n</m:m>", rows_xml.join("\n"));
     if open.is_empty() && close.is_empty() {
-        format!("<m:mRow>\n{}\n</m:mRow>", cells_xml.join("\n"))
+        matrix
     } else {
         format!(
-            "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n{}\n</m:d>",
+            "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
             xml_escape(open),
             xml_escape(close),
-            cells_xml.join("\n")
+            matrix
         )
     }
 }
@@ -714,7 +733,7 @@ fn cases_to_omml(rows: &[Vec<LatexNode>]) -> String {
             .map(|cell| format!("    <m:e>{}</m:e>", ast_to_omml(cell)))
             .collect();
         rows_xml.push(format!(
-            "  <m:r>\n{}\n  </m:r>",
+            "  <m:mr>\n{}\n  </m:mr>",
             if cells.is_empty() {
                 "    <m:e></m:e>".to_string()
             } else {
@@ -723,7 +742,7 @@ fn cases_to_omml(rows: &[Vec<LatexNode>]) -> String {
         ));
     }
     format!(
-        "<m:d>\n  <m:dPr><m:begChr m:val=\"{{\"/><m:endChr m:val=\"}}\"/></m:dPr>\n{}\n</m:d>",
+        "<m:d>\n  <m:dPr><m:begChr m:val=\"{{\"/><m:endChr m:val=\"\"/></m:dPr>\n  <m:e><m:m>\n{}\n  </m:m></m:e>\n</m:d>",
         rows_xml.join("\n")
     )
 }
@@ -768,6 +787,7 @@ fn map_omml_symbol(latex: &str) -> Option<&str> {
         "\\leftarrow" | "\\leftarrow " => Some("\u{2190}"),
         "\\leftrightarrow" | "\\leftrightarrow " => Some("\u{2194}"),
         "\\Rightarrow" | "\\Rightarrow " => Some("\u{21D2}"),
+        "\\implies" | "\\implies " => Some("\u{21D2}"),
         "\\Leftarrow" | "\\Leftarrow " => Some("\u{21D0}"),
         "\\Leftrightarrow" | "\\Leftrightarrow " => Some("\u{21D4}"),
         "\\mapsto" | "\\mapsto " => Some("\u{21A6}"),
@@ -1241,7 +1261,14 @@ mod tests {
     #[test]
     fn color_green() {
         let r = latex_to_omml("\\color{green}x+y");
-        assert!(r.contains("<m:t>x+y</m:t>"), "green test: {}", r);
+        assert!(
+            r.contains("<w:color w:val=\"00FF00\"/>"),
+            "green color missing: {}",
+            r
+        );
+        assert!(r.contains("<m:t>x</m:t>"), "green x missing: {}", r);
+        assert!(r.contains("<m:t>+</m:t>"), "green plus missing: {}", r);
+        assert!(r.contains("<m:t>y</m:t>"), "green y missing: {}", r);
     }
 
     #[test]

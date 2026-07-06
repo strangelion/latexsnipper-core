@@ -215,6 +215,10 @@ fn latex_to_mathml(latex: &str) -> String {
             latex_to_mathml(inner)
         );
     }
+    if let Some(content) = latex.strip_prefix("\\text{") {
+        let inner = content.strip_suffix('}').unwrap_or(content);
+        return format!("<mtext>{}</mtext>", xml_escape(inner));
+    }
     // \mathbb{...} → <mi mathvariant="double-struck">
     if let Some(content) = latex.strip_prefix("\\mathbb{") {
         let inner = content.strip_suffix('}').unwrap_or(content);
@@ -223,8 +227,23 @@ fn latex_to_mathml(latex: &str) -> String {
             latex_to_mathml(inner)
         );
     }
+    for (command, variant) in [
+        ("\\mathcal{", "script"),
+        ("\\mathfrak{", "fraktur"),
+        ("\\mathsf{", "sans-serif"),
+        ("\\mathtt{", "monospace"),
+    ] {
+        if let Some(content) = latex.strip_prefix(command) {
+            let inner = content.strip_suffix('}').unwrap_or(content);
+            return format!(
+                "<mstyle mathvariant=\"{}\"><mrow>{}</mrow></mstyle>",
+                variant,
+                latex_to_mathml(inner)
+            );
+        }
+    }
 
-    if let Some(inner) = latex.strip_prefix("\\frac{") {
+    if let Some(inner) = latex.strip_prefix("\\frac") {
         if let Some((num, den)) = split_brace_pair(inner) {
             return format!(
                 "<mfrac>\n  <mrow>{}</mrow>\n  <mrow>{}</mrow>\n</mfrac>",
@@ -252,6 +271,14 @@ fn latex_to_mathml(latex: &str) -> String {
                 latex_to_mathml(degree)
             );
         }
+    }
+
+    if let Some(rendered) = render_accent_mathml(latex) {
+        return rendered;
+    }
+
+    if let Some(rendered) = render_left_right_mathml(latex) {
+        return rendered;
     }
 
     // Matrix environments
@@ -286,6 +313,30 @@ fn latex_to_mathml(latex: &str) -> String {
         );
     }
 
+    if let Some(rendered) = render_nary_limits(latex) {
+        return rendered;
+    }
+
+    if let Some(rendered) = render_operator_limits(latex) {
+        return rendered;
+    }
+
+    if let Some(parts) = split_math_sequence(latex) {
+        let rendered = parts
+            .iter()
+            .map(|part| {
+                if is_math_operator(part) {
+                    let op = map_symbol_mathml(part).unwrap_or(part);
+                    format!("<mo>{}</mo>", xml_escape(op))
+                } else {
+                    latex_to_mathml(part)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        return format!("<mrow>{}</mrow>", rendered);
+    }
+
     if let Some((base, sup)) = split_superscript(latex) {
         return format!(
             "<msup>\n  <mrow>{}</mrow>\n  <mrow>{}</mrow>\n</msup>",
@@ -312,6 +363,360 @@ fn latex_to_mathml(latex: &str) -> String {
         format!("<mn>{}</mn>", latex)
     } else {
         format!("<mi>{}</mi>", xml_escape(latex))
+    }
+}
+
+fn render_operator_limits(latex: &str) -> Option<String> {
+    let (command, mut pos) = [
+        "\\limsup", "\\liminf", "\\lim", "\\max", "\\min", "\\sup", "\\inf", "\\log",
+    ]
+    .iter()
+    .find_map(|command| {
+        latex
+            .strip_prefix(command)
+            .map(|_| (*command, command.len()))
+    })?;
+
+    let name = command.trim_start_matches('\\');
+    let mut lower = None;
+    let mut upper = None;
+
+    loop {
+        pos = skip_ascii_whitespace(latex, pos);
+        let marker = latex[pos..].chars().next();
+        match marker {
+            Some('_') => {
+                let (value, next_pos) = read_script_argument(latex, pos + 1)?;
+                lower = Some(value);
+                pos = next_pos;
+            }
+            Some('^') => {
+                let (value, next_pos) = read_script_argument(latex, pos + 1)?;
+                upper = Some(value);
+                pos = next_pos;
+            }
+            _ => break,
+        }
+    }
+
+    if lower.is_none() && upper.is_none() {
+        return None;
+    }
+
+    let core = match (lower, upper) {
+        (Some(lower), Some(upper)) => format!(
+            "<munderover><mi>{}</mi><mrow>{}</mrow><mrow>{}</mrow></munderover>",
+            name,
+            latex_to_mathml(&lower),
+            latex_to_mathml(&upper)
+        ),
+        (Some(lower), None) => format!(
+            "<munder><mi>{}</mi><mrow>{}</mrow></munder>",
+            name,
+            latex_to_mathml(&lower)
+        ),
+        (None, Some(upper)) => format!(
+            "<mover><mi>{}</mi><mrow>{}</mrow></mover>",
+            name,
+            latex_to_mathml(&upper)
+        ),
+        (None, None) => unreachable!(),
+    };
+
+    let body = latex[pos..].trim();
+    if body.is_empty() {
+        Some(core)
+    } else {
+        Some(format!(
+            "<mrow>{}<mrow>{}</mrow></mrow>",
+            core,
+            latex_to_mathml(body)
+        ))
+    }
+}
+
+fn render_nary_limits(latex: &str) -> Option<String> {
+    let (command, mut pos) = [
+        "\\sum", "\\prod", "\\coprod", "\\int", "\\iint", "\\iiint", "\\oint",
+    ]
+    .iter()
+    .find_map(|command| {
+        latex
+            .strip_prefix(command)
+            .map(|_| (*command, command.len()))
+    })?;
+
+    let op = map_symbol_mathml(command)?;
+    let mut lower = None;
+    let mut upper = None;
+
+    loop {
+        pos = skip_ascii_whitespace(latex, pos);
+        let marker = latex[pos..].chars().next();
+        match marker {
+            Some('_') => {
+                let (value, next_pos) = read_script_argument(latex, pos + 1)?;
+                lower = Some(value);
+                pos = next_pos;
+            }
+            Some('^') => {
+                let (value, next_pos) = read_script_argument(latex, pos + 1)?;
+                upper = Some(value);
+                pos = next_pos;
+            }
+            _ => break,
+        }
+    }
+
+    if lower.is_none() && upper.is_none() {
+        return None;
+    }
+
+    let core = match (lower, upper) {
+        (Some(lower), Some(upper)) => format!(
+            "<munderover><mo>{}</mo><mrow>{}</mrow><mrow>{}</mrow></munderover>",
+            op,
+            latex_to_mathml(&lower),
+            latex_to_mathml(&upper)
+        ),
+        (Some(lower), None) => format!(
+            "<munder><mo>{}</mo><mrow>{}</mrow></munder>",
+            op,
+            latex_to_mathml(&lower)
+        ),
+        (None, Some(upper)) => format!(
+            "<mover><mo>{}</mo><mrow>{}</mrow></mover>",
+            op,
+            latex_to_mathml(&upper)
+        ),
+        (None, None) => unreachable!(),
+    };
+
+    let body = latex[pos..].trim();
+    if body.is_empty() {
+        Some(core)
+    } else {
+        Some(format!(
+            "<mrow>{}<mrow>{}</mrow></mrow>",
+            core,
+            latex_to_mathml(body)
+        ))
+    }
+}
+
+fn skip_ascii_whitespace(text: &str, mut pos: usize) -> usize {
+    while pos < text.len() && text.as_bytes()[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    pos
+}
+
+fn read_script_argument(text: &str, pos: usize) -> Option<(String, usize)> {
+    let pos = skip_ascii_whitespace(text, pos);
+    let rest = &text[pos..];
+    if rest.starts_with('{') {
+        let chars: Vec<char> = text.chars().collect();
+        let char_start = text[..pos].chars().count();
+        let mut depth = 0i32;
+        for char_pos in char_start..chars.len() {
+            match chars[char_pos] {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        let byte_end: usize =
+                            chars[..char_pos].iter().map(|ch| ch.len_utf8()).sum();
+                        let byte_after: usize =
+                            chars[..=char_pos].iter().map(|ch| ch.len_utf8()).sum();
+                        return Some((text[pos + 1..byte_end].to_string(), byte_after));
+                    }
+                }
+                _ => {}
+            }
+        }
+        return None;
+    }
+
+    if rest.starts_with('\\') {
+        let mut end = pos + 1;
+        while end < text.len() && text.as_bytes()[end].is_ascii_alphabetic() {
+            end += 1;
+        }
+        if end == pos + 1 && end < text.len() {
+            end += text[end..].chars().next()?.len_utf8();
+        }
+        return Some((text[pos..end].to_string(), end));
+    }
+
+    let end = pos + rest.chars().next()?.len_utf8();
+    Some((text[pos..end].to_string(), end))
+}
+
+fn is_math_operator(text: &str) -> bool {
+    matches!(text, "+" | "-" | "=" | "<" | ">" | "/" | "*" | "|")
+        || is_sequence_command_operator(text)
+}
+
+fn is_sequence_command_operator(text: &str) -> bool {
+    matches!(
+        text,
+        "\\implies"
+            | "\\Rightarrow"
+            | "\\Leftarrow"
+            | "\\Leftrightarrow"
+            | "\\rightarrow"
+            | "\\leftarrow"
+            | "\\leftrightarrow"
+            | "\\to"
+            | "\\mapsto"
+            | "\\leq"
+            | "\\le"
+            | "\\geq"
+            | "\\ge"
+            | "\\neq"
+            | "\\ne"
+            | "\\approx"
+            | "\\equiv"
+            | "\\sim"
+    )
+}
+
+fn render_accent_mathml(latex: &str) -> Option<String> {
+    let (command, accent) = [
+        ("\\hat", "^"),
+        ("\\widehat", "^"),
+        ("\\bar", "\u{00AF}"),
+        ("\\overline", "\u{00AF}"),
+        ("\\vec", "\u{2192}"),
+        ("\\dot", "."),
+        ("\\ddot", ".."),
+        ("\\tilde", "~"),
+        ("\\widetilde", "~"),
+        ("\\check", "\u{02C7}"),
+    ]
+    .iter()
+    .find_map(|(command, accent)| latex.strip_prefix(command).map(|_| (*command, *accent)))?;
+    let chars: Vec<char> = latex.chars().collect();
+    let (inner, after_inner) = read_braced_group(&chars, command.len())?;
+    if skip_ascii_whitespace(latex, after_inner) != latex.len() {
+        return None;
+    }
+    Some(format!(
+        "<mover><mrow>{}</mrow><mo>{}</mo></mover>",
+        latex_to_mathml(&inner),
+        xml_escape(accent)
+    ))
+}
+
+fn render_left_right_mathml(latex: &str) -> Option<String> {
+    let rest = latex.strip_prefix("\\left")?;
+    let mut chars = rest.chars();
+    let left = chars.next()?;
+    let content_start = "\\left".len() + left.len_utf8();
+    let right_pos = latex[content_start..].rfind("\\right")? + content_start;
+    let right_rest = &latex[right_pos + "\\right".len()..];
+    let right = right_rest.chars().next()?;
+    if skip_ascii_whitespace(latex, right_pos + "\\right".len() + right.len_utf8()) != latex.len() {
+        return None;
+    }
+    let content = &latex[content_start..right_pos];
+    let open = if left == '.' {
+        ""
+    } else {
+        &latex["\\left".len()..content_start]
+    };
+    let close_start = right_pos + "\\right".len();
+    let close_end = close_start + right.len_utf8();
+    let close = if right == '.' {
+        ""
+    } else {
+        &latex[close_start..close_end]
+    };
+    Some(format!(
+        "<mfenced open=\"{}\" close=\"{}\"><mrow>{}</mrow></mfenced>",
+        xml_escape(open),
+        xml_escape(close),
+        latex_to_mathml(content)
+    ))
+}
+
+fn split_math_sequence(latex: &str) -> Option<Vec<String>> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut brace_depth = 0i32;
+    let mut bracket_depth = 0i32;
+    let chars: Vec<char> = latex.chars().collect();
+    let mut pos = 0usize;
+
+    while pos < chars.len() {
+        let ch = chars[pos];
+        if ch == '\\' {
+            let command_start = pos;
+            current.push(ch);
+            pos += 1;
+            let name_start = pos;
+            while pos < chars.len() && chars[pos].is_ascii_alphabetic() {
+                current.push(chars[pos]);
+                pos += 1;
+            }
+            if pos == name_start && pos < chars.len() {
+                current.push(chars[pos]);
+                pos += 1;
+            }
+            let command: String = chars[command_start..pos].iter().collect();
+            if brace_depth == 0 && bracket_depth == 0 && is_sequence_command_operator(&command) {
+                let before_command_len = current.len() - command.len();
+                let before = current[..before_command_len].trim();
+                if !before.is_empty() {
+                    parts.push(before.to_string());
+                }
+                parts.push(command);
+                current.clear();
+            }
+            continue;
+        }
+
+        match ch {
+            '{' => {
+                brace_depth += 1;
+                current.push(ch);
+            }
+            '}' => {
+                brace_depth -= 1;
+                current.push(ch);
+            }
+            '[' => {
+                bracket_depth += 1;
+                current.push(ch);
+            }
+            ']' => {
+                bracket_depth -= 1;
+                current.push(ch);
+            }
+            '+' | '-' | '=' | '<' | '>' | '/' | '*' | '|'
+                if brace_depth == 0 && bracket_depth == 0 =>
+            {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    parts.push(trimmed.to_string());
+                }
+                parts.push(ch.to_string());
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+        pos += 1;
+    }
+
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        parts.push(trimmed.to_string());
+    }
+
+    if parts.iter().any(|part| is_math_operator(part)) {
+        Some(parts)
+    } else {
+        None
     }
 }
 
@@ -410,6 +815,39 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
                     "<mstyle mathvariant=\"double-struck\"><mrow>{}</mrow></mstyle>",
                     latex_to_mathml(&inner)
                 ));
+                pos = after_inner;
+                found_style = true;
+            }
+            "mathcal" | "mathfrak" | "mathsf" | "mathtt" => {
+                let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                let variant = match command.as_str() {
+                    "mathcal" => "script",
+                    "mathfrak" => "fraktur",
+                    "mathsf" => "sans-serif",
+                    "mathtt" => "monospace",
+                    _ => "normal",
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&format!(
+                    "<mstyle mathvariant=\"{}\"><mrow>{}</mrow></mstyle>",
+                    variant,
+                    latex_to_mathml(&inner)
+                ));
+                pos = after_inner;
+                found_style = true;
+            }
+            "text" | "textrm" | "textsf" | "texttt" => {
+                let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&format!("<mtext>{}</mtext>", xml_escape(&inner)));
                 pos = after_inner;
                 found_style = true;
             }
@@ -536,6 +974,7 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
         "\\approx" | "approx" => Some("<mo>\u{2248}</mo>"),
         "\\rightarrow" | "rightarrow" => Some("<mo>\u{2192}</mo>"),
         "\\leftarrow" | "leftarrow" => Some("<mo>\u{2190}</mo>"),
+        "\\implies" | "implies" => Some("<mo>\u{21D2}</mo>"),
         "\\sum" => Some("<mo>\u{2211}</mo>"),
         "\\prod" => Some("<mo>\u{220F}</mo>"),
         "\\coprod" => Some("<mo>\u{2210}</mo>"),

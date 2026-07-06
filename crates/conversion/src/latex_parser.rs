@@ -104,6 +104,11 @@ impl LatexParser {
                     sub: Box::new(sub),
                 })
             }
+            ',' | ';' | ':' | '+' | '-' | '=' | '<' | '>' | '/' | '*' | '|' => {
+                let ch = self.chars[self.pos];
+                self.pos += 1;
+                Some(LatexNode::Text(ch.to_string()))
+            }
             _ => self.parse_text(),
         }
     }
@@ -136,7 +141,7 @@ impl LatexParser {
                 while self.pos < self.chars.len() {
                     match self.chars[self.pos] {
                         '\\' | '{' | '}' | '$' | '^' | '_' | ' ' | '(' | ')' | '[' | ']' | ':'
-                        | ',' | ';' => break,
+                        | ',' | ';' | '+' | '-' | '=' | '<' | '>' | '/' | '*' | '|' => break,
                         _ => self.pos += 1,
                     }
                 }
@@ -178,7 +183,8 @@ impl LatexParser {
         let start = self.pos;
         while self.pos < self.chars.len() {
             match self.chars[self.pos] {
-                '\\' | '{' | '}' | '$' | '^' | '_' | ':' | ',' | ';' => break,
+                '\\' | '{' | '}' | '$' | '^' | '_' | ':' | ',' | ';' | '+' | '-' | '=' | '<'
+                | '>' | '/' | '*' | '|' => break,
                 _ => self.pos += 1,
             }
         }
@@ -227,7 +233,9 @@ impl LatexParser {
             | "Sigma" | "Upsilon" | "Phi" | "Psi" | "Omega" => Some(LatexNode::Greek(cmd)),
             // Operators
             "int" | "iint" | "iiint" | "oint" | "sum" | "prod" | "coprod" | "lim" | "limsup"
-            | "liminf" | "max" | "min" | "sup" | "inf" => Some(LatexNode::Operator(cmd)),
+            | "liminf" | "max" | "min" | "sup" | "inf" | "log" | "ln" | "sin" | "cos" | "tan"
+            | "cot" | "sec" | "csc" | "arcsin" | "arccos" | "arctan" | "sinh" | "cosh" | "tanh"
+            | "det" | "gcd" => Some(LatexNode::Operator(cmd)),
             // Relations
             "leq" | "le" | "geq" | "ge" | "neq" | "ne" | "approx" | "equiv" | "sim" | "propto"
             | "ll" | "gg" | "prec" | "succ" | "cong" => Some(LatexNode::Relation(cmd)),
@@ -240,8 +248,8 @@ impl LatexParser {
             | "cdots" | "vdots" | "ddots" | "hbar" | "ell" | "prime" | "perp" | "parallel"
             | "mid" | "therefore" | "because" | "wp" | "Re" | "Im" | "aleph" | "beth" | "gimel"
             | "daleth" | "to" | "rightarrow" | "leftarrow" | "leftrightarrow" | "Rightarrow"
-            | "Leftarrow" | "Leftrightarrow" | "mapsto" | "uparrow" | "downarrow" | "nearrow"
-            | "searrow" | "swarrow" | "nwarrow" => Some(LatexNode::Symbol(cmd)),
+            | "Leftarrow" | "Leftrightarrow" | "implies" | "mapsto" | "uparrow" | "downarrow"
+            | "nearrow" | "searrow" | "swarrow" | "nwarrow" => Some(LatexNode::Symbol(cmd)),
             // Fraction
             "frac" => {
                 let num = self.parse_single();
@@ -379,7 +387,7 @@ impl LatexParser {
                 } else {
                     cmd
                 };
-                let content = self.parse_single();
+                let content = self.parse_font_argument();
                 Some(LatexNode::FontModifier {
                     font,
                     content: Box::new(content),
@@ -726,12 +734,12 @@ impl LatexParser {
         }
 
         let right = match right_char {
-            '(' => ")",
-            ')' => "(",
-            '[' => "]",
-            ']' => "[",
-            '{' => "}",
-            '}' => "{",
+            '(' => "(",
+            ')' => ")",
+            '[' => "[",
+            ']' => "]",
+            '{' => "{",
+            '}' => "}",
             '|' => "|",
             '.' => ".",  // invisible
             '\0' => ".", // default
@@ -815,6 +823,11 @@ impl LatexParser {
         while self.pos < self.chars.len() && self.chars[self.pos] == ' ' {
             self.pos += 1;
         }
+    }
+
+    fn parse_font_argument(&mut self) -> LatexNode {
+        self.skip_whitespace();
+        self.parse_single()
     }
 
     fn parse_until(&mut self, delimiter: char) -> Vec<LatexNode> {

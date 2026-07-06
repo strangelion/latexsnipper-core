@@ -468,7 +468,7 @@ fn convert_font_modifier(font: &str, inner: &str) -> String {
         "mathtt" => format!("mono({})", inner),
         "mathcal" => format!("cal({})", inner),
         "mathfrak" => format!("frak({})", inner),
-        "mathrm" | "mathnormal" => inner.to_string(),
+        "mathrm" | "mathnormal" => format!("upright({})", inner),
         "bar" | "overline" => format!("overline({})", inner),
         "hat" | "widehat" => format!("hat({})", inner),
         "tilde" | "widetilde" => format!("tilde({})", inner),
@@ -744,6 +744,7 @@ fn convert_symbol(s: &str) -> String {
 
         // Arrows (if used as symbols)
         "rightarrow" | "to" => "arrow.r".to_string(),
+        "implies" => "arrow.r.double".to_string(),
         "leftarrow" => "arrow.l".to_string(),
         "leftrightarrow" => "arrow.l.r".to_string(),
         "Rightarrow" => "arrow.r.double".to_string(),

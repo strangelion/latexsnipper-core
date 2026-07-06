@@ -161,7 +161,21 @@ mod tests {
         let converter = MathmlConverter;
         let result = converter.convert(&doc).unwrap();
         assert!(result.contains("<math"));
-        assert!(result.contains("E=mc^2"));
+        assert!(
+            result.contains("<mi>E</mi>"),
+            "should contain E: {}",
+            result
+        );
+        assert!(
+            result.contains("<msup>"),
+            "should have superscript: {}",
+            result
+        );
+        assert!(
+            result.contains("<mn>2</mn>"),
+            "should contain exponent 2: {}",
+            result
+        );
         assert!(result.contains("<mfrac>"));
         assert_eq!(converter.name(), "mathml");
     }
@@ -199,8 +213,18 @@ mod tests {
         let converter = OmmlConverter;
         let result = converter.convert(&doc).unwrap();
         assert!(
-            result.contains("<m:t>E=mc</m:t>"),
-            "should contain E=mc: {}",
+            result.contains("<m:t>E</m:t>"),
+            "should contain E: {}",
+            result
+        );
+        assert!(
+            result.contains("<m:t>=</m:t>"),
+            "should contain equals: {}",
+            result
+        );
+        assert!(
+            result.contains("<m:t>mc</m:t>"),
+            "should contain mc: {}",
             result
         );
         assert!(
