@@ -164,24 +164,72 @@ impl SnipperEngine {
                 );
             }
             RecognizeMode::Mixed => {
-                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
-                graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::text()));
-                graph.add_node_with_deps(
-                    Box::new(latexsnipper_pipeline::CropNode::default()),
-                    vec!["detect_formula".into(), "detect_text".into()],
-                );
-                graph.add_node_with_deps(
-                    Box::new(latexsnipper_pipeline::RecognizerNode::formula()),
-                    vec!["crop".into()],
-                );
-                graph.add_node_with_deps(
-                    Box::new(latexsnipper_pipeline::RecognizerNode::text()),
-                    vec!["crop".into()],
-                );
-                graph.add_node_with_deps(
-                    Box::new(latexsnipper_pipeline::PostprocessNode::new()),
-                    vec!["recognize_formula".into(), "recognize_text".into()],
-                );
+                // Check if OpenDocHybrid mode is requested
+                if self.config.parse_mode == latexsnipper_pipeline::DocumentParseMode::OpenDocHybrid
+                {
+                    // OpenDocHybrid pipeline: layout → region resolve → specialized recognizers
+                    graph.add_node(Box::new(latexsnipper_pipeline::LayoutNode::new()));
+                    graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
+                    graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::text()));
+                    graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::table()));
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::CropNode::default()),
+                        vec!["detect_formula".into(), "detect_text".into()],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::RegionResolveNode::new()),
+                        vec![
+                            "layout_analysis".into(),
+                            "crop".into(),
+                            "detect_formula".into(),
+                            "detect_text".into(),
+                            "detect_table".into(),
+                        ],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::RecognizerNode::formula()),
+                        vec!["region_resolve".into()],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::RecognizerNode::text()),
+                        vec!["region_resolve".into()],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::TableStructureNode::new()),
+                        vec!["region_resolve".into()],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::TableRecognizerNode::new()),
+                        vec!["table_structure".into()],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::PostprocessNode::new()),
+                        vec![
+                            "recognize_formula".into(),
+                            "recognize_text".into(),
+                            "recognize_table".into(),
+                        ],
+                    );
+                } else {
+                    graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::formula()));
+                    graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::text()));
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::CropNode::default()),
+                        vec!["detect_formula".into(), "detect_text".into()],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::RecognizerNode::formula()),
+                        vec!["crop".into()],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::RecognizerNode::text()),
+                        vec!["crop".into()],
+                    );
+                    graph.add_node_with_deps(
+                        Box::new(latexsnipper_pipeline::PostprocessNode::new()),
+                        vec!["recognize_formula".into(), "recognize_text".into()],
+                    );
+                }
             }
             RecognizeMode::Handwriting => {
                 graph.add_node(Box::new(latexsnipper_pipeline::DetectorNode::handwriting()));
