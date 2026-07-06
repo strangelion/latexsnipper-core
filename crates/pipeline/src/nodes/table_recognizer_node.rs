@@ -97,7 +97,7 @@ impl TableRecognizerNode {
                     table,
                     &formula_det_session,
                     &formula_rec_session,
-                    text_rec_service.as_ref().map(|v| &**v),
+                    text_rec_service.as_deref(),
                 )
                 .await?
             {
