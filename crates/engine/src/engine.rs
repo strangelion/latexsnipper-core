@@ -8,7 +8,7 @@ use latexsnipper_foundation::Result;
 use latexsnipper_image::pdf::{decode_pdf, PdfSource};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_model::ModelManager;
-use latexsnipper_pipeline::{PipelineContext, PipelineGraph};
+use latexsnipper_pipeline::{DocumentParseMode, PipelineContext, PipelineGraph};
 use latexsnipper_runtime::{
     FsModelResolver, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver,
 };
@@ -621,6 +621,8 @@ impl SnipperEngine {
         ctx.acceleration = self.config.acceleration;
         ctx.max_threads = self.config.max_threads;
         ctx.parse_mode = self.config.parse_mode;
+
+        // Apply explicit model variant overrides from config
         if let Some(v) = &self.config.formula_det_model {
             ctx.model_variants.insert("formula-det".into(), v.clone());
         }
@@ -633,6 +635,97 @@ impl SnipperEngine {
         if let Some(v) = &self.config.text_rec_model {
             ctx.model_variants.insert("text-rec".into(), v.clone());
         }
+
+        // Mode-specific defaults
+        match self.config.parse_mode {
+            DocumentParseMode::OpenOcrText => {
+                ctx.model_variants
+                    .entry("text-det".into())
+                    .or_insert_with(|| "openocr-mobile".into());
+                ctx.model_variants
+                    .entry("text-rec".into())
+                    .or_insert_with(|| "openocr-mobile".into());
+            }
+            DocumentParseMode::OpenDocHybrid => {
+                // Auto-register layout package from manifest if available
+                self.try_register_layout_package(&mut ctx);
+            }
+            DocumentParseMode::SpecializedStable => {}
+        }
+
         ctx
+    }
+
+    /// Try to auto-register layout analysis package from the model manifest.
+    fn try_register_layout_package(&self, ctx: &mut PipelineContext) {
+        let manifest_path = self
+            .config
+            .models_dir
+            .join("model-manifest.json");
+
+        let manifest = match std::fs::read_to_string(&manifest_path) {
+            Ok(content) => match serde_json::from_str::<latexsnipper_model::manifest::ModelManifest>(&content) {
+                Ok(m) => m,
+                Err(e) => {
+                    log::warn!("Failed to parse manifest for layout registration: {}", e);
+                    return;
+                }
+            },
+            Err(e) => {
+                log::warn!("Cannot read manifest: {}", e);
+                return;
+            }
+        };
+
+        // Look for a layout category
+        let layout_info = manifest.categories.iter().find(|(cat, _)| *cat == "layout");
+        let (_cat_name, layout_cat) = match layout_info {
+            Some(v) => v,
+            None => {
+                log::info!("No layout category in manifest, skipping layout registration");
+                return;
+            }
+        };
+
+        // Find the default variant
+        let default_id = layout_cat
+            .default
+            .as_deref()
+            .unwrap_or("pp-layout-cdla");
+
+        let variant = layout_cat
+            .variants
+            .iter()
+            .find(|v| v.id == default_id);
+
+        if let Some(variant) = variant {
+            let variant_dir = self
+                .config
+                .models_dir
+                .join("layout")
+                .join(&variant.id);
+
+            // Check if layout model directory exists and has files
+            if !variant_dir.is_dir() {
+                log::info!(
+                    "Layout model directory not found: {}, skipping layout registration",
+                    variant_dir.display()
+                );
+                return;
+            }
+
+            let model_path = variant_dir.join(variant.files.first().unwrap_or(&"model.onnx".into()));
+            if !model_path.exists() {
+                log::info!(
+                    "Layout model file not found: {}, skipping",
+                    model_path.display()
+                );
+                return;
+            }
+
+            log::info!("Auto-registering layout package: {}/{}", _cat_name, variant.id);
+            ctx.model_variants
+                .insert("layout".into(), variant.id.clone());
+        }
     }
 }
