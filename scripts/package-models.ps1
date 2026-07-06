@@ -1,81 +1,88 @@
 # Package models for release
-# Usage: .\scripts\package-models.ps1
+# Usage: .\scripts\package-models.ps1 [-ManifestPath scripts/model-manifest.template.json] [-ModelsDir models] [-OutputDir release_models]
+#
+# Reads the model manifest template, discovers all category:variant entries,
+# and packages each variant as a separate ZIP in the output directory.
+
+param(
+    [string]$ManifestPath = "scripts/model-manifest.template.json",
+    [string]$ModelsDir = "models",
+    [string]$OutputDir = "release_models"
+)
 
 $ErrorActionPreference = "Stop"
-$modelsDir = "models"
-$outputDir = "release_models"
+
+# Resolve manifest path
+$manifestFile = Join-Path (Get-Location) $ManifestPath
+if (-not (Test-Path $manifestFile)) {
+    Write-Host "ERROR: Manifest not found at $manifestFile" -ForegroundColor Red
+    exit 1
+}
 
 # Create output directory
-if (Test-Path $outputDir) {
-    Remove-Item -Recurse -Force $outputDir
+if (Test-Path $OutputDir) {
+    Remove-Item -Recurse -Force $OutputDir
 }
-New-Item -ItemType Directory -Path $outputDir | Out-Null
+New-Item -ItemType Directory -Path $OutputDir | Out-Null
 
 Write-Host "Packaging models for release..." -ForegroundColor Green
+Write-Host "Manifest: $manifestFile" -ForegroundColor Cyan
 
-# Define model categories and their files
-$categories = @{
-    "formula-det" = @{
-        variant = "yolov8-mfd"
-        files = @("mathcraft-mfd.onnx", "config.json")
-        zipName = "latexsnipper-formula-det.zip"
-    }
-    "formula-rec" = @{
-        variant = "trocr-deit"
-        files = @("encoder_model.onnx", "decoder_model.onnx", "tokenizer.json", "config.json")
-        zipName = "latexsnipper-formula-rec.zip"
-    }
-    "text-det" = @{
-        variant = "v6-small"
-        files = @("inference.onnx", "inference.yml", "config.json")
-        zipName = "latexsnipper-text-det.zip"
-    }
-    "text-rec" = @{
-        variant = "v6-small"
-        files = @("inference.onnx", "inference.yml", "config.json")
-        zipName = "latexsnipper-text-rec.zip"
-    }
-    "table-det" = @{
-        variant = "tatr-detection"
-        files = @("model.onnx", "model.onnx.data", "config.json")
-        zipName = "latexsnipper-table-det.zip"
-    }
-    "table-struct" = @{
-        variant = "tatr-structure"
-        files = @("model.onnx", "model.onnx.data", "config.json")
-        zipName = "latexsnipper-table-struct.zip"
+# Parse manifest to discover all variants
+$manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
+$variants = @()
+$manifest.categories.PSObject.Properties | ForEach-Object {
+    $cat = $_.Name
+    $_.Value.variants | ForEach-Object {
+        $variants += @{
+            category = $cat
+            id = $_.id
+            zipFile = $_.zipFile
+            files = $_.files
+            adapter = $_.adapter
+            modelType = $_.modelType
+        }
     }
 }
+
+Write-Host "Discovered $($variants.Count) variants:" -ForegroundColor Cyan
+$variants | ForEach-Object { Write-Host "  $($_.category)/$($_.id) -> $($_.zipFile)" }
 
 $checksums = @{}
 
-foreach ($cat in $categories.Keys) {
-    $info = $categories[$cat]
-    $variantDir = Join-Path (Join-Path $modelsDir $cat) $info.variant
-    $zipPath = Join-Path $outputDir $info.zipName
+foreach ($v in $variants) {
+    $variantDir = Join-Path (Join-Path $ModelsDir $v.category) $v.id
+    $zipPath = Join-Path $OutputDir $v.zipFile
 
     if (-not (Test-Path $variantDir)) {
         Write-Host "Warning: $variantDir not found, skipping" -ForegroundColor Yellow
         continue
     }
 
-    Write-Host "Packaging $cat ($($info.variant))..." -ForegroundColor Cyan
+    Write-Host "Packaging $($v.category)/$($v.id)..." -ForegroundColor Cyan
 
     # Create temp directory with proper structure
-    $tempDir = Join-Path $outputDir "temp_$cat"
+    $tempDir = Join-Path $OutputDir "temp_$($v.category)_$($v.id)"
     if (Test-Path $tempDir) {
         Remove-Item -Recurse -Force $tempDir
     }
-    $tempVariantDir = Join-Path $tempDir $info.variant
+    $tempVariantDir = Join-Path $tempDir $v.id
     New-Item -ItemType Directory -Path $tempVariantDir -Force | Out-Null
 
-    # Copy files
-    foreach ($file in $info.files) {
-        $src = Join-Path $variantDir $file
-        if (Test-Path $src) {
-            Copy-Item $src $tempVariantDir
-        } else {
-            Write-Host "  Warning: $file not found in $variantDir" -ForegroundColor Yellow
+    # Copy files (from manifest file list, or all if none specified)
+    if ($v.files -and $v.files.Count -gt 0) {
+        foreach ($file in $v.files) {
+            $src = Join-Path $variantDir $file
+            if (Test-Path $src) {
+                Copy-Item $src $tempVariantDir
+            } else {
+                Write-Host "  Warning: $file not found in $variantDir" -ForegroundColor Yellow
+            }
+        }
+    } else {
+        # Copy all files from variant directory
+        Get-ChildItem -Path $variantDir -File | ForEach-Object {
+            Copy-Item $_.FullName $tempVariantDir
         }
     }
 
@@ -84,7 +91,7 @@ foreach ($cat in $categories.Keys) {
 
     # Calculate checksum
     $hash = Get-FileHash -Path $zipPath -Algorithm SHA256
-    $checksums[$info.zipName] = $hash.Hash.ToLower()
+    $checksums[$v.zipFile] = $hash.Hash.ToLower()
 
     # Clean up temp
     Remove-Item -Recurse -Force $tempDir
@@ -93,36 +100,43 @@ foreach ($cat in $categories.Keys) {
     Write-Host "  Created: $zipPath ($([math]::Round($size, 1)) MB)" -ForegroundColor Green
 }
 
-# Update manifest with checksums
-$manifestPath = Join-Path $modelsDir "model-manifest.json"
-$manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+# Generate SHA256SUMS
+$shaPath = Join-Path $OutputDir "SHA256SUMS"
+Get-ChildItem $OutputDir -Filter "*.zip" | ForEach-Object {
+    $hash = Get-FileHash $_.FullName -Algorithm SHA256
+    "$($hash.Hash.ToLower())  $($_.Name)" | Add-Content $shaPath
+}
+Write-Host "`nSHA256SUMS generated:" -ForegroundColor Green
+Get-Content $shaPath
 
-# Update checksums
-$manifest.checksums = $checksums
+# Update manifest with real checksums
+$manifest.checksums = $checksums | ForEach-Object {
+    $h = @{}
+    $_.GetEnumerator() | ForEach-Object { $h[$_.Key] = $_.Value }
+    $h
+}
 
-# Update file lists to match actual files
-foreach ($cat in $categories.Keys) {
-    $info = $categories[$cat]
-    if ($manifest.categories.$cat.variants) {
-        foreach ($variant in $manifest.categories.$cat.variants) {
-            if ($variant.id -eq $info.variant) {
-                $variant.files = $info.files
-            }
+# Update file lists to match actual packaged files
+$manifest.categories.PSObject.Properties | ForEach-Object {
+    $cat = $_.Name
+    $_.Value.variants | ForEach-Object {
+        $variant = $_
+        $v = $variants | Where-Object { $_.category -eq $cat -and $_.id -eq $variant.id }
+        if ($v -and $v.files) {
+            $variant.files = $v.files
         }
     }
 }
 
 # Save updated manifest
+$manifestPath = Join-Path $OutputDir "model-manifest.json"
 $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestPath
+Write-Host "`nManifest saved: $manifestPath" -ForegroundColor Green
 
-Write-Host "`nManifest updated with checksums" -ForegroundColor Green
-Write-Host "`nFiles created in $outputDir/:" -ForegroundColor Green
-Get-ChildItem $outputDir -Filter "*.zip" | ForEach-Object {
+# Summary
+Write-Host "`nFiles created in $OutputDir/:" -ForegroundColor Green
+Get-ChildItem $OutputDir -Filter "*.zip" | ForEach-Object {
     Write-Host "  $($_.Name) ($([math]::Round($_.Length / 1MB, 1)) MB)" -ForegroundColor Cyan
 }
-
-Write-Host "`nTo upload to GitHub releases:" -ForegroundColor Yellow
-Write-Host "  1. Run: gh auth login" -ForegroundColor White
-Write-Host "  2. Run: gh release create models-v2.0.0 --title 'Models v2.0.0' --notes 'Model packages for LaTeXSnipper Core'" -ForegroundColor White
-Write-Host "  3. Upload the zip files from $outputDir/ + SHA256SUMS + model-manifest.json" -ForegroundColor White
-Write-Host "  4. Or use: gh release upload models-v2.0.0 $outputDir/*.zip $outputDir/SHA256SUMS $outputDir/model-manifest.json" -ForegroundColor White
+Write-Host "  SHA256SUMS" -ForegroundColor Cyan
+Write-Host "  model-manifest.json" -ForegroundColor Cyan

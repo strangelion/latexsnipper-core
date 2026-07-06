@@ -47,74 +47,72 @@ jobs:
           fi
           echo "Manifest template OK"
 
-      - name: Acquire model sources from release tag
+      - name: Discover all model variants from manifest
+        id: variants
+        run: |
+          # Parse manifest to extract all (category, variant_id, zipFile) tuples
+          VARIANTS=$(jq -r '
+            .categories | to_entries[] |
+            .key as $cat |
+            (.value.variants[] | "\($cat):\(.id):\(.zipFile)")
+          ' scripts/model-manifest.template.json)
+          echo "Discovered variants:"
+          echo "$VARIANTS"
+          # Store as newline-separated list for subsequent steps
+          echo "$VARIANTS" > /tmp/variants.txt
+          echo "count=$(wc -l < /tmp/variants.txt)" >> $GITHUB_OUTPUT
+
+      - name: Download and extract model ZIPs
         run: |
           BASE_TAG="models-v2.0.0"
-          echo "Downloading model ZIPs from $BASE_TAG release..."
           mkdir -p models
+          CATEGORIES=""
+          VARIANTS_LIST=""
+          while IFS=: read -r cat variant zip_name; do
+            echo "---"
+            echo "Processing: cat=$cat variant=$variant zip=$zip_name"
+            CATEGORIES="$CATEGORIES $cat"
+            VARIANTS_LIST="$VARIANTS_LIST $variant"
 
-          # Each ZIP contains {variant}/ at the root.
-          # We need to place it under models/{category}/{variant}/.
-          declare -A ZIPS=(
-            ["latexsnipper-formula-det.zip"]="formula-det"
-            ["latexsnipper-formula-rec.zip"]="formula-rec"
-            ["latexsnipper-text-det.zip"]="text-det"
-            ["latexsnipper-text-rec.zip"]="text-rec"
-            ["latexsnipper-table-det.zip"]="table-det"
-            ["latexsnipper-table-struct.zip"]="table-struct"
-          )
-
-          for zip_name in "${!ZIPS[@]}"; do
-            cat="${ZIPS[$zip_name]}"
             URL="https://github.com/strangelion/latexsnipper-core/releases/download/$BASE_TAG/$zip_name"
-            echo "Downloading $zip_name -> models/$cat/ ..."
+            echo "Downloading $zip_name -> models/$cat/$variant ..."
             curl -fsSL -o "$zip_name" "$URL" || {
-              echo "FAIL: Could not download $zip_name from $BASE_TAG"
-              exit 1
+              echo "WARNING: Could not download $zip_name (may be a new model not in v2.0.0 release)"
+              echo "Creating placeholder directory for models/$cat/$variant"
+              mkdir -p "models/$cat/$variant"
+              continue
             }
             tmp="$(mktemp -d)"
             unzip -q -o "$zip_name" -d "$tmp"
-            # Find the variant directory inside the extracted ZIP (e.g. yolov8-mfd/)
+            # Find the variant directory inside the extracted ZIP
             variant_dir="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
-            variant="$(basename "$variant_dir")"
-            mkdir -p "models/$cat"
-            mv "$variant_dir" "models/$cat/$variant"
+            if [ -n "$variant_dir" ]; then
+              mv "$variant_dir" "models/$cat/$variant"
+            else
+              # ZIP with no subdirectory (flat layout)
+              mkdir -p "models/$cat/$variant"
+              find "$tmp" -type f -exec mv {} "models/$cat/$variant/" \;
+            fi
             rm -rf "$tmp" "$zip_name"
             echo "  OK: models/$cat/$variant"
-          done
+          done < /tmp/variants.txt
 
-          # Verify all 6 category directories exist
-          count=0
-          for cat in formula-det formula-rec text-det text-rec table-det table-struct; do
-            if [ -d "models/$cat" ]; then
-              count=$((count + 1))
-            fi
-          done
-          if [ "$count" -ne 6 ]; then
-            echo "FAIL: Only $count/6 model categories extracted."
-            exit 1
-          fi
-          echo "All 6 model categories acquired."
-
-      - name: Package models (Unix)
+      - name: Package each variant as separate ZIP
         run: |
           mkdir -p release_models
           count=0
-          for cat_pair in "formula-det:yolov8-mfd" "formula-rec:trocr-deit" "text-det:v6-small" "text-rec:v6-small" "table-det:tatr-detection" "table-struct:tatr-structure"; do
-            IFS=":" read -r cat variant <<< "$cat_pair"
+          while IFS=: read -r cat variant zip_name; do
             if [ -d "models/$cat/$variant" ]; then
-              cd "models/$cat" && zip -r "../../release_models/latexsnipper-$cat.zip" "$variant/" && cd ../..
+              # Use canonical zip name from manifest
+              output_zip="release_models/$zip_name"
+              cd "models/$cat" && zip -r "../../$output_zip" "$variant/" && cd ../..
               count=$((count + 1))
+              echo "Packaged: $output_zip"
             else
               echo "WARNING: models/$cat/$variant not found, skipping"
             fi
-          done
-          # Assert exactly 6 models were packaged
-          if [ "$count" -ne 6 ]; then
-            echo "FAIL: Only $count/6 model packages built. All 6 categories required."
-            exit 1
-          fi
-          echo "Packaged $count/6 models"
+          done < /tmp/variants.txt
+          echo "Packaged $count model ZIP(s)"
 
       - name: Generate SHA256SUMS
         run: |
@@ -125,7 +123,6 @@ jobs:
 
       - name: Generate final model-manifest.json with checksums
         run: |
-          # Parse SHA256SUMS into a JSON object: {"file.zip": "sha256", ...}
           CHECKSUMS=$(jq -c -Rn '
             reduce inputs as $line
               ({};
@@ -168,7 +165,7 @@ jobs:
             release_models/model-manifest.json
 
   # ============================================================
-  # Job 2: Smoke test — extract, verify path structure, validate manifest
+  # Job 2: Smoke test — dynamic per-manifest
   # ============================================================
   smoke-test:
     name: Smoke test
@@ -189,26 +186,46 @@ jobs:
           name: release-metadata
           path: test_metadata
 
-      - name: Smoke test — extract and verify path structure
+      - name: Discover expected ZIPs from manifest
+        id: expected
+        run: |
+          # Collect all zipFile values from manifest
+          jq -r '
+            .categories[] | .variants[] | .zipFile
+          ' scripts/model-manifest.template.json | sort > /tmp/expected_zips.txt
+          echo "Expected ZIPs ($(wc -l < /tmp/expected_zips.txt)):"
+          cat /tmp/expected_zips.txt
+
+      - name: Smoke test — verify each ZIP exists and has config.json
         run: |
           cd test_models
-          for zip in *.zip; do
+          failures=0
+          while IFS= read -r zip; do
+            if [ ! -f "$zip" ]; then
+              echo "FAIL: $zip not found in artifacts!"
+              failures=$((failures + 1))
+              continue
+            fi
             echo "Testing: $zip"
             unzip -q "$zip" -d extracted
-            # Verify the variant directory contains model files (should have at least config.json)
             found=$(find extracted -name "config.json" | wc -l)
             if [ "$found" -eq 0 ]; then
               echo "FAIL: $zip has no config.json!"
-              exit 1
+              failures=$((failures + 1))
+            else
+              echo "  OK: $found config.json(s)"
             fi
-            echo "  OK: $found config.json(s)"
             rm -rf extracted
-          done
+          done < /tmp/expected_zips.txt
+          if [ "$failures" -gt 0 ]; then
+            echo "FAIL: $failures ZIP(s) failed smoke test"
+            exit 1
+          fi
+          echo "All ZIPs passed smoke test"
 
       - name: Smoke test — validate manifest checksums
         run: |
           cat test_metadata/SHA256SUMS
-          # Verify that every ZIP in SHA256SUMS exists
           while read -r hash file; do
             if [ ! -f "test_models/$file" ]; then
               echo "FAIL: $file from SHA256SUMS not found!"
@@ -218,7 +235,7 @@ jobs:
           done < test_metadata/SHA256SUMS
 
   # ============================================================
-  # Job 3: Create Release (only if packaging and smoke test both pass)
+  # Job 3: Create Release
   # ============================================================
   create-release:
     name: Create GitHub Release
@@ -250,6 +267,45 @@ jobs:
           name: release-metadata
           path: release_assets
 
+      - name: Generate dynamic release body
+        id: release_body
+        run: |
+          # Build model support table from manifest
+          TABLE="| Category | Variant | Status |\n|---|---|---|"
+          jq -r '
+            .categories | to_entries[] |
+            .key as $cat |
+            (.value.variants[] |
+              "\($cat) | \(.id) | experimental"
+            )
+          ' scripts/model-manifest.template.json |
+          while IFS="|" read -r line; do
+            TABLE="$TABLE\n| $(echo $line | xargs) |"
+          done
+
+          # Generate full body
+          BODY=$(cat <<ENDBODY
+          ## Model Packages
+
+          Each ZIP is self-contained with the model variant directory at the root.
+
+          ### SHA-256 Integrity
+
+          All ZIP files are verified with SHA-256. Each asset's checksum is recorded in
+          \`SHA256SUMS\` and in the \`model-manifest.json\` checksums section.
+
+          ### Model Packages
+
+          | Category | Variant | Status |
+          |---|---|---|
+          $(jq -r '.categories | to_entries[] | .key as $cat | (.value.variants[] | "\($cat) | \(.id) | experimental")' scripts/model-manifest.template.json | sed 's/^/| /' | sed 's/$/ |/')
+          ENDBODY
+          )
+
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -259,39 +315,18 @@ jobs:
           body: |
             ## Model Packages
 
-            Six model packages for LaTeXSnipper Core. Each ZIP is self-contained with the
-            model variant directory at the root (single directory per ZIP).
+            Each ZIP is self-contained with the model variant directory at the root.
 
             ### SHA-256 Integrity
 
             All ZIP files are verified with SHA-256. Each asset's checksum is recorded in
             `SHA256SUMS` and in the `model-manifest.json` checksums section.
 
-            ### Installation
+            ### Model Packages
 
-            ```bash
-            # Install CLI
-            cargo install latexsnipper-cli
-
-            # Download models
-            snipper models download --manifest-url https://github.com/strangelion/latexsnipper-core/releases/download/${{ steps.tag.outputs.tag }}/model-manifest.json --all
-
-            # Verify
-            snipper models verify
-            ```
-
-            ### Model Support Status
-
-            | Model | Status | Default |
+            | Category | Variant | Status |
             |---|---|---|
-            | YOLOv8-MFD (formula-det) | Stable | Yes |
-            | TrOCR-DeiT (formula-rec) | Stable | Yes |
-            | PP-OCRv6 Det (text-det) | Stable | Yes |
-            | PP-OCRv6 Rec (text-rec) | Stable | Yes |
-            | TATR Detection (table-det) | Experimental | No |
-            | TATR Structure (table-struct) | Experimental | No |
-            | SLANet Plus (table-struct) | Experimental | No |
-            | PP-DocLayout v3 | Experimental | No |
+            $(jq -r '.categories | to_entries[] | .key as $cat | (.value.variants[] | "\($cat) | \(.id) | experimental")' scripts/model-manifest.template.json)
 
           files: |
             release_assets/*.zip
