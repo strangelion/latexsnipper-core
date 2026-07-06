@@ -76,7 +76,10 @@ pub enum RecognitionTarget {
     /// Top-level handwriting region, index into handwriting_detections.
     TopLevelHandwriting { detection_index: usize },
     /// Table cell that needs text recognition: (table_index, cell_index).
-    TableCell { table_index: usize, cell_index: usize },
+    TableCell {
+        table_index: usize,
+        cell_index: usize,
+    },
 }
 
 /// Resolved ownership of a region after conflict resolution.

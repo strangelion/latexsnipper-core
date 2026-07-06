@@ -658,19 +658,19 @@ impl SnipperEngine {
 
     /// Try to auto-register layout analysis package from the model manifest.
     fn try_register_layout_package(&self, ctx: &mut PipelineContext) {
-        let manifest_path = self
-            .config
-            .models_dir
-            .join("model-manifest.json");
+        let manifest_path = self.config.models_dir.join("model-manifest.json");
 
         let manifest = match std::fs::read_to_string(&manifest_path) {
-            Ok(content) => match serde_json::from_str::<latexsnipper_model::manifest::ModelManifest>(&content) {
-                Ok(m) => m,
-                Err(e) => {
-                    log::warn!("Failed to parse manifest for layout registration: {}", e);
-                    return;
+            Ok(content) => {
+                match serde_json::from_str::<latexsnipper_model::manifest::ModelManifest>(&content)
+                {
+                    Ok(m) => m,
+                    Err(e) => {
+                        log::warn!("Failed to parse manifest for layout registration: {}", e);
+                        return;
+                    }
                 }
-            },
+            }
             Err(e) => {
                 log::warn!("Cannot read manifest: {}", e);
                 return;
@@ -688,22 +688,12 @@ impl SnipperEngine {
         };
 
         // Find the default variant
-        let default_id = layout_cat
-            .default
-            .as_deref()
-            .unwrap_or("pp-layout-cdla");
+        let default_id = layout_cat.default.as_deref().unwrap_or("pp-layout-cdla");
 
-        let variant = layout_cat
-            .variants
-            .iter()
-            .find(|v| v.id == default_id);
+        let variant = layout_cat.variants.iter().find(|v| v.id == default_id);
 
         if let Some(variant) = variant {
-            let variant_dir = self
-                .config
-                .models_dir
-                .join("layout")
-                .join(&variant.id);
+            let variant_dir = self.config.models_dir.join("layout").join(&variant.id);
 
             // Check if layout model directory exists and has files
             if !variant_dir.is_dir() {
@@ -714,7 +704,8 @@ impl SnipperEngine {
                 return;
             }
 
-            let model_path = variant_dir.join(variant.files.first().unwrap_or(&"model.onnx".into()));
+            let model_path =
+                variant_dir.join(variant.files.first().unwrap_or(&"model.onnx".into()));
             if !model_path.exists() {
                 log::info!(
                     "Layout model file not found: {}, skipping",
@@ -723,7 +714,11 @@ impl SnipperEngine {
                 return;
             }
 
-            log::info!("Auto-registering layout package: {}/{}", _cat_name, variant.id);
+            log::info!(
+                "Auto-registering layout package: {}/{}",
+                _cat_name,
+                variant.id
+            );
             ctx.model_variants
                 .insert("layout".into(), variant.id.clone());
         }

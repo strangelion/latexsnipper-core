@@ -42,6 +42,7 @@ impl SnipperEngine {
     pub fn model_resolver(&self) -> Option<&SharedModelResolver>;
     pub fn set_model_resolver(&mut self, resolver);
     pub fn has_model(&self, category, variant) -> bool;
+    pub fn register_model_package(&mut self, task, package);
     pub fn reload_model(&self, session_key) -> Result<()>;
     pub fn reload_all_models(&self) -> Result<()>;
     pub async fn recognize(&self, image, mode) -> Result<Document>;
@@ -54,6 +55,20 @@ impl SnipperEngine {
 ```rust
 pub enum RecognizeMode { Formula, Text, Mixed, Handwriting, Table, FormulaLayout }
 ```
+
+## DocumentParseMode
+
+```rust
+pub enum DocumentParseMode {
+    SpecializedStable,  // 默认：专用模型链（PP-OCR + TrOCR + TATR）
+    OpenOcrText,        // 文本检测/识别使用 OpenOCR mobile 变体
+    OpenDocHybrid,      // Layout分析 + 区域路由 + 专用识别器
+}
+```
+
+通过 `EngineConfig::set_parse_mode()` 设置，`build_pipeline()` 根据模式自动构建不同图结构。
+
+`OpenDocHybrid` 模式自动从 `model-manifest.json` 注册 layout 包。`OpenOcrText` 模式自动将 `text-det`/`text-rec` 变体设为 `openocr-mobile`。
 
 ## 模型热加载
 

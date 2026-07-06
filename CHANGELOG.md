@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Region Graph Routing**: Only `Independent` regions are routed to top-level recognizers; `Child` and `Discarded` regions excluded to prevent duplicate output in table cells
+- **Region Graph Projection**: `ArtifactRef` replaces array-index projection for layout/formula/text/table candidates
+- **Region Graph Import**: `RegionResolveNode` imports existing `region_candidates` from `LayoutNode` before adding detector results
+- **TextRecognitionService**: `recognize_via_package()` delegates to shared `TextRecognitionService`, eliminating dual session paths
+- **Recursive CJK/Latin Normalization**: `normalize_block_inlines()` handles Paragraph, Heading, Table cells, List items, Quote, DescriptionList, and Handwriting
+- **Engine Pipeline Activation**: `build_pipeline()` constructs OpenDocHybrid pipeline when `parse_mode == OpenDocHybrid`
+- **Engine Layout Registration**: `try_register_layout_package()` discovers layout variant from manifest automatically
+- **Engine OpenOcrText Mode**: `configure_context()` auto-selects `openocr-mobile` variant when mode is `OpenOcrText`
+- **Clippy Fixes**: `derivable_impls`, `unnecessary_unwrap`, `match_like_matches_macro`, `upper_case_acronyms`, `option_as_ref_deref`, `map_or`→`is_none_or`, `needless_range_loop`
+- **Model Packaging**: Removed duplicate `openocr-mobile` variants; updated manifest file lists to use `config.json`; added `layout_cdla/config.json`
+- **Model Release Workflow**: Per-variant `sourceUrl` support replaces hardcoded `BASE_TAG`
 - PipelineGraph execution order: nodes now execute in insertion order, not alphabetical
 - recognize_pdf() missing RuntimeBackend injection
 - Test paths hardcoded to non-existent model directories
@@ -15,9 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CropNode now actually performs image cropping instead be a no-op
 - ModelPackage executor `run()` methods now properly implement inference logic
 - `\tableofcontents` command not parsed correctly (only handled as environment, not standalone command)
-
-### Added
-- **LaTeX Syntax Extensions**
   - `\underline{text}` — underline text formatting, output to OMML/LaTeX/HTML/Typst
   - `\begin{description}` environment — definition lists with optional labels
   - `\footnote{text}` — footnote (OMML outputs `[^content]` placeholder)

@@ -18,6 +18,9 @@
 | `graph` | graph.rs | PipelineGraph（拓扑排序 + 显式依赖） |
 | `artifacts` | artifacts.rs | PipelineArtifacts 强类型数据 |
 | `reading_order` | reading_order.rs | 阅读顺序排序（y-bucket + x tie-breaker） |
+| `region_graph` | region_graph.rs | RegionGraph + RecognitionTarget + ArtifactRef 路由 |
+| `text_recognition_service` | text_recognition_service.rs | 共享文本识别服务（单 session、配置驱动） |
+| `opendoc_hybrid` | opendoc_hybrid.rs | DocumentParseMode + OpenDoc Hybrid 编排 |
 
 ## 关键类型
 
@@ -59,8 +62,24 @@ pub struct PipelineArtifacts {
     pub text_blocks: Vec<Block>,
     pub handwriting_blocks: Vec<Block>,
     pub table_blocks: Vec<Block>,
+    pub region_candidates: Vec<RegionCandidate>,
+    pub resolved_regions: Vec<ResolvedRegion>,
+    pub recognition_targets: Vec<RecognitionTarget>,
 }
 ```
+
+### RecognitionTarget
+
+```rust
+pub enum RecognitionTarget {
+    TopLevelText { detection_index: usize },
+    TopLevelFormula { detection_index: usize },
+    TopLevelHandwriting { detection_index: usize },
+    TableCell { table_index: usize, cell_index: usize },
+}
+```
+
+`RecognitionTarget` 是 `RegionResolveNode` 的核心输出，告诉各识别器精确处理哪些区域，避免重复识别。
 
 ### PipelineGraph
 

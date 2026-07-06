@@ -123,6 +123,8 @@ Engine
 | **转换** | ✅ | 6 种格式：LaTeX、OMML、MathML、Typst、Markdown、HTML |
 | **语法** | ✅ | LaTeX/Typst/Markdown 解析器 + 渲染器 |
 | **流水线** | ✅ | 异步节点流水线，支持取消 |
+| **区域图** | ✅ | 冲突消解、ArtifactRef 路由、layout→识别器路由 |
+| **CJK/Latin 归一化** | ✅ | 跨所有块类型的递归文本规范化 |
 
 ### 实验版
 
@@ -287,6 +289,8 @@ models/
 ├── formula-rec/trocr-deit/     # 公式识别 — 稳定
 ├── text-det/v6-small/          # 文本检测 — 稳定
 ├── text-rec/v6-small/          # 文本识别 — 稳定
+├── layout/
+│   └── pp-layout-cdla/         # 文档版式分析（CDLA）— 稳定
 ├── table-det/
 │   ├── tatr-detection/         # 表格检测 — 实验
 │   └── doclayout-v3/           # 文档版式分析 — 实验

@@ -211,6 +211,8 @@ Engine
 | **Conversion** | ✅ | 6 formats: LaTeX, OMML, MathML, Typst, Markdown, HTML |
 | **Syntax** | ✅ | LaTeX/Typst/Markdown Parser + Renderer |
 | **Pipeline** | ✅ | DAG Node Graph, YAML/JSON Manifest, async with cancellation |
+| **Region Graph** | ✅ | Conflict resolution, ArtifactRef routing, layout→recognition routing |
+| **CJK/Latin Normalization** | ✅ | Recursive text normalization across all block types |
 
 ### Experimental
 
@@ -422,6 +424,8 @@ models/
 ├── formula-rec/trocr-deit/     # Formula recognition (TrOCR) — Stable
 ├── text-det/v6-small/          # Text detection (PP-OCRv6) — Stable
 ├── text-rec/v6-small/          # Text recognition (PP-OCRv6) — Stable
+├── layout/
+│   └── pp-layout-cdla/         # Document layout analysis (CDLA) — Stable
 ├── table-det/
 │   ├── tatr-detection/         # Table detection (TATR) — Experimental
 │   └── doclayout-v3/           # Document layout analysis (PP-DocLayout) — Experimental

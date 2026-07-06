@@ -155,13 +155,14 @@ impl RecognizerNode {
                 let detections = ctx.artifacts.text_detections.clone();
                 if let Some(service) = ctx.get_or_init_text_rec_service() {
                     for det in &detections {
-                        let text = match service.recognize_region(&image, &det.rect, det.quad.as_ref()) {
-                            Ok(t) => t,
-                            Err(e) => {
-                                log::warn!("Text rec failed: {}", e);
-                                continue;
-                            }
-                        };
+                        let text =
+                            match service.recognize_region(&image, &det.rect, det.quad.as_ref()) {
+                                Ok(t) => t,
+                                Err(e) => {
+                                    log::warn!("Text rec failed: {}", e);
+                                    continue;
+                                }
+                            };
                         if !text.is_empty() {
                             blocks.push(Block::Paragraph(ParagraphBlock {
                                 inlines: vec![Inline::Text(TextRun::new(text))],
