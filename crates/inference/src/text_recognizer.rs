@@ -10,9 +10,16 @@ use crate::types::RecognitionResult;
 /// Text recognition parameters loaded from config.json.
 #[derive(Debug, Clone)]
 pub struct TextRecParams {
+    pub input_name: String,
+    pub output_name: String,
+    pub color_format: String,
     pub target_h: u32,
     pub max_w: u32,
+    pub keep_ratio: bool,
+    pub pad_value: u8,
     pub blank_id: usize,
+    pub output_layout: String,
+    pub logits_kind: String,
     pub mean: [f32; 3],
     pub std: [f32; 3],
 }
@@ -20,18 +27,60 @@ pub struct TextRecParams {
 impl TextRecParams {
     pub fn from_config(config: &latexsnipper_model::ModelConfig) -> Self {
         let mut params = Self::default();
+
         let (width, height) = config.resize_dimensions();
         if let Some(h) = height {
             params.target_h = h;
         }
         if let Some(w) = width {
             params.max_w = w;
+        } else if let Some(input) = &config.input {
+            // Infer from input shape: [1, 3, H, W]
+            if input.shape.len() == 4 {
+                if let Some(&h) = input.shape.get(2) {
+                    if h > 0 && h != -1 {
+                        params.target_h = h as u32;
+                    }
+                }
+                if let Some(&w) = input.shape.get(3) {
+                    if w > 0 && w != -1 {
+                        params.max_w = w as u32;
+                    }
+                }
+            }
         }
+
+        // Input/output tensor names
+        if let Some(input) = &config.input {
+            params.input_name = input.name.clone();
+        }
+        if let Some(output) = &config.output {
+            params.output_name = output.name.clone();
+        }
+
+        // Color format from preprocessing
+        let cf = config.color_format().to_lowercase();
+        if cf == "bgr" || cf == "rgb" {
+            params.color_format = cf;
+        }
+
+        // Preprocessing details
+        if let Some(pre) = &config.preprocessing {
+            if let Some(resize) = &pre.resize {
+                params.keep_ratio = resize.keep_ratio.unwrap_or(true);
+                params.pad_value = resize.pad_value.unwrap_or(0.0) as u8;
+            }
+        }
+
+        // Decoding params
         if let Some(decoding) = &config.decoding {
             if let Some(blank_id) = decoding.blank_id {
                 params.blank_id = blank_id;
             }
+            params.output_layout = decoding.ctc_output_layout().to_string();
+            params.logits_kind = decoding.ctc_logits_kind().to_string();
         }
+
         let mean = config.normalization_mean();
         if mean.len() == 3 {
             params.mean = [mean[0], mean[1], mean[2]];
@@ -47,9 +96,16 @@ impl TextRecParams {
 impl Default for TextRecParams {
     fn default() -> Self {
         Self {
+            input_name: "x".into(),
+            output_name: "output".into(),
+            color_format: "BGR".into(),
             target_h: 48,
             max_w: 320,
+            keep_ratio: true,
+            pad_value: 0,
             blank_id: 0,
+            output_layout: "ntc".into(),
+            logits_kind: "logits".into(),
             mean: [0.5, 0.5, 0.5],
             std: [0.5, 0.5, 0.5],
         }
@@ -77,18 +133,24 @@ pub fn recognize_text_with_keys(
     first_char_id: usize,
     params: &TextRecParams,
 ) -> Result<RecognitionResult> {
-    // PP-OCR models are trained on BGR input; convert if needed
+    // Convert to model's expected color format
     use latexsnipper_image::color::PixelFormat;
-    let bgr_image = match image.format() {
-        PixelFormat::Rgba => latexsnipper_image::operations::rgba_to_bgr(image),
-        PixelFormat::Rgb => latexsnipper_image::operations::rgb_to_bgr(image),
-        PixelFormat::Bgr | PixelFormat::Bgra => image.clone(),
-        PixelFormat::Gray => image.clone(),
+    let model_image = match params.color_format.as_str() {
+        "BGR" | "bgr" => match image.format() {
+            PixelFormat::Rgb => latexsnipper_image::operations::rgb_to_bgr(image),
+            PixelFormat::Rgba => latexsnipper_image::operations::rgba_to_bgr(image),
+            _ => image.clone(),
+        },
+        _ => match image.format() {
+            PixelFormat::Bgr => latexsnipper_image::operations::bgr_to_rgb(image),
+            PixelFormat::Bgra => latexsnipper_image::operations::bgr_to_rgb(image),
+            _ => image.clone(),
+        },
     };
-    let (processed, _orig_w) = preprocess(&bgr_image, params);
+    let (processed, _orig_w) = preprocess(&model_image, params);
 
     let input = Tensor::float32(
-        "x",
+        &params.input_name,
         vec![1, 3, params.target_h as usize, params.max_w as usize],
         latexsnipper_image::operations::normalize(&processed, &params.mean, &params.std),
     );
@@ -102,7 +164,7 @@ pub fn recognize_text_with_keys(
         .ok_or_else(|| SnipperError::Inference("Output not float32".into()))?;
     let shape = output.shape().to_vec();
 
-    let (text, confidence) = ctc_decode(logits, &shape, keys, first_char_id);
+    let (text, confidence) = ctc_decode(logits, &shape, keys, first_char_id, params);
 
     Ok(RecognitionResult { text, confidence })
 }
@@ -202,17 +264,23 @@ fn ctc_decode(
     shape: &[usize],
     keys: &[String],
     first_char_id: usize,
+    params: &TextRecParams,
 ) -> (String, f32) {
     if shape.len() < 3 {
         return (String::new(), 0.0);
     }
 
-    let seq_len = shape[1];
-    let vocab_size = shape[2];
+    let blank_id = params.blank_id;
 
-    let mut prev_id = 0usize;
+    // Reshape output to [T, C] based on output_layout
+    let (seq_len, vocab_size) = match params.output_layout.as_str() {
+        "tnc" => (shape[0], shape[2]),
+        _ => (shape[1], shape[2]), // ntc or default
+    };
+
+    let mut prev_id = blank_id;
     let mut result = String::new();
-    let mut confidences = Vec::new();
+    let mut token_confidences = Vec::new();
 
     for t in 0..seq_len {
         let start = t * vocab_size;
@@ -223,40 +291,61 @@ fn ctc_decode(
 
         let slice = &logits[start..end];
 
+        // Apply softmax for logits to get probabilities
+        let probs = if params.logits_kind == "logits" {
+            softmax(slice)
+        } else if params.logits_kind == "log_probabilities" {
+            slice.iter().map(|v| v.exp()).collect()
+        } else {
+            slice.to_vec() // already probabilities
+        };
+
         // Find best token (argmax)
-        let mut best_id = 0;
+        let mut best_id = blank_id;
         let mut best_val = f32::NEG_INFINITY;
-        for (i, &val) in slice.iter().enumerate() {
+        for (i, &val) in probs.iter().enumerate() {
             if val > best_val {
                 best_val = val;
                 best_id = i;
             }
         }
 
-        if best_id != 0 && best_id != prev_id {
+        let token_prob = best_val;
+
+        if best_id != blank_id && best_id != prev_id {
             // Map model output ID to character
-            // Model metadata: blank at 0, chars at 1..N, space at N+1 (first_char_id=0)
-            // File keys: blank at 0, space at 1, chars at 2+ (first_char_id=1 or 2)
             let char_idx = if first_char_id == 0 {
-                best_id // Direct mapping for model metadata
+                best_id
             } else {
-                best_id.wrapping_sub(first_char_id) // Offset for file keys
+                best_id.wrapping_sub(first_char_id)
             };
             if let Some(ch) = keys.get(char_idx) {
                 result.push_str(ch);
-                confidences.push(1.0);
+                token_confidences.push(token_prob);
             }
         }
         prev_id = best_id;
     }
 
-    let avg_confidence = if confidences.is_empty() {
+    let avg_confidence = if token_confidences.is_empty() {
         0.0
     } else {
-        confidences.iter().sum::<f32>() / confidences.len() as f32
+        token_confidences.iter().sum::<f32>() / token_confidences.len() as f32
     };
 
     (result, avg_confidence)
+}
+
+/// Compute softmax over a slice in-place and return the probabilities.
+fn softmax(slice: &[f32]) -> Vec<f32> {
+    let max_val = slice.iter().cloned().reduce(f32::max).unwrap_or(0.0);
+    let exps: Vec<f32> = slice.iter().map(|v| (v - max_val).exp()).collect();
+    let sum: f32 = exps.iter().sum();
+    if sum > 0.0 {
+        exps.iter().map(|v| v / sum).collect()
+    } else {
+        exps
+    }
 }
 
 /// Post-process text to insert spaces between words.
@@ -370,7 +459,8 @@ Other:
 
     #[test]
     fn ctc_decode_rejects_invalid_shape_without_panic() {
-        let (text, confidence) = ctc_decode(&[0.0, 1.0], &[2], &[], 1);
+        let params = TextRecParams::default();
+        let (text, confidence) = ctc_decode(&[0.0, 1.0], &[2], &[], 1, &params);
         assert!(text.is_empty());
         assert_eq!(confidence, 0.0);
     }

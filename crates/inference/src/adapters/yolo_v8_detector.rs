@@ -180,6 +180,12 @@ impl ModelExecutor for YoloV8DetectorExecutor {
                 y: d.rect.y,
                 width: d.rect.width,
                 height: d.rect.height,
+                quad: d.quad.map(|q| latexsnipper_runtime::DetectionQuad {
+                    x1: q.p1.x, y1: q.p1.y,
+                    x2: q.p2.x, y2: q.p2.y,
+                    x3: q.p3.x, y3: q.p3.y,
+                    x4: q.p4.x, y4: q.p4.y,
+                }),
                 confidence: d.confidence,
                 class_id: 0,
                 class_name: "formula".to_string(),

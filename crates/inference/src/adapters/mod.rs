@@ -4,9 +4,11 @@
 //! the ModelPackage/ModelExecutor traits.
 
 pub mod crnn_text_recognizer;
+pub mod dbnet_text_detector;
 pub mod trocr_formula_recognizer;
 pub mod yolo_v8_detector;
 
 pub use crnn_text_recognizer::CrnnTextRecognizerPackage;
+pub use dbnet_text_detector::DbNetTextDetectorPackage;
 pub use trocr_formula_recognizer::TrOcrFormulaPackage;
 pub use yolo_v8_detector::YoloV8DetectorPackage;

@@ -8,21 +8,29 @@ use latexsnipper_runtime::{
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::text_recognizer::{load_keys, TextRecParams};
+
 /// CRNN CTC text recognition model package.
+///
+/// Config-driven: reads input/output names, preprocessing, and CTC decoding
+/// parameters from config.json. Supports both PP-OCR and OpenOCR model variants.
 pub struct CrnnTextRecognizerPackage {
     descriptor: ModelDescriptor,
     model_path: Option<PathBuf>,
     keys_path: Option<PathBuf>,
+    params: TextRecParams,
 }
 
 impl CrnnTextRecognizerPackage {
     /// Create from a model config.
     pub fn from_config(config: &ModelConfig, model_id: ModelId) -> Self {
+        let params = TextRecParams::from_config(config);
+
         let input_shape = config
             .input
             .as_ref()
             .map(|i| i.shape.iter().map(|s| *s as usize).collect())
-            .unwrap_or_else(|| vec![1, 3, 48, 3200]);
+            .unwrap_or_else(|| vec![1, 3, params.target_h as usize, params.max_w as usize]);
 
         let descriptor = ModelDescriptor {
             id: model_id,
@@ -32,12 +40,12 @@ impl CrnnTextRecognizerPackage {
                 .clone()
                 .unwrap_or_else(|| "unknown".into()),
             input_spec: TensorSpec {
-                name: "x".into(),
+                name: params.input_name.clone(),
                 shape: input_shape,
                 dtype: TensorDtype::Float32,
             },
             output_spec: vec![TensorSpec {
-                name: "output".into(),
+                name: params.output_name.clone(),
                 shape: vec![1, 0, 0],
                 dtype: TensorDtype::Float32,
             }],
@@ -48,6 +56,7 @@ impl CrnnTextRecognizerPackage {
             descriptor,
             model_path: None,
             keys_path: None,
+            params,
         }
     }
 
@@ -67,6 +76,7 @@ impl ModelPackage for CrnnTextRecognizerPackage {
     fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
         Ok(Box::new(CrnnTextRecognizerExecutor {
             descriptor: self.descriptor.clone(),
+            params: self.params.clone(),
             runtime,
             model_path: self.model_path.clone(),
             keys_path: self.keys_path.clone(),
@@ -83,6 +93,7 @@ impl ModelPackage for CrnnTextRecognizerPackage {
 /// Output: `ModelOutput::Text` with recognized text strings
 struct CrnnTextRecognizerExecutor {
     descriptor: ModelDescriptor,
+    params: TextRecParams,
     runtime: Arc<dyn RuntimeBackend>,
     model_path: Option<PathBuf>,
     keys_path: Option<PathBuf>,
@@ -91,19 +102,12 @@ struct CrnnTextRecognizerExecutor {
     first_char_id: usize,
 }
 
-/// Type alias for loaded session reference.
-type SessionRef<'a> = &'a Arc<Box<dyn InferenceSession>>;
-
 impl CrnnTextRecognizerExecutor {
     /// Ensure session and keys are loaded, creating from paths if needed.
     #[allow(clippy::unnecessary_unwrap)]
-    fn ensure_loaded(&mut self) -> Result<(SessionRef<'_>, &Vec<String>, usize)> {
+    fn ensure_loaded(&mut self) -> Result<()> {
         if self.session.is_some() && !self.keys.is_empty() {
-            return Ok((
-                self.session.as_ref().unwrap(),
-                &self.keys,
-                self.first_char_id,
-            ));
+            return Ok(());
         }
 
         let model_path = self.model_path.as_ref().ok_or_else(|| {
@@ -121,23 +125,22 @@ impl CrnnTextRecognizerExecutor {
             .runtime
             .create_session(&handle, AccelerationMode::Cpu)?;
 
-        let (keys, first_char_id) = crate::text_recognizer::load_keys(keys_path)?;
+        let (keys, first_char_id) = load_keys(keys_path)?;
 
         self.session = Some(Arc::new(session));
         self.keys = keys;
         self.first_char_id = first_char_id;
 
-        Ok((
-            self.session.as_ref().unwrap(),
-            &self.keys,
-            self.first_char_id,
-        ))
+        Ok(())
     }
 }
 
 impl ModelExecutor for CrnnTextRecognizerExecutor {
     fn run(&mut self, input: ModelInput, _ctx: &mut InferenceContext) -> Result<ModelOutput> {
-        let (session, keys, first_char_id) = self.ensure_loaded()?;
+        self.ensure_loaded()?;
+
+        let session = self.session.as_ref().unwrap();
+        let keys = &self.keys;
 
         // Reconstruct SnipperImage from ModelInput
         let shape = &input.shape;
@@ -158,14 +161,13 @@ impl ModelExecutor for CrnnTextRecognizerExecutor {
             pixels,
         );
 
-        // Run recognition using the existing inference function
-        let params = crate::text_recognizer::TextRecParams::default();
+        // Run recognition using the compiled params (not defaults)
         let result = crate::text_recognizer::recognize_text_with_keys(
             &image,
             &**session,
             keys,
-            first_char_id,
-            &params,
+            self.first_char_id,
+            &self.params,
         )?;
 
         // Convert to ModelOutput

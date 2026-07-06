@@ -220,6 +220,7 @@ fn test_register_builtin_adapters() {
 
     let adapters = registry.registered_adapters();
     assert!(adapters.contains(&"yolov8-detection-v1"));
+    assert!(adapters.contains(&"dbnet-detection-v1"));
     assert!(adapters.contains(&"trocr-recognition-v1"));
     assert!(adapters.contains(&"ctc-recognition-v1"));
 }

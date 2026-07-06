@@ -65,6 +65,20 @@ pub enum ModelOutput {
     Raw(Vec<Vec<f32>>),
 }
 
+/// Optional quad coordinates for rotated text regions.
+/// Four points in order: top-left, top-right, bottom-right, bottom-left.
+#[derive(Debug, Clone, Copy)]
+pub struct DetectionQuad {
+    pub x1: f32,
+    pub y1: f32,
+    pub x2: f32,
+    pub y2: f32,
+    pub x3: f32,
+    pub y3: f32,
+    pub x4: f32,
+    pub y4: f32,
+}
+
 /// Detection result from a detection model.
 #[derive(Debug, Clone)]
 pub struct DetectionResult {
@@ -72,6 +86,8 @@ pub struct DetectionResult {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    /// Optional four-point quad for rotated text regions.
+    pub quad: Option<DetectionQuad>,
     pub confidence: f32,
     pub class_id: usize,
     pub class_name: String,

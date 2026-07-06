@@ -132,11 +132,27 @@ impl DetectorNode {
                 let (class_id, class_name) = self.task_to_class();
                 let detections: Vec<latexsnipper_inference::DetectionBox> = results
                     .into_iter()
-                    .map(|r| latexsnipper_inference::DetectionBox {
-                        rect: latexsnipper_ast::Rect::new(r.x, r.y, r.width, r.height),
-                        confidence: r.confidence,
-                        class_id,
-                        class_name: class_name.clone(),
+                    .map(|r| {
+                        let rect = latexsnipper_ast::Rect::new(r.x, r.y, r.width, r.height);
+                        match r.quad {
+                            Some(q) => latexsnipper_inference::DetectionBox::quad(
+                                latexsnipper_ast::Quad::new(
+                                    latexsnipper_ast::Point::new(q.x1, q.y1),
+                                    latexsnipper_ast::Point::new(q.x2, q.y2),
+                                    latexsnipper_ast::Point::new(q.x3, q.y3),
+                                    latexsnipper_ast::Point::new(q.x4, q.y4),
+                                ),
+                                r.confidence,
+                                class_id,
+                                class_name.clone(),
+                            ),
+                            None => latexsnipper_inference::DetectionBox::rect(
+                                rect,
+                                r.confidence,
+                                class_id,
+                                class_name.clone(),
+                            ),
+                        }
                     })
                     .collect();
 
@@ -230,7 +246,7 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let (_det_config, det_model_path, _variant_dir) =
+        let (det_config, det_model_path, _variant_dir) =
             match resolve_variant(ctx, models, "text-det") {
                 Ok(r) => r,
                 Err(_) => {
@@ -239,7 +255,7 @@ impl DetectorNode {
                 }
             };
 
-        let det_params = TextDetParams::default();
+        let det_params = TextDetParams::from_config(&det_config);
         let det_handle = resolve_model_handle(ctx, "text-det", det_model_path)?;
 
         let backend = get_backend(ctx)?;

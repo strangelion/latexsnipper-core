@@ -22,7 +22,7 @@ pub use formula::{Formula, FormulaSource};
 pub use formula_layout::{
     categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory, SymbolInfo,
 };
-pub use geometry::{Point, Rect, Size};
+pub use geometry::{Point, Quad, Rect, Size};
 pub use inline::{CiteStyle, ImageInline, Inline, TextRun};
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;

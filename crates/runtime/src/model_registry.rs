@@ -99,6 +99,12 @@ pub struct ManifestDecoding {
     /// Blank token ID for CTC.
     #[serde(default)]
     pub blank_id: Option<usize>,
+    /// CTC output tensor layout: "ntc" or "tnc".
+    #[serde(default)]
+    pub output_layout: Option<String>,
+    /// Type of logits: "logits", "probabilities", or "log_probabilities".
+    #[serde(default)]
+    pub logits_kind: Option<String>,
     /// Temperature for sampling.
     #[serde(default)]
     pub temperature: Option<f32>,

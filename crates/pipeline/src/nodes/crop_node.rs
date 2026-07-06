@@ -67,20 +67,26 @@ impl PipelineNode for CropNode {
         }
         ctx.artifacts.formula_crops = formula_crops;
 
-        // Crop text detections
+        // Crop text detections — use quad warp when available, fall back to rect crop
         let text_detections = ctx.artifacts.text_detections.clone();
         let mut text_crops = Vec::new();
         for det in &text_detections {
-            let x = det.rect.x as u32;
-            let y = det.rect.y as u32;
             let w = det.rect.width as u32;
             let h = det.rect.height as u32;
 
             if w >= self.min_size && h >= self.min_size {
-                let cropped = operations::crop(
-                    &image,
-                    latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32),
-                );
+                let cropped = if let Some(ref quad) = det.quad {
+                    let (tw, th) = quad.warp_target_size();
+                    let padding = (th as f32 * 0.1).max(2.0); // 10% height padding
+                    operations::warp_quad_to_rect(&image, quad, tw.max(4), th.max(4), padding)
+                } else {
+                    let x = det.rect.x as u32;
+                    let y = det.rect.y as u32;
+                    operations::crop(
+                        &image,
+                        latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32),
+                    )
+                };
                 text_crops.push(CropRegion {
                     rect: det.rect,
                     image: cropped,

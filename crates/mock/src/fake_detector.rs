@@ -15,24 +15,24 @@ impl FakeDetector {
     /// Create a detector that returns a single formula box.
     pub fn single_formula(confidence: f32) -> Self {
         Self {
-            boxes: vec![DetectionBox {
-                rect: Rect::new(10.0, 10.0, 100.0, 50.0),
+            boxes: vec![DetectionBox::rect(
+                Rect::new(10.0, 10.0, 100.0, 50.0),
                 confidence,
-                class_id: 1,
-                class_name: "isolated".into(),
-            }],
+                1,
+                "isolated".into(),
+            )],
         }
     }
 
     /// Create a detector that returns a single text box.
     pub fn single_text(confidence: f32) -> Self {
         Self {
-            boxes: vec![DetectionBox {
-                rect: Rect::new(10.0, 10.0, 200.0, 30.0),
+            boxes: vec![DetectionBox::rect(
+                Rect::new(10.0, 10.0, 200.0, 30.0),
                 confidence,
-                class_id: 0,
-                class_name: "text".into(),
-            }],
+                0,
+                "text".into(),
+            )],
         }
     }
 

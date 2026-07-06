@@ -6,7 +6,9 @@
 
 use latexsnipper_runtime::{ModelId, ModelManifest, ModelRegistry};
 
-use crate::adapters::{CrnnTextRecognizerPackage, TrOcrFormulaPackage, YoloV8DetectorPackage};
+use crate::adapters::{
+    CrnnTextRecognizerPackage, DbNetTextDetectorPackage, TrOcrFormulaPackage, YoloV8DetectorPackage,
+};
 
 /// Convert a ModelManifest to a ModelConfig.
 ///
@@ -56,6 +58,21 @@ fn manifest_to_config(manifest: &ModelManifest) -> latexsnipper_model::ModelConf
             decoding_type: Some(d.decoding_type.clone()),
             beam_width: d.beam_width,
             blank_id: d.blank_id,
+            output_layout: d.output_layout.as_ref().and_then(|s| {
+                match s.to_lowercase().as_str() {
+                    "ntc" => Some(latexsnipper_model::CtcOutputLayout::Ntc),
+                    "tnc" => Some(latexsnipper_model::CtcOutputLayout::Tnc),
+                    _ => None,
+                }
+            }),
+            logits_kind: d.logits_kind.as_ref().and_then(|s| {
+                match s.to_lowercase().as_str() {
+                    "logits" => Some(latexsnipper_model::LogitsKind::Logits),
+                    "probabilities" => Some(latexsnipper_model::LogitsKind::Probabilities),
+                    "log_probabilities" => Some(latexsnipper_model::LogitsKind::LogProbabilities),
+                    _ => None,
+                }
+            }),
             temperature: d.temperature,
             top_k: None,
             tokenizer_file: None,
@@ -100,6 +117,7 @@ fn manifest_to_config(manifest: &ModelManifest) -> latexsnipper_model::ModelConf
 /// After calling this, the registry can create packages from manifests
 /// that declare:
 /// - `adapter = "yolov8-detection-v1"` → `YoloV8DetectorPackage`
+/// - `adapter = "dbnet-detection-v1"` → `DbNetTextDetectorPackage`
 /// - `adapter = "trocr-recognition-v1"` → `TrOcrFormulaPackage`
 /// - `adapter = "ctc-recognition-v1"` → `CrnnTextRecognizerPackage`
 ///
@@ -171,6 +189,37 @@ pub fn register_builtin_adapters(registry: &mut ModelRegistry) {
         Ok(Box::new(package))
     });
 
+    // DBNet CTC Text Detection
+    registry.register_adapter("dbnet-detection-v1", |manifest, model_dir| {
+        let model_id = ModelId::from_composite_key(&manifest.id);
+        let config_exists = model_dir.join("config.json").exists();
+
+        // Try config.json first, fall back to manifest
+        let config = if config_exists {
+            latexsnipper_model::ModelConfig::load(model_dir).ok()
+        } else {
+            Some(manifest_to_config(manifest))
+        };
+
+        let package = if let Some(config) = config {
+            DbNetTextDetectorPackage::from_config(&config, model_id)
+        } else {
+            DbNetTextDetectorPackage::from_config(
+                &latexsnipper_model::ModelConfig::minimal(),
+                model_id,
+            )
+        };
+
+        // Set model path from manifest
+        let package = if let Some(primary) = &manifest.files.primary {
+            package.with_model_path(model_dir.join(primary))
+        } else {
+            package
+        };
+
+        Ok(Box::new(package))
+    });
+
     // CRNN CTC Text Recognition
     registry.register_adapter("ctc-recognition-v1", |manifest, model_dir| {
         let model_id = ModelId::from_composite_key(&manifest.id);
@@ -217,6 +266,7 @@ mod tests {
 
         let adapters = registry.registered_adapters();
         assert!(adapters.contains(&"yolov8-detection-v1"));
+        assert!(adapters.contains(&"dbnet-detection-v1"));
         assert!(adapters.contains(&"trocr-recognition-v1"));
         assert!(adapters.contains(&"ctc-recognition-v1"));
     }

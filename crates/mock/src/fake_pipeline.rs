@@ -42,33 +42,13 @@ impl FakePipeline {
     pub fn mixed(formula_latex: &str, text: &str, confidence: f32) -> Self {
         Self {
             detector: FakeDetector::new(vec![
-                DetectionBox {
-                    rect: Rect::new(10.0, 10.0, 100.0, 50.0),
-                    confidence,
-                    class_id: 1,
-                    class_name: "isolated".into(),
-                },
-                DetectionBox {
-                    rect: Rect::new(10.0, 70.0, 200.0, 30.0),
-                    confidence,
-                    class_id: 0,
-                    class_name: "text".into(),
-                },
+                DetectionBox::rect(Rect::new(10.0, 10.0, 100.0, 50.0), confidence, 1, "isolated".into()),
+                DetectionBox::rect(Rect::new(10.0, 70.0, 200.0, 30.0), confidence, 0, "text".into()),
             ]),
             recognizer: FakeRecognizer::from_detections(
                 &[
-                    DetectionBox {
-                        rect: Rect::new(10.0, 10.0, 100.0, 50.0),
-                        confidence,
-                        class_id: 1,
-                        class_name: "isolated".into(),
-                    },
-                    DetectionBox {
-                        rect: Rect::new(10.0, 70.0, 200.0, 30.0),
-                        confidence,
-                        class_id: 0,
-                        class_name: "text".into(),
-                    },
+                    DetectionBox::rect(Rect::new(10.0, 10.0, 100.0, 50.0), confidence, 1, "isolated".into()),
+                    DetectionBox::rect(Rect::new(10.0, 70.0, 200.0, 30.0), confidence, 0, "text".into()),
                 ],
                 &[formula_latex, text],
             ),

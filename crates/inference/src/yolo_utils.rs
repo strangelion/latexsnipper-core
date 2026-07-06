@@ -97,12 +97,12 @@ pub fn decode_yolo_output(
         let bw = w / scale;
         let bh = h / scale;
 
-        boxes.push(DetectionBox {
-            rect: Rect::new(x1.max(0.0), y1.max(0.0), bw, bh),
-            confidence: max_conf,
+        boxes.push(DetectionBox::rect(
+            Rect::new(x1.max(0.0), y1.max(0.0), bw, bh),
+            max_conf,
             class_id,
             class_name,
-        });
+        ));
     }
 
     Ok(boxes)
