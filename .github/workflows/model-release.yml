@@ -64,20 +64,26 @@ jobs:
 
       - name: Download and extract model ZIPs
         run: |
-          BASE_TAG="models-v2.0.0"
           mkdir -p models
-          CATEGORIES=""
-          VARIANTS_LIST=""
           while IFS=: read -r cat variant zip_name; do
             echo "---"
             echo "Processing: cat=$cat variant=$variant zip=$zip_name"
-            CATEGORIES="$CATEGORIES $cat"
-            VARIANTS_LIST="$VARIANTS_LIST $variant"
 
-            URL="https://github.com/strangelion/latexsnipper-core/releases/download/$BASE_TAG/$zip_name"
-            echo "Downloading $zip_name -> models/$cat/$variant ..."
+            # Try to get sourceUrl from manifest
+            SOURCE_URL=$(jq -r --arg cat "$cat" --arg var "$variant" '
+              .categories[$cat].variants[] | select(.id == $var) | .sourceUrl // empty
+            ' scripts/model-manifest.template.json)
+
+            if [ -n "$SOURCE_URL" ]; then
+              URL="$SOURCE_URL"
+            else
+              BASE_TAG="models-v2.0.0"
+              URL="https://github.com/strangelion/latexsnipper-core/releases/download/$BASE_TAG/$zip_name"
+            fi
+
+            echo "Downloading $zip_name from $URL ..."
             curl -fsSL -o "$zip_name" "$URL" || {
-              echo "WARNING: Could not download $zip_name (may be a new model not in v2.0.0 release)"
+              echo "WARNING: Could not download $zip_name"
               echo "Creating placeholder directory for models/$cat/$variant"
               mkdir -p "models/$cat/$variant"
               continue

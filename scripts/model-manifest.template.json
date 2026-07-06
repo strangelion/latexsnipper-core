@@ -76,6 +76,7 @@
                                                               "label":  "OpenOCR Mobile Text Detection",
                                                               "adapter":  "dbnet-detection-v1",
                                                               "modelType":  "dbnet",
+                                                              "sourceUrl":  "https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.1.0/latexsnipper-text-det-openocr-mobile.zip",
                                                               "files":  [
                                                                             "model.onnx",
                                                                             "config.json",
@@ -107,12 +108,13 @@
                                                               "label":  "OpenOCR Mobile Text Recognition",
                                                               "adapter":  "ctc-recognition-v1",
                                                               "modelType":  "crnn_ctc",
+                                                              "sourceUrl":  "https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.1.0/latexsnipper-text-rec-openocr-mobile.zip",
                                                               "files":  [
-                                                                            "model.onnx",
-                                                                            "dict.txt",
-                                                                            "config.json",
-                                                                            "MODEL_CARD.md"
-                                                                        ],
+                                                                             "model.onnx",
+                                                                             "dict.txt",
+                                                                             "config.json",
+                                                                             "MODEL_CARD.md"
+                                                                         ],
                                                               "zipFile":  "latexsnipper-text-rec-openocr-mobile.zip"
                                                           }
                                                       ]
