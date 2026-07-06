@@ -1,11 +1,14 @@
 use async_trait::async_trait;
+use latexsnipper_ast::Inline;
 use latexsnipper_foundation::Result;
+use latexsnipper_inference::LanguageDetector;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::reading_order::ReadingOrder;
 
-/// Post-processes recognition results (sort by reading order, merge, etc.).
+/// Post-processes recognition results (sort by reading order, merge, and
+/// apply language-specific text cleanup for multilingual output).
 pub struct PostprocessNode {
     name: String,
     y_threshold: f32,
@@ -53,6 +56,17 @@ impl PipelineNode for PostprocessNode {
 
         // Sort by reading order (y-bucket + x tie-breaker)
         ReadingOrder::sort(&mut blocks, self.y_threshold);
+
+        // Apply language-specific postprocessing to text blocks
+        for block in &mut blocks {
+            if let latexsnipper_ast::Block::Paragraph(ref mut p) = block {
+                for inline in &mut p.inlines {
+                    if let Inline::Text(ref mut text_run) = inline {
+                        text_run.text = LanguageDetector::postprocess(&text_run.text);
+                    }
+                }
+            }
+        }
 
         // Replace artifacts with sorted blocks
         ctx.artifacts.formula_blocks.clear();

@@ -6,6 +6,7 @@ pub mod formula_parser;
 pub mod formula_recognizer;
 pub mod handwriting_detector;
 pub mod handwriting_postprocess;
+pub mod language;
 pub mod latex_repair;
 pub mod symbol_detector;
 pub mod table_detector;
@@ -28,6 +29,7 @@ pub use handwriting_detector::{
     detect_handwriting, filter_handwriting_detections, HandwritingDetParams,
 };
 pub use handwriting_postprocess::postprocess_handwriting;
+pub use language::{Language, LanguageDetector};
 pub use latex_repair::{has_severe_latex_issue, latex_quality_flags, repair_latex};
 pub use symbol_detector::{detect_symbols, SymbolDetParams, SymbolDetection};
 pub use table_detector::{detect_tables, filter_table_detections, TableDetParams};
