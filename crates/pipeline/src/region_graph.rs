@@ -75,6 +75,7 @@ pub struct ResolvedRegion {
 // ── priority ordering for conflict resolution ─────────────────────────
 
 /// Priority ranking: higher = wins conflicts.
+#[allow(dead_code)]
 fn kind_priority(kind: RegionKind) -> u8 {
     match kind {
         RegionKind::Table => 100,
