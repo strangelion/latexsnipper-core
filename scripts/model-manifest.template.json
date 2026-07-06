@@ -54,44 +54,69 @@
                                                             }
                                                         ]
                                        },
-                       "text-det":  {
-                                        "label":  "Text Detection",
-                                        "required":  false,
-                                        "default":  "v6-small",
-                                        "variants":  [
-                                                         {
-                                                             "id":  "v6-small",
-                                                             "label":  "PP-OCRv6 Text Detection",
-                                                             "adapter":  "dbnet-detection-v1",
-                                                             "modelType":  "dbnet",
-                                                             "files":  [
-                                                                           "inference.onnx",
-                                                                           "inference.yml",
-                                                                           "config.json"
-                                                                       ],
-                                                             "zipFile":  "latexsnipper-text-det.zip"
-                                                         }
-                                                     ]
-                                    },
-                       "text-rec":  {
-                                        "label":  "Text Recognition",
-                                        "required":  false,
-                                        "default":  "v6-small",
-                                        "variants":  [
-                                                         {
-                                                             "id":  "v6-small",
-                                                             "label":  "PP-OCRv6 Text Recognition",
-                                                             "adapter":  "ctc-recognition-v1",
-                                                             "modelType":  "crnn_ctc",
-                                                             "files":  [
-                                                                           "inference.onnx",
-                                                                           "inference.yml",
-                                                                           "config.json"
-                                                                       ],
-                                                             "zipFile":  "latexsnipper-text-rec.zip"
-                                                         }
-                                                     ]
-                                    },
+                        "text-det":  {
+                                         "label":  "Text Detection",
+                                         "required":  false,
+                                         "default":  "v6-small",
+                                         "variants":  [
+                                                          {
+                                                              "id":  "v6-small",
+                                                              "label":  "PP-OCRv6 Text Detection",
+                                                              "adapter":  "dbnet-detection-v1",
+                                                              "modelType":  "dbnet",
+                                                              "files":  [
+                                                                            "inference.onnx",
+                                                                            "inference.yml",
+                                                                            "config.json"
+                                                                        ],
+                                                              "zipFile":  "latexsnipper-text-det.zip"
+                                                          },
+                                                          {
+                                                              "id":  "openocr-mobile",
+                                                              "label":  "OpenOCR Mobile Text Detection",
+                                                              "adapter":  "dbnet-detection-v1",
+                                                              "modelType":  "dbnet",
+                                                              "files":  [
+                                                                            "model.onnx",
+                                                                            "config.json",
+                                                                            "MODEL_CARD.md"
+                                                                        ],
+                                                              "zipFile":  "latexsnipper-text-det-openocr-mobile.zip"
+                                                          }
+                                                      ]
+                                     },
+                        "text-rec":  {
+                                         "label":  "Text Recognition",
+                                         "required":  false,
+                                         "default":  "v6-small",
+                                         "variants":  [
+                                                          {
+                                                              "id":  "v6-small",
+                                                              "label":  "PP-OCRv6 Text Recognition",
+                                                              "adapter":  "ctc-recognition-v1",
+                                                              "modelType":  "crnn_ctc",
+                                                              "files":  [
+                                                                            "inference.onnx",
+                                                                            "inference.yml",
+                                                                            "config.json"
+                                                                        ],
+                                                              "zipFile":  "latexsnipper-text-rec.zip"
+                                                          },
+                                                          {
+                                                              "id":  "openocr-mobile",
+                                                              "label":  "OpenOCR Mobile Text Recognition",
+                                                              "adapter":  "ctc-recognition-v1",
+                                                              "modelType":  "crnn_ctc",
+                                                              "files":  [
+                                                                            "model.onnx",
+                                                                            "dict.txt",
+                                                                            "config.json",
+                                                                            "MODEL_CARD.md"
+                                                                        ],
+                                                              "zipFile":  "latexsnipper-text-rec-openocr-mobile.zip"
+                                                          }
+                                                      ]
+                                     },
                        "table-det":  {
                                           "label":  "Table Detection",
                                           "required":  false,

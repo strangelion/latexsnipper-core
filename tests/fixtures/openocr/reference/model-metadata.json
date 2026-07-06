@@ -1,0 +1,246 @@
+{
+  "models\\formula-det\\yolov8-mfd\\mathcraft-mfd.onnx": {
+    "model_path": "models\\formula-det\\yolov8-mfd\\mathcraft-mfd.onnx",
+    "inputs": [
+      {
+        "name": "images",
+        "shape": [
+          "batch",
+          3,
+          "height",
+          "width"
+        ],
+        "dtype": "tensor(float)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output0",
+        "shape": [
+          "batch",
+          6,
+          "(floor(floor(floor(height/2 - 1/2)/2)/2) + 1)*(floor(floor(floor(width/2 - 1/2)/2)/2) + 1) + (floor(floor(floor(floor(height/2 - 1/2)/2)/2)/2) + 1)*(floor(floor(floor(floor(width/2 - 1/2)/2)/2)/2) + 1) + (floor(floor(floor(floor(floor(height/2 - 1/2)/2)/2)/2)/2) + 1)*(floor(floor(floor(floor(floor(width/2 - 1/2)/2)/2)/2)/2) + 1)"
+        ],
+        "dtype": "tensor(float)"
+      }
+    ]
+  },
+  "models\\formula-rec\\trocr-deit\\decoder_model.onnx": {
+    "model_path": "models\\formula-rec\\trocr-deit\\decoder_model.onnx",
+    "inputs": [
+      {
+        "name": "input_ids",
+        "shape": [
+          "batch_size",
+          "decoder_sequence_length"
+        ],
+        "dtype": "tensor(int64)"
+      },
+      {
+        "name": "encoder_hidden_states",
+        "shape": [
+          "batch_size",
+          "encoder_sequence_length",
+          384
+        ],
+        "dtype": "tensor(float)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "logits",
+        "shape": [
+          "batch_size",
+          "decoder_sequence_length",
+          1200
+        ],
+        "dtype": "tensor(float)"
+      }
+    ]
+  },
+  "models\\formula-rec\\trocr-deit\\encoder_model.onnx": {
+    "model_path": "models\\formula-rec\\trocr-deit\\encoder_model.onnx",
+    "inputs": [
+      {
+        "name": "pixel_values",
+        "shape": [
+          "batch_size",
+          "num_channels",
+          "height",
+          "width"
+        ],
+        "dtype": "tensor(float)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "last_hidden_state",
+        "shape": [
+          "batch_size",
+          578,
+          384
+        ],
+        "dtype": "tensor(float)"
+      }
+    ]
+  },
+  "models\\table-det\\tatr-detection\\model.onnx": {
+    "model_path": "models\\table-det\\tatr-detection\\model.onnx",
+    "inputs": [
+      {
+        "name": "pixel_values",
+        "shape": [
+          "batch",
+          3,
+          "height",
+          "width"
+        ],
+        "dtype": "tensor(float)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "logits",
+        "shape": [
+          "batch",
+          15,
+          3
+        ],
+        "dtype": "tensor(float)"
+      },
+      {
+        "name": "pred_boxes",
+        "shape": [
+          "batch",
+          15,
+          4
+        ],
+        "dtype": "tensor(float)"
+      },
+      {
+        "name": "layer_norm_31",
+        "shape": [
+          "batch",
+          15,
+          256
+        ],
+        "dtype": "tensor(float)"
+      },
+      {
+        "name": "layer_norm_12",
+        "shape": [
+          "batch",
+          "((((height - 1)//32)) + 1)*((((width - 1)//32)) + 1)",
+          256
+        ],
+        "dtype": "tensor(float)"
+      }
+    ]
+  },
+  "models\\table-struct\\tatr-structure\\model.onnx": {
+    "model_path": "models\\table-struct\\tatr-structure\\model.onnx",
+    "inputs": [
+      {
+        "name": "pixel_values",
+        "shape": [
+          "batch",
+          3,
+          "height",
+          "width"
+        ],
+        "dtype": "tensor(float)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "logits",
+        "shape": [
+          "batch",
+          125,
+          7
+        ],
+        "dtype": "tensor(float)"
+      },
+      {
+        "name": "pred_boxes",
+        "shape": [
+          "batch",
+          125,
+          4
+        ],
+        "dtype": "tensor(float)"
+      },
+      {
+        "name": "layer_norm_31",
+        "shape": [
+          "batch",
+          125,
+          256
+        ],
+        "dtype": "tensor(float)"
+      },
+      {
+        "name": "layer_norm_12",
+        "shape": [
+          "batch",
+          "((((height - 1)//32)) + 1)*((((width - 1)//32)) + 1)",
+          256
+        ],
+        "dtype": "tensor(float)"
+      }
+    ]
+  },
+  "models\\text-det\\v6-small\\inference.onnx": {
+    "model_path": "models\\text-det\\v6-small\\inference.onnx",
+    "inputs": [
+      {
+        "name": "x",
+        "shape": [
+          "DynamicDimension.0",
+          3,
+          "DynamicDimension.1",
+          "DynamicDimension.2"
+        ],
+        "dtype": "tensor(float)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "fetch_name_0",
+        "shape": [
+          "ConvTranspose_459_o0__d0",
+          1,
+          "ConvTranspose_459_o0__d2",
+          "ConvTranspose_459_o0__d3"
+        ],
+        "dtype": "tensor(float)"
+      }
+    ]
+  },
+  "models\\text-rec\\v6-small\\inference.onnx": {
+    "model_path": "models\\text-rec\\v6-small\\inference.onnx",
+    "inputs": [
+      {
+        "name": "x",
+        "shape": [
+          "DynamicDimension.0",
+          3,
+          48,
+          "DynamicDimension.1"
+        ],
+        "dtype": "tensor(float)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "fetch_name_0",
+        "shape": [
+          "DynamicDimension.0",
+          "Reshape_470_o0__d2",
+          18710
+        ],
+        "dtype": "tensor(float)"
+      }
+    ]
+  }
+}

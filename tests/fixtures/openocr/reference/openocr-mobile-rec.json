@@ -1,0 +1,85 @@
+{
+  "long-line.png": {
+    "texts": [
+      {
+        "text": "The quick brown fox jumps over the lazy dog 1234567890",
+        "confidence": 0.98308
+      }
+    ]
+  },
+  "mixed-en-zh.png": {
+    "texts": [
+      {
+        "text": "English \u25a1 Mixed Text \u25a1",
+        "confidence": 0.943
+      }
+    ]
+  },
+  "rotated-text.png": {
+    "texts": [
+      {
+        "text": "Rotated Text",
+        "confidence": 0.99636
+      },
+      {
+        "text": "Skewed Line",
+        "confidence": 0.99996
+      }
+    ]
+  },
+  "table-text.png": {
+    "texts": [
+      {
+        "text": "Name",
+        "confidence": 0.99995
+      },
+      {
+        "text": "Age",
+        "confidence": 0.99995
+      },
+      {
+        "text": "City",
+        "confidence": 0.99991
+      },
+      {
+        "text": "Alice 30",
+        "confidence": 0.99785
+      },
+      {
+        "text": "Beijing",
+        "confidence": 0.97362
+      },
+      {
+        "text": "Bob",
+        "confidence": 0.99994
+      },
+      {
+        "text": "25",
+        "confidence": 1.0
+      },
+      {
+        "text": "Shanghai",
+        "confidence": 0.99996
+      },
+      {
+        "text": "Carol 35",
+        "confidence": 0.94572
+      },
+      {
+        "text": "Guangzhou",
+        "confidence": 0.99996
+      }
+    ]
+  },
+  "text-en.png": {
+    "texts": [
+      {
+        "text": "Hello World OCR Test",
+        "confidence": 0.99937
+      }
+    ]
+  },
+  "text-zh.png": {
+    "texts": []
+  }
+}
