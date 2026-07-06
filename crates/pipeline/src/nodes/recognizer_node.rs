@@ -149,41 +149,25 @@ impl RecognizerNode {
                 ctx.artifacts.formula_blocks = blocks;
             }
             ModelTask::TextRecognition => {
+                // Delegate to shared TextRecognitionService to ensure
+                // session reuse and consistent preprocessing across all paths.
+                drop(executor);
                 let detections = ctx.artifacts.text_detections.clone();
-                for det in &detections {
-                    let x = det.rect.x as u32;
-                    let y = det.rect.y as u32;
-                    let w = det.rect.width as u32;
-                    let h = det.rect.height as u32;
-
-                    if w >= 4 && h >= 4 {
-                        let cropped = operations::crop(
-                            &image,
-                            Rect::new(x as f32, y as f32, w as f32, h as f32),
-                        );
-
-                        let pixels = cropped.pixels().to_vec();
-                        let shape = vec![cropped.height() as usize, cropped.width() as usize, 3];
-                        let input = ModelInput {
-                            name: "image".to_string(),
-                            data: pixels,
-                            shape,
-                            dtype: latexsnipper_runtime::TensorDtype::UInt8,
-                        };
-
-                        let mut inf_ctx = InferenceContext::new();
-                        let output = executor.run(input, &mut inf_ctx)?;
-
-                        if let ModelOutput::Text(results) = output {
-                            for result in results {
-                                if !result.text.is_empty() {
-                                    blocks.push(Block::Paragraph(ParagraphBlock {
-                                        inlines: vec![Inline::Text(TextRun::new(result.text))],
-                                        geometry: Some(det.rect),
-                                        source: Some(SourceInfo::new().with_page(ctx.current_page)),
-                                    }));
-                                }
+                if let Some(service) = ctx.get_or_init_text_rec_service() {
+                    for det in &detections {
+                        let text = match service.recognize_region(&image, &det.rect, det.quad.as_ref()) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                log::warn!("Text rec failed: {}", e);
+                                continue;
                             }
+                        };
+                        if !text.is_empty() {
+                            blocks.push(Block::Paragraph(ParagraphBlock {
+                                inlines: vec![Inline::Text(TextRun::new(text))],
+                                geometry: Some(det.rect),
+                                source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                            }));
                         }
                     }
                 }
