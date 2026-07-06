@@ -10,8 +10,12 @@
   "mixed-en-zh.png": {
     "texts": [
       {
-        "text": "English \u25a1 Mixed Text \u25a1",
-        "confidence": 0.943
+        "text": "English \u4e2d\u6587\u6df7\u5408 Mixed Text ",
+        "confidence": 0.97743
+      },
+      {
+        "text": "t\u6d4b\u8bd5",
+        "confidence": 0.99972
       }
     ]
   },
@@ -80,6 +84,11 @@
     ]
   },
   "text-zh.png": {
-    "texts": []
+    "texts": [
+      {
+        "text": "\u4e2d\u6587\u8bc6\u522b\u6d4b\u8bd5",
+        "confidence": 0.99945
+      }
+    ]
   }
 }
