@@ -5,8 +5,8 @@ use latexsnipper_ast::*;
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_inference::{
-    detect_formulas, filter_formula_detections, group_formula_detections, load_keys,
-    recognize_formula, recognize_text_with_keys, DetectionParams, RecognitionParams, TextRecParams,
+    detect_formulas, filter_formula_detections, group_formula_detections,
+    recognize_formula, DetectionParams, RecognitionParams,
 };
 use latexsnipper_runtime::RuntimeBackend;
 
@@ -14,10 +14,10 @@ use crate::artifacts::RecognizedTable;
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::nodes::utils::{get_backend, resolve_model_handle};
+use crate::text_recognition_service::TextRecognitionService;
 
 type InferenceArc = Arc<Box<dyn latexsnipper_runtime::InferenceSession>>;
 type FormulaRecSession = (InferenceArc, InferenceArc, std::path::PathBuf);
-type TextRecSession = (InferenceArc, std::path::PathBuf);
 
 /// Recognizes content in table cells.
 ///
@@ -85,7 +85,7 @@ impl TableRecognizerNode {
         let backend = get_backend(ctx)?;
         let formula_det_session = self.load_formula_det_session(ctx, &*backend, models)?;
         let formula_rec_session = self.load_formula_rec_session(ctx, &*backend, models)?;
-        let text_rec_session = self.load_text_rec_session(ctx, &*backend, models)?;
+        let text_rec_service = TextRecognitionService::try_load(models);
 
         let mut table_blocks = Vec::new();
 
@@ -97,7 +97,7 @@ impl TableRecognizerNode {
                     table,
                     &formula_det_session,
                     &formula_rec_session,
-                    &text_rec_session,
+                    text_rec_service.as_ref(),
                 )
                 .await?
             {
@@ -121,7 +121,7 @@ impl TableRecognizerNode {
         table: &RecognizedTable,
         formula_det_session: &Option<InferenceArc>,
         formula_rec_session: &Option<FormulaRecSession>,
-        text_rec_session: &Option<TextRecSession>,
+        text_rec_service: Option<&TextRecognitionService>,
     ) -> Result<Option<Block>> {
         let cells = &table.cells;
         let table_rect = table.table_rect;
@@ -153,7 +153,7 @@ impl TableRecognizerNode {
                     &cell_rect,
                     formula_det_session,
                     formula_rec_session,
-                    text_rec_session,
+                    text_rec_service,
                 )
                 .await;
 
@@ -278,75 +278,6 @@ impl TableRecognizerNode {
         Ok(Some((enc_session, dec_session, tok_path)))
     }
 
-    /// Load text recognition session, using ctx session cache.
-    /// Respects ctx.model_variants for variant selection.
-    fn load_text_rec_session(
-        &self,
-        ctx: &mut PipelineContext,
-        backend: &dyn RuntimeBackend,
-        models: &std::path::Path,
-    ) -> Result<Option<TextRecSession>> {
-        if let Some(s) = ctx.get_session("text_rec") {
-            let variant = ctx
-                .model_variants
-                .get("text-rec")
-                .cloned()
-                .unwrap_or_else(|| "v6-small".into());
-            let keys_path = self.find_text_rec_keys_for_variant(models, &variant);
-            return Ok(Some((s, keys_path)));
-        }
-
-        let variant = ctx
-            .model_variants
-            .get("text-rec")
-            .cloned()
-            .unwrap_or_else(|| "v6-small".into());
-
-        let rec_path = self.find_text_rec_model_for_variant(models, &variant);
-        let keys_path = self.find_text_rec_keys_for_variant(models, &variant);
-
-        if rec_path.is_none() {
-            return Ok(None);
-        }
-
-        let handle = resolve_model_handle(ctx, "text-rec", rec_path.unwrap())?;
-        let session = backend.create_session(&handle, ctx.acceleration)?;
-        ctx.cache_session("text_rec", session);
-        Ok(ctx.get_session("text_rec").map(|s| (s, keys_path)))
-    }
-
-    fn find_text_rec_model_for_variant(
-        &self,
-        models: &std::path::Path,
-        variant: &str,
-    ) -> Option<std::path::PathBuf> {
-        let candidates = [
-            models.join(format!("text-rec/{}/inference.onnx", variant)),
-            models.join(format!("text-rec/{}/model.onnx", variant)),
-            models.join("v6_models/PP-OCRv6_small_rec_infer/inference.onnx"),
-            models.join("v6_models/PP-OCRv6_small_rec_infer/model.onnx"),
-        ];
-        candidates.iter().find(|p| p.exists()).cloned()
-    }
-
-    fn find_text_rec_keys_for_variant(
-        &self,
-        models: &std::path::Path,
-        variant: &str,
-    ) -> std::path::PathBuf {
-        let candidates = [
-            models.join(format!("text-rec/{}/ppocr_keys.txt", variant)),
-            models.join(format!("text-rec/{}/inference.yml", variant)),
-            models.join("v6_models/PP-OCRv6_small_rec_infer/ppocr_keys.txt"),
-            models.join("v6_models/PP-OCRv6_small_rec_infer/inference.yml"),
-        ];
-        candidates
-            .iter()
-            .find(|p| p.exists())
-            .cloned()
-            .unwrap_or_else(|| models.join(format!("text-rec/{}/inference.yml", variant)))
-    }
-
     async fn recognize_cell_content(
         &self,
         ctx: &mut PipelineContext,
@@ -354,7 +285,7 @@ impl TableRecognizerNode {
         rect: &Rect,
         formula_det: &Option<InferenceArc>,
         formula_rec: &Option<FormulaRecSession>,
-        text_rec: &Option<TextRecSession>,
+        text_rec_service: Option<&TextRecognitionService>,
     ) -> Vec<Inline> {
         let w = rect.width as u32;
         let h = rect.height as u32;
@@ -425,26 +356,13 @@ impl TableRecognizerNode {
             }
         }
 
-        // No formula detected — try text recognition on the whole cell
-        if let Some((ref rec_session, ref keys_path)) = text_rec {
-            let (keys, first_char_id) = if let Some(chars) = rec_session.get_character_list() {
-                (chars, 1)
-            } else {
-                load_keys(keys_path).unwrap_or_default()
-            };
-            let rec_params = TextRecParams::default();
-            match recognize_text_with_keys(
-                &cropped,
-                &**rec_session,
-                &keys,
-                first_char_id,
-                &rec_params,
-            ) {
-                Ok(result) => {
-                    if !result.text.trim().is_empty() {
-                        return vec![Inline::Text(TextRun::new(result.text))];
-                    }
+        // No formula detected — try shared text recognition service
+        if let Some(service) = text_rec_service {
+            match service.recognize_region(image, rect, None) {
+                Ok(text) if !text.trim().is_empty() => {
+                    return vec![Inline::Text(TextRun::new(text))];
                 }
+                Ok(_) => {}
                 Err(e) => {
                     ctx.diagnostic_error(
                         "recognize_table",

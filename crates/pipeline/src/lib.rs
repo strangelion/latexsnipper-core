@@ -5,6 +5,7 @@ pub mod manifest;
 pub mod node;
 pub mod nodes;
 pub mod reading_order;
+pub mod text_recognition_service;
 #[deprecated(
     since = "1.1.0",
     note = "Use latexsnipper_engine::sdk::Snipper instead"

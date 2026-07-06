@@ -329,6 +329,42 @@ impl RecognizerNode {
             return Ok(());
         }
 
+        // Try shared text recognition service first
+        if let Some(service) = crate::text_recognition_service::TextRecognitionService::try_load(
+            models,
+        ) {
+            let mut blocks = Vec::new();
+            if let Some(ref image) = ctx.image {
+                for det in &detections {
+                    let text = match service.recognize_region(
+                        image,
+                        &det.rect,
+                        det.quad.as_ref(),
+                    ) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            log::warn!("Text rec failed: {}", e);
+                            continue;
+                        }
+                    };
+                    if !text.is_empty() {
+                        blocks.push(Block::Paragraph(ParagraphBlock {
+                            inlines: vec![Inline::Text(TextRun::new(text))],
+                            geometry: Some(det.rect),
+                            source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                        }));
+                    }
+                }
+            }
+            ctx.artifacts.text_blocks = blocks;
+            log::info!(
+                "Recognized {} text blocks (shared service)",
+                ctx.artifacts.text_blocks.len()
+            );
+            return Ok(());
+        }
+
+        // Fall back to direct function calls (legacy path)
         let rec_model = match select_text_rec_model(models) {
             Ok(m) => m,
             Err(e) => {
