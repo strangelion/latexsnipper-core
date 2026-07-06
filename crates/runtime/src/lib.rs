@@ -14,9 +14,9 @@ pub use acceleration::AccelerationMode;
 pub use backend::RuntimeBackend;
 pub use model_handle::ModelHandle;
 pub use model_package::{
-    DetectionQuad, DetectionResult, FormulaResult, InferenceContext, ModelDescriptor,
-    ModelExecutor, ModelInput, ModelOutput, ModelPackage, ModelTask, TableResult, TensorDtype,
-    TensorSpec, TextResult,
+    DetectionQuad, DetectionResult, FormulaResult, InferenceContext, LayoutResult,
+    ModelDescriptor, ModelExecutor, ModelInput, ModelOutput, ModelPackage, ModelTask, TableResult,
+    TensorDtype, TensorSpec, TextResult,
 };
 pub use model_plugin::{ManifestAdapter, ModelManifestView, ModelPlugin, ModelPluginRegistry};
 pub use model_registry::{

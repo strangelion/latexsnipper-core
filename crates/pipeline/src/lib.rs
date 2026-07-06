@@ -23,6 +23,7 @@ pub use nodes::crop_node::CropNode;
 pub use nodes::detector_node::DetectorNode;
 pub use nodes::formula_layout_node::FormulaLayoutNode;
 pub use nodes::handwriting_recognizer_node::HandwritingRecognizerNode;
+pub use nodes::layout_node::LayoutNode;
 pub use nodes::normalize_node::NormalizeNode;
 pub use nodes::page_assembly_node::PageAssemblyNode;
 pub use nodes::page_iterator_node::PageIteratorNode;

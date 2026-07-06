@@ -140,28 +140,49 @@
                                                            }
                                                        ]
                                       },
-                       "table-struct":  {
-                                            "label":  "Table Structure Recognition",
-                                            "required":  false,
-                                            "default":  "tatr-structure",
-                                            "description":  "Parse table structure - rows, columns, headers, cells. Critical for Word/Excel/HTML export.",
-                                            "variants":  [
-                                                             {
-                                                                 "id":  "tatr-structure",
-                                                                 "label":  "TATR Structure (Microsoft Table Transformer)",
-                                                                 "adapter":  "detr-structure-v1",
-                                                                 "modelType":  "detr",
-                                                                 "source":  "microsoft/table-transformer-structure-recognition",
-                                                                 "license":  "MIT",
-                                                                 "files":  [
-                                                                               "model.onnx",
-                                                                               "model.onnx.data",
-                                                                               "config.json"
-                                                                           ],
-                                                                 "zipFile":  "latexsnipper-table-struct.zip",
-                                                                 "notes":  "DETR-based. Outputs 7 classes: no_object, table, column, row, column_header, row_header, spanning_cell. Best for academic PDFs."
-                                                             }
-                                                         ]
-                                        }
-                   }
+                        "table-struct":  {
+                                             "label":  "Table Structure Recognition",
+                                             "required":  false,
+                                             "default":  "tatr-structure",
+                                             "description":  "Parse table structure - rows, columns, headers, cells. Critical for Word/Excel/HTML export.",
+                                             "variants":  [
+                                                              {
+                                                                  "id":  "tatr-structure",
+                                                                  "label":  "TATR Structure (Microsoft Table Transformer)",
+                                                                  "adapter":  "detr-structure-v1",
+                                                                  "modelType":  "detr",
+                                                                  "source":  "microsoft/table-transformer-structure-recognition",
+                                                                  "license":  "MIT",
+                                                                  "files":  [
+                                                                                "model.onnx",
+                                                                                "model.onnx.data",
+                                                                                "config.json"
+                                                                            ],
+                                                                  "zipFile":  "latexsnipper-table-struct.zip",
+                                                                  "notes":  "DETR-based. Outputs 7 classes: no_object, table, column, row, column_header, row_header, spanning_cell. Best for academic PDFs."
+                                                              }
+                                                          ]
+                                         },
+                        "layout":  {
+                                       "label":  "Layout Analysis",
+                                       "required":  false,
+                                       "default":  "pp-layout-cdla",
+                                       "description":  "Document layout analysis - detects text, title, figure, table, equation regions.",
+                                       "variants":  [
+                                                        {
+                                                            "id":  "pp-layout-cdla",
+                                                            "label":  "PP-Layout CDLA (PicoDet)",
+                                                            "adapter":  "picodet-layout-v1",
+                                                            "modelType":  "picodet_layout",
+                                                            "source":  "RapidAI/RapidLayout",
+                                                            "license":  "Apache-2.0",
+                                                            "files":  [
+                                                                          "layout_cdla.onnx",
+                                                                          "config.json"
+                                                                      ],
+                                                            "zipFile":  "latexsnipper-layout-cdla.zip"
+                                                        }
+                                                    ]
+                                   }
+                    }
 }

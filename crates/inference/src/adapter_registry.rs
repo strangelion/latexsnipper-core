@@ -7,7 +7,8 @@
 use latexsnipper_runtime::{ModelId, ModelManifest, ModelRegistry};
 
 use crate::adapters::{
-    CrnnTextRecognizerPackage, DbNetTextDetectorPackage, TrOcrFormulaPackage, YoloV8DetectorPackage,
+    CrnnTextRecognizerPackage, DbNetTextDetectorPackage, LayoutDetectorPackage,
+    TrOcrFormulaPackage, YoloV8DetectorPackage,
 };
 
 /// Convert a ModelManifest to a ModelConfig.
@@ -252,6 +253,36 @@ pub fn register_builtin_adapters(registry: &mut ModelRegistry) {
 
         Ok(Box::new(package))
     });
+
+    // PicoDet Layout Analysis
+    registry.register_adapter("picodet-layout-v1", |manifest, model_dir| {
+        let model_id = ModelId::from_composite_key(&manifest.id);
+        let config_exists = model_dir.join("config.json").exists();
+
+        let config = if config_exists {
+            latexsnipper_model::ModelConfig::load(model_dir).ok()
+        } else {
+            Some(manifest_to_config(manifest))
+        };
+
+        let package = if let Some(config) = config {
+            LayoutDetectorPackage::from_config(&config, model_id)
+        } else {
+            LayoutDetectorPackage::from_config(
+                &latexsnipper_model::ModelConfig::minimal(),
+                model_id,
+            )
+        };
+
+        // Set model path from manifest
+        let package = if let Some(primary) = &manifest.files.primary {
+            package.with_model_path(model_dir.join(primary))
+        } else {
+            package
+        };
+
+        Ok(Box::new(package))
+    });
 }
 
 #[cfg(test)]
@@ -267,6 +298,7 @@ mod tests {
         let adapters = registry.registered_adapters();
         assert!(adapters.contains(&"yolov8-detection-v1"));
         assert!(adapters.contains(&"dbnet-detection-v1"));
+        assert!(adapters.contains(&"picodet-layout-v1"));
         assert!(adapters.contains(&"trocr-recognition-v1"));
         assert!(adapters.contains(&"ctc-recognition-v1"));
     }
