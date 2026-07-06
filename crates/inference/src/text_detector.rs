@@ -257,9 +257,13 @@ fn postprocess(
             // Bounding-box mask score (fast mode)
             let bbox = quad.bounding_rect();
             average_score(
-                prob_map, map_w, map_h,
-                bbox.x as i32, bbox.y as i32,
-                bbox.right() as i32, bbox.bottom() as i32,
+                prob_map,
+                map_w,
+                map_h,
+                bbox.x as i32,
+                bbox.y as i32,
+                bbox.right() as i32,
+                bbox.bottom() as i32,
             )
         };
 
@@ -334,11 +338,13 @@ fn find_contours(binary: &[u8], width: usize, height: usize) -> Vec<Vec<(i32, i3
                             || py == 0
                             || px >= width as i32 - 1
                             || py >= height as i32 - 1
-                            || [(0i32, 1i32), (1, 0), (0, -1), (-1, 0)].iter().any(|&(dx, dy)| {
-                                let nx = (px + dx) as usize;
-                                let ny = (py + dy) as usize;
-                                binary[ny * width + nx] == 0
-                            })
+                            || [(0i32, 1i32), (1, 0), (0, -1), (-1, 0)]
+                                .iter()
+                                .any(|&(dx, dy)| {
+                                    let nx = (px + dx) as usize;
+                                    let ny = (py + dy) as usize;
+                                    binary[ny * width + nx] == 0
+                                })
                     })
                     .copied()
                     .collect();
@@ -467,10 +473,22 @@ fn minimum_area_bounding_rect(hull: &[(i32, i32)]) -> Quad {
 
             // Compute the 4 corners in world coordinates
             let corners = [
-                (min_proj_u * ux + min_proj_v * vx, min_proj_u * uy + min_proj_v * vy),
-                (max_proj_u * ux + min_proj_v * vx, max_proj_u * uy + min_proj_v * vy),
-                (max_proj_u * ux + max_proj_v * vx, max_proj_u * uy + max_proj_v * vy),
-                (min_proj_u * ux + max_proj_v * vx, min_proj_u * uy + max_proj_v * vy),
+                (
+                    min_proj_u * ux + min_proj_v * vx,
+                    min_proj_u * uy + min_proj_v * vy,
+                ),
+                (
+                    max_proj_u * ux + min_proj_v * vx,
+                    max_proj_u * uy + min_proj_v * vy,
+                ),
+                (
+                    max_proj_u * ux + max_proj_v * vx,
+                    max_proj_u * uy + max_proj_v * vy,
+                ),
+                (
+                    min_proj_u * ux + max_proj_v * vx,
+                    min_proj_u * uy + max_proj_v * vy,
+                ),
             ];
             best_rect_points = corners.to_vec();
         }
@@ -588,13 +606,7 @@ fn average_score(
 
 /// Compute the average probability score within a quadrilateral region on the probability map.
 /// Uses the quad's bounding rect on the scaled-down probability map for mask scoring.
-fn polygon_average_score(
-    map: &[f32],
-    width: usize,
-    height: usize,
-    quad: &Quad,
-    scale: f32,
-) -> f32 {
+fn polygon_average_score(map: &[f32], width: usize, height: usize, quad: &Quad, scale: f32) -> f32 {
     // Scale quad coordinates down to probability map coordinate space
     let scaled = quad.scale(1.0 / scale, 1.0 / scale);
     let brect = scaled.bounding_rect();
@@ -672,7 +684,10 @@ mod tests {
 
         let params = TextDetParams::from_config(&config);
 
-        assert_eq!(params.max_side, 960, "should keep default when config lacks postprocessing");
+        assert_eq!(
+            params.max_side, 960,
+            "should keep default when config lacks postprocessing"
+        );
         assert_eq!(params.input_name, "x");
         assert_eq!(params.color_format, "bgr");
         assert_eq!(params.mean, [0.5, 0.5, 0.5]);

@@ -116,7 +116,7 @@ fn insert_latin_cjk_spaces(text: &str) -> String {
                 | (CharCat::CJK, CharCat::Latin)
                 | (CharCat::Latin, CharCat::CjkPunct)
                 | (CharCat::CjkPunct, CharCat::Latin)
-                |                 (CharCat::Digit, CharCat::CJK)
+                | (CharCat::Digit, CharCat::CJK)
                 | (CharCat::CJK, CharCat::Digit)
                 | (CharCat::Digit, CharCat::Latin)
                 | (CharCat::Punct, CharCat::CJK)

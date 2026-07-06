@@ -7,13 +7,13 @@ pub mod nodes;
 pub mod opendoc_hybrid;
 pub mod reading_order;
 pub mod region_graph;
-pub mod text_recognition_service;
 #[deprecated(
     since = "1.1.0",
     note = "Use latexsnipper_engine::sdk::Snipper instead"
 )]
 pub mod sdk;
 pub mod simple;
+pub mod text_recognition_service;
 
 pub use crate::opendoc_hybrid::DocumentParseMode;
 pub use artifacts::{CropRegion, PipelineArtifacts, RecognizedTable};

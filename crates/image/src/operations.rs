@@ -288,10 +288,8 @@ pub fn warp_quad_to_rect(
 
 /// Compute the 3x3 homography matrix mapping src → dst.
 /// Returns the 9 elements in row-major order: [h11, h12, h13, h21, h22, h23, h31, h32, h33].
-fn compute_homography(
-    src: &[(f64, f64); 4],
-    dst: &[(f64, f64); 4],
-) -> [f64; 9] {
+#[allow(clippy::needless_range_loop)]
+fn compute_homography(src: &[(f64, f64); 4], dst: &[(f64, f64); 4]) -> [f64; 9] {
     // DLT algorithm: solve Ah = 0 via Gaussian elimination on an 8x8 system
     // Each point pair contributes 2 rows to the 8x9 matrix (8 unknowns, augmented)
     let mut a = [[0.0f64; 9]; 8];
@@ -304,9 +302,7 @@ fn compute_homography(
         a[i * 2] = [-sx, -sy, -1.0, 0.0, 0.0, 0.0, dx * sx, dx * sy, dx];
 
         // Second row: [ 0, 0, 0, -sx, -sy, -1, dy*sx, dy*sy, dy ]
-        a[i * 2 + 1] = [
-            0.0, 0.0, 0.0, -sx, -sy, -1.0, dy * sx, dy * sy, dy,
-        ];
+        a[i * 2 + 1] = [0.0, 0.0, 0.0, -sx, -sy, -1.0, dy * sx, dy * sy, dy];
     }
 
     // Gaussian elimination with partial pivoting
@@ -357,8 +353,7 @@ fn compute_homography(
 
 /// Compute the inverse of a 3x3 homography matrix.
 fn invert_homography(h: &[f64; 9]) -> [f64; 9] {
-    let det = h[0] * (h[4] * h[8] - h[5] * h[7])
-        - h[1] * (h[3] * h[8] - h[5] * h[6])
+    let det = h[0] * (h[4] * h[8] - h[5] * h[7]) - h[1] * (h[3] * h[8] - h[5] * h[6])
         + h[2] * (h[3] * h[7] - h[4] * h[6]);
 
     if det.abs() < 1e-15 {

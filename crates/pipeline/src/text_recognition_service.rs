@@ -8,12 +8,8 @@ use latexsnipper_ast::{Quad, Rect};
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_image::SnipperImage;
-use latexsnipper_inference::{
-    load_keys, recognize_text_with_keys, TextRecParams,
-};
-use latexsnipper_runtime::{
-    AccelerationMode, InferenceSession, ModelHandle, RuntimeBackend,
-};
+use latexsnipper_inference::{load_keys, recognize_text_with_keys, TextRecParams};
+use latexsnipper_runtime::{AccelerationMode, InferenceSession, ModelHandle, RuntimeBackend};
 use std::sync::Arc;
 
 /// Shared text recognition service.
@@ -94,7 +90,10 @@ impl TextRecognitionService {
             let crop_h = h + pad_y * 2;
             let crop_y_end = (crop_y + crop_h).min(image.height());
             let final_h = crop_y_end - crop_y;
-            operations::crop(image, Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32))
+            operations::crop(
+                image,
+                Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32),
+            )
         };
 
         let result = recognize_text_with_keys(

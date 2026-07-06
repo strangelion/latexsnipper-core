@@ -47,7 +47,10 @@ impl DocumentParseMode {
         // Step 1: Run layout analysis (optional — skip if no model)
         let layout = LayoutNode::new();
         if let Err(e) = layout.process(ctx).await {
-            log::warn!("OpenDocHybrid: layout analysis failed (will fall back): {}", e);
+            log::warn!(
+                "OpenDocHybrid: layout analysis failed (will fall back): {}",
+                e
+            );
             return Ok(false);
         }
 
@@ -73,12 +76,21 @@ mod tests {
 
     #[test]
     fn test_parse_mode_default() {
-        assert_eq!(DocumentParseMode::default(), DocumentParseMode::SpecializedStable);
+        assert_eq!(
+            DocumentParseMode::default(),
+            DocumentParseMode::SpecializedStable
+        );
     }
 
     #[test]
     fn test_parse_mode_equality() {
-        assert_eq!(DocumentParseMode::OpenDocHybrid, DocumentParseMode::OpenDocHybrid);
-        assert_ne!(DocumentParseMode::SpecializedStable, DocumentParseMode::OpenOcrText);
+        assert_eq!(
+            DocumentParseMode::OpenDocHybrid,
+            DocumentParseMode::OpenDocHybrid
+        );
+        assert_ne!(
+            DocumentParseMode::SpecializedStable,
+            DocumentParseMode::OpenOcrText
+        );
     }
 }

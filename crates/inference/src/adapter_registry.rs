@@ -59,21 +59,23 @@ fn manifest_to_config(manifest: &ModelManifest) -> latexsnipper_model::ModelConf
             decoding_type: Some(d.decoding_type.clone()),
             beam_width: d.beam_width,
             blank_id: d.blank_id,
-            output_layout: d.output_layout.as_ref().and_then(|s| {
-                match s.to_lowercase().as_str() {
+            output_layout: d
+                .output_layout
+                .as_ref()
+                .and_then(|s| match s.to_lowercase().as_str() {
                     "ntc" => Some(latexsnipper_model::CtcOutputLayout::Ntc),
                     "tnc" => Some(latexsnipper_model::CtcOutputLayout::Tnc),
                     _ => None,
-                }
-            }),
-            logits_kind: d.logits_kind.as_ref().and_then(|s| {
-                match s.to_lowercase().as_str() {
+                }),
+            logits_kind: d
+                .logits_kind
+                .as_ref()
+                .and_then(|s| match s.to_lowercase().as_str() {
                     "logits" => Some(latexsnipper_model::LogitsKind::Logits),
                     "probabilities" => Some(latexsnipper_model::LogitsKind::Probabilities),
                     "log_probabilities" => Some(latexsnipper_model::LogitsKind::LogProbabilities),
                     _ => None,
-                }
-            }),
+                }),
             temperature: d.temperature,
             top_k: None,
             tokenizer_file: None,

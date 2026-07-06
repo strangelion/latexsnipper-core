@@ -14,8 +14,16 @@ use std::sync::Arc;
 
 /// CDLA layout labels used by the PP-Layout CDLA model.
 pub const CDLA_LABELS: &[&str] = &[
-    "text", "title", "figure", "figure_caption", "table", "table_caption", "header", "footer",
-    "reference", "equation",
+    "text",
+    "title",
+    "figure",
+    "figure_caption",
+    "table",
+    "table_caption",
+    "header",
+    "footer",
+    "reference",
+    "equation",
 ];
 
 /// Layout detection model package (PicoDet-based).
@@ -113,11 +121,10 @@ impl LayoutDetectorExecutor {
             return Ok(self.session.as_ref().unwrap());
         }
 
-        let handle =
-            latexsnipper_runtime::ModelHandle::with_path(
-                self.descriptor.id.composite_key(),
-                self.model_path.clone(),
-            );
+        let handle = latexsnipper_runtime::ModelHandle::with_path(
+            self.descriptor.id.composite_key(),
+            self.model_path.clone(),
+        );
         let session = self
             .runtime
             .create_session(&handle, AccelerationMode::Cpu)?;
@@ -157,8 +164,7 @@ impl ModelExecutor for LayoutDetectorExecutor {
         // Normalize using ImageNet stats
         let mean = [0.485, 0.456, 0.406];
         let std = [0.229, 0.224, 0.225];
-        let normalized =
-            latexsnipper_image::operations::normalize(&resized, &mean, &std);
+        let normalized = latexsnipper_image::operations::normalize(&resized, &mean, &std);
 
         let input_tensor = latexsnipper_tensor::Tensor::float32(
             "image",
@@ -211,7 +217,7 @@ impl ModelExecutor for LayoutDetectorExecutor {
             let actual_anchors = out_shape[1];
             let actual_channels = out_shape[2];
             if actual_channels < 6 {
-                continue; // Need at least [cx, cy, w, h, cls] 
+                continue; // Need at least [cx, cy, w, h, cls]
             }
 
             let data = match outputs[level_idx].as_f32_slice() {
@@ -226,7 +232,7 @@ impl ModelExecutor for LayoutDetectorExecutor {
             let expected_grid = fmap_h * fmap_w;
 
             if actual_anchors != expected_grid {
-                // The head shape doesn't match stride-based grid; 
+                // The head shape doesn't match stride-based grid;
                 // use actual_anchors directly
             }
 
@@ -299,7 +305,11 @@ impl ModelExecutor for LayoutDetectorExecutor {
             .map(|(rect, score, class)| Detection { rect, score, class })
             .collect();
 
-        dets.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        dets.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut keep: Vec<usize> = Vec::new();
         for i in 0..dets.len() {

@@ -5,8 +5,8 @@ use latexsnipper_ast::*;
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_inference::{
-    detect_formulas, filter_formula_detections, group_formula_detections,
-    recognize_formula, DetectionParams, RecognitionParams,
+    detect_formulas, filter_formula_detections, group_formula_detections, recognize_formula,
+    DetectionParams, RecognitionParams,
 };
 use latexsnipper_runtime::RuntimeBackend;
 

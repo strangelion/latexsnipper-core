@@ -102,7 +102,11 @@ fn iou(a: &Rect, b: &Rect) -> f32 {
     let y2 = a.bottom().min(b.bottom());
     let inter = (x2 - x1).max(0.0) * (y2 - y1).max(0.0);
     let union = a.width * a.height + b.width * b.height - inter;
-    if union <= 0.0 { 0.0 } else { inter / union }
+    if union <= 0.0 {
+        0.0
+    } else {
+        inter / union
+    }
 }
 
 fn contains_ratio(outer: &Rect, inner: &Rect) -> f32 {
@@ -112,7 +116,11 @@ fn contains_ratio(outer: &Rect, inner: &Rect) -> f32 {
     let y2 = outer.bottom().min(inner.bottom());
     let overlap = (x2 - x1).max(0.0) * (y2 - y1).max(0.0);
     let inner_area = inner.width * inner.height;
-    if inner_area <= 0.0 { 0.0 } else { overlap / inner_area }
+    if inner_area <= 0.0 {
+        0.0
+    } else {
+        overlap / inner_area
+    }
 }
 
 // ── RegionGraph ───────────────────────────────────────────────────────
@@ -380,8 +388,14 @@ mod tests {
         );
 
         let resolved = graph.resolve();
-        let inside = resolved.iter().find(|r| r.candidate.rect.x == 10.0).unwrap();
-        let outside = resolved.iter().find(|r| r.candidate.rect.x == 300.0).unwrap();
+        let inside = resolved
+            .iter()
+            .find(|r| r.candidate.rect.x == 10.0)
+            .unwrap();
+        let outside = resolved
+            .iter()
+            .find(|r| r.candidate.rect.x == 300.0)
+            .unwrap();
 
         assert_eq!(
             inside.owner,
@@ -414,8 +428,14 @@ mod tests {
         );
 
         let resolved = graph.resolve();
-        let formula = resolved.iter().find(|r| r.candidate.kind == RegionKind::FormulaDisplay).unwrap();
-        let text = resolved.iter().find(|r| r.candidate.kind == RegionKind::TextLine).unwrap();
+        let formula = resolved
+            .iter()
+            .find(|r| r.candidate.kind == RegionKind::FormulaDisplay)
+            .unwrap();
+        let text = resolved
+            .iter()
+            .find(|r| r.candidate.kind == RegionKind::TextLine)
+            .unwrap();
 
         assert_eq!(formula.owner, RegionOwner::Independent);
         assert_eq!(text.owner, RegionOwner::Discarded);

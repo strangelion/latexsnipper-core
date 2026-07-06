@@ -330,17 +330,13 @@ impl RecognizerNode {
         }
 
         // Try shared text recognition service first
-        if let Some(service) = crate::text_recognition_service::TextRecognitionService::try_load(
-            models,
-        ) {
+        if let Some(service) =
+            crate::text_recognition_service::TextRecognitionService::try_load(models)
+        {
             let mut blocks = Vec::new();
             if let Some(ref image) = ctx.image {
                 for det in &detections {
-                    let text = match service.recognize_region(
-                        image,
-                        &det.rect,
-                        det.quad.as_ref(),
-                    ) {
+                    let text = match service.recognize_region(image, &det.rect, det.quad.as_ref()) {
                         Ok(t) => t,
                         Err(e) => {
                             log::warn!("Text rec failed: {}", e);

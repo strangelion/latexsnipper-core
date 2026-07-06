@@ -48,11 +48,21 @@ impl PipelineNode for RegionResolveNode {
         // ── Step 1: collect all detection candidates ────────────────
 
         for det in &ctx.artifacts.formula_detections {
-            graph.add_detection(det, RegionKind::FormulaDisplay, RegionProducer::FormulaDetector, page);
+            graph.add_detection(
+                det,
+                RegionKind::FormulaDisplay,
+                RegionProducer::FormulaDetector,
+                page,
+            );
         }
 
         for det in &ctx.artifacts.text_detections {
-            graph.add_detection(det, RegionKind::TextLine, RegionProducer::TextDetector, page);
+            graph.add_detection(
+                det,
+                RegionKind::TextLine,
+                RegionProducer::TextDetector,
+                page,
+            );
         }
 
         for det in &ctx.artifacts.table_detections {
@@ -60,7 +70,12 @@ impl PipelineNode for RegionResolveNode {
         }
 
         for det in &ctx.artifacts.handwriting_detections {
-            graph.add_detection(det, RegionKind::Unknown, RegionProducer::HandwritingDetector, page);
+            graph.add_detection(
+                det,
+                RegionKind::Unknown,
+                RegionProducer::HandwritingDetector,
+                page,
+            );
         }
 
         for table in &ctx.artifacts.table_structures {
@@ -87,10 +102,9 @@ impl PipelineNode for RegionResolveNode {
             .iter()
             .enumerate()
             .filter(|(i, _)| {
-                ctx.artifacts
-                    .resolved_regions
-                    .get(*i)
-                    .map_or(true, |r| r.owner != crate::region_graph::RegionOwner::Discarded)
+                ctx.artifacts.resolved_regions.get(*i).map_or(true, |r| {
+                    r.owner != crate::region_graph::RegionOwner::Discarded
+                })
             })
             .map(|(_, d)| d.clone())
             .collect();
@@ -104,10 +118,9 @@ impl PipelineNode for RegionResolveNode {
             .iter()
             .enumerate()
             .filter(|(i, _)| {
-                ctx.artifacts
-                    .resolved_regions
-                    .get(*i)
-                    .map_or(true, |r| r.owner != crate::region_graph::RegionOwner::Discarded)
+                ctx.artifacts.resolved_regions.get(*i).map_or(true, |r| {
+                    r.owner != crate::region_graph::RegionOwner::Discarded
+                })
             })
             .map(|(_, d)| d.clone())
             .collect();

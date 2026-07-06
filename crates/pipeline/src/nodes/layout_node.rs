@@ -99,10 +99,7 @@ impl LayoutNode {
                 // Store in artifacts
                 ctx.artifacts.region_candidates.extend(candidates);
 
-                log::info!(
-                    "LayoutNode: detected {} layout regions",
-                    results.len()
-                );
+                log::info!("LayoutNode: detected {} layout regions", results.len());
                 Ok(())
             }
             _ => Err(SnipperError::Inference(
