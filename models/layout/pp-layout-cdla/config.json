@@ -1,0 +1,30 @@
+{
+  "model_type": "picodet",
+  "model_family": "PP-Layout CDLA (PicoDet)",
+  "license": "Apache-2.0",
+  "task_type": "detection",
+  "dynamic_shapes": false,
+  "input": {
+    "name": "image",
+    "shape": [1, 3, 800, 608],
+    "dtype": "float32"
+  },
+  "output": [
+    {"name": "transpose_0.tmp_0", "shape": [1, 7600, 10]},
+    {"name": "transpose_1.tmp_0", "shape": [1, 7600, 32]},
+    {"name": "transpose_2.tmp_0", "shape": [1, 1900, 10]},
+    {"name": "transpose_3.tmp_0", "shape": [1, 1900, 32]},
+    {"name": "transpose_4.tmp_0", "shape": [1, 475, 10]},
+    {"name": "transpose_5.tmp_0", "shape": [1, 475, 32]},
+    {"name": "transpose_6.tmp_0", "shape": [1, 130, 10]},
+    {"name": "transpose_7.tmp_0", "shape": [1, 130, 32]}
+  ],
+  "preprocessing": {
+    "resize": {"width": 608, "height": 800, "keep_ratio": false},
+    "normalization": {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]},
+    "color_format": "RGB"
+  },
+  "pipeline": {
+    "model_files": {"primary": "model.onnx"}
+  }
+}

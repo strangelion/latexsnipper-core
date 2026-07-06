@@ -66,25 +66,11 @@
                                                               "modelType":  "dbnet",
                                                               "files":  [
                                                                             "inference.onnx",
-                                                                            "inference.yml",
                                                                             "config.json"
                                                                         ],
                                                               "zipFile":  "latexsnipper-text-det.zip"
-                                                          },
-                                                          {
-                                                              "id":  "openocr-mobile",
-                                                              "label":  "OpenOCR Mobile Text Detection",
-                                                              "adapter":  "dbnet-detection-v1",
-                                                              "modelType":  "dbnet",
-                                                              "sourceUrl":  "https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.1.0/latexsnipper-text-det-openocr-mobile.zip",
-                                                              "files":  [
-                                                                            "model.onnx",
-                                                                            "config.json",
-                                                                            "MODEL_CARD.md"
-                                                                        ],
-                                                              "zipFile":  "latexsnipper-text-det-openocr-mobile.zip"
                                                           }
-                                                      ]
+                                                       ]
                                      },
                         "text-rec":  {
                                          "label":  "Text Recognition",
@@ -98,26 +84,11 @@
                                                               "modelType":  "crnn_ctc",
                                                               "files":  [
                                                                             "inference.onnx",
-                                                                            "inference.yml",
                                                                             "config.json"
                                                                         ],
                                                               "zipFile":  "latexsnipper-text-rec.zip"
-                                                          },
-                                                          {
-                                                              "id":  "openocr-mobile",
-                                                              "label":  "OpenOCR Mobile Text Recognition",
-                                                              "adapter":  "ctc-recognition-v1",
-                                                              "modelType":  "crnn_ctc",
-                                                              "sourceUrl":  "https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.1.0/latexsnipper-text-rec-openocr-mobile.zip",
-                                                              "files":  [
-                                                                             "model.onnx",
-                                                                             "dict.txt",
-                                                                             "config.json",
-                                                                             "MODEL_CARD.md"
-                                                                         ],
-                                                              "zipFile":  "latexsnipper-text-rec-openocr-mobile.zip"
                                                           }
-                                                      ]
+                                                       ]
                                      },
                        "table-det":  {
                                           "label":  "Table Detection",
@@ -178,10 +149,10 @@
                                                             "modelType":  "picodet_layout",
                                                             "source":  "RapidAI/RapidLayout",
                                                             "license":  "Apache-2.0",
-                                                            "files":  [
-                                                                          "layout_cdla.onnx",
-                                                                          "config.json"
-                                                                      ],
+                                                             "files":  [
+                                                                           "model.onnx",
+                                                                           "config.json"
+                                                                       ],
                                                             "zipFile":  "latexsnipper-layout-cdla.zip"
                                                         }
                                                     ]
