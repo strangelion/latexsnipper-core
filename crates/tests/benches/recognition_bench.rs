@@ -1,3 +1,5 @@
+#![cfg(target_os = "windows")]
+
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::operations;
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};

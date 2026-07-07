@@ -1,8 +1,10 @@
 //! End-to-end table recognition test.
 //! Pipeline: TATR det -> table crop -> structure (tatr|slanet) -> grid -> per-cell OCR.
 //! Run: cargo test --test table_e2e -- --nocapture
-//!
 //! Select backend by setting STRUCT_BACKEND env var: "tatr" (default) or "slanet".
+//! Requires Windows (ONNX Runtime).
+
+#![cfg(target_os = "windows")]
 
 use latexsnipper_ast::*;
 use latexsnipper_image::operations;
