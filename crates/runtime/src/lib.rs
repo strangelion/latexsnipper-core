@@ -31,7 +31,9 @@ pub use model_validation::{
     validate_model_bytes, ValidationReport,
 };
 pub use plugin_loader::load_plugins_from_dir;
+#[cfg(target_os = "windows")]
 pub use providers::onnx::OnnxRuntimeBackend;
+#[cfg(target_os = "windows")]
 pub use providers::onnx::{Acceleration, Platform};
 pub use providers::stub::StubRuntime;
 pub use session::InferenceSession;

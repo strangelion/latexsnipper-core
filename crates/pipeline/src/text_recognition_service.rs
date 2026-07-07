@@ -72,6 +72,7 @@ impl TextRecognitionService {
                 let handle = ModelHandle::with_path("text-rec", model_path);
                 b.create_session(&handle, acceleration).ok()?
             }
+            #[cfg(target_os = "windows")]
             None => {
                 let b = latexsnipper_runtime::providers::onnx::OnnxRuntimeBackend::new(
                     models_dir.to_path_buf(),
@@ -80,6 +81,8 @@ impl TextRecognitionService {
                 let handle = ModelHandle::with_path("text-rec", model_path);
                 b.create_session(&handle, acceleration).ok()?
             }
+            #[cfg(not(target_os = "windows"))]
+            None => return None,
         };
 
         let params = TextRecParams::from_config(&config);

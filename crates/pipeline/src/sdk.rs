@@ -21,7 +21,9 @@ use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, recognize_formula,
     DetectionParams, RecognitionParams,
 };
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
+#[cfg(target_os = "windows")]
+use latexsnipper_runtime::OnnxRuntimeBackend;
 use std::path::{Path, PathBuf};
 
 /// Main entry point for LaTeXSnipper SDK.
@@ -57,11 +59,20 @@ impl Snipper {
 
     /// Create from raw RGB pixels.
     pub fn from_image(img: SnipperImage) -> Result<Self, SnipperError> {
-        let models = find_models_dir()?;
-        log::info!("Using models from {:?}", models);
+        #[cfg(not(target_os = "windows"))]
+        {
+            return Err(SnipperError::Runtime(
+                "Image processing requires Windows (ONNX Runtime)".to_string(),
+            ));
+        }
 
-        let backend = OnnxRuntimeBackend::new(models.clone())
-            .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+        #[cfg(target_os = "windows")]
+        {
+            let models = find_models_dir()?;
+            log::info!("Using models from {:?}", models);
+
+            let backend = OnnxRuntimeBackend::new(models.clone())
+                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
         // Detect formulas
         let det_config =
@@ -148,6 +159,7 @@ impl Snipper {
         };
 
         Ok(Self { document: doc })
+        }
     }
 
     /// Get the Document AST.
