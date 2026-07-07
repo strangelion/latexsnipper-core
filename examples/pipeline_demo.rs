@@ -1,6 +1,10 @@
 //! Pipeline Demo — Image → Detection → Recognition → AST → Export
 //!
 //! Run: cargo run --example pipeline_demo
+//!
+//! This example requires Windows (ONNX Runtime).
+
+#![cfg(target_os = "windows")]
 
 use latexsnipper_ast::*;
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
