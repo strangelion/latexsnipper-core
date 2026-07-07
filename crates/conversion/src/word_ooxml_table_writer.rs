@@ -49,7 +49,7 @@ pub fn write_word_table_ooxml(table: &TableBlock) -> String {
                         let latex = f.as_latex();
                         parts.push(format!(
                             r#"<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">{}</w:t></w:r>"#,
-                            xml_escape(&latex)
+                            xml_escape(latex)
                         ));
                     }
                     _ => {}

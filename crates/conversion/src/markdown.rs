@@ -289,10 +289,10 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
     }
 
     // Check if any cell has colspan/rowspan — if so, use HTML table
-    let has_merge = t.rows.iter().any(|row| {
-        row.iter()
-            .any(|cell| cell.colspan > 1 || cell.rowspan > 1)
-    });
+    let has_merge = t
+        .rows
+        .iter()
+        .any(|row| row.iter().any(|cell| cell.colspan > 1 || cell.rowspan > 1));
 
     if has_merge {
         return render_html_table_for_markdown(t);

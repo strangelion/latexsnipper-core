@@ -411,10 +411,7 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
                         "\\multicolumn{{{}}}{{|{}|}}{{{}}}",
                         cell.colspan, align_char, text
                     ),
-                    (false, true) => format!(
-                        "\\multirow{{{}}}{{*}}{{{}}}",
-                        cell.rowspan, text
-                    ),
+                    (false, true) => format!("\\multirow{{{}}}{{*}}{{{}}}", cell.rowspan, text),
                     (false, false) => text,
                 }
             })

@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
 use latexsnipper_foundation::{Result, SnipperError};
-use latexsnipper_runtime::{OnnxRuntimeBackend, StubRuntime};
+use latexsnipper_runtime::StubRuntime;
 
 use crate::common::FfiResponse;
 
@@ -28,11 +28,9 @@ pub extern "C" fn latexsnipper_init(models_dir: *const c_char) -> i32 {
         ..Default::default()
     };
 
+    // Use StubRuntime on iOS (ONNX backend is Windows-only)
     let runtime: Box<dyn latexsnipper_runtime::RuntimeBackend> =
-        match OnnxRuntimeBackend::new(models_path) {
-            Ok(backend) => Box::new(backend),
-            Err(_) => Box::new(StubRuntime::new()),
-        };
+        Box::new(StubRuntime::new());
 
     let engine = SnipperEngine::new(config, runtime);
     *ENGINE.lock().unwrap() = Some(engine);

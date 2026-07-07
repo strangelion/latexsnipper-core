@@ -95,8 +95,11 @@ pub fn parse_word_table_ooxml(xml: &str) -> Option<TableBlock> {
             if rc.vmerge_restart {
                 let mut check_visual = 0;
                 // Sum up colspans in row ri to find the right visual offset
-                for prior in &raw_row[..raw_row.iter().position(|c| std::ptr::eq(c, rc)).unwrap_or(0)]
-                {
+                let pos = raw_row
+                    .iter()
+                    .position(|c| std::ptr::eq(c, rc))
+                    .unwrap_or(0);
+                for prior in &raw_row[..pos] {
                     check_visual += prior.colspan as usize;
                 }
 

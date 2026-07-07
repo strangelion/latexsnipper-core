@@ -2,7 +2,7 @@ use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
 use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
-use latexsnipper_runtime::{OnnxRuntimeBackend, StubRuntime};
+use latexsnipper_runtime::StubRuntime;
 
 use crate::common::FfiResponse;
 
@@ -27,18 +27,9 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeInit(
         ..Default::default()
     };
 
-    // Try OnnxRuntimeBackend first, fall back to StubRuntime
+    // Use StubRuntime on Android (ONNX backend is Windows-only)
     let runtime: Box<dyn latexsnipper_runtime::RuntimeBackend> =
-        match OnnxRuntimeBackend::new(models_path) {
-            Ok(backend) => {
-                log::info!("Using ONNX Runtime backend");
-                Box::new(backend)
-            }
-            Err(e) => {
-                log::warn!("ONNX Runtime not available ({}), using StubRuntime", e);
-                Box::new(StubRuntime::new())
-            }
-        };
+        Box::new(StubRuntime::new());
 
     let engine = SnipperEngine::new(config, runtime);
     *ENGINE.lock().unwrap() = Some(engine);

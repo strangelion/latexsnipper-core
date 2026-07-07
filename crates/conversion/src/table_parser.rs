@@ -583,7 +583,8 @@ pub fn parse_typst_table(typst: &str) -> Option<TableBlock> {
         if let Some(bracket_start) = remaining.find('[') {
             let bracket_end = remaining[bracket_start + 1..].find(']');
             if let Some(bracket_end) = bracket_end {
-                let cell_content = remaining[bracket_start + 1..bracket_start + 1 + bracket_end].trim();
+                let cell_content =
+                    remaining[bracket_start + 1..bracket_start + 1 + bracket_end].trim();
                 cells.push(TableCell {
                     inlines: parse_cell_content(cell_content),
                     colspan: 1,
@@ -632,7 +633,9 @@ fn parse_typst_cell_body(body: &str) -> (String, u32, u32) {
     // Extract content from first [...] argument
     if let Some(lbracket) = body.find('[') {
         if let Some(rbracket) = body[lbracket + 1..].find(']') {
-            content = body[lbracket + 1..lbracket + 1 + rbracket].trim().to_string();
+            content = body[lbracket + 1..lbracket + 1 + rbracket]
+                .trim()
+                .to_string();
         }
     }
 
