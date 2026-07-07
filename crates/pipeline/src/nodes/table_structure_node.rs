@@ -21,11 +21,17 @@ pub struct TableStructureNode {
     backend: String,
 }
 
+#[derive(Clone)]
+struct BackendChoice {
+    backend: String,
+    variant: String,
+}
+
 impl TableStructureNode {
     pub fn new() -> Self {
         Self {
             name: "table_structure".into(),
-            backend: "tatr".into(),
+            backend: "auto".into(),
         }
     }
 
@@ -37,24 +43,79 @@ impl TableStructureNode {
         }
     }
 
-    fn backend_model_path(&self, models: &std::path::Path) -> Option<std::path::PathBuf> {
-        let category = match self.backend.as_str() {
-            "tatr" => "table-struct/tatr-structure",
-            "slanet" => "table-struct/slanet-plus",
-            _ => return None,
-        };
-
-        if let Some((_config, path, _dir)) =
-            latexsnipper_model::ModelConfig::find_best(models, category)
-        {
-            return Some(path);
+    fn backend_model_path(
+        &self,
+        models: &std::path::Path,
+        variant: &str,
+    ) -> Option<std::path::PathBuf> {
+        let variant_dir = models.join("table-struct").join(variant);
+        if !variant_dir.is_dir() {
+            return None;
         }
 
-        let path = models.join(category).join("model.onnx");
+        if let Ok(config) = latexsnipper_model::ModelConfig::load(&variant_dir) {
+            if let Some(path) = config.pipeline_model_path(&variant_dir) {
+                return Some(path);
+            }
+        }
+
+        let path = variant_dir.join("model.onnx");
         if path.exists() {
             Some(path)
         } else {
             None
+        }
+    }
+
+    fn choice(backend: &str, variant: &str) -> BackendChoice {
+        BackendChoice {
+            backend: backend.to_string(),
+            variant: variant.to_string(),
+        }
+    }
+
+    fn explicit_choice(&self, ctx: &PipelineContext) -> Option<BackendChoice> {
+        let variant = ctx.model_variants.get("table-struct")?;
+        let backend = match variant.as_str() {
+            "slanet-plus" | "slanet" => "slanet",
+            "tatr-structure" | "tatr" => "tatr",
+            _ => return None,
+        };
+
+        Some(BackendChoice {
+            backend: backend.to_string(),
+            variant: variant.clone(),
+        })
+    }
+
+    fn backend_choices(&self, ctx: &PipelineContext) -> Vec<BackendChoice> {
+        if self.backend != "auto" {
+            return match self.backend.as_str() {
+                "slanet" => vec![Self::choice("slanet", "slanet-plus")],
+                "tatr" => vec![Self::choice("tatr", "tatr-structure")],
+                "projection" => Vec::new(),
+                _ => Vec::new(),
+            };
+        }
+
+        if let Some(choice) = self.explicit_choice(ctx) {
+            return vec![choice];
+        }
+
+        match ctx.parse_mode {
+            crate::opendoc_hybrid::DocumentParseMode::OpenOcrText
+            | crate::opendoc_hybrid::DocumentParseMode::OpenDocHybrid => {
+                vec![
+                    Self::choice("slanet", "slanet-plus"),
+                    Self::choice("tatr", "tatr-structure"),
+                ]
+            }
+            crate::opendoc_hybrid::DocumentParseMode::SpecializedStable => {
+                vec![
+                    Self::choice("tatr", "tatr-structure"),
+                    Self::choice("slanet", "slanet-plus"),
+                ]
+            }
         }
     }
 }
@@ -87,28 +148,47 @@ impl PipelineNode for TableStructureNode {
             None => return Ok(()),
         };
 
-        // Load backend model if needed
         let acc = ctx.acceleration;
-        let backend_session: Option<Box<dyn InferenceSession>> =
-            (|| -> Option<Box<dyn InferenceSession>> {
-                let model_path = self.backend_model_path(&models)?;
-                let handle = resolve_model_handle(ctx, &self.backend, model_path).ok()?;
-                let backend = ctx.backend.as_ref()?;
-                backend.create_session(&handle, acc).ok()
-            })();
+        let choices = self.backend_choices(ctx);
+        let mut backend_sessions: Vec<(String, Box<dyn InferenceSession>)> = Vec::new();
 
-        if self.backend.as_str() != "projection" && backend_session.is_none() {
-            log::warn!(
-                "Table structure model for '{}' not found, skipping",
-                self.backend
+        for choice in choices {
+            let Some(model_path) = self.backend_model_path(&models, &choice.variant) else {
+                continue;
+            };
+            let Ok(handle) = resolve_model_handle(ctx, &choice.backend, model_path) else {
+                continue;
+            };
+            let Some(backend) = ctx.backend.as_ref() else {
+                continue;
+            };
+            match backend.create_session(&handle, acc) {
+                Ok(session) => {
+                    backend_sessions.push((choice.backend, session));
+                }
+                Err(e) => {
+                    ctx.diagnostic_warn(
+                        "table_structure",
+                        format!(
+                            "Table structure backend '{}' failed to load: {}",
+                            choice.backend, e
+                        ),
+                    );
+                }
+            }
+        }
+
+        if backend_sessions.is_empty() && self.backend.as_str() != "projection" {
+            ctx.diagnostic_warn(
+                "table_structure",
+                "No table structure model available; falling back to projection backend",
             );
-            return Ok(());
         }
 
         log::info!(
-            "TableStructure: parsing {} table regions with backend '{}'",
+            "TableStructure: parsing {} table regions with {} model backend(s)",
             detections.len(),
-            self.backend
+            backend_sessions.len()
         );
 
         let mut all_tables: Vec<RecognizedTable> = Vec::new();
@@ -122,11 +202,31 @@ impl PipelineNode for TableStructureNode {
             let table_rect = Rect::new(x, y, w, h);
             let cropped = operations::crop(&image, table_rect);
 
-            let grid = if let Some(ref sess) = backend_session {
-                recognize_table_structure(&cropped, &self.backend, Some(&**sess))?
-            } else {
-                recognize_table_structure(&cropped, "projection", None)?
-            };
+            let mut grid = None;
+            for (backend_name, sess) in &backend_sessions {
+                let candidate = recognize_table_structure(&cropped, backend_name, Some(&**sess))?;
+                if let Some(cells) = candidate {
+                    if cells.is_empty() {
+                        continue;
+                    }
+                    if suspicious_grid(&cells) {
+                        ctx.diagnostic_warn(
+                            "table_structure",
+                            format!(
+                                "Table structure backend '{}' produced suspicious grid; trying fallback",
+                                backend_name
+                            ),
+                        );
+                        continue;
+                    }
+                    grid = Some(cells);
+                    break;
+                }
+            }
+
+            if grid.is_none() {
+                grid = recognize_table_structure(&cropped, "projection", None)?;
+            }
 
             match grid {
                 Some(mut cells) if !cells.is_empty() => {
@@ -148,10 +248,24 @@ impl PipelineNode for TableStructureNode {
 
         ctx.artifacts.table_structures = all_tables;
         log::info!(
-            "TableStructure: parsed {} tables via '{}'",
-            ctx.artifacts.table_structures.len(),
-            self.backend
+            "TableStructure: parsed {} tables",
+            ctx.artifacts.table_structures.len()
         );
         Ok(())
     }
+}
+
+fn suspicious_grid(cells: &[latexsnipper_inference::GridCell]) -> bool {
+    if cells.is_empty() {
+        return true;
+    }
+
+    let rows = cells.iter().map(|c| c.row).max().unwrap_or(0) + 1;
+    let cols = cells.iter().map(|c| c.col).max().unwrap_or(0) + 1;
+    let dense_slots = rows.saturating_mul(cols);
+
+    cells.len() > 120
+        || rows > 16
+        || cols > 12
+        || ((rows > 8 || cols > 8) && dense_slots > cells.len().saturating_mul(2))
 }

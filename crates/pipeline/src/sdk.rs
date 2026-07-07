@@ -21,9 +21,9 @@ use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, recognize_formula,
     DetectionParams, RecognitionParams,
 };
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
 #[cfg(target_os = "windows")]
 use latexsnipper_runtime::OnnxRuntimeBackend;
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
 use std::path::{Path, PathBuf};
 
 /// Main entry point for LaTeXSnipper SDK.
@@ -74,91 +74,95 @@ impl Snipper {
             let backend = OnnxRuntimeBackend::new(models.clone())
                 .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
-        // Detect formulas
-        let det_config =
-            latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
-                .map_err(|e| SnipperError::Model(e.to_string()))?;
+            // Detect formulas
+            let det_config =
+                latexsnipper_model::ModelConfig::load(&models.join("formula-det/yolov8-mfd"))
+                    .map_err(|e| SnipperError::Model(e.to_string()))?;
 
-        let det_params = DetectionParams::from_config(&det_config);
-        let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
-        let det_handle = ModelHandle::with_path("formula-det", det_path);
-        let det_session = backend
-            .create_session(&det_handle, AccelerationMode::Cpu)
-            .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+            let det_params = DetectionParams::from_config(&det_config);
+            let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
+            let det_handle = ModelHandle::with_path("formula-det", det_path);
+            let det_session = backend
+                .create_session(&det_handle, AccelerationMode::Cpu)
+                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
-        let mut detections = detect_formulas(&img, &*det_session, &det_params)
-            .map_err(|e| SnipperError::Inference(e.to_string()))?;
+            let mut detections = detect_formulas(&img, &*det_session, &det_params)
+                .map_err(|e| SnipperError::Inference(e.to_string()))?;
 
-        group_formula_detections(&mut detections);
-        filter_formula_detections(&mut detections, 100.0, 0.2);
+            group_formula_detections(&mut detections);
+            filter_formula_detections(&mut detections, 100.0, 0.2);
 
-        // Sort by reading order (y then x)
-        detections.sort_by(|a, b| {
-            a.rect
-                .y
-                .partial_cmp(&b.rect.y)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| {
-                    a.rect
-                        .x
-                        .partial_cmp(&b.rect.x)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-        });
-        log::info!("Detected {} formula regions", detections.len());
+            // Sort by reading order (y then x)
+            detections.sort_by(|a, b| {
+                a.rect
+                    .y
+                    .partial_cmp(&b.rect.y)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| {
+                        a.rect
+                            .x
+                            .partial_cmp(&b.rect.x)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            });
+            log::info!("Detected {} formula regions", detections.len());
 
-        // Recognize formulas
-        let enc_path = models.join("formula-rec/trocr-deit/encoder_model.onnx");
-        let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
-        let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
+            // Recognize formulas
+            let enc_path = models.join("formula-rec/trocr-deit/encoder_model.onnx");
+            let dec_path = models.join("formula-rec/trocr-deit/decoder_model.onnx");
+            let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
 
-        let enc_handle = ModelHandle::with_path("encoder", enc_path);
-        let dec_handle = ModelHandle::with_path("decoder", dec_path);
-        let enc_session = backend
-            .create_session(&enc_handle, AccelerationMode::Cpu)
-            .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-        let dec_session = backend
-            .create_session(&dec_handle, AccelerationMode::Cpu)
-            .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+            let enc_handle = ModelHandle::with_path("encoder", enc_path);
+            let dec_handle = ModelHandle::with_path("decoder", dec_path);
+            let enc_session = backend
+                .create_session(&enc_handle, AccelerationMode::Cpu)
+                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+            let dec_session = backend
+                .create_session(&dec_handle, AccelerationMode::Cpu)
+                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
 
-        let rec_params = RecognitionParams::default();
-        let mut blocks = Vec::new();
+            let rec_params = RecognitionParams::default();
+            let mut blocks = Vec::new();
 
-        for det in &detections {
-            let x = det.rect.x as u32;
-            let y = det.rect.y as u32;
-            let w = det.rect.width as u32;
-            let h = det.rect.height as u32;
+            for det in &detections {
+                let x = det.rect.x as u32;
+                let y = det.rect.y as u32;
+                let w = det.rect.width as u32;
+                let h = det.rect.height as u32;
 
-            if w >= 4 && h >= 4 {
-                let crop = crop_region(&img, x, y, w, h);
-                if let Ok(result) =
-                    recognize_formula(&crop, &*enc_session, &*dec_session, &tok_path, &rec_params)
-                {
-                    let mut f = Formula::latex(result.text);
-                    f.confidence = result.confidence;
-                    blocks.push(Block::Formula(FormulaBlock {
-                        formula: f,
-                        geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
-                        source: Some(SourceInfo::new()),
-                    }));
+                if w >= 4 && h >= 4 {
+                    let crop = crop_region(&img, x, y, w, h);
+                    if let Ok(result) = recognize_formula(
+                        &crop,
+                        &*enc_session,
+                        &*dec_session,
+                        &tok_path,
+                        &rec_params,
+                    ) {
+                        let mut f = Formula::latex(result.text);
+                        f.confidence = result.confidence;
+                        blocks.push(Block::Formula(FormulaBlock {
+                            formula: f,
+                            geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                            source: Some(SourceInfo::new()),
+                        }));
+                    }
                 }
             }
-        }
 
-        log::info!("Building Document with {} blocks", blocks.len());
-        let doc = Document {
-            metadata: Metadata::default(),
-            pages: vec![Page {
-                width: img.width() as f32,
-                height: img.height() as f32,
-                blocks,
-                page_number: Some(1),
-            }],
-            id_gen: NodeIdGenerator::new(),
-        };
+            log::info!("Building Document with {} blocks", blocks.len());
+            let doc = Document {
+                metadata: Metadata::default(),
+                pages: vec![Page {
+                    width: img.width() as f32,
+                    height: img.height() as f32,
+                    blocks,
+                    page_number: Some(1),
+                }],
+                id_gen: NodeIdGenerator::new(),
+            };
 
-        Ok(Self { document: doc })
+            Ok(Self { document: doc })
         }
     }
 

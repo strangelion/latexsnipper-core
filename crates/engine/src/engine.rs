@@ -635,18 +635,22 @@ impl SnipperEngine {
         if let Some(v) = &self.config.text_rec_model {
             ctx.model_variants.insert("text-rec".into(), v.clone());
         }
+        if let Some(v) = &self.config.table_det_model {
+            ctx.model_variants.insert("table-det".into(), v.clone());
+        }
+        if let Some(v) = &self.config.table_struct_model {
+            ctx.model_variants.insert("table-struct".into(), v.clone());
+        }
 
         // Mode-specific defaults
         match self.config.parse_mode {
             DocumentParseMode::OpenOcrText => {
-                ctx.model_variants
-                    .entry("text-det".into())
-                    .or_insert_with(|| "openocr-mobile".into());
-                ctx.model_variants
-                    .entry("text-rec".into())
-                    .or_insert_with(|| "openocr-mobile".into());
+                self.prefer_variant_if_installed(&mut ctx, "text-det", "openocr-mobile");
+                self.prefer_variant_if_installed(&mut ctx, "text-rec", "openocr-mobile");
+                self.prefer_variant_if_installed(&mut ctx, "table-struct", "slanet-plus");
             }
             DocumentParseMode::OpenDocHybrid => {
+                self.prefer_variant_if_installed(&mut ctx, "table-struct", "slanet-plus");
                 // Auto-register layout package from manifest if available
                 self.try_register_layout_package(&mut ctx);
             }
@@ -654,6 +658,23 @@ impl SnipperEngine {
         }
 
         ctx
+    }
+
+    fn prefer_variant_if_installed(
+        &self,
+        ctx: &mut PipelineContext,
+        category: &str,
+        variant: &str,
+    ) {
+        if ctx.model_variants.contains_key(category) {
+            return;
+        }
+
+        let variant_dir = self.config.models_dir.join(category).join(variant);
+        if variant_dir.is_dir() {
+            ctx.model_variants
+                .insert(category.to_string(), variant.to_string());
+        }
     }
 
     /// Try to auto-register layout analysis package from the model manifest.

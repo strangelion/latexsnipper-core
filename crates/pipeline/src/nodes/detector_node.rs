@@ -3,7 +3,8 @@ use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_inference::{
     detect_formulas, detect_handwriting, detect_tables, detect_text, filter_formula_detections,
     filter_handwriting_detections, filter_table_detections, group_formula_detections,
-    DetectionParams, HandwritingDetParams, TableDetParams, TextDetParams,
+    recognize_table_transformer, DetectionParams, HandwritingDetParams, TableDetParams,
+    TextDetParams,
 };
 use latexsnipper_runtime::{InferenceContext, ModelInput, ModelOutput, ModelTask};
 
@@ -324,13 +325,37 @@ impl DetectorNode {
                 }
             };
 
-        let det_params = TableDetParams::from_config(&det_config);
         let det_handle = resolve_model_handle(ctx, "table-det", det_model_path)?;
 
         let backend = get_backend(ctx)?;
         let session = get_or_create_session(ctx, "table_det", &backend, &det_handle)?;
 
-        let mut detections = detect_tables(image, &*session, &det_params)?;
+        let mut detections = if det_config.model_type == "tatr" || det_config.model_type == "detr" {
+            recognize_table_transformer(image, &*session)?
+                .into_iter()
+                .filter(|d| d.class_id != 0)
+                .map(|d| {
+                    let rect = latexsnipper_ast::Rect::new(
+                        d.bbox[0],
+                        d.bbox[1],
+                        d.bbox[2] - d.bbox[0],
+                        d.bbox[3] - d.bbox[1],
+                    );
+                    latexsnipper_inference::DetectionBox::rect(
+                        rect,
+                        d.score,
+                        d.class_id as usize,
+                        match d.class_id {
+                            2 => "table_rotated".to_string(),
+                            _ => "table".to_string(),
+                        },
+                    )
+                })
+                .collect()
+        } else {
+            let det_params = TableDetParams::from_config(&det_config);
+            detect_tables(image, &*session, &det_params)?
+        };
 
         let min_area = det_config.pipeline_min_area();
         let min_conf = det_config.pipeline_min_confidence();

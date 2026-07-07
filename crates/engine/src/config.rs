@@ -14,6 +14,8 @@ pub struct EngineConfig {
     pub formula_rec_model: Option<String>,
     pub text_det_model: Option<String>,
     pub text_rec_model: Option<String>,
+    pub table_det_model: Option<String>,
+    pub table_struct_model: Option<String>,
     pub doc_ori_model: Option<String>,
 
     /// Document parsing mode.
@@ -30,6 +32,8 @@ impl Default for EngineConfig {
             formula_rec_model: None,
             text_det_model: None,
             text_rec_model: None,
+            table_det_model: None,
+            table_struct_model: None,
             doc_ori_model: None,
             parse_mode: DocumentParseMode::default(),
         }
@@ -54,6 +58,18 @@ impl EngineConfig {
     /// Set text recognition model variant (e.g. "v6-medium", "ppocrv5-mobile").
     pub fn set_text_rec(mut self, variant: &str) -> Self {
         self.text_rec_model = Some(variant.to_string());
+        self
+    }
+
+    /// Set table detection model variant.
+    pub fn set_table_det(mut self, variant: &str) -> Self {
+        self.table_det_model = Some(variant.to_string());
+        self
+    }
+
+    /// Set table structure model variant.
+    pub fn set_table_struct(mut self, variant: &str) -> Self {
+        self.table_struct_model = Some(variant.to_string());
         self
     }
 

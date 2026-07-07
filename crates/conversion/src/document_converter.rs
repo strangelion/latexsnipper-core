@@ -28,6 +28,8 @@ impl OutputFormat {
     pub fn all() -> &'static [OutputFormat] {
         &[
             OutputFormat::Latex,
+            OutputFormat::LatexDisplay,
+            OutputFormat::LatexEquation,
             OutputFormat::Typst,
             OutputFormat::MarkdownInline,
             OutputFormat::MarkdownBlock,
@@ -211,7 +213,7 @@ mod tests {
     fn convert_all_formats() {
         let doc = test_doc();
         let results = DocumentConverter::convert_all(&doc).unwrap();
-        assert_eq!(results.len(), 7);
+        assert_eq!(results.len(), 9);
         for (format, output) in &results {
             assert!(!output.is_empty(), "Empty output for {:?}", format);
         }

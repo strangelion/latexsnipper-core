@@ -9,6 +9,7 @@ pub mod service;
 pub use config::EngineConfig;
 pub use engine::{RecognizeMode, RecognizeRequest, RecognizeResponse, SnipperEngine, StreamItem};
 pub use job::{Job, JobQueue, JobStatus};
+pub use latexsnipper_pipeline::DocumentParseMode;
 pub use metrics::{MetricsBuilder, RecognitionMetrics, SerializableMetrics};
 pub use service::{Service, ServiceStatus};
 

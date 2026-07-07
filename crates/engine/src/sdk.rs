@@ -21,7 +21,7 @@ use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::OnnxRuntimeBackend;
 use std::path::Path;
 
-use crate::{EngineConfig, RecognizeMode, SnipperEngine};
+use crate::{DocumentParseMode, EngineConfig, RecognizeMode, SnipperEngine};
 
 /// Main entry point for LaTeXSnipper SDK.
 pub struct Snipper {
@@ -43,24 +43,68 @@ impl Snipper {
         Self::from_image(rgb)
     }
 
+    /// Create from a file path using a custom engine config and recognition mode.
+    pub fn from_file_with_config(
+        path: impl AsRef<Path>,
+        config: EngineConfig,
+        mode: RecognizeMode,
+    ) -> Result<Self, SnipperError> {
+        let path = path.as_ref();
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))
+        {
+            return Self::from_pdf_with_config(path, config, mode);
+        }
+
+        let img =
+            decode(ImageSource::File(path)).map_err(|e| SnipperError::Image(e.to_string()))?;
+        Self::from_image_with_config(rgba_to_rgb(&img), config, mode)
+    }
+
+    /// Create from a file path using a parse mode and recognition mode.
+    pub fn from_file_with_parse_mode(
+        path: impl AsRef<Path>,
+        parse_mode: DocumentParseMode,
+        mode: RecognizeMode,
+    ) -> Result<Self, SnipperError> {
+        Self::from_file_with_config(
+            path,
+            EngineConfig::default().set_parse_mode(parse_mode),
+            mode,
+        )
+    }
+
     /// Create from a PDF file path.
     ///
     /// PDF page rendering requires `pdftoppm` (poppler) or `mutool` (MuPDF).
     pub fn from_pdf(path: impl AsRef<Path>) -> Result<Self, SnipperError> {
+        Self::from_pdf_with_config(path, EngineConfig::default(), RecognizeMode::Mixed)
+    }
+
+    /// Create from a PDF file path using a custom engine config and recognition mode.
+    pub fn from_pdf_with_config(
+        path: impl AsRef<Path>,
+        config: EngineConfig,
+        mode: RecognizeMode,
+    ) -> Result<Self, SnipperError> {
         #[cfg(target_os = "windows")]
         {
-            let config = EngineConfig::default();
             let backend = OnnxRuntimeBackend::new(config.models_dir.clone())
                 .map_err(|e| SnipperError::Runtime(e.to_string()))?;
             let engine = SnipperEngine::new(config, Box::new(backend));
 
-            let rt = tokio::runtime::Runtime::new()
-                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+            let rt =
+                tokio::runtime::Runtime::new().map_err(|e| SnipperError::Runtime(e.to_string()))?;
             let doc = rt
-                .block_on(engine.recognize_pdf(path.as_ref(), RecognizeMode::Mixed))
+                .block_on(engine.recognize_pdf(path.as_ref(), mode))
                 .map_err(|e| SnipperError::Inference(e.to_string()))?;
 
-            Ok(Self { engine, document: doc })
+            Ok(Self {
+                engine,
+                document: doc,
+            })
         }
         #[cfg(not(target_os = "windows"))]
         {
@@ -72,20 +116,31 @@ impl Snipper {
 
     /// Create from raw RGB pixels.
     pub fn from_image(img: SnipperImage) -> Result<Self, SnipperError> {
+        Self::from_image_with_config(img, EngineConfig::default(), RecognizeMode::Formula)
+    }
+
+    /// Create from raw RGB pixels using a custom engine config and recognition mode.
+    pub fn from_image_with_config(
+        img: SnipperImage,
+        config: EngineConfig,
+        mode: RecognizeMode,
+    ) -> Result<Self, SnipperError> {
         #[cfg(target_os = "windows")]
         {
-            let config = EngineConfig::default();
             let backend = OnnxRuntimeBackend::new(config.models_dir.clone())
                 .map_err(|e| SnipperError::Runtime(e.to_string()))?;
             let engine = SnipperEngine::new(config, Box::new(backend));
 
-            let rt = tokio::runtime::Runtime::new()
-                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+            let rt =
+                tokio::runtime::Runtime::new().map_err(|e| SnipperError::Runtime(e.to_string()))?;
             let doc = rt
-                .block_on(engine.recognize(img, RecognizeMode::Formula))
+                .block_on(engine.recognize(img, mode))
                 .map_err(|e| SnipperError::Inference(e.to_string()))?;
 
-            Ok(Self { engine, document: doc })
+            Ok(Self {
+                engine,
+                document: doc,
+            })
         }
         #[cfg(not(target_os = "windows"))]
         {

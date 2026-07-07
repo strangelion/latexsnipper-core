@@ -6,6 +6,7 @@ Approaches:
 3. Use PaddleOCR's paddle2onnx if compatible
 """
 import os
+import json
 import shutil
 import sys
 import urllib.request
@@ -62,17 +63,44 @@ def method1_rapidocr_copy():
 def method2_huggingface():
     """Download PP-OCR ONNX from HuggingFace."""
     print("\n=== Method 2: Download from HuggingFace ===")
-    urls = {
-        "det": "https://huggingface.co/rapidocr/PP-OCRv6_det_small/resolve/main/PP-OCRv6_det_small.onnx",
-        "rec": "https://huggingface.co/rapidocr/PP-OCRv6_rec_small/resolve/main/PP-OCRv6_rec_small.onnx",
-    }
-    for name, url in urls.items():
-        dst = str(PROJECT_ROOT / "models" / f"text-{name[:3]}" / "openocr-mobile" / "model.onnx")
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        print(f"  Downloading {name}: {url[:60]}...")
+    files = [
+        (
+            "det",
+            "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.onnx",
+            PROJECT_ROOT / "models" / "text-det" / "openocr-mobile" / "model.onnx",
+        ),
+        (
+            "det-yml",
+            "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.yml",
+            PROJECT_ROOT / "models" / "text-det" / "openocr-mobile" / "inference.yml",
+        ),
+        (
+            "det-json",
+            "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.json",
+            PROJECT_ROOT / "models" / "text-det" / "openocr-mobile" / "inference.json",
+        ),
+        (
+            "rec",
+            "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.onnx",
+            PROJECT_ROOT / "models" / "text-rec" / "openocr-mobile" / "model.onnx",
+        ),
+        (
+            "rec-yml",
+            "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.yml",
+            PROJECT_ROOT / "models" / "text-rec" / "openocr-mobile" / "inference.yml",
+        ),
+        (
+            "rec-json",
+            "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.json",
+            PROJECT_ROOT / "models" / "text-rec" / "openocr-mobile" / "inference.json",
+        ),
+    ]
+    for name, url, dst in files:
+        os.makedirs(dst.parent, exist_ok=True)
+        print(f"  Downloading {name}: {url[:70]}...")
         try:
             urllib.request.urlretrieve(url, dst)
-            print(f"  Saved: {os.path.getsize(dst) / 1024 / 1024:.1f} MB")
+            print(f"  Saved: {dst.stat().st_size / 1024 / 1024:.1f} MB")
         except Exception as e:
             print(f"  Failed: {e}")
             return False
@@ -131,6 +159,162 @@ def generate_dict():
     print("  NOTE: This is a minimal dictionary. Replace with actual model dict for production.")
 
 
+def write_core_configs():
+    """Write latexsnipper-core config.json files for OpenOCR-style variants."""
+    print("\n=== Writing latexsnipper-core config.json ===")
+    det_dir = PROJECT_ROOT / "models" / "text-det" / "openocr-mobile"
+    rec_dir = PROJECT_ROOT / "models" / "text-rec" / "openocr-mobile"
+
+    det_config = {
+        "model_type": "dbnet",
+        "model_family": "OpenOCR Mobile Text Detection",
+        "license": "Apache-2.0",
+        "task_type": "detection",
+        "dynamic_shapes": True,
+        "input": {
+            "name": "x",
+            "shape": [1, 3, -1, -1],
+            "dtype": "float32",
+            "range": [0.0, 1.0],
+        },
+        "output": {
+            "name": "fetch_name_0",
+            "shape": [1, 1, -1, -1],
+            "description": "DBNet probability map",
+        },
+        "preprocessing": {
+            "resize": {"keep_ratio": True, "pad_value": 0.0},
+            "normalization": {
+                "mean": [0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0],
+            },
+            "color_format": "BGR",
+        },
+        "postprocessing": {
+            "type": "dbnet",
+            "threshold": 0.3,
+            "box_threshold": 0.5,
+            "max_candidates": 1000,
+            "unclip_ratio": 1.5,
+        },
+        "pipeline": {
+            "min_area": 100.0,
+            "min_confidence": 0.2,
+            "model_files": {"primary": "model.onnx"},
+        },
+    }
+
+    rec_config = {
+        "model_type": "crnn_ctc",
+        "model_family": "OpenOCR Mobile Text Recognition",
+        "license": "Apache-2.0",
+        "task_type": "ocr",
+        "dynamic_shapes": True,
+        "input": {
+            "name": "x",
+            "shape": [1, 3, 48, 3200],
+            "dtype": "float32",
+            "range": [-1.0, 1.0],
+        },
+        "output": {
+            "name": "fetch_name_0",
+            "shape": [1, -1, 18710],
+            "description": "CTC logits",
+        },
+        "preprocessing": {
+            "resize": {
+                "width": 3200,
+                "height": 48,
+                "keep_ratio": True,
+                "pad_value": 0.0,
+            },
+            "normalization": {
+                "mean": [0.5, 0.5, 0.5],
+                "std": [0.5, 0.5, 0.5],
+            },
+            "color_format": "BGR",
+        },
+        "decoding": {
+            "type": "ctc_greedy",
+            "blank_id": 0,
+            "keys_file": "inference.yml",
+        },
+        "pipeline": {
+            "model_files": {
+                "primary": "model.onnx",
+                "tokenizer": "inference.yml",
+            },
+        },
+    }
+
+    for path, data in [
+        (det_dir / "config.json", det_config),
+        (rec_dir / "config.json", rec_config),
+    ]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        print(f"  Wrote: {path}")
+
+
+def method5_slanet_plus():
+    """Copy SLANet_plus ONNX from RapidTable if available."""
+    print("\n=== Method 5: Copy SLANet_plus from RapidTable ===")
+    try:
+        import rapid_table
+
+        rt_dir = Path(rapid_table.__file__).resolve().parent
+        src = rt_dir / "models" / "slanet-plus.onnx"
+        dst_dir = PROJECT_ROOT / "models" / "table-struct" / "slanet-plus"
+        dst = dst_dir / "model.onnx"
+
+        if not src.exists():
+            print(f"  Source not found: {src}")
+            return False
+
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        config = {
+            "model_type": "slanet",
+            "model_family": "SLANet Plus Table Structure Recognition",
+            "license": "Apache-2.0",
+            "task_type": "structure",
+            "input": {
+                "name": "x",
+                "shape": [1, 3, 488, 488],
+                "dtype": "float32",
+                "range": [-2.1179, 2.64],
+            },
+            "output": {
+                "name": "structure_probs",
+                "shape": [1, -1, 50],
+                "description": "SLANet cell coordinates and structure token logits",
+            },
+            "preprocessing": {
+                "resize": {
+                    "width": 488,
+                    "height": 488,
+                    "keep_ratio": True,
+                    "pad_value": 0.0,
+                },
+                "normalization": {
+                    "mean": [0.485, 0.456, 0.406],
+                    "std": [0.229, 0.224, 0.225],
+                },
+                "color_format": "RGB",
+            },
+            "pipeline": {"model_files": {"primary": "model.onnx"}},
+        }
+        (dst_dir / "config.json").write_text(
+            json.dumps(config, indent=2) + "\n", encoding="utf-8"
+        )
+        print(f"  Copied SLANet_plus: {dst.stat().st_size / 1024 / 1024:.1f} MB")
+        print(f"  Wrote: {dst_dir / 'config.json'}")
+        return True
+    except Exception as e:
+        print(f"  Error: {e}")
+        return False
+
+
 def main():
     print(f"Project root: {PROJECT_ROOT}\n")
 
@@ -148,6 +332,9 @@ def main():
         # Generate dict.txt
         generate_dict()
 
+        # Generate config.json files consumed by latexsnipper-core
+        write_core_configs()
+
         # Verify config files exist
         det_dir = PROJECT_ROOT / "models" / "text-det" / "openocr-mobile"
         rec_dir = PROJECT_ROOT / "models" / "text-rec" / "openocr-mobile"
@@ -161,6 +348,9 @@ def main():
 
         # Copy layout model
         method4_layout_model()
+
+        # Copy table structure model
+        method5_slanet_plus()
     else:
         print("\nFailed to export models from any source.")
 

@@ -97,13 +97,13 @@ pub enum TableStructBackend {
 /// Note: With merge_no_span_structure=True (default), `<td>` is replaced by `<td></td>`.
 /// The vocabulary size is 50 tokens matching the model output.
 const SLANET_STRUCTURE_DICT: &[&str] = &[
-    "<thead>",         // 0
-    "</thead>",        // 1
-    "<tbody>",         // 2
-    "</tbody>",        // 3
-    "<tr>",            // 4
-    "</tr>",           // 5
-    "<td></td>",       // 6 (merged with merge_no_span_structure)
+    "sos",             // 0 (start of sequence)
+    "<thead>",         // 1
+    "</thead>",        // 2
+    "<tbody>",         // 3
+    "</tbody>",        // 4
+    "<tr>",            // 5
+    "</tr>",           // 6
     "<td",             // 7
     ">",               // 8
     "</td>",           // 9
@@ -145,7 +145,7 @@ const SLANET_STRUCTURE_DICT: &[&str] = &[
     " rowspan=\"18\"", // 45
     " rowspan=\"19\"", // 46
     " rowspan=\"20\"", // 47
-    "sos",             // 48 (start of sequence)
+    "<td></td>",       // 48 (merged with merge_no_span_structure)
     "eos",             // 49 (end of sequence)
 ];
 
@@ -187,10 +187,8 @@ pub fn preprocess_for_slanet(image: &SnipperImage) -> Result<(Vec<f32>, [f32; 4]
         }
     }
 
-    // Shape info for bbox decoding: [resized_h, resized_w, orig_h, orig_w]
-    // Python uses: h, w = shape[:2] then bbox[0::2] *= w, bbox[1::2] *= h
-    // So shape[:2] should be the RESIZED dimensions for bbox scaling
-    let shape_info = [resize_h as f32, resize_w as f32, h, w];
+    // Shape info follows RapidTable: [orig_h, orig_w, ratio, ratio].
+    let shape_info = [h, w, ratio, ratio];
 
     Ok((padded, shape_info))
 }
@@ -263,6 +261,22 @@ pub fn recognize_table_structure(
                     image.width() as f32,
                     image.height() as f32,
                 );
+                if is_sparse_or_exploded_grid(&cells) {
+                    let rect = Rect::new(0.0, 0.0, image.width() as f32, image.height() as f32);
+                    let structure = parse_table_structure(image, &rect)?;
+                    let cells: Vec<GridCell> = structure
+                        .cells
+                        .iter()
+                        .map(|c| GridCell {
+                            row: c.row,
+                            col: c.col,
+                            rowspan: c.rowspan,
+                            colspan: c.colspan,
+                            rect: c.rect,
+                        })
+                        .collect();
+                    return Ok(Some(cells));
+                }
                 Ok(Some(cells))
             } else {
                 Ok(None)
@@ -299,6 +313,18 @@ pub fn recognize_table_structure(
     }
 }
 
+fn is_sparse_or_exploded_grid(cells: &[GridCell]) -> bool {
+    if cells.is_empty() {
+        return false;
+    }
+
+    let rows = cells.iter().map(|c| c.row).max().unwrap_or(0) + 1;
+    let cols = cells.iter().map(|c| c.col).max().unwrap_or(0) + 1;
+    let dense_slots = rows.saturating_mul(cols);
+
+    (rows > 8 || cols > 8) && dense_slots > cells.len().saturating_mul(2)
+}
+
 /// Decode SLANet model outputs into table structure.
 ///
 /// # Arguments
@@ -314,10 +340,10 @@ pub fn decode_slanet_output(
     img_width: f32,
     img_height: f32,
 ) -> Result<TableStructure> {
-    // Python uses: h, w = shape[:2] then bbox[0::2] *= w, bbox[1::2] *= h
-    // So we need RESIZED dimensions for bbox scaling
-    let resized_h = shape_info[0];
-    let resized_w = shape_info[1];
+    let orig_h = shape_info[0];
+    let orig_w = shape_info[1];
+    let ratio = shape_info[2].max(1e-6);
+    let max_side = orig_w.max(orig_h);
 
     // Get argmax of structure logits for each position
     let num_positions = structure_logits.len() / SLANET_STRUCTURE_DICT.len();
@@ -345,6 +371,12 @@ pub fn decode_slanet_output(
         }
 
         let token = SLANET_STRUCTURE_DICT[max_idx];
+        if token == "eos" && pos > 0 {
+            break;
+        }
+        if token == "sos" || token == "eos" {
+            continue;
+        }
         structure_tokens.push((token, *max_val));
 
         // If token is a cell tag, extract bbox
@@ -355,11 +387,11 @@ pub fn decode_slanet_output(
             if coords_end <= cell_coords.len() {
                 let bbox = &cell_coords[coords_start..coords_end];
 
-                // Decode bbox: multiply by resized dimensions (Python: bbox[0::2] *= w, bbox[1::2] *= h)
+                // Decode bbox from the padded 488x488 coordinate space back to the original crop.
                 let mut decoded = [0.0f32; 8];
                 for i in 0..4 {
-                    decoded[i * 2] = bbox[i * 2] * resized_w;
-                    decoded[i * 2 + 1] = bbox[i * 2 + 1] * resized_h;
+                    decoded[i * 2] = (bbox[i * 2] * max_side).clamp(0.0, img_width);
+                    decoded[i * 2 + 1] = (bbox[i * 2 + 1] * 488.0 / ratio).clamp(0.0, img_height);
                 }
 
                 // Calculate bounding rect from quadrilateral

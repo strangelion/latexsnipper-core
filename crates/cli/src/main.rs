@@ -1,10 +1,14 @@
 use clap::{Parser, Subcommand};
-use latexsnipper_engine::sdk::Snipper;
+use latexsnipper_conversion::OutputFormat;
+use latexsnipper_engine::{sdk::Snipper, DocumentParseMode, EngineConfig, RecognizeMode};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use std::io::{self, Write};
 
-const SUPPORTED_FORMATS: &str = "latex, markdown, typst, html, mathml, omml, json";
+const SUPPORTED_FORMATS: &str =
+    "latex, latex_display, latex_equation, markdown, markdown_inline, typst, html, mathml, omml, json";
+const SUPPORTED_PARSE_MODES: &str = "specialized, openocr-text, opendoc-hybrid";
+const SUPPORTED_RECOGNIZE_MODES: &str = "formula, text, mixed, handwriting, table, formula-layout";
 
 #[derive(Parser)]
 #[command(name = "snipper")]
@@ -54,6 +58,14 @@ enum Commands {
         /// Output file path. If omitted, prints to stdout.
         #[arg(short = 'o', long)]
         output: Option<String>,
+
+        /// Document parsing mode.
+        #[arg(long, default_value = "specialized")]
+        parse_mode: String,
+
+        /// Recognition pipeline mode.
+        #[arg(long, default_value = "formula")]
+        recognize_mode: String,
     },
 
     /// Shorthand for 'recognize'
@@ -70,6 +82,14 @@ enum Commands {
         /// Output file path. If omitted, prints to stdout.
         #[arg(short = 'o', long)]
         output: Option<String>,
+
+        /// Document parsing mode.
+        #[arg(long, default_value = "specialized")]
+        parse_mode: String,
+
+        /// Recognition pipeline mode.
+        #[arg(long, default_value = "formula")]
+        recognize_mode: String,
     },
 
     /// Parse a LaTeX string to AST (JSON)
@@ -187,7 +207,7 @@ fn resolve_format(format: &str, output: Option<&str>) -> String {
             .extension()
             .and_then(|e| e.to_str())
         {
-            return match ext {
+            return match ext.to_ascii_lowercase().as_str() {
                 "tex" | "latex" => "latex".to_string(),
                 "typ" => "typst".to_string(),
                 "md" | "markdown" => "markdown".to_string(),
@@ -199,14 +219,26 @@ fn resolve_format(format: &str, output: Option<&str>) -> String {
             };
         }
     }
-    format.to_string()
+    format.to_ascii_lowercase()
 }
 
 fn suggest_format(input: &str) -> Option<&'static str> {
     let lower = input.to_lowercase();
     let suggestions: Vec<(&str, Vec<&str>)> = vec![
+        (
+            "latex_display",
+            vec!["latex_display", "display", "displaylatex", "texdisplay"],
+        ),
+        (
+            "latex_equation",
+            vec!["latex_equation", "equation", "equationlatex", "eqn"],
+        ),
         ("latex", vec!["latex", "tex", "late", "ltx"]),
         ("markdown", vec!["markdown", "md", "mark", "mard"]),
+        (
+            "markdown_inline",
+            vec!["markdown_inline", "md_inline", "inline_markdown"],
+        ),
         ("typst", vec!["typst", "typ", "typs"]),
         ("html", vec!["html", "htm"]),
         ("json", vec!["json", "jsn"]),
@@ -222,6 +254,33 @@ fn suggest_format(input: &str) -> Option<&'static str> {
         }
     }
     None
+}
+
+fn parse_document_parse_mode(input: &str) -> Option<DocumentParseMode> {
+    match input.to_ascii_lowercase().as_str() {
+        "specialized" | "specialized-stable" | "stable" | "default" => {
+            Some(DocumentParseMode::SpecializedStable)
+        }
+        "openocr" | "openocr-text" | "openocr_text" | "open-ocr-text" => {
+            Some(DocumentParseMode::OpenOcrText)
+        }
+        "opendoc" | "opendoc-hybrid" | "opendoc_hybrid" | "hybrid" => {
+            Some(DocumentParseMode::OpenDocHybrid)
+        }
+        _ => None,
+    }
+}
+
+fn parse_recognize_mode(input: &str) -> Option<RecognizeMode> {
+    match input.to_ascii_lowercase().as_str() {
+        "formula" | "math" => Some(RecognizeMode::Formula),
+        "text" | "ocr" => Some(RecognizeMode::Text),
+        "mixed" | "document" => Some(RecognizeMode::Mixed),
+        "handwriting" | "handwrite" => Some(RecognizeMode::Handwriting),
+        "table" => Some(RecognizeMode::Table),
+        "formula-layout" | "formula_layout" | "layout" => Some(RecognizeMode::FormulaLayout),
+        _ => None,
+    }
 }
 
 fn levenshtein_distance(a: &str, b: &str) -> usize {
@@ -267,15 +326,37 @@ fn main() {
             input,
             format,
             output,
+            parse_mode,
+            recognize_mode,
         }
         | Commands::Rec {
             input,
             format,
             output,
+            parse_mode,
+            recognize_mode,
         } => {
             eprintln!("Processing: {}", input);
 
-            let snipper = match Snipper::from_file(&input) {
+            let parse_mode = match parse_document_parse_mode(&parse_mode) {
+                Some(mode) => mode,
+                None => {
+                    eprintln!("Unknown parse mode: '{}'", parse_mode);
+                    eprintln!("  Supported parse modes: {}", SUPPORTED_PARSE_MODES);
+                    std::process::exit(1);
+                }
+            };
+            let recognize_mode = match parse_recognize_mode(&recognize_mode) {
+                Some(mode) => mode,
+                None => {
+                    eprintln!("Unknown recognize mode: '{}'", recognize_mode);
+                    eprintln!("  Supported recognize modes: {}", SUPPORTED_RECOGNIZE_MODES);
+                    std::process::exit(1);
+                }
+            };
+            let config = EngineConfig::default().set_parse_mode(parse_mode);
+
+            let snipper = match Snipper::from_file_with_config(&input, config, recognize_mode) {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("Error: {}", e);
@@ -289,7 +370,12 @@ fn main() {
 
             let output_result = match resolved_format.as_str() {
                 "latex" | "tex" => snipper.to_latex(),
+                "latex_display" | "display" => snipper.to_format(OutputFormat::LatexDisplay),
+                "latex_equation" | "equation" | "eqn" => {
+                    snipper.to_format(OutputFormat::LatexEquation)
+                }
                 "markdown" | "md" => snipper.to_markdown(),
+                "markdown_inline" | "md_inline" => snipper.to_format(OutputFormat::MarkdownInline),
                 "typst" => snipper.to_typst(),
                 "html" => snipper.to_html(),
                 "mathml" => snipper.to_mathml(),
@@ -1259,4 +1345,38 @@ fn print_final_stats(
         println!("      Keep going! \\int practice \\, dx = mastery");
     }
     println!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_all_public_format_aliases() {
+        assert_eq!(resolve_format("latex_display", None), "latex_display");
+        assert_eq!(resolve_format("LATEX_EQUATION", None), "latex_equation");
+        assert_eq!(resolve_format("markdown_inline", None), "markdown_inline");
+        assert_eq!(resolve_format("ignored", Some("out.typ")), "typst");
+        assert_eq!(suggest_format("equationlatex"), Some("latex_equation"));
+    }
+
+    #[test]
+    fn parses_openocr_modes() {
+        assert_eq!(
+            parse_document_parse_mode("openocr-text"),
+            Some(DocumentParseMode::OpenOcrText)
+        );
+        assert_eq!(
+            parse_document_parse_mode("opendoc_hybrid"),
+            Some(DocumentParseMode::OpenDocHybrid)
+        );
+        assert!(matches!(
+            parse_recognize_mode("text"),
+            Some(RecognizeMode::Text)
+        ));
+        assert!(matches!(
+            parse_recognize_mode("mixed"),
+            Some(RecognizeMode::Mixed)
+        ));
+    }
 }

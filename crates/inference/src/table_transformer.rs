@@ -32,21 +32,17 @@ pub struct TableTransformerDetection {
 
 /// Structure recognition labels (7 classes including no_object at index 0).
 pub const TABLE_STRUCTURE_LABELS: &[&str] = &[
-    "no_object",                  // 0
-    "table",                      // 1
-    "table column",               // 2
-    "table row",                  // 3
-    "table column header",        // 4
-    "table projected row header", // 5
-    "table spanning cell",        // 6
+    "table",
+    "table column",
+    "table row",
+    "table column header",
+    "table projected row header",
+    "table spanning cell",
+    "no_object",
 ];
 
 /// Detection labels (3 classes including no_object at index 0).
-pub const TABLE_DETECTION_LABELS: &[&str] = &[
-    "no_object",     // 0
-    "table",         // 1
-    "table rotated", // 2
-];
+pub const TABLE_DETECTION_LABELS: &[&str] = &["no_object", "table", "table rotated"];
 
 /// Run a Table Transformer model (detection or structure) and return detections.
 ///
@@ -112,17 +108,6 @@ pub fn recognize_table_transformer(
 
     let mut detections = Vec::new();
 
-    // Debug: print first query's raw logits
-    if logits.len() >= 7 {
-        eprintln!("TATR DEBUG: Query 0 logits: {:?}", &logits[0..7]);
-    }
-    eprintln!(
-        "TATR DEBUG: logits_shape={:?}, total_logits={}, total_boxes={}",
-        logits_shape,
-        logits.len(),
-        pred_boxes.len()
-    );
-
     for q in 0..num_queries {
         let logits_offset = q * num_classes;
         let box_offset = q * 4;
@@ -151,7 +136,13 @@ pub fn recognize_table_transformer(
             }
         }
 
-        if best_score < 0.7 {
+        let is_no_object = match num_classes {
+            3 => best_class == 0,
+            7 => best_class == 6,
+            _ => best_class == 0,
+        };
+
+        if is_no_object || best_score < 0.7 {
             continue;
         }
 
@@ -180,7 +171,12 @@ pub fn recognize_table_transformer(
     for det in detections {
         let bw = det.bbox[2] - det.bbox[0];
         let bh = det.bbox[3] - det.bbox[1];
-        if det.class_id > 2 && bw > 0.8 && bh > 0.8 {
+        let is_table_box = match num_classes {
+            3 => det.class_id == 1 || det.class_id == 2,
+            7 => det.class_id == 0,
+            _ => false,
+        };
+        if !is_table_box && bw > 0.8 && bh > 0.8 {
             continue;
         }
         filtered.push(det);
@@ -258,21 +254,38 @@ pub fn build_grid_from_detections(
     img_w: f32,
     img_h: f32,
 ) -> Vec<GridCell> {
-    let mut row_dets: Vec<&TableTransformerDetection> =
-        detections.iter().filter(|d| d.class_id == 3).collect();
+    let mut row_dets: Vec<&TableTransformerDetection> = detections
+        .iter()
+        .filter(|d| {
+            d.class_id == 2
+                && (d.bbox[2] - d.bbox[0]) >= img_w * 0.20
+                && (d.bbox[3] - d.bbox[1]) <= img_h * 0.60
+        })
+        .collect();
     row_dets.sort_by(|a, b| a.bbox[1].partial_cmp(&b.bbox[1]).unwrap());
 
-    let mut col_dets: Vec<&TableTransformerDetection> =
-        detections.iter().filter(|d| d.class_id == 2).collect();
+    let mut col_dets: Vec<&TableTransformerDetection> = detections
+        .iter()
+        .filter(|d| {
+            d.class_id == 1
+                && (d.bbox[3] - d.bbox[1]) >= img_h * 0.20
+                && (d.bbox[2] - d.bbox[0]) <= img_w * 0.60
+        })
+        .collect();
     col_dets.sort_by(|a, b| a.bbox[0].partial_cmp(&b.bbox[0]).unwrap());
-
-    let spanning: Vec<&TableTransformerDetection> =
-        detections.iter().filter(|d| d.class_id == 6).collect();
 
     let mut y_edges: Vec<f32> = Vec::new();
     let mut x_edges: Vec<f32> = Vec::new();
 
     let use_row_col = row_dets.len() >= 3 && col_dets.len() >= 3;
+    let spanning: Vec<&TableTransformerDetection> = if use_row_col {
+        Vec::new()
+    } else {
+        detections
+            .iter()
+            .filter(|d| d.class_id == 5 && d.score >= 0.95)
+            .collect()
+    };
 
     if use_row_col {
         y_edges.push(0.0);
@@ -383,9 +396,20 @@ pub fn build_grid_from_detections(
             let cspan = end_col - sc + 1;
             let avg_cell_w = (x_edges[sc + 1] - x_edges[sc]).max(1.0);
             let avg_cell_h = (y_edges[sr + 1] - y_edges[sr]).max(1.0);
-            let is_real_merge = (rspan * cspan >= 3)
-                || (rspan >= 2 && (sx2 - sx1) > avg_cell_w * 1.8)
-                || (cspan >= 2 && (sy2 - sy1) > avg_cell_h * 1.8);
+            let span_w = sx2 - sx1;
+            let span_h = sy2 - sy1;
+            let area_ratio = (span_w * span_h) / (img_w * img_h).max(1.0);
+            let looks_like_rowspan =
+                rspan >= 2 && span_h > avg_cell_h * 1.5 && span_w < avg_cell_w * 2.5;
+            let looks_like_colspan =
+                cspan >= 2 && span_w > avg_cell_w * 1.5 && span_h < avg_cell_h * 2.5;
+            let looks_like_block_merge = rspan >= 2
+                && cspan >= 2
+                && span_w > avg_cell_w * 1.5
+                && span_h > avg_cell_h * 1.5
+                && area_ratio < 0.35;
+            let is_real_merge = area_ratio < 0.65
+                && (looks_like_rowspan || looks_like_colspan || looks_like_block_merge);
 
             if is_real_merge {
                 for r in sr..=end_row {
@@ -438,7 +462,7 @@ fn build_fallback_grid(
 ) -> Vec<GridCell> {
     let content: Vec<&TableTransformerDetection> = detections
         .iter()
-        .filter(|d| d.class_id != 0 && d.class_id != 1 && d.score > 0.3)
+        .filter(|d| d.class_id != 0 && d.class_id != 6 && d.score > 0.3)
         .collect();
 
     if content.is_empty() {
@@ -452,7 +476,7 @@ fn build_fallback_grid(
     }
 
     let span_only: Vec<&&TableTransformerDetection> =
-        content.iter().filter(|d| d.class_id == 6).collect();
+        content.iter().filter(|d| d.class_id == 5).collect();
     if !span_only.is_empty() {
         let mut cells: Vec<GridCell> = span_only
             .iter()
@@ -533,8 +557,9 @@ mod tests {
     #[test]
     fn test_structure_labels() {
         assert_eq!(TABLE_STRUCTURE_LABELS.len(), 7);
-        assert_eq!(TABLE_STRUCTURE_LABELS[0], "no_object");
-        assert_eq!(TABLE_STRUCTURE_LABELS[3], "table row");
+        assert_eq!(TABLE_STRUCTURE_LABELS[0], "table");
+        assert_eq!(TABLE_STRUCTURE_LABELS[2], "table row");
+        assert_eq!(TABLE_STRUCTURE_LABELS[6], "no_object");
     }
 
     #[test]
