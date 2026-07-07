@@ -4,65 +4,73 @@
 //!
 //! This example requires Windows (ONNX Runtime).
 
-#![cfg(target_os = "windows")]
-
-use latexsnipper_ast::*;
-use latexsnipper_conversion::{DocumentConverter, OutputFormat};
-use latexsnipper_image::color::PixelFormat;
-use latexsnipper_image::decode::{decode, ImageSource};
-use latexsnipper_image::image::SnipperImage;
-use latexsnipper_inference::{
-    detect_formulas, recognize_formula, DetectionParams, RecognitionParams,
-};
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
-use std::path::PathBuf;
-
-fn models_dir() -> PathBuf {
-    PathBuf::from("models")
-}
-
-fn fixtures_dir() -> PathBuf {
-    PathBuf::from("fixtures")
-}
-
-fn rgba_to_rgb(img: &SnipperImage) -> SnipperImage {
-    let mut rgb = Vec::with_capacity((img.width() * img.height() * 3) as usize);
-    for chunk in img.pixels().chunks_exact(4) {
-        rgb.push(chunk[0]);
-        rgb.push(chunk[1]);
-        rgb.push(chunk[2]);
-    }
-    SnipperImage::new(img.width(), img.height(), PixelFormat::Rgb, rgb)
-}
-
-fn crop_region(img: &SnipperImage, x: u32, y: u32, w: u32, h: u32) -> SnipperImage {
-    let img_w = img.width();
-    let img_h = img.height();
-    let x = x.min(img_w.saturating_sub(1));
-    let y = y.min(img_h.saturating_sub(1));
-    let w = w.min(img_w - x);
-    let h = h.min(img_h - y);
-    if w == 0 || h == 0 {
-        return SnipperImage::new(1, 1, PixelFormat::Rgb, vec![0, 0, 0]);
-    }
-    let mut pixels = Vec::with_capacity((w * h * 3) as usize);
-    for row in 0..h {
-        let src_off = ((y + row) * img_w + x) * 3;
-        let src_end = src_off + w * 3;
-        if src_end as usize <= img.pixels().len() {
-            pixels.extend_from_slice(&img.pixels()[src_off as usize..src_end as usize]);
-        }
-    }
-    SnipperImage::new(w, h, PixelFormat::Rgb, pixels)
-}
-
 fn main() {
+    #[cfg(not(target_os = "windows"))]
+    {
+        println!("This example requires Windows (ONNX Runtime).");
+        return;
+    }
+
+    #[cfg(target_os = "windows")]
+    windows_main();
+}
+
+#[cfg(target_os = "windows")]
+fn windows_main() {
+    use latexsnipper_ast::*;
+    use latexsnipper_conversion::{DocumentConverter, OutputFormat};
+    use latexsnipper_image::color::PixelFormat;
+    use latexsnipper_image::decode::{decode, ImageSource};
+    use latexsnipper_image::image::SnipperImage;
+    use latexsnipper_inference::{
+        detect_formulas, recognize_formula, DetectionParams, RecognitionParams,
+    };
+    use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+    use std::path::PathBuf;
+
+    fn models_dir() -> PathBuf {
+        PathBuf::from("models")
+    }
+
+    fn fixtures_dir() -> PathBuf {
+        PathBuf::from("fixtures")
+    }
+
+    fn rgba_to_rgb(img: &SnipperImage) -> SnipperImage {
+        let mut rgb = Vec::with_capacity((img.width() * img.height() * 3) as usize);
+        for chunk in img.pixels().chunks_exact(4) {
+            rgb.push(chunk[0]);
+            rgb.push(chunk[1]);
+            rgb.push(chunk[2]);
+        }
+        SnipperImage::new(img.width(), img.height(), PixelFormat::Rgb, rgb)
+    }
+
+    fn crop_region(img: &SnipperImage, x: u32, y: u32, w: u32, h: u32) -> SnipperImage {
+        let img_w = img.width();
+        let img_h = img.height();
+        let x = x.min(img_w.saturating_sub(1));
+        let y = y.min(img_h.saturating_sub(1));
+        let w = w.min(img_w - x);
+        let h = h.min(img_h - y);
+        if w == 0 || h == 0 {
+            return SnipperImage::new(1, 1, PixelFormat::Rgb, vec![0, 0, 0]);
+        }
+        let mut pixels = Vec::with_capacity((w * h * 3) as usize);
+        for row in 0..h {
+            let src_off = ((y + row) * img_w + x) * 3;
+            let src_end = src_off + w * 3;
+            if src_end as usize <= img.pixels().len() {
+                pixels.extend_from_slice(&img.pixels()[src_off as usize..src_end as usize]);
+            }
+        }
+        SnipperImage::new(w, h, PixelFormat::Rgb, pixels)
+    }
+
     let models = models_dir();
     let fixtures = fixtures_dir();
 
-    println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║     LaTeXSnipper Pipeline Demo                         ║");
-    println!("╚══════════════════════════════════════════════════════════╝\n");
+    println!("Pipeline Demo: Image -> Detect -> Recognize -> AST -> Export\n");
 
     // 1. Load image
     let image_path = fixtures.join("formula.png");
@@ -165,7 +173,7 @@ fn main() {
     let latex = DocumentConverter::new(OutputFormat::Latex)
         .convert(&doc)
         .unwrap();
-    println!("   ── LaTeX ({} chars) ──", latex.len());
+    println!("   LaTeX ({} chars)", latex.len());
     for line in latex.lines().take(3) {
         println!("   {}", line);
     }
@@ -173,7 +181,7 @@ fn main() {
     let md = DocumentConverter::new(OutputFormat::MarkdownBlock)
         .convert(&doc)
         .unwrap();
-    println!("\n   ── Markdown ({} chars) ──", md.len());
+    println!("\n   Markdown ({} chars)", md.len());
     for line in md.lines().take(3) {
         println!("   {}", line);
     }
@@ -181,12 +189,8 @@ fn main() {
     let typst = DocumentConverter::new(OutputFormat::Typst)
         .convert(&doc)
         .unwrap();
-    println!("\n   ── Typst ({} chars) ──", typst.len());
+    println!("\n   Typst ({} chars)", typst.len());
     for line in typst.lines().take(3) {
         println!("   {}", line);
     }
-
-    println!("\n╔══════════════════════════════════════════════════════════╗");
-    println!("║  Pipeline: Image → Detect → Recognize → AST → Export   ║");
-    println!("╚══════════════════════════════════════════════════════════╝");
 }
