@@ -28,8 +28,7 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeInit(
     };
 
     // Use StubRuntime on Android (ONNX backend is Windows-only)
-    let runtime: Box<dyn latexsnipper_runtime::RuntimeBackend> =
-        Box::new(StubRuntime::new());
+    let runtime: Box<dyn latexsnipper_runtime::RuntimeBackend> = Box::new(StubRuntime::new());
 
     let engine = SnipperEngine::new(config, runtime);
     *ENGINE.lock().unwrap() = Some(engine);

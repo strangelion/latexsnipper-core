@@ -17,13 +17,13 @@ use latexsnipper_foundation::SnipperError;
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::image::SnipperImage;
+#[cfg(target_os = "windows")]
 use latexsnipper_inference::{
     detect_formulas, filter_formula_detections, group_formula_detections, recognize_formula,
     DetectionParams, RecognitionParams,
 };
 #[cfg(target_os = "windows")]
-use latexsnipper_runtime::OnnxRuntimeBackend;
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
 use std::path::{Path, PathBuf};
 
 /// Main entry point for LaTeXSnipper SDK.
@@ -58,12 +58,13 @@ impl Snipper {
     }
 
     /// Create from raw RGB pixels.
+    #[allow(unused_variables)]
     pub fn from_image(img: SnipperImage) -> Result<Self, SnipperError> {
         #[cfg(not(target_os = "windows"))]
         {
-            return Err(SnipperError::Runtime(
+            Err(SnipperError::Runtime(
                 "Image processing requires Windows (ONNX Runtime)".to_string(),
-            ));
+            ))
         }
 
         #[cfg(target_os = "windows")]
@@ -235,6 +236,7 @@ impl Snipper {
     }
 }
 
+#[allow(dead_code)]
 fn find_models_dir() -> Result<PathBuf, SnipperError> {
     let candidates = [
         PathBuf::from("models"),
@@ -265,6 +267,7 @@ fn rgba_to_rgb(img: &SnipperImage) -> SnipperImage {
     SnipperImage::new(img.width(), img.height(), PixelFormat::Rgb, rgb)
 }
 
+#[allow(dead_code)]
 fn crop_region(img: &SnipperImage, x: u32, y: u32, w: u32, h: u32) -> SnipperImage {
     let img_w = img.width();
     let img_h = img.height();

@@ -1,5 +1,7 @@
 //! Integration tests using real ONNX models from models/
 
+#![cfg(target_os = "windows")]
+
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::image::SnipperImage;

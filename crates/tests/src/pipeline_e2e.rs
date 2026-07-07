@@ -1,5 +1,7 @@
 //! End-to-end pipeline test: Image → Detection → Recognition → AST → Export
 
+#![cfg(target_os = "windows")]
+
 use latexsnipper_ast::*;
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
 use latexsnipper_image::color::PixelFormat;

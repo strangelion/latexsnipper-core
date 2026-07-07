@@ -29,8 +29,7 @@ pub extern "C" fn latexsnipper_init(models_dir: *const c_char) -> i32 {
     };
 
     // Use StubRuntime on iOS (ONNX backend is Windows-only)
-    let runtime: Box<dyn latexsnipper_runtime::RuntimeBackend> =
-        Box::new(StubRuntime::new());
+    let runtime: Box<dyn latexsnipper_runtime::RuntimeBackend> = Box::new(StubRuntime::new());
 
     let engine = SnipperEngine::new(config, runtime);
     *ENGINE.lock().unwrap() = Some(engine);

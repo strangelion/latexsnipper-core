@@ -5,7 +5,9 @@ use latexsnipper_engine::{EngineConfig, SnipperEngine};
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_mock::FakePipeline;
-use latexsnipper_runtime::{OnnxRuntimeBackend, StubRuntime};
+#[cfg(target_os = "windows")]
+use latexsnipper_runtime::OnnxRuntimeBackend;
+use latexsnipper_runtime::StubRuntime;
 
 fn test_image() -> SnipperImage {
     SnipperImage::new(100, 100, PixelFormat::Rgb, vec![128u8; 30000])
@@ -21,19 +23,22 @@ fn dual_runtime_initialization() {
     assert_eq!(mock_engine.runtime().name(), "stub");
 
     // ONNX runtime (may fail if ORT not available)
-    let models_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("models");
-    if models_dir.exists() {
-        if let Ok(ort_backend) = OnnxRuntimeBackend::new(models_dir) {
-            let ort_engine = SnipperEngine::new(config, Box::new(ort_backend));
-            assert_eq!(ort_engine.runtime().name(), "onnxruntime");
-            println!("Both runtimes initialized successfully");
-        } else {
-            println!("ORT not available, skipping real runtime test");
+    #[cfg(target_os = "windows")]
+    {
+        let models_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("models");
+        if models_dir.exists() {
+            if let Ok(ort_backend) = OnnxRuntimeBackend::new(models_dir) {
+                let ort_engine = SnipperEngine::new(config, Box::new(ort_backend));
+                assert_eq!(ort_engine.runtime().name(), "onnxruntime");
+                println!("Both runtimes initialized successfully");
+            } else {
+                println!("ORT not available, skipping real runtime test");
+            }
         }
     }
 }
