@@ -84,6 +84,7 @@ impl Snipper {
     }
 
     /// Create from a PDF file path using a custom engine config and recognition mode.
+    #[allow(unused_variables)]
     pub fn from_pdf_with_config(
         path: impl AsRef<Path>,
         config: EngineConfig,
@@ -120,6 +121,7 @@ impl Snipper {
     }
 
     /// Create from raw RGB pixels using a custom engine config and recognition mode.
+    #[allow(unused_variables)]
     pub fn from_image_with_config(
         img: SnipperImage,
         config: EngineConfig,
