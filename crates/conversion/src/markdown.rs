@@ -288,6 +288,17 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
         return String::new();
     }
 
+    // Check if any cell has colspan/rowspan — if so, use HTML table
+    let has_merge = t.rows.iter().any(|row| {
+        row.iter()
+            .any(|cell| cell.colspan > 1 || cell.rowspan > 1)
+    });
+
+    if has_merge {
+        return render_html_table_for_markdown(t);
+    }
+
+    // Plain Markdown pipe table
     let cols = t.rows[0].len();
     let mut lines = Vec::new();
 
@@ -333,4 +344,62 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
     }
 
     lines.join("\n")
+}
+
+/// Render table as HTML for Markdown when cells have colspan/rowspan.
+fn render_html_table_for_markdown(t: &latexsnipper_ast::TableBlock) -> String {
+    let mut lines = vec!["<table>".to_string()];
+
+    if let Some(first_row) = t.rows.first() {
+        lines.push("  <thead><tr>".to_string());
+        for cell in first_row {
+            let text = extract_cell_text_plain(&cell.inlines);
+            let mut attrs = String::new();
+            if cell.colspan > 1 {
+                attrs.push_str(&format!(" colspan=\"{}\"", cell.colspan));
+            }
+            if cell.rowspan > 1 {
+                attrs.push_str(&format!(" rowspan=\"{}\"", cell.rowspan));
+            }
+            lines.push(format!("    <th{}>{}</th>", attrs, text));
+        }
+        lines.push("  </tr></thead>".to_string());
+    }
+
+    if t.rows.len() > 1 {
+        lines.push("  <tbody>".to_string());
+        for row in &t.rows[1..] {
+            lines.push("    <tr>".to_string());
+            for cell in row {
+                let text = extract_cell_text_plain(&cell.inlines);
+                let mut attrs = String::new();
+                if cell.colspan > 1 {
+                    attrs.push_str(&format!(" colspan=\"{}\"", cell.colspan));
+                }
+                if cell.rowspan > 1 {
+                    attrs.push_str(&format!(" rowspan=\"{}\"", cell.rowspan));
+                }
+                lines.push(format!("    <td{}>{}</td>", attrs, text));
+            }
+            lines.push("    </tr>".to_string());
+        }
+        lines.push("  </tbody>".to_string());
+    }
+
+    lines.push("</table>".to_string());
+    lines.join("\n")
+}
+
+fn extract_cell_text_plain(inlines: &[Inline]) -> String {
+    inlines
+        .iter()
+        .filter_map(|i| {
+            if let Inline::Text(t) = i {
+                Some(t.text.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }

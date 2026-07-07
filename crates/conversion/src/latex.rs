@@ -13,6 +13,7 @@ impl Converter for LatexConverter {
             "\\documentclass{article}".to_string(),
             "\\usepackage{amsmath}".to_string(),
             "\\usepackage{amssymb}".to_string(),
+            "\\usepackage{multirow}".to_string(),
             "\\begin{document}".to_string(),
         ];
 
@@ -375,49 +376,47 @@ fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
         let cells: Vec<String> = row
             .iter()
             .map(|cell| {
-                let mut parts = Vec::new();
-                // Handle colspan with \multicolumn
-                if cell.colspan > 1 {
-                    let align = cell
-                        .alignment
-                        .as_ref()
-                        .unwrap_or(&latexsnipper_ast::CellAlignment::Center);
-                    let align_char = match align {
-                        latexsnipper_ast::CellAlignment::Left => "l",
-                        latexsnipper_ast::CellAlignment::Center => "c",
-                        latexsnipper_ast::CellAlignment::Right => "r",
-                        latexsnipper_ast::CellAlignment::Justify => "p{5cm}",
-                    };
-                    let text: String = cell
-                        .inlines
-                        .iter()
-                        .filter_map(|i| {
-                            if let Inline::Text(t) = i {
-                                Some(t.text.as_str())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    parts.push(format!(
+                let text: String = cell
+                    .inlines
+                    .iter()
+                    .filter_map(|i| {
+                        if let Inline::Text(t) = i {
+                            Some(t.text.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let align = cell
+                    .alignment
+                    .as_ref()
+                    .unwrap_or(&latexsnipper_ast::CellAlignment::Center);
+                let align_char = match align {
+                    latexsnipper_ast::CellAlignment::Left => "l",
+                    latexsnipper_ast::CellAlignment::Center => "c",
+                    latexsnipper_ast::CellAlignment::Right => "r",
+                    latexsnipper_ast::CellAlignment::Justify => "p{5cm}",
+                };
+
+                let has_colspan = cell.colspan > 1;
+                let has_rowspan = cell.rowspan > 1;
+
+                match (has_colspan, has_rowspan) {
+                    (true, true) => format!(
+                        "\\multicolumn{{{}}}{{|{}|}}{{\\multirow{{{}}}{{*}}{{{}}}}}",
+                        cell.colspan, align_char, cell.rowspan, text
+                    ),
+                    (true, false) => format!(
                         "\\multicolumn{{{}}}{{|{}|}}{{{}}}",
                         cell.colspan, align_char, text
-                    ));
-                } else {
-                    let text: String = cell
-                        .inlines
-                        .iter()
-                        .filter_map(|i| {
-                            if let Inline::Text(t) = i {
-                                Some(t.text.as_str())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    parts.push(text);
+                    ),
+                    (false, true) => format!(
+                        "\\multirow{{{}}}{{*}}{{{}}}",
+                        cell.rowspan, text
+                    ),
+                    (false, false) => text,
                 }
-                parts.join("")
             })
             .collect();
         lines.push(format!("{} \\\\", cells.join(" & ")));

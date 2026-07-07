@@ -44,10 +44,13 @@ pub fn write_word_table_ooxml(table: &TableBlock) -> String {
                             xml_escape(&t.text)
                         ));
                     }
-                    Inline::Formula(_f) => {
-                        // Formulas in cells are handled separately via OMML insertion
-                        // For now, encode formula as plain text marker
-                        parts.push(r#"<w:r><w:rPr></w:rPr><w:t xml:space="preserve">[Formula]</w:t></w:r>"#.to_string());
+                    Inline::Formula(f) => {
+                        // Output formula as LaTeX source text
+                        let latex = f.as_latex();
+                        parts.push(format!(
+                            r#"<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">{}</w:t></w:r>"#,
+                            xml_escape(&latex)
+                        ));
                     }
                     _ => {}
                 }
