@@ -1,4 +1,7 @@
 use clap::{Parser, Subcommand};
+use latexsnipper_ast::{
+    CapabilityMatrix, FidelityLevel, FormatCapability, LossKind,
+};
 use latexsnipper_conversion::OutputFormat;
 use latexsnipper_engine::{sdk::Snipper, DocumentParseMode, EngineConfig, RecognizeMode};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
@@ -124,6 +127,20 @@ enum Commands {
         Includes version number, build target, and runtime mode.\n\
         Use '-v' or '--version' as a flag on the root command for brief output.")]
     Version,
+
+    /// Show conversion capabilities matrix
+    #[command(long_about = "Display the conversion/export capabilities matrix.\n\n\
+        Lists all supported input/output formats with fidelity levels,\n\
+        supported features (formulas, tables, images, SVG, styles, layout),\n\
+        and known information loss during conversion.\n\n\
+        EXAMPLES:\n    \
+        snipper capabilities\n    \
+        snipper capabilities --format markdown")]
+    Capabilities {
+        /// Output format for the matrix: "table" (default) or "markdown"
+        #[arg(short = 'f', long, default_value = "table")]
+        format: String,
+    },
 
     /// Play the LaTeX Math Rendering Challenge (minigame)
     #[command(long_about = "Launch the LaTeX Math Rendering Challenge.\n\n\
@@ -450,6 +467,14 @@ fn main() {
             println!("Try 'snipper play' for a hidden mini-game!");
         }
 
+        Commands::Capabilities { format } => {
+            let matrix = build_capability_matrix();
+            match format.as_str() {
+                "markdown" | "md" => print_capabilities_markdown(&matrix),
+                _ => print_capabilities_table(&matrix),
+            }
+        }
+
         Commands::Play => play_game(),
 
         Commands::Models(cmd) => match cmd {
@@ -752,6 +777,379 @@ fn handle_models_verify(category: Option<String>) {
     } else {
         eprintln!("Some model files are missing. Run 'snipper models download' to re-download.");
         std::process::exit(1);
+    }
+}
+
+fn build_capability_matrix() -> CapabilityMatrix {
+    CapabilityMatrix {
+        schema_version: "1.0.0".to_string(),
+        entries: vec![
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("Markdown".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: false,
+                supports_style: true,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::SemanticOnly,
+                known_loss: vec![LossKind::StyleLoss, LossKind::LayoutLoss],
+                notes: vec![
+                    "inline/block math with $..$ / $$..$$".to_string(),
+                    "images reference via asset_id".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("HTML".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: false,
+                supports_style: true,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::MostlyLossless,
+                known_loss: vec![],
+                notes: vec![
+                    "MathJax for formula rendering".to_string(),
+                    "table borders and alignment preserved".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("LaTeX".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: false,
+                supports_style: true,
+                supports_layout: true,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::SemanticOnly,
+                known_loss: vec![
+                    LossKind::StyleLoss,
+                    LossKind::OfficeObjectPreviewOnly,
+                ],
+                notes: vec![
+                    "full LaTeX document with amsmath".to_string(),
+                    "Office Shape/Chart blocks rendered empty".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("Typst".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: false,
+                supports_style: true,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::SemanticOnly,
+                known_loss: vec![LossKind::StyleLoss],
+                notes: vec![
+                    "formula via LaTeX->Typst conversion".to_string(),
+                    "images via #image()".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("MathML".to_string()),
+                supports_formula: true,
+                supports_table: false,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::Lossless,
+                known_loss: vec![],
+                notes: vec![
+                    "formula-only output".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("OMML".to_string()),
+                supports_formula: true,
+                supports_table: false,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::Lossless,
+                known_loss: vec![],
+                notes: vec![
+                    "Office MathML for Word equation insertion".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("SVG".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: true,
+                supports_style: true,
+                supports_layout: true,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::VisualOnly,
+                known_loss: vec![LossKind::OfficeObjectPreviewOnly],
+                notes: vec![
+                    "visual render, not semantic editing".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("PDF".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: false,
+                supports_style: true,
+                supports_layout: true,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::VisualOnly,
+                known_loss: vec![LossKind::OfficeObjectPreviewOnly],
+                notes: vec![
+                    "visual render via printpdf".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("AST".to_string()),
+                output: Some("PlainText".to_string()),
+                supports_formula: false,
+                supports_table: true,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::SemanticOnly,
+                known_loss: vec![
+                    LossKind::StyleLoss,
+                    LossKind::FormulaDowngraded,
+                    LossKind::LayoutLoss,
+                ],
+                notes: vec![
+                    "text-only extraction".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("Markdown".to_string()),
+                output: Some("AST".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: false,
+                supports_style: true,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::MostlyLossless,
+                known_loss: vec![],
+                notes: vec![],
+            },
+            FormatCapability {
+                input: Some("HTML".to_string()),
+                output: Some("AST".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: false,
+                supports_style: true,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::MostlyLossless,
+                known_loss: vec![],
+                notes: vec![],
+            },
+            FormatCapability {
+                input: Some("LaTeX".to_string()),
+                output: Some("OMML".to_string()),
+                supports_formula: true,
+                supports_table: false,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::Lossless,
+                known_loss: vec![],
+                notes: vec![
+                    "formula-level conversion only".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("LaTeX".to_string()),
+                output: Some("MathML".to_string()),
+                supports_formula: true,
+                supports_table: false,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::Lossless,
+                known_loss: vec![],
+                notes: vec![
+                    "formula-level conversion only".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("OMML".to_string()),
+                output: Some("LaTeX".to_string()),
+                supports_formula: true,
+                supports_table: false,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::Lossless,
+                known_loss: vec![],
+                notes: vec![
+                    "formula-level conversion only".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("MathML".to_string()),
+                output: Some("LaTeX".to_string()),
+                supports_formula: true,
+                supports_table: false,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::Lossless,
+                known_loss: vec![],
+                notes: vec![
+                    "formula-level conversion only".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("Typst".to_string()),
+                output: Some("LaTeX".to_string()),
+                supports_formula: true,
+                supports_table: false,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::Lossless,
+                known_loss: vec![],
+                notes: vec![
+                    "formula-level conversion only".to_string(),
+                ],
+            },
+            FormatCapability {
+                input: Some("Markdown".to_string()),
+                output: Some("LaTeX".to_string()),
+                supports_formula: true,
+                supports_table: true,
+                supports_image: true,
+                supports_svg: false,
+                supports_style: true,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::SemanticOnly,
+                known_loss: vec![LossKind::LayoutLoss],
+                notes: vec![],
+            },
+        ],
+    }
+}
+
+fn format_fidelity(f: &FidelityLevel) -> &'static str {
+    match f {
+        FidelityLevel::Lossless => "lossless",
+        FidelityLevel::MostlyLossless => "mostly",
+        FidelityLevel::SemanticOnly => "semantic",
+        FidelityLevel::VisualOnly => "visual",
+        FidelityLevel::BestEffort => "best-effort",
+    }
+}
+
+fn format_losses(losses: &[LossKind]) -> String {
+    if losses.is_empty() {
+        "none".to_string()
+    } else {
+        losses
+            .iter()
+            .map(|l| match l {
+                LossKind::StyleLoss => "style",
+                LossKind::LayoutLoss => "layout",
+                LossKind::AssetRasterized => "raster",
+                LossKind::FormulaDowngraded => "formula",
+                LossKind::TableStructureLoss => "table-struct",
+                LossKind::OfficeObjectPreviewOnly => "office-preview",
+                LossKind::UnsupportedAnnotation => "annotation",
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn print_capabilities_table(matrix: &CapabilityMatrix) {
+    println!();
+    println!("  LaTeXSnipper Core — Conversion Capabilities");
+    println!("  Schema v{}", matrix.schema_version);
+    println!();
+    println!("  {:<36} {:<10} {:<8} {:<26}", "Conversion", "Fidelity", "Formulas", "Loss");
+    println!("  {:-<36} {:-<10} {:-<8} {:-<26}", "", "", "", "");
+    for entry in &matrix.entries {
+        let label = format!(
+            "{} -> {}",
+            entry.input.as_deref().unwrap_or("?"),
+            entry.output.as_deref().unwrap_or("?")
+        );
+        let formulas = if entry.supports_formula { "✓" } else { "✗" };
+        println!(
+            "  {:<36} {:<10} {:<8} {:<26}",
+            label,
+            format_fidelity(&entry.fidelity),
+            formulas,
+            format_losses(&entry.known_loss)
+        );
+    }
+    println!();
+    println!("  Legend: ✓=supported  ✗=not supported");
+    println!("  Run 'snipper capabilities --format markdown' for detailed view.");
+}
+
+fn print_capabilities_markdown(matrix: &CapabilityMatrix) {
+    println!("# LaTeXSnipper Core — Capability Matrix");
+    println!();
+    println!("Schema version: {}", matrix.schema_version);
+    println!();
+    for entry in &matrix.entries {
+        let from = entry.input.as_deref().unwrap_or("?");
+        let to = entry.output.as_deref().unwrap_or("?");
+        println!("## {} → {}", from, to);
+        println!();
+        println!("| Property | Value |");
+        println!("|---|---|");
+        println!("| Fidelity | {} |", format_fidelity(&entry.fidelity));
+        println!("| Formulas | {} |", if entry.supports_formula { "✓" } else { "✗" });
+        println!("| Tables   | {} |", if entry.supports_table { "✓" } else { "✗" });
+        println!("| Images   | {} |", if entry.supports_image { "✓" } else { "✗" });
+        println!("| SVG      | {} |", if entry.supports_svg { "✓" } else { "✗" });
+        println!("| Style    | {} |", if entry.supports_style { "✓" } else { "✗" });
+        println!("| Layout   | {} |", if entry.supports_layout { "✓" } else { "✗" });
+        println!(
+            "| Office   | {} |",
+            if entry.supports_office_objects { "✓" } else { "✗" }
+        );
+        println!("| Known loss | {} |", format_losses(&entry.known_loss));
+        if !entry.notes.is_empty() {
+            println!("| Notes | {} |", entry.notes.join("; "));
+        }
+        println!();
     }
 }
 
