@@ -361,7 +361,11 @@ fn inlines_to_clipboard_html(inlines: &[Inline]) -> String {
             Inline::Code(c) => format!("<code>{}</code>", html_escape(&c.code)),
             Inline::Anchor(a) => format!("<a name=\"{}\"/>", a.id),
             Inline::CrossReference(x) => {
-                format!("<a href=\"#{}\">{}</a>", x.target_id, x.display_text.as_deref().unwrap_or(&x.target_id))
+                format!(
+                    "<a href=\"#{}\">{}</a>",
+                    x.target_id,
+                    x.display_text.as_deref().unwrap_or(&x.target_id)
+                )
             }
             Inline::CitationGroup(c) => {
                 let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();

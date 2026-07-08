@@ -3,9 +3,7 @@
 //! Uses regex-based parsing to extract table structure from Word's OOXML.
 //! Supports horizontal merge (gridSpan/colspan) and vertical merge (vMerge/rowspan).
 
-use latexsnipper_ast::{
-    Block, Inline, ParagraphBlock, TableBlock, TableCell, TableRow, TextRun,
-};
+use latexsnipper_ast::{Block, Inline, ParagraphBlock, TableBlock, TableCell, TableRow, TextRun};
 use regex::Regex;
 
 /// Intermediate cell data before rowspan resolution.

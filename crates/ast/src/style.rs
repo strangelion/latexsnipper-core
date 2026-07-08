@@ -371,9 +371,22 @@ pub struct VectorPath {
 /// A single path command in a vector path.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PathCommand {
-    MoveTo { x: f32, y: f32 },
-    LineTo { x: f32, y: f32 },
-    CurveTo { x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32 },
+    MoveTo {
+        x: f32,
+        y: f32,
+    },
+    LineTo {
+        x: f32,
+        y: f32,
+    },
+    CurveTo {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        x3: f32,
+        y3: f32,
+    },
     ClosePath,
 }
 

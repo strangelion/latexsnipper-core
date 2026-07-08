@@ -209,11 +209,7 @@ mod tests {
             rows: vec![
                 TableRow {
                     cells: vec![
-                        cell_with_geo(
-                            "Name",
-                            Rect::new(0.0, 0.0, 100.0, 20.0),
-                            SourceInfo::new(),
-                        ),
+                        cell_with_geo("Name", Rect::new(0.0, 0.0, 100.0, 20.0), SourceInfo::new()),
                         cell_with_geo(
                             "Score",
                             Rect::new(100.0, 0.0, 100.0, 20.0),
@@ -230,11 +226,7 @@ mod tests {
                             Rect::new(0.0, 20.0, 100.0, 20.0),
                             SourceInfo::new(),
                         ),
-                        cell_with_geo(
-                            "95",
-                            Rect::new(100.0, 20.0, 100.0, 20.0),
-                            SourceInfo::new(),
-                        ),
+                        cell_with_geo("95", Rect::new(100.0, 20.0, 100.0, 20.0), SourceInfo::new()),
                     ],
                     height: None,
                     is_header: false,

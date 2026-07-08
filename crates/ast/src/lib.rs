@@ -23,9 +23,9 @@ pub use block::{
     FormFieldBlock, FormFieldKind, FormulaBlock, GraphBlock, GraphType, HandwritingBlock,
     HeaderFooterBlock, HeaderFooterKind, HeaderFooterScope, HeadingBlock, HorizontalRuleBlock,
     ListBlock, ListItem, MinipageBlock, PageBreakBlock, PageLayout, PageMargin, PageOrientation,
-    ParagraphBlock, ProofBlock, QrCodeBlock, QuoteBlock, Revision, RevisionKind,
-    SectionBreakBlock, SectionBreakKind, ShapeBlock, TableBlock, TableCell, TableCellStyle,
-    TableColumn, TableRow, TableStyle, TextBoxBlock, TheoremBlock,
+    ParagraphBlock, ProofBlock, QrCodeBlock, QuoteBlock, Revision, RevisionKind, SectionBreakBlock,
+    SectionBreakKind, ShapeBlock, TableBlock, TableCell, TableCellStyle, TableColumn, TableRow,
+    TableStyle, TextBoxBlock, TheoremBlock,
 };
 pub use builder::DocumentBuilder;
 pub use document::{Document, Page};
@@ -40,9 +40,9 @@ pub use formula_layout::{
 };
 pub use geometry::{Point, Quad, Rect, Size};
 pub use inline::{
-    AnchorInline, CitationGroupInline, CitationItem, CiteStyle, CodeInline,
-    CrossReferenceInline, CrossReferenceKind, DocumentOutline, ImageInline, Inline, LinkInline,
-    LinkTarget, NoteDefinition, NoteKind, NoteRefInline, SpanInline, TextRun, TocEntry,
+    AnchorInline, CitationGroupInline, CitationItem, CiteStyle, CodeInline, CrossReferenceInline,
+    CrossReferenceKind, DocumentOutline, ImageInline, Inline, LinkInline, LinkTarget,
+    NoteDefinition, NoteKind, NoteRefInline, SpanInline, TextRun, TocEntry,
 };
 pub use input::{
     InputFormat, InputSourceDescriptor, InputStorage, OfficeInsertKind, OutputLevel, PageRange,
@@ -52,9 +52,8 @@ pub use media::{
     AssetBundle, AssetExportPolicy, AssetExporter, AssetFormat, AssetId, AssetManifest,
     AssetManifestEntry, AssetReferenceResolver, AssetResolver as MediaAssetResolver, AssetStorage,
     AssetStore, AudioAsset, AudioFormat, Diagnostic, DiagnosticLevel, ExportedAsset, MediaAsset,
-    MediaRole, VideoAsset, VideoFormat,
-    E_API_CALL_FAILED, E_SCHEMA_VALIDATION_FAILED, I_LEGACY_IMAGE_MIGRATED,
-    W_ACTIVEX_NOT_SUPPORTED, W_BLOCK_DOWNGRADED, W_CHART_DATA_SIMPLIFIED,
+    MediaRole, VideoAsset, VideoFormat, E_API_CALL_FAILED, E_SCHEMA_VALIDATION_FAILED,
+    I_LEGACY_IMAGE_MIGRATED, W_ACTIVEX_NOT_SUPPORTED, W_BLOCK_DOWNGRADED, W_CHART_DATA_SIMPLIFIED,
     W_FORM_FIELD_NOT_SUPPORTED, W_MEDIA_NOT_SUPPORTED, W_MISSING_ASSET_REF, W_OLE_NOT_SUPPORTED,
     W_REVISION_NOT_FULLY_PRESERVED, W_SMARTART_NOT_SUPPORTED,
 };
@@ -72,10 +71,10 @@ pub use span::{
 };
 pub use style::{
     effective_text_style, AccessibilityInfo, AnnotationKind, BoxStyle, BulletStyle, ChartAxis,
-    ChartData, ChartLegend, ChartSeries, ChartType, Color, EmbeddedObjectKind, FontWeight, LayerInfo,
-    ListStyle, NumberingStyle, OfficeApp, OfficeSourceInfo, ParagraphStyle, PathCommand, ShapeGroup,
-    ShapeStyle, ShapeType, TextAlignment, TextDirection, TextStyle, Transform2D, UnderlineStyle,
-    VectorPath, VerticalAlign,
+    ChartData, ChartLegend, ChartSeries, ChartType, Color, EmbeddedObjectKind, FontWeight,
+    LayerInfo, ListStyle, NumberingStyle, OfficeApp, OfficeSourceInfo, ParagraphStyle, PathCommand,
+    ShapeGroup, ShapeStyle, ShapeType, TextAlignment, TextDirection, TextStyle, Transform2D,
+    UnderlineStyle, VectorPath, VerticalAlign,
 };
 pub use traits::{Exporter, Importer, OfficeAdapter, Renderer, SemanticConverter, StageRunner};
 pub use visitor::{DocumentVisitor, TextCollector};

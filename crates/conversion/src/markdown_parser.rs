@@ -1,7 +1,7 @@
 use latexsnipper_ast::{
     Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, FormulaSource, Inline,
-    ListBlock, ListItem, ListStyle, Metadata, NumberingStyle, NodeIdGenerator, Page, ParagraphBlock,
-    QuoteBlock, TextRun,
+    ListBlock, ListItem, ListStyle, Metadata, NodeIdGenerator, NumberingStyle, Page,
+    ParagraphBlock, QuoteBlock, TextRun,
 };
 
 /// Parse a Markdown string into a Document AST.

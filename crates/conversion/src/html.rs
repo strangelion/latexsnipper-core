@@ -166,9 +166,7 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
                 a.kind
             )
         }
-        Block::PageBreak(_) => {
-            "<div class=\"page-break\">[page break]</div>".to_string()
-        }
+        Block::PageBreak(_) => "<div class=\"page-break\">[page break]</div>".to_string(),
         Block::SectionBreak(sb) => {
             format!(
                 "<div class=\"section-break\" title=\"{:?}\">[section break]</div>",
@@ -205,9 +203,7 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
                 cf.formula
             )
         }
-        Block::QrCode(_) => {
-            "<div class=\"qr-code\">[QR code]</div>".to_string()
-        }
+        Block::QrCode(_) => "<div class=\"qr-code\">[QR code]</div>".to_string(),
         Block::Graph(g) => {
             format!(
                 "<div class=\"graph\" title=\"{:?}\">[graph]</div>",
@@ -278,7 +274,11 @@ fn render_inlines(inlines: &[Inline], assets: &[MediaAsset]) -> String {
                 parts.push(format!("<a id=\"{}\"></a>", a.id));
             }
             Inline::CrossReference(x) => {
-                parts.push(format!("<a href=\"#{}\">{}</a>", x.target_id, x.display_text.as_deref().unwrap_or(&x.target_id)));
+                parts.push(format!(
+                    "<a href=\"#{}\">{}</a>",
+                    x.target_id,
+                    x.display_text.as_deref().unwrap_or(&x.target_id)
+                ));
             }
             Inline::CitationGroup(c) => {
                 let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();

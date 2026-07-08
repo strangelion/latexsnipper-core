@@ -3,9 +3,9 @@
 //! Writes Core's TableCell structure back to Word's OOXML format,
 //! preserving colspan, rowspan, and cell content.
 
-use latexsnipper_ast::{Inline, TableBlock};
 #[cfg(test)]
 use latexsnipper_ast::{Block, ParagraphBlock, TableCell, TableRow};
+use latexsnipper_ast::{Inline, TableBlock};
 
 /// Write a TableBlock to Word OOXML table XML.
 ///

@@ -170,11 +170,12 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
             format!("% [Embedded object: {:?}]\n\\textit{{[embedded]}}", e.kind)
         }
         Block::Annotation(a) => format!("% [Annotation: {:?}]\n\\textit{{[annotation]}}", a.kind),
-        Block::PageBreak(_) => {
-            "% [PageBreak]\n\\newpage".to_string()
-        }
+        Block::PageBreak(_) => "% [PageBreak]\n\\newpage".to_string(),
         Block::SectionBreak(sb) => {
-            format!("% [SectionBreak: {:?}]\n\\textit{{[section break]}}", sb.kind)
+            format!(
+                "% [SectionBreak: {:?}]\n\\textit{{[section break]}}",
+                sb.kind
+            )
         }
         Block::HeaderFooter(hf) => {
             format!(
@@ -200,9 +201,7 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
                 cf.formula
             )
         }
-        Block::QrCode(_) => {
-            "% [QRCode]\n\\textit{[qr code]}".to_string()
-        }
+        Block::QrCode(_) => "% [QRCode]\n\\textit{[qr code]}".to_string(),
         Block::Graph(g) => {
             format!("% [Graph: {:?}]\n\\textit{{[graph]}}", g.graph_type)
         }
@@ -330,7 +329,11 @@ fn render_inlines(inlines: &[Inline], assets: &[MediaAsset]) -> String {
 }
 
 fn render_list(l: &latexsnipper_ast::ListBlock, assets: &[MediaAsset]) -> String {
-    let env = if l.is_ordered() { "enumerate" } else { "itemize" };
+    let env = if l.is_ordered() {
+        "enumerate"
+    } else {
+        "itemize"
+    };
     let mut items = Vec::new();
     for item in &l.items {
         let text = render_blocks(&item.content, assets);

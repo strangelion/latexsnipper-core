@@ -1,6 +1,7 @@
 use latexsnipper_ast::{
     Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, Inline, ListBlock, ListItem,
-    ListStyle, Metadata, NumberingStyle, NodeIdGenerator, Page, ParagraphBlock, QuoteBlock, TextRun,
+    ListStyle, Metadata, NodeIdGenerator, NumberingStyle, Page, ParagraphBlock, QuoteBlock,
+    TextRun,
 };
 
 /// Parsed HTML tag: (tag_name, attributes, self_closing, end_position)

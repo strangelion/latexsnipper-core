@@ -56,13 +56,13 @@ Document
 | 模块 | 文件 | 说明 |
 |---|---|---|
 | `document` | document.rs | Document, Page |
-| `block` | block.rs | Block enum (25 variants), all block structs |
-| `inline` | inline.rs | Inline enum (15+ variants), TextRun, SpanInline, LinkInline, ImageInline, NoteRefInline |
+| `block` | block.rs | Block enum (37 variants), all block structs |
+| `inline` | inline.rs | Inline enum (18+ variants), TextRun, SpanInline, LinkInline, ImageInline, NoteRefInline, AnchorInline, CrossReferenceInline, CitationGroupInline |
 | `formula` | formula.rs | Formula, FormulaSource (Latex/Omml/Typst/MathML) |
 | `formula_layout` | formula_layout.rs | FormulaLayout, FormulaNode, SymbolInfo |
 | `span` | span.rs | SourceInfo, Provenance, BlockPolicy, CoordinateSpace, NodeId |
-| `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType, TextDirection, UnderlineStyle, Transform2D, LayerInfo |
-| `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits, 12 diagnostic code constants |
+| `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType, TextDirection, UnderlineStyle, Transform2D, LayerInfo, ListStyle, BulletStyle, NumberingStyle, VectorPath, PathCommand, ShapeGroup, AccessibilityInfo |
+| `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits, 12 diagnostic code constants, AudioAsset/VideoAsset |
 | `format` | format.rs | ExportArtifact, CapabilityMatrix, LossKind, FidelityLevel, SemanticFormat, ExportFormat, TargetFormat, PdfExportMode |
 | `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest, ProviderReport, EventRecord |
 | `input` | input.rs | InputFormat (19 variants), InputSourceDescriptor, RecognizeInput, SnipperImageDescriptor |

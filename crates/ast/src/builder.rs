@@ -1,6 +1,7 @@
 use crate::{
-    Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, HeadingBlock, Inline, ListBlock,
-    ListItem, ListStyle, Metadata, NumberingStyle, Page, ParagraphBlock, QuoteBlock, TextRun,
+    Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, HeadingBlock, Inline,
+    ListBlock, ListItem, ListStyle, Metadata, NumberingStyle, Page, ParagraphBlock, QuoteBlock,
+    TextRun,
 };
 
 /// Builder for constructing Documents fluently.

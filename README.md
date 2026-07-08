@@ -106,6 +106,17 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **TextDirection/UnderlineStyle** | ✅ | Style enums for LTR/RTL/underline variants |
 | **Transform2D/LayerInfo** | ✅ | 2D transforms and z-order for blocks |
 | **NoteDefinition** | ✅ | Structured footnote/endnote with multi-block content |
+| **PageLayout/PageMargin/PageOrientation** | ✅ | Page layout descriptors |
+| **ListStyle/BulletStyle/NumberingStyle** | ✅ | Structured list styling |
+| **ListItem.content: Vec\<Block\>** | ✅ | Multi-block list items |
+| **TableRow/TableColumn/TableStyle** | ✅ | Enhanced table model |
+| **TableCell.content: Vec\<Block\>** | ✅ | Block-level cell content |
+| **Anchor/CrossReference Inline** | ✅ | Bookmark and cross-reference inlines |
+| **FormFieldBlock** | ✅ | Form field support (text/checkbox/dropdown) |
+| **BibliographyBlock** | ✅ | Structured bibliography entries |
+| **Revision/TrackedChange** | ✅ | Revision tracking support |
+| **ChemicalFormula/QrCode/Graph Block** | ✅ | Domain-specific block types |
+| **DocumentOutline** | ✅ | Table-of-contents hierarchy |
 
 ---
 

@@ -68,6 +68,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `effective_text_style()` with `merge_style()` — style inheritance rules
   - `ParagraphBlock.style: Option<ParagraphStyle>` — paragraph-level style support
 
+- **P0 Page Layout / List / Table Types**
+  - `PageLayout`, `PageMargin`, `PageOrientation`, `ColumnLayout` — page layout descriptors
+  - `PageBreakBlock`, `SectionBreakBlock`/`SectionBreakKind` — page/section break Block variants
+  - `HeaderFooterBlock`/`HeaderFooterKind`/`HeaderFooterScope` — header/footer Block variant
+  - `ListStyle`/`BulletStyle`/`NumberingStyle` — structured list styling (disc/circle/square/decimal/roman etc.)
+  - `ListBlock` now uses `style: Option<ListStyle>` + `start: Option<u32>` replacing `ordered: bool`
+  - `ListItem.inlines: Vec<Inline>` → `content: Vec<Block>` — multi-block list item support
+  - `TableBlock.rows`: `Vec<Vec<TableCell>>` → `Vec<TableRow>` with per-row `height`/`is_header`
+  - `TableCell.inlines: Vec<Inline>` → `content: Vec<Block>` — table cells support block-level content
+  - `TableColumn`, `CellDataType` (`Text`/`Number`/`Boolean`/`Date`/`Formula`), `TableStyle`, `TableCellStyle`
+  - `Document.notes: Vec<NoteDefinition>` — footnote/endnote storage on Document
+  - Updated 18+ downstream converter/engine/example files for new type layouts
+
+- **P1 Type Additions**
+  - `AnchorInline` — inline bookmark/anchor for Office/HTML/PDF cross-references
+  - `CrossReferenceInline`/`CrossReferenceKind` — structured cross-references
+  - `CitationGroupInline`/`CitationItem` — multi-citation support with prefix/suffix/locator
+  - `FormFieldBlock`/`FormFieldKind` — PDF/Word form field support (text/checkbox/radio/dropdown etc.)
+  - `BibliographyBlock`/`BibliographyEntry` — structured bibliography with entry types
+  - `Revision`/`RevisionKind` — tracked changes support (inserted/deleted/moved/format)
+  - `AccessibilityInfo` — alt_text/title/description/decorative/reading_order
+  - `LinkTarget` enum (`Url`/`InternalAnchor`/`Email`/`File`/`Custom`)
+  - `DocumentOutline`/`TocEntry` — table-of-contents hierarchy
+  - All converters updated with visible placeholders for new Block/Inline variants
+
+- **P2 Type Additions**
+  - `ChemicalFormulaBlock` — chemical formula (mhchem-style) support
+  - `QrCodeBlock` — QR code / barcode block
+  - `GraphBlock`/`DataPoint`/`GraphType` — data graph (bar/line/pie/scatter/area)
+  - `VectorPath`/`PathCommand`/`ShapeGroup` — vector path operations
+  - `AudioAsset`/`AudioFormat` — embedded audio support
+  - `VideoAsset`/`VideoFormat` — embedded video support
+
 ### Changed
 - `FigureBlock.caption` deprecated in favor of `caption_inlines: Option<Vec<Inline>>`
 - `RecognizeInput::Image(String)` → `RecognizeInput::Image(SnipperImageDescriptor)`

@@ -160,18 +160,12 @@ fn empty_cells_table() -> TableBlock {
     TableBlock {
         rows: vec![
             TableRow {
-                cells: vec![
-                    make_cell("", 1, 1),
-                    make_cell("B", 1, 1),
-                ],
+                cells: vec![make_cell("", 1, 1), make_cell("B", 1, 1)],
                 height: None,
                 is_header: false,
             },
             TableRow {
-                cells: vec![
-                    make_cell("C", 1, 1),
-                    make_cell("", 1, 1),
-                ],
+                cells: vec![make_cell("C", 1, 1), make_cell("", 1, 1)],
                 height: None,
                 is_header: false,
             },
@@ -354,7 +348,14 @@ fn roundtrip_merged_cells() {
 /// Test table with styling.
 #[test]
 fn roundtrip_styled_table() {
-    fn cell_with_style(text: &str, border_style: Option<latexsnipper_ast::BorderStyle>, border_width: Option<u32>, border_color: Option<String>, background: Option<String>, alignment: Option<latexsnipper_ast::CellAlignment>) -> TableCell {
+    fn cell_with_style(
+        text: &str,
+        border_style: Option<latexsnipper_ast::BorderStyle>,
+        border_width: Option<u32>,
+        border_color: Option<String>,
+        background: Option<String>,
+        alignment: Option<latexsnipper_ast::CellAlignment>,
+    ) -> TableCell {
         TableCell {
             content: vec![Block::Paragraph(ParagraphBlock {
                 inlines: vec![Inline::Text(TextRun::new(text.to_string()))],
