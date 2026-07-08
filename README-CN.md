@@ -78,6 +78,26 @@ LaTeXSnipper Core 采用严格的**四层架构**：
 | Markdown | `markdown_parser.rs` | 标题/粗体/斜体/代码/列表/引用/公式 |
 | HTML | `html_parser.rs` | 完整 HTML 标签解析 |
 | Typst | `typst_parser.rs` | Typst 数学语法转换 |
+| **DOCX** | `docx_reader.rs` | Word 段落/文本/图片/表格 |
+| **PPTX** | `pptx_reader.rs` | PowerPoint 幻灯片/文本/形状/图片 |
+| **XLSX** | `xlsx_reader.rs` | Excel 工作表/表格/共享字符串 |
+| **PDF native** | `pdf_native.rs` | lopdf 内容流原生文本提取 |
+
+### 多格式输出导出
+
+| 输出格式 | 模块 | 说明 |
+|----------|------|------|
+| LaTeX | `latex.rs` | 完整 LaTeX 文档 |
+| OMML | `omml.rs` | Office Math ML (Word 可编辑公式) |
+| MathML | `mathml.rs` | W3C MathML |
+| Markdown | `markdown.rs` | MathJax 兼容 |
+| HTML | `html.rs` | MathJax 渲染 |
+| Typst | `typst.rs` | 原生 Typst 语法 |
+| **SVG** | `ExportService` | 视觉渲染输出 |
+| **PDF** | `ExportService` | 视觉渲染输出 (printpdf) |
+| **Clipboard** | `ClipboardBundle` | HTML+RTF+PlainText 多格式剪贴板 |
+| **Office** | `OfficeInsertService` | 按应用自动选择 OMath/SVG/HTML |
+| **PDF overlay** | `pdf_overlay.rs` | 在源 PDF 上叠加文本 |
 
 ---
 

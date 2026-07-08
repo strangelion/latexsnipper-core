@@ -68,14 +68,29 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 |------------|--------|---------|
 | **Image → AST** | ✅ | YOLOv8 detection + TrOCR recognition |
 | **AST → LaTeX** | ✅ | Full formula, table, list support |
-| **AST → Markdown** | ✅ | MathJax compatible |
+| **AST → Markdown** | ✅ | MathJax compatible, image asset support |
 | **AST → Typst** | ✅ | Native Typst syntax |
 | **AST → HTML** | ✅ | MathJax rendering |
 | **AST → MathML** | ✅ | Office compatible |
 | **AST → OMML** | ✅ | Word compatible |
+| **AST → SVG** | ✅ | Visual render via ExportService |
+| **AST → PDF** | ✅ | Visual render via printpdf |
+| **AST → XML** | ✅ | Fully typed JSON AST |
 | **Markdown → AST** | ✅ | Headings, bold/italic, code, lists, math |
 | **HTML → AST** | ✅ | Full tag support, MathJax compatible |
-| **LaTeX Extended** | ✅ | underline, footnote, cite, theorem, minipage |
+| **DOCX → AST** | ✅ | Word paragraphs, runs, images, tables |
+| **PPTX → AST** | ✅ | PowerPoint slides, text, shapes, images |
+| **XLSX → AST** | ✅ | Excel sheets, tables, strings |
+| **PDF native → AST** | ✅ | Native text extraction via lopdf |
+| **PDF overlay** | ✅ | Overlay AST text onto source PDF |
+| **SVG → ShapeBlock** | ✅ | Parse SVG primitives to AST shapes |
+| **Chart → ChartBlock** | ✅ | VLM-powered chart data extraction |
+| **Diagram → Shape/Graph** | ✅ | VLM-powered diagram understanding |
+| **Clipboard bundle** | ✅ | HTML + RTF + PlainText multi-format |
+| **Office insertion** | ✅ | Auto-select OMath/SVG/HTML per app |
+| **Document cleaning** | ✅ | Merge/remove/dedup/normalize blocks |
+| **Remote API** | ✅ | OpenAI-compatible VLM provider |
+| **Capability matrix** | ✅ | `snipper capabilities` |
 
 ---
 

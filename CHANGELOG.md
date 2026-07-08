@@ -7,15 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **Region Graph Routing**: Only `Independent` regions are routed to top-level recognizers; `Child` and `Discarded` regions excluded to prevent duplicate output in table cells
-- **Region Graph Projection**: `ArtifactRef` replaces array-index projection for layout/formula/text/table candidates
-- **Region Graph Import**: `RegionResolveNode` imports existing `region_candidates` from `LayoutNode` before adding detector results
-- **TextRecognitionService**: `recognize_via_package()` delegates to shared `TextRecognitionService`, eliminating dual session paths
-- **Recursive CJK/Latin Normalization**: `normalize_block_inlines()` handles Paragraph, Heading, Table cells, List items, Quote, DescriptionList, and Handwriting
-- **Engine Pipeline Activation**: `build_pipeline()` constructs OpenDocHybrid pipeline when `parse_mode == OpenDocHybrid`
-- **Engine Layout Registration**: `try_register_layout_package()` discovers layout variant from manifest automatically
-- **Engine OpenOcrText Mode**: `configure_context()` auto-selects `openocr-mobile` variant when mode is `OpenOcrText`
+### Added
+
+- **Platform Type System (v2 Plan Phases 0-6)**
+  - `Document.schema_version`, `Diagnostic.recoverable`/`data` fields
+  - `MediaAsset` expansions: `OoxmlPart`, `PdfXObject`, `PdfObject`, `Background`, `Watermark`
+  - `AssetExportPolicy`, `ExportedAsset`, `AssetBundle`, `AssetManifest`
+  - `AssetResolver` trait with `resolve_bytes`/`resolve_path`/`resolve_data_uri`/`export_asset`
+  - `Format.rs`: `ExportArtifact`, `LossKind`, `FormatCapability`, `CapabilityMatrix`, `PdfExportMode`, `ImportOptions`, `ExportOptions`, `ModelCapability`, `ModelProviderKind`
+  - `SourceInfo` extended: `region`, `quad`, `coordinate_space`, `stable_id`, `provider_id`, `artifact_id`, `asset_id`, `pdf`
+  - `CoordinateSpace` enum, `PdfSourceInfo`, `Provenance`/`ProvenanceOperation`, `BlockPolicy`
+  - `InputStorage::OfficeSelection`, `InputSourceDescriptor.password_ref`
+  - `RecognizeInput`/`RecognizeOptions`/`OutputLevel` types
+  - `FigureBlock.role`/`policy`, `TextBoxBlock.rotation_deg`/`z_index`, `ImageInline.alt_text`
+  - `ChartSeries` export from AST crate
+
+- **Report & Job Infrastructure (Phase 3)**
+  - `JobRoot` standard directory layout
+  - `StageSpec`/`StageReport`/`ArtifactManifest`/`ArtifactKind`/`EventRecord`
+  - `DocumentReport`/`ProviderReport` with `InputSummary`, `BlockSummary`, `ProviderCallReport`
+  - engine `Job` upgraded with `artifacts`/`stages`/`diagnostics`/`events` fields
+  - `job run`/`inspect` CLI commands
+
+- **Format Traits & Services (Phase 4)**
+  - `Importer`/`SemanticConverter`/`Exporter`/`Renderer`/`OfficeAdapter` traits
+  - `ExportService` unifies SVG/PDF/PlainText export via `VisualFormat`
+  - `ClipboardBundle` multi-format output (HTML+RTF+PlainText+PNG)
+  - `OfficeInsertService` with per-app format auto-selection (Word/PowerPoint/Excel)
+  - `parse_svg_to_shapes()` extracts Rectangle/Ellipse/Line/Text from SVG XML
+  - `pdf_native::extract_pdf_text()` using lopdf content stream parsing
+
+- **Remote API Integration (Phase 6)**
+  - `RemoteApiProvider` — OpenAI-compatible HTTP client with schema validation
+  - `chart_understanding::ChartUnderstandingService` — VLM chart extraction
+  - `diagram_understanding::DiagramUnderstandingService` — VLM diagram to Shape/Graph AST
+  - Feature-gated via `remote-api` Cargo feature
+
+- **Advanced Document Understanding (Phase 7)**
+  - `docx_reader::read_docx()` — extracts paragraphs, runs, images from .docx
+  - `pptx_reader::read_pptx()` — extracts text, shapes, images from .pptx
+  - `xlsx_reader::read_xlsx()` — extracts tables from .xlsx
+  - `pdf_overlay::overlay_pdf()` — overlays AST text onto existing PDF
+  - `document_cleaner::clean_document()` — removes empties, merges adjacent blocks,
+    deduplicates, adds low-confidence diagnostics, normalizes whitespace
+  - `convert` capability with `--input`/`--output` filters
+
+- **CLI Enhancements**
+  - `snipper capabilities` — shows conversion capability matrix
+  - `snipper capabilities --format markdown` — detailed format view
+  - `snipper capabilities --input ast --output markdown` — filtered view
+  - `snipper job run` / `snipper job inspect` — job management
+
+- **Testing**
+  - In-memory DOCX/PPTX/XLSX reader tests (via zip::ZipWriter)
+  - PDF overlay e2e test (lopdf → overlay → verify output)
+  - 6 DocumentCleaner edge case tests
+  - SVG parser: 7 unit tests for all element types
+  - ExportService doc-test (was `ignore`, now runs)
+  - 208 conversion tests, all passing
+
+### Changed
+- Block enum variants expanded: TextBox, Chart, Shape, EmbeddedObject, Annotation
+- Inline variants expanded: Span, Link, Code, Superscript, Subscript, LineBreak, SoftBreak
+- Converters (Markdown/HTML/LaTeX/Typst) now use `doc.assets` for image resolution
+- `RenderNode` now includes `Image` and `Figure` variants
+- `RecognizerNode` fills SourceInfo with `confidence` and `region` from detections
+- `Diagnostic` struct now has `recoverable: bool` and `data: serde_json::Value`
+- `JobQueue::complete/fail` write structured `EventRecord` and `Diagnostic`
 - **Clippy Fixes**: `derivable_impls`, `unnecessary_unwrap`, `match_like_matches_macro`, `upper_case_acronyms`, `option_as_ref_deref`, `map_or`→`is_none_or`, `needless_range_loop`
 - **Model Packaging**: Removed duplicate `openocr-mobile` variants; updated manifest file lists to use `config.json`; added `layout_cdla/config.json`
 - **Model Release Workflow**: Per-variant `sourceUrl` support replaces hardcoded `BASE_TAG`
@@ -137,7 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.0] 07.01
+## [1.0.0] 07.01
 
 ### Export
 - PDF generator using printpdf 0.7 (replaces minimal hand-rolled PDF)
