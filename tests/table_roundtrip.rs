@@ -171,6 +171,7 @@ fn roundtrip_tables_to_all_formats() {
             diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
+            notes: Vec::new(),
         };
 
         for (format, format_name) in &formats {
@@ -211,6 +212,7 @@ fn roundtrip_5x6_table() {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
 
     let formats = [
@@ -247,6 +249,7 @@ fn roundtrip_formula_table() {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
 
     // All formats should produce non-empty output
@@ -280,6 +283,7 @@ fn roundtrip_merged_cells() {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
 
     // HTML output should contain colspan
@@ -337,6 +341,7 @@ fn roundtrip_styled_table() {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
 
     // HTML output should contain styling

@@ -26,6 +26,7 @@ fn formula_doc(latex: &str) -> Document {
         diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     }
 }
 
@@ -78,6 +79,7 @@ fn ast_text_collector_visits_nested_inline_formula() {
         diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
 
     let mut collector = TextCollector::new();

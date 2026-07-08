@@ -212,6 +212,7 @@ fn test_formula_pipeline_e2e() {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
     println!("3. Built Document AST with {} blocks", doc.block_count());
 
@@ -415,6 +416,7 @@ fn test_text_pipeline_e2e() {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
     println!("3. Built Document AST with {} blocks", doc.block_count());
 
@@ -683,6 +685,7 @@ fn test_mixed_pipeline_e2e() {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
     println!("4. Built Document AST with {} blocks", doc.block_count());
 

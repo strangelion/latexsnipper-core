@@ -111,6 +111,7 @@ mod tests {
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
+            notes: Vec::new(),
         }
     }
 
@@ -295,6 +296,7 @@ mod tests {
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
+            notes: Vec::new(),
         };
         let converter = OmmlConverter;
         let result = converter.convert(&doc).unwrap();
@@ -321,6 +323,7 @@ mod tests {
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
+            notes: Vec::new(),
         };
         let converter = MathmlConverter;
         let result = converter.convert(&doc).unwrap();

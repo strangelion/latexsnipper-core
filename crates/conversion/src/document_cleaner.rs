@@ -147,6 +147,7 @@ pub fn clean_document(doc: &Document, options: &CleanerOptions) -> CleanResult {
             diagnostics: [doc.diagnostics.clone(), all_diagnostics.clone()].concat(),
             id_gen: NodeIdGenerator::new(),
             schema_version: doc.schema_version.clone(),
+            notes: Vec::new(),
         },
         blocks_removed,
         blocks_merged,
@@ -386,6 +387,7 @@ mod tests {
             diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
+            notes: Vec::new(),
         }
     }
 

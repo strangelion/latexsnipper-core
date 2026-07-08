@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{AssetId, Block, Diagnostic, Inline, MediaAsset, Metadata, NodeIdGenerator};
+use crate::{
+    AssetId, Block, Diagnostic, Inline, MediaAsset, Metadata, NodeIdGenerator, NoteDefinition,
+};
 
 /// Top-level document — the single source of truth.
 ///
@@ -24,6 +26,10 @@ pub struct Document {
     /// Schema version for compatibility tracking.
     #[serde(default = "default_schema_version")]
     pub schema_version: String,
+
+    /// Footnotes and endnotes referenced by the document body.
+    #[serde(default)]
+    pub notes: Vec<NoteDefinition>,
 }
 
 fn default_schema_version() -> String {
@@ -39,6 +45,7 @@ impl Clone for Document {
             diagnostics: self.diagnostics.clone(),
             id_gen: NodeIdGenerator::new(),
             schema_version: self.schema_version.clone(),
+            notes: self.notes.clone(),
         }
     }
 }
@@ -78,6 +85,7 @@ impl Document {
             diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
             schema_version: default_schema_version(),
+            notes: Vec::new(),
         }
     }
 
@@ -119,6 +127,7 @@ impl Document {
             diagnostics: self.diagnostics.clone(),
             id_gen: NodeIdGenerator::new(),
             schema_version: self.schema_version.clone(),
+            notes: self.notes.clone(),
         }
     }
 
@@ -137,6 +146,7 @@ impl Document {
             diagnostics: self.diagnostics.clone(),
             id_gen: NodeIdGenerator::new(),
             schema_version: self.schema_version.clone(),
+            notes: self.notes.clone(),
         }
     }
 

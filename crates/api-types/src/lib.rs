@@ -112,6 +112,7 @@ impl RecognizeResponse {
 
 /// A single item in a streaming recognition response.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum StreamItem {
     /// A region has been detected.
     RegionDetected {

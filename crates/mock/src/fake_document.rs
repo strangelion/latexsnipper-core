@@ -48,6 +48,7 @@ pub fn fake_document() -> Document {
         diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     }
 }
 

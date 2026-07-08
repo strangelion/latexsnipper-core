@@ -38,8 +38,8 @@ pub use formula_layout::{
 };
 pub use geometry::{Point, Quad, Rect, Size};
 pub use inline::{
-    CiteStyle, CodeInline, ImageInline, Inline, LinkInline, NoteKind, NoteRefInline, SpanInline,
-    TextRun,
+    CiteStyle, CodeInline, ImageInline, Inline, LinkInline, NoteDefinition, NoteKind, NoteRefInline,
+    SpanInline, TextRun,
 };
 pub use input::{
     InputFormat, InputSourceDescriptor, InputStorage, OfficeInsertKind, OutputLevel, PageRange,

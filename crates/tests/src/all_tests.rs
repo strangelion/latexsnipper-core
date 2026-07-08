@@ -450,6 +450,7 @@ mod conversion_tests {
         diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     });
 
     #[test]
@@ -531,6 +532,7 @@ mod conversion_tests {
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
+            notes: Vec::new(),
         };
         let r = OmmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<m:num>"));
@@ -555,6 +557,7 @@ mod conversion_tests {
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
+            notes: Vec::new(),
         };
         let r = MathmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<mfrac>"));

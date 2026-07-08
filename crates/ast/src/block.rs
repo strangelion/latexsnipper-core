@@ -4,7 +4,7 @@ use crate::media::MediaRole;
 use crate::span::BlockPolicy;
 use crate::style::{
     AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartType, EmbeddedObjectKind,
-    ListStyle, ShapeStyle, ShapeType,
+    ShapeStyle, ShapeType,
 };
 use crate::{Inline, NodeId, Rect, SourceInfo};
 

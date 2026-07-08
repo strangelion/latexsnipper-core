@@ -249,6 +249,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     }
 }
 

@@ -167,6 +167,7 @@ fn windows_main() {
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
     };
     println!("\n3. Document AST: {} blocks\n", doc.block_count());
 
