@@ -19,6 +19,7 @@ pub mod mathml_parser;
 pub mod office_insert;
 pub mod omml;
 pub mod omml_parser;
+pub mod pdf_native;
 pub mod svg_parser;
 pub mod table_export;
 pub mod table_parser;
@@ -31,6 +32,7 @@ pub use asset_helper::{resolve_asset_ref, resolve_image_html, resolve_image_late
 pub use clipboard::ClipboardBundle;
 pub use converter::Converter;
 pub use office_insert::{OfficeInsertResult, OfficeInsertService};
+pub use pdf_native::extract_pdf_text;
 pub use svg_parser::parse_svg_to_shapes;
 pub use document_converter::{DocumentConverter, OutputFormat};
 pub use html::HtmlConverter;

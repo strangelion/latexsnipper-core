@@ -16,3 +16,4 @@ log.workspace = true
 serde.workspace = true
 quick-xml = "0.37"
 regex = "1"
+lopdf = "0.34"
