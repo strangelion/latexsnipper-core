@@ -337,6 +337,7 @@ fn parse_inline_text(text: &str) -> Vec<Inline> {
                 let code: String = chars[i + 1..end].iter().collect();
                 inlines.push(Inline::Text(TextRun {
                     text: code,
+                    style: None,
                     bold: None,
                     italic: None,
                     underline: None,

@@ -91,12 +91,14 @@ impl Inline {
 pub struct TextRun {
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<TextStyle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bold: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub italic: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub underline: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strikethrough: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
@@ -106,6 +108,7 @@ impl TextRun {
     pub fn new(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
+            style: None,
             bold: None,
             italic: None,
             underline: None,
@@ -187,5 +190,31 @@ pub struct CodeInline {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+use crate::Block;
+
+/// Kind of note (footnote or endnote).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NoteKind {
+    Footnote,
+    Endnote,
+}
+
+/// A reference to a note (footnote/endnote) in the document body.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteRefInline {
+    pub note_id: String,
+    pub kind: NoteKind,
+    pub source: Option<SourceInfo>,
+}
+
+/// Content of a note (footnote/endnote), stored in the Document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteDefinition {
+    pub id: String,
+    pub kind: NoteKind,
+    pub content: Vec<Block>,
     pub source: Option<SourceInfo>,
 }

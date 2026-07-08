@@ -35,7 +35,10 @@ pub use formula_layout::{
     categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory, SymbolInfo,
 };
 pub use geometry::{Point, Quad, Rect, Size};
-pub use inline::{CiteStyle, CodeInline, ImageInline, Inline, LinkInline, SpanInline, TextRun};
+pub use inline::{
+    CiteStyle, CodeInline, ImageInline, Inline, LinkInline, NoteKind, NoteRefInline, SpanInline,
+    TextRun,
+};
 pub use input::{
     InputFormat, InputSourceDescriptor, InputStorage, OfficeInsertKind, OutputLevel, PageRange,
     RecognizeInput, RecognizeOptions,
@@ -63,8 +66,9 @@ pub use span::{
 };
 pub use style::{
     effective_text_style, AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartSeries,
-    ChartType, Color, EmbeddedObjectKind, FontWeight, OfficeApp, OfficeSourceInfo, ParagraphStyle,
-    ShapeStyle, ShapeType, TextAlignment, TextStyle, VerticalAlign,
+    ChartType, Color, EmbeddedObjectKind, FontWeight, LayerInfo, OfficeApp, OfficeSourceInfo,
+    ParagraphStyle, ShapeStyle, ShapeType, TextAlignment, TextDirection, TextStyle, Transform2D,
+    UnderlineStyle, VerticalAlign,
 };
 pub use traits::{Exporter, Importer, OfficeAdapter, Renderer, SemanticConverter};
 pub use visitor::{DocumentVisitor, TextCollector};

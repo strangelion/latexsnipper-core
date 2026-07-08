@@ -102,6 +102,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
                         let code = content.trim().to_string();
                         current_inlines.push(Inline::Text(TextRun {
                             text: code,
+                            style: None,
                             bold: None,
                             italic: None,
                             underline: None,
@@ -534,6 +535,7 @@ fn parse_inline_html(html: &str) -> Vec<Inline> {
                         let code = content.trim().to_string();
                         inlines.push(Inline::Text(TextRun {
                             text: code,
+                            style: None,
                             bold: None,
                             italic: None,
                             underline: None,

@@ -252,3 +252,58 @@ pub fn effective_text_style(
 
     result
 }
+
+// ---------------------------------------------------------------------------
+// TextDirection
+// ---------------------------------------------------------------------------
+
+/// Text direction (left-to-right, right-to-left, auto).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TextDirection {
+    Ltr,
+    Rtl,
+    Auto,
+}
+
+// ---------------------------------------------------------------------------
+// UnderlineStyle
+// ---------------------------------------------------------------------------
+
+/// Style of underline decoration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnderlineStyle {
+    Single,
+    Double,
+    Dotted,
+    Dashed,
+    Wavy,
+}
+
+// ---------------------------------------------------------------------------
+// Transform2D
+// ---------------------------------------------------------------------------
+
+/// 2D transformation (rotation, scale, translation, skew).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Transform2D {
+    pub rotation_deg: Option<f32>,
+    pub scale_x: Option<f32>,
+    pub scale_y: Option<f32>,
+    pub translate_x: Option<f32>,
+    pub translate_y: Option<f32>,
+    pub skew_x: Option<f32>,
+    pub skew_y: Option<f32>,
+}
+
+// ---------------------------------------------------------------------------
+// LayerInfo
+// ---------------------------------------------------------------------------
+
+/// Z-order and visibility information for layering.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LayerInfo {
+    pub z_index: Option<i32>,
+    pub locked: Option<bool>,
+    pub hidden: Option<bool>,
+    pub group_id: Option<String>,
+}
