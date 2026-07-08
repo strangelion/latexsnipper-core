@@ -25,6 +25,21 @@ pub struct DiagnosticEvent {
     pub message: String,
 }
 
+impl From<DiagnosticEvent> for latexsnipper_ast::Diagnostic {
+    fn from(event: DiagnosticEvent) -> Self {
+        let level = match event.level {
+            DiagnosticLevel::Info => latexsnipper_ast::DiagnosticLevel::Info,
+            DiagnosticLevel::Warning => latexsnipper_ast::DiagnosticLevel::Warning,
+            DiagnosticLevel::Error => latexsnipper_ast::DiagnosticLevel::Error,
+        };
+        latexsnipper_ast::Diagnostic::new(
+            level,
+            format!("PIPELINE_{:?}", event.level).to_uppercase(),
+            format!("[{}] {}", event.node, event.message),
+        )
+    }
+}
+
 /// Cached ONNX session for reuse across pipeline nodes.
 pub struct CachedSession {
     pub session: Arc<Box<dyn InferenceSession>>,

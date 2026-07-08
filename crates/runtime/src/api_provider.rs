@@ -47,6 +47,31 @@ pub enum UploadPolicy {
     WholeDocument,
 }
 
+/// The scope of data to be uploaded for a single API call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UploadScope {
+    /// A single cropped region (e.g., a detected formula or text block).
+    CroppedRegion,
+    /// A full page image.
+    PageImage,
+    /// The entire document (all pages).
+    WholeDocument,
+}
+
+impl UploadPolicy {
+    /// Check whether this policy allows uploading the given scope.
+    pub fn allows(&self, scope: UploadScope) -> bool {
+        match self {
+            UploadPolicy::Never => false,
+            UploadPolicy::CroppedRegionsOnly => matches!(scope, UploadScope::CroppedRegion),
+            UploadPolicy::WholePage => {
+                matches!(scope, UploadScope::CroppedRegion | UploadScope::PageImage)
+            }
+            UploadPolicy::WholeDocument => true,
+        }
+    }
+}
+
 /// Prompt profile for structured API interactions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptProfile {

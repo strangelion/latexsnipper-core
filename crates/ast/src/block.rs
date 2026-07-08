@@ -421,6 +421,33 @@ pub struct FigureBlock {
     pub source: Option<SourceInfo>,
 }
 
+impl FigureBlock {
+    /// Returns the caption inlines, falling back to legacy plain text caption.
+    pub fn caption_inlines_or_legacy(&self) -> Vec<crate::Inline> {
+        self.caption_inlines.clone().unwrap_or_else(|| {
+            self.caption
+                .as_ref()
+                .map(|c| vec![crate::Inline::Text(crate::TextRun::new(c))])
+                .unwrap_or_default()
+        })
+    }
+
+    /// Returns the caption as plain text, preferring structured inlines.
+    pub fn caption_plain_text(&self) -> String {
+        if let Some(inlines) = &self.caption_inlines {
+            let mut text = String::new();
+            for inline in inlines {
+                if let crate::Inline::Text(t) = inline {
+                    text.push_str(&t.text);
+                }
+            }
+            text
+        } else {
+            self.caption.clone().unwrap_or_default()
+        }
+    }
+}
+
 /// A list block (ordered or unordered).
 ///
 /// Contains list items, each with inline content.

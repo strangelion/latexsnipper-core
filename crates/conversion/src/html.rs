@@ -82,11 +82,12 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
         }
         Block::Table(t) => render_table(t, assets),
         Block::Figure(f) => {
-            let caption = f.caption.as_deref().unwrap_or("figure");
+            let caption = f.caption_plain_text();
+            let caption_str = if caption.is_empty() { "figure" } else { &caption };
             if let Some(data) = &f.image_data {
                 format!(
                     "<figure><img src=\"data:image/png;base64,{}\" alt=\"{}\"><figcaption>{}</figcaption></figure>",
-                    data, caption, caption
+                    data, caption_str, caption_str
                 )
             } else {
                 let src = resolve_asset_ref(assets, &f.asset_id);

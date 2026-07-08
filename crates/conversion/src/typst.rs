@@ -54,7 +54,7 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
         }
         Block::Table(t) => render_table(t, assets),
         Block::Figure(f) => {
-            let caption = f.caption.as_deref().unwrap_or("");
+            let caption = f.caption_plain_text();
             let src = resolve_asset_ref(assets, &f.asset_id);
             if src.is_empty() {
                 if caption.is_empty() {

@@ -85,16 +85,17 @@ fn render_block(block: &Block, mode: &MarkdownMode, assets: &[MediaAsset]) -> St
         }
         Block::Table(t) => render_table(t, mode, assets),
         Block::Figure(f) => {
-            let caption = f.caption.as_deref().unwrap_or("figure");
+            let caption = f.caption_plain_text();
+            let caption_str = if caption.is_empty() { "figure" } else { &caption };
             if let Some(data) = &f.image_data {
                 // Legacy path: inline base64 data
-                format!("![{}](data:image/png;base64,{})", caption, data)
+                format!("![{}](data:image/png;base64,{})", caption_str, data)
             } else {
                 let src = resolve_asset_ref(assets, &f.asset_id);
                 if src.is_empty() {
-                    format!("![{}](image.png)", caption)
+                    format!("![{}](image.png)", caption_str)
                 } else {
-                    format!("![{}]({})", caption, src)
+                    format!("![{}]({})", caption_str, src)
                 }
             }
         }

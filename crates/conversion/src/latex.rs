@@ -127,7 +127,7 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
         }
         Block::Table(t) => render_table(t, assets),
         Block::Figure(f) => {
-            let caption = f.caption.as_deref().unwrap_or("");
+            let caption = f.caption_plain_text();
             if let Some(data) = &f.image_data {
                 format!(
                     "\\includegraphics[width=0.8\\textwidth]{{{}}}\n\\caption{{{}}}",

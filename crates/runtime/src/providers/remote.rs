@@ -66,8 +66,8 @@ impl RemoteApiProvider {
         let report_id = format!("remote_{}", self.config.provider);
 
         // 1. Check upload policy
-        if let Some(img) = image_base64 {
-            if !self.may_upload(img) {
+        if let Some(_img) = image_base64 {
+            if !self.may_upload(UploadScope::PageImage) {
                 diagnostics.push(
                     Diagnostic::new(
                         DiagnosticLevel::Error,
@@ -240,14 +240,9 @@ impl RemoteApiProvider {
         )
     }
 
-    /// Check whether the upload policy allows sending the given image data.
-    fn may_upload(&self, _image_base64: &str) -> bool {
-        match self.config.upload_policy {
-            UploadPolicy::Never => false,
-            UploadPolicy::CroppedRegionsOnly
-            | UploadPolicy::WholePage
-            | UploadPolicy::WholeDocument => true,
-        }
+    /// Check whether the upload policy allows sending the given scope of data.
+    fn may_upload(&self, scope: UploadScope) -> bool {
+        self.config.upload_policy.allows(scope)
     }
 
     /// Build the JSON request payload for an OpenAI-compatible chat endpoint.

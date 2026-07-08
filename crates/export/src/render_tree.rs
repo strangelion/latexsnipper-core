@@ -134,14 +134,12 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             Some(RenderNode::Table { rows })
         }
         Block::Figure(f) => {
-            let caption = f
-                .caption
-                .as_ref()
-                .map(|c| {
-                    // Simple text render of caption
-                    vec![RenderNode::Text(c.clone())]
-                })
-                .unwrap_or_default();
+            let caption_text = f.caption_plain_text();
+            let caption = if caption_text.is_empty() {
+                vec![]
+            } else {
+                vec![RenderNode::Text(caption_text)]
+            };
             Some(RenderNode::Figure {
                 asset_id: f.asset_id.clone(),
                 caption,
