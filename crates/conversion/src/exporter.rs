@@ -12,20 +12,11 @@ pub struct ExportArtifact {
 }
 
 /// Options for export.
+#[derive(Default)]
 pub struct ExportOptions {
     pub include_assets: bool,
     pub assets_dir: Option<String>,
     pub embed_assets: bool,
-}
-
-impl Default for ExportOptions {
-    fn default() -> Self {
-        Self {
-            include_assets: false,
-            assets_dir: None,
-            embed_assets: false,
-        }
-    }
 }
 
 /// Trait for exporting Document to file formats.

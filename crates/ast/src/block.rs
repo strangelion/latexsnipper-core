@@ -9,8 +9,13 @@ use crate::span::BlockPolicy;
 ///
 /// This is the core enum for all block-level content.
 /// All variants follow the same pattern: `{Name}Block` struct.
+///
+/// Some variants (FormulaBlock, ChartBlock, etc.) differ significantly in size.
+/// Boxing individual variants would break exhaustive pattern matching across
+/// the codebase, so the size difference is accepted by explicit allow.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
+#[allow(clippy::large_enum_variant)]
 pub enum Block {
     /// A heading/section title (H1-H6).
     Heading(HeadingBlock),

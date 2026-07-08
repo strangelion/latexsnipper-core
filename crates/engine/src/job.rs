@@ -59,11 +59,8 @@ impl Job {
 
     /// Add a stage report and update job status on completion.
     pub fn add_stage_report(&mut self, report: StageReport) {
-        match report.status {
-            StageStatus::Failed => {
-                self.status = JobStatus::Failed;
-            }
-            _ => {}
+        if report.status == StageStatus::Failed {
+            self.status = JobStatus::Failed;
         }
         self.stages.push(report);
     }

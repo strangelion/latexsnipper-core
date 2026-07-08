@@ -6,6 +6,7 @@ use crate::{Block, Formula};
 /// Supports undo/redo and collaborative editing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
+#[allow(clippy::large_enum_variant)]
 pub enum Operation {
     /// Insert a block at a position.
     InsertBlock {
