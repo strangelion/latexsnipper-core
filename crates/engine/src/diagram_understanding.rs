@@ -224,7 +224,7 @@ impl DiagramUnderstandingService {
                 let shape_connections: Vec<DiagramConnection> = connections
                     .iter()
                     .filter(|c| {
-                        id.as_ref().map_or(false, |sid| {
+                        id.as_ref().is_some_and(|sid| {
                             c.from_id == *sid || c.to_id == *sid
                         })
                     })
