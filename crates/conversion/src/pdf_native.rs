@@ -51,13 +51,14 @@ pub fn extract_pdf_text(path: impl AsRef<Path>) -> Result<Document> {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct TextFragment {
     text: String,
     x: f32,
     y: f32,
     width: f32,
     height: f32,
-    font_size: f32,
+    font_size: f32, // kept for potential future use (font metric estimation)
 }
 
 fn get_page_size(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Option<(f32, f32)> {
