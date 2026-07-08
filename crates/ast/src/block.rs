@@ -192,6 +192,60 @@ impl Block {
         }
     }
 
+    /// Get mutable access to the child inline elements of this block.
+    ///
+    /// Returns `None` for block types that do not have direct inline children
+    /// (e.g., Formula, Code, Figure, nested container blocks).
+    /// For container blocks (Quote, Theorem, etc.), this returns `None` since
+    /// child blocks need separate recursive traversal.
+    pub fn inlines_mut(&mut self) -> Option<Vec<&mut Inline>> {
+        match self {
+            Block::Heading(h) => Some(h.inlines.iter_mut().collect()),
+            Block::Paragraph(p) => Some(p.inlines.iter_mut().collect()),
+            Block::Formula(_) => None,
+            Block::Table(t) => Some(
+                t.rows
+                    .iter_mut()
+                    .flat_map(|row| row.iter_mut())
+                    .flat_map(|cell| cell.inlines.iter_mut())
+                    .collect(),
+            ),
+            Block::Figure(_) => None,
+            Block::List(l) => Some(
+                l.items
+                    .iter_mut()
+                    .flat_map(|item| item.inlines.iter_mut())
+                    .collect(),
+            ),
+            Block::Quote(_) => None,
+            Block::Code(_) => None,
+            Block::HorizontalRule(_) => None,
+            Block::Handwriting(hw) => Some(hw.inlines.iter_mut().collect()),
+            Block::DescriptionList(dl) => Some(
+                dl.items
+                    .iter_mut()
+                    .filter_map(|item| item.label.as_mut())
+                    .flat_map(|label| label.iter_mut())
+                    .collect(),
+            ),
+            Block::TableOfContents => None,
+            Block::Theorem(_) => None,
+            Block::Proof(_) => None,
+            Block::Minipage(_) => None,
+            Block::Float(_) => None,
+            Block::TextBox(_) => None,
+            Block::Chart(c) => Some(
+                c.title
+                    .iter_mut()
+                    .flat_map(|t| t.iter_mut())
+                    .collect(),
+            ),
+            Block::Shape(s) => Some(s.text.iter_mut().collect()),
+            Block::EmbeddedObject(_) => None,
+            Block::Annotation(a) => Some(a.content.iter_mut().collect()),
+        }
+    }
+
     /// Get a human-readable name for this block type.
     pub fn type_name(&self) -> &'static str {
         match self {

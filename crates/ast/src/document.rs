@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Block, Diagnostic, MediaAsset, Metadata, NodeIdGenerator};
+use crate::{AssetId, Block, Diagnostic, Inline, MediaAsset, Metadata, NodeIdGenerator};
 
 /// Top-level document — the single source of truth.
 ///
-/// TODO(phase1): add `normalize_assets()` to compute checksums, fill mime/role/size
-/// TODO(phase4): integrate with unified Importer/Exporter trait dispatch
+/// Provides asset management methods for working with media assets
+/// referenced by blocks and inlines throughout the document.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Document {
     pub metadata: Metadata,
@@ -161,6 +161,271 @@ impl Document {
         result.sort();
         result.dedup();
         result
+    }
+
+    /// Add a media asset to the document's asset list, returning its ID.
+    pub fn add_asset(&mut self, asset: MediaAsset) -> AssetId {
+        let id = asset.id.clone();
+        self.assets.push(asset);
+        id
+    }
+
+    /// Look up a media asset by its ID.
+    pub fn get_asset(&self, id: &AssetId) -> Option<&MediaAsset> {
+        self.assets.iter().find(|a| a.id == *id)
+    }
+
+    /// Validate that every `asset_id` reference in blocks and inlines
+    /// points to an existing entry in `self.assets`.
+    ///
+    /// Returns diagnostics for missing asset references.
+    pub fn validate_asset_refs(&self) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+        let asset_ids: Vec<&AssetId> = self.assets.iter().map(|a| &a.id).collect();
+        for page in &self.pages {
+            for block in &page.blocks {
+                Self::check_block_asset_refs(block, &asset_ids, &mut diags);
+            }
+        }
+        diags
+    }
+
+    /// Walk all FigureBlock and ImageInline asset references in the document
+    /// checking they exist in the assets list.
+    fn check_block_asset_refs(
+        block: &Block,
+        asset_ids: &[&AssetId],
+        diags: &mut Vec<Diagnostic>,
+    ) {
+        match block {
+            Block::Figure(f) => {
+                if let Some(ref aid) = f.asset_id {
+                    if !asset_ids.iter().any(|id| *id == aid) {
+                        diags.push(
+                            Diagnostic::warning(
+                                "W_MISSING_ASSET_REF",
+                                format!("FigureBlock references missing asset {}", aid.0),
+                            )
+                            .with_recoverable(true),
+                        );
+                    }
+                }
+            }
+            Block::TextBox(tb) => {
+                for child in &tb.content {
+                    Self::check_block_asset_refs(child, asset_ids, diags);
+                }
+            }
+            Block::Quote(q) => {
+                for child in &q.blocks {
+                    Self::check_block_asset_refs(child, asset_ids, diags);
+                }
+            }
+            Block::Minipage(m) => {
+                for child in &m.content {
+                    Self::check_block_asset_refs(child, asset_ids, diags);
+                }
+            }
+            Block::Float(f) => {
+                for child in &f.content {
+                    Self::check_block_asset_refs(child, asset_ids, diags);
+                }
+            }
+            Block::Theorem(t) => {
+                for child in &t.content {
+                    Self::check_block_asset_refs(child, asset_ids, diags);
+                }
+            }
+            Block::Proof(p) => {
+                for child in &p.content {
+                    Self::check_block_asset_refs(child, asset_ids, diags);
+                }
+            }
+            _ => {}
+        }
+        // Also check inlines within this block
+        for inline in block.inlines() {
+            if let Inline::Image(img) = inline {
+                if let Some(ref aid) = img.asset_id {
+                    if !asset_ids.iter().any(|id| *id == aid) {
+                        diags.push(
+                            Diagnostic::warning(
+                                "W_MISSING_ASSET_REF",
+                                format!("ImageInline references missing asset {}", aid.0),
+                            )
+                            .with_recoverable(true),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Migrate legacy `image_data` base64 strings to proper `MediaAsset` entries.
+    ///
+    /// Walks all blocks and inlines, and for every `FigureBlock` or `ImageInline` that
+    /// has `image_data` but no `asset_id`, creates a new `MediaAsset` and sets the `asset_id`.
+    /// This is used during deserialization of old JSON documents that predate the asset system.
+    pub fn migrate_legacy_image_data(&mut self) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+        let mut next_id = 0;
+
+        for page in &mut self.pages {
+            for block in &mut page.blocks {
+                Self::migrate_block_image_data(block, &mut next_id, &mut self.assets, &mut diags);
+            }
+        }
+
+        diags
+    }
+
+    fn migrate_block_image_data(
+        block: &mut Block,
+        next_id: &mut usize,
+        assets: &mut Vec<MediaAsset>,
+        diags: &mut Vec<Diagnostic>,
+    ) {
+        match block {
+            Block::Figure(f) => {
+                if f.asset_id.is_none() {
+                    if let Some(ref data) = f.image_data {
+                        let id = AssetId(format!("migrated-figure-{}", *next_id));
+                        *next_id += 1;
+                        f.asset_id = Some(id.clone());
+                        let format = guess_format_from_base64(data);
+                        assets.push(MediaAsset {
+                            id,
+                            format,
+                            mime_type: None,
+                            role: crate::MediaRole::Photo,
+                            storage: crate::AssetStorage::InlineBase64 { data: data.clone() },
+                            width: None,
+                            height: None,
+                            dpi: None,
+                            color_space: None,
+                            checksum_sha256: None,
+                            alt_text: f.caption.clone(),
+                            metadata: Default::default(),
+                        });
+                        diags.push(
+                            Diagnostic::info(
+                                "I_LEGACY_IMAGE_MIGRATED",
+                                "FigureBlock image_data migrated to MediaAsset",
+                            )
+                            .with_recoverable(true),
+                        );
+                    }
+                }
+            }
+            Block::TextBox(tb) => {
+                for child in &mut tb.content {
+                    Self::migrate_block_image_data(child, next_id, assets, diags);
+                }
+            }
+            Block::Quote(q) => {
+                for child in &mut q.blocks {
+                    Self::migrate_block_image_data(child, next_id, assets, diags);
+                }
+            }
+            Block::Minipage(m) => {
+                for child in &mut m.content {
+                    Self::migrate_block_image_data(child, next_id, assets, diags);
+                }
+            }
+            Block::Float(f) => {
+                for child in &mut f.content {
+                    Self::migrate_block_image_data(child, next_id, assets, diags);
+                }
+            }
+            Block::Theorem(t) => {
+                for child in &mut t.content {
+                    Self::migrate_block_image_data(child, next_id, assets, diags);
+                }
+            }
+            Block::Proof(p) => {
+                for child in &mut p.content {
+                    Self::migrate_block_image_data(child, next_id, assets, diags);
+                }
+            }
+            _ => {}
+        }
+        // Also migrate inlines
+        if let Some(inlines) = block.inlines_mut() {
+            for inline in inlines {
+                if let Inline::Image(img) = inline {
+                    if img.asset_id.is_none() {
+                        if let Some(ref data) = img.image_data {
+                            let id = AssetId(format!("migrated-image-{}", *next_id));
+                            *next_id += 1;
+                            img.asset_id = Some(id.clone());
+                            let format = guess_format_from_base64(data);
+                            assets.push(MediaAsset {
+                                id,
+                                format,
+                                mime_type: None,
+                                role: crate::MediaRole::Photo,
+                                storage: crate::AssetStorage::InlineBase64 { data: data.clone() },
+                                width: None,
+                                height: None,
+                                dpi: None,
+                                color_space: None,
+                                checksum_sha256: None,
+                                alt_text: img.alt_text.clone(),
+                                metadata: Default::default(),
+                            });
+                            diags.push(
+                                Diagnostic::info(
+                                    "I_LEGACY_IMAGE_MIGRATED",
+                                    "ImageInline image_data migrated to MediaAsset",
+                                )
+                                .with_recoverable(true),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Guess the asset format from a base64-encoded data prefix.
+fn guess_format_from_base64(data: &str) -> crate::AssetFormat {
+    if data.starts_with("/9j") || data.starts_with("/9k") {
+        crate::AssetFormat::Jpeg
+    } else if data.starts_with("iVBOR") {
+        crate::AssetFormat::Png
+    } else if data.starts_with("R0lG") {
+        crate::AssetFormat::Gif
+    } else if data.starts_with("UklGR") {
+        crate::AssetFormat::Webp
+    } else if data.starts_with("PHN2Zy") || data.starts_with("PD94bW") {
+        crate::AssetFormat::Svg
+    } else {
+        crate::AssetFormat::Unknown
+    }
+}
+
+impl Diagnostic {
+    fn info(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            level: crate::DiagnosticLevel::Info,
+            code: code.into(),
+            message: message.into(),
+            source: None,
+            recoverable: false,
+            data: serde_json::Value::Null,
+        }
+    }
+
+    fn warning(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            level: crate::DiagnosticLevel::Warning,
+            code: code.into(),
+            message: message.into(),
+            source: None,
+            recoverable: false,
+            data: serde_json::Value::Null,
+        }
     }
 }
 
