@@ -58,7 +58,7 @@ pub use span::{
     ProvenanceOperation, SourceInfo, Span,
 };
 pub use style::{
-    AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartType, Color,
+    AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartSeries, ChartType, Color,
     EmbeddedObjectKind, FontWeight, OfficeApp, OfficeSourceInfo, ParagraphStyle, ShapeStyle,
     ShapeType, TextAlignment, TextStyle, VerticalAlign,
 };

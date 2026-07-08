@@ -25,6 +25,10 @@ log.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
+[features]
+default = []
+remote-api = ["latexsnipper-runtime/remote-api"]
+
 [dev-dependencies]
 latexsnipper-mock.workspace = true
 latexsnipper-syntax.workspace = true
