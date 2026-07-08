@@ -31,9 +31,8 @@ pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
     // Parse relationships
     let rels = parse_rels(&rels_xml);
 
-    // Parse document body
-    // Parse document body with diagnostics
-    let (blocks, docx_diags) = parse_document_body(&document_xml, &mut archive, &rels);
+    // Parse document body with diagnostics and assets
+    let (blocks, assets, docx_diags) = parse_document_body(&document_xml, &mut archive, &rels);
 
     Ok(Document {
         metadata: Metadata {
@@ -49,7 +48,7 @@ pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
             blocks,
             page_number: Some(1),
         }],
-        assets: Vec::new(),
+        assets,
         diagnostics: docx_diags,
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
@@ -101,13 +100,14 @@ fn parse_rels(xml: &str) -> std::collections::HashMap<String, String> {
     rels
 }
 
-/// Parse the main document body XML and extract blocks with diagnostics.
+/// Parse the main document body XML and extract blocks with diagnostics and assets.
 fn parse_document_body(
     xml: &str,
     archive: &mut zip::ZipArchive<std::fs::File>,
     rels: &std::collections::HashMap<String, String>,
-) -> (Vec<Block>, Vec<Diagnostic>) {
+) -> (Vec<Block>, Vec<MediaAsset>, Vec<Diagnostic>) {
     let mut blocks = Vec::new();
+    let mut assets = Vec::new();
     let mut diagnostics = Vec::new();
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
@@ -239,15 +239,30 @@ fn parse_document_body(
                     }
                     b"w:drawing" | b"drawing" => {
                         if let Some(img_rel) = &drawing_id {
-                            // Try to read the image from the media folder
                             let media_path = format!("word/{}", img_rel);
                             if let Ok(mut img_file) = archive.by_name(&media_path) {
                                 let mut img_bytes = Vec::new();
                                 if img_file.read_to_end(&mut img_bytes).is_ok() {
                                     let b64 = base64_encode(&img_bytes);
+                                    let asset_id = AssetId(format!("docx-img-{}", assets.len()));
+                                    let format = guess_image_format(&img_rel);
+                                    assets.push(MediaAsset {
+                                        id: asset_id.clone(),
+                                        format,
+                                        mime_type: None,
+                                        role: MediaRole::Photo,
+                                        storage: AssetStorage::InlineBase64 { data: b64 },
+                                        width: None,
+                                        height: None,
+                                        dpi: None,
+                                        color_space: None,
+                                        checksum_sha256: None,
+                                        alt_text: None,
+                                        metadata: Default::default(),
+                                    });
                                     current_paragraph_inlines.push(Inline::Image(ImageInline {
-                                        asset_id: None,
-                                        image_data: Some(b64),
+                                        asset_id: Some(asset_id),
+                                        image_data: None,
                                         width: None,
                                         height: None,
                                         alt_text: None,
@@ -280,7 +295,28 @@ fn parse_document_body(
         buf.clear();
     }
 
-    (blocks, diagnostics)
+    (blocks, assets, diagnostics)
+}
+
+/// Guess the image format from the media file path extension.
+fn guess_image_format(path: &str) -> AssetFormat {
+    if path.ends_with(".png") {
+        AssetFormat::Png
+    } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        AssetFormat::Jpeg
+    } else if path.ends_with(".gif") {
+        AssetFormat::Gif
+    } else if path.ends_with(".webp") {
+        AssetFormat::Webp
+    } else if path.ends_with(".svg") {
+        AssetFormat::Svg
+    } else if path.ends_with(".bmp") {
+        AssetFormat::Bmp
+    } else if path.ends_with(".tiff") || path.ends_with(".tif") {
+        AssetFormat::Tiff
+    } else {
+        AssetFormat::Unknown
+    }
 }
 
 fn base64_encode(bytes: &[u8]) -> String {

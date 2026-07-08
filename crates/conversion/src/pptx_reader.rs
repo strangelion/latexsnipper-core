@@ -25,6 +25,7 @@ pub fn read_pptx(path: impl AsRef<Path>) -> Result<Document> {
     let slide_rels = parse_slide_rels(&pres_xml, &pres_rels);
 
     let mut pages = Vec::new();
+    let mut all_assets = Vec::new();
 
     for (slide_idx, (slide_file, slide_name)) in slide_rels.iter().enumerate() {
         let slide_xml = match read_entry(&mut archive, slide_file) {
@@ -35,8 +36,10 @@ pub fn read_pptx(path: impl AsRef<Path>) -> Result<Document> {
         let rels_xml = read_entry(&mut archive, &rels_file).unwrap_or_default();
         let rels = parse_rels(&rels_xml);
 
-        let blocks = parse_slide_body(&slide_xml, &mut archive, &rels);
+        let (blocks, slide_assets) =
+            parse_slide_body(&slide_xml, &mut archive, &rels, &mut all_assets.len());
 
+        all_assets.extend(slide_assets);
         pages.push(Page {
             width: 960.0,
             height: 540.0,
@@ -54,7 +57,7 @@ pub fn read_pptx(path: impl AsRef<Path>) -> Result<Document> {
             ocr_time_ms: None,
         },
         pages,
-        assets: Vec::new(),
+        assets: all_assets,
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
@@ -182,8 +185,10 @@ fn parse_slide_body(
     xml: &str,
     archive: &mut zip::ZipArchive<std::fs::File>,
     rels: &std::collections::HashMap<String, String>,
-) -> Vec<Block> {
+    next_asset_id: &mut usize,
+) -> (Vec<Block>, Vec<MediaAsset>) {
     let mut blocks = Vec::new();
+    let mut slide_assets = Vec::new();
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -252,10 +257,28 @@ fn parse_slide_body(
                                 let mut img_bytes = Vec::new();
                                 if img_file.read_to_end(&mut img_bytes).is_ok() {
                                     let b64 = base64_encode(&img_bytes);
+                                    let asset_id =
+                                        AssetId(format!("pptx-img-{}", *next_asset_id));
+                                    *next_asset_id += 1;
+                                    let format = guess_image_format(&media_path);
+                                    slide_assets.push(MediaAsset {
+                                        id: asset_id.clone(),
+                                        format,
+                                        mime_type: None,
+                                        role: MediaRole::Photo,
+                                        storage: AssetStorage::InlineBase64 { data: b64 },
+                                        width: None,
+                                        height: None,
+                                        dpi: None,
+                                        color_space: None,
+                                        checksum_sha256: None,
+                                        alt_text: None,
+                                        metadata: Default::default(),
+                                    });
                                     blocks.push(Block::Paragraph(ParagraphBlock {
                                         inlines: vec![Inline::Image(ImageInline {
-                                            asset_id: None,
-                                            image_data: Some(b64),
+                                            asset_id: Some(asset_id),
+                                            image_data: None,
                                             width: None,
                                             height: None,
                                             alt_text: None,
@@ -311,7 +334,28 @@ fn parse_slide_body(
         Block::Paragraph(p) => !p.inlines.is_empty(),
         _ => true,
     });
-    blocks
+    (blocks, slide_assets)
+}
+
+/// Guess the image format from a PPTX media file path extension.
+fn guess_image_format(path: &str) -> AssetFormat {
+    if path.ends_with(".png") {
+        AssetFormat::Png
+    } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        AssetFormat::Jpeg
+    } else if path.ends_with(".gif") {
+        AssetFormat::Gif
+    } else if path.ends_with(".webp") {
+        AssetFormat::Webp
+    } else if path.ends_with(".svg") {
+        AssetFormat::Svg
+    } else if path.ends_with(".bmp") {
+        AssetFormat::Bmp
+    } else if path.ends_with(".tiff") || path.ends_with(".tif") {
+        AssetFormat::Tiff
+    } else {
+        AssetFormat::Unknown
+    }
 }
 
 fn base64_encode(bytes: &[u8]) -> String {

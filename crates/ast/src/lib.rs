@@ -70,5 +70,5 @@ pub use style::{
     ParagraphStyle, ShapeStyle, ShapeType, TextAlignment, TextDirection, TextStyle, Transform2D,
     UnderlineStyle, VerticalAlign,
 };
-pub use traits::{Exporter, Importer, OfficeAdapter, Renderer, SemanticConverter};
+pub use traits::{Exporter, Importer, OfficeAdapter, Renderer, SemanticConverter, StageRunner};
 pub use visitor::{DocumentVisitor, TextCollector};

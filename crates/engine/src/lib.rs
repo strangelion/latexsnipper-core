@@ -5,6 +5,7 @@ pub mod job;
 pub mod metrics;
 pub mod sdk;
 pub mod service;
+pub mod stage_runners;
 
 #[cfg(feature = "remote-api")]
 pub mod chart_understanding;
