@@ -30,7 +30,13 @@ pub struct RemoteApiResult {
 impl RemoteApiResult {
     /// Check if the response is usable (non-empty, schema-valid if schema required).
     pub fn is_usable(&self) -> bool {
-        !self.text.is_empty()
+        !self.text.is_empty() && self.schema_valid
+    }
+
+    /// Check if the response is usable for a specific profile.
+    /// Allows responses without schema validation when the profile doesn't require one.
+    pub fn is_usable_for_profile(&self, profile: &PromptProfile) -> bool {
+        !self.text.is_empty() && (profile.output_schema.is_none() || self.schema_valid)
     }
 }
 
@@ -86,7 +92,15 @@ impl RemoteApiProvider {
                         provider_kind: "RemoteApi".to_string(),
                         model: Some(self.config.model.clone()),
                         tasks: vec![format!("{:?}", profile.task)],
-                        calls: vec![],
+                        calls: vec![ProviderCallReport {
+                            call_id: "call_1".to_string(),
+                            model: Some(self.config.model.clone()),
+                            input_tokens: None,
+                            output_tokens: None,
+                            elapsed_ms: elapsed,
+                            success: false,
+                            error: Some("E_UPLOAD_BLOCKED: Upload policy prevented image transmission".to_string()),
+                        }],
                         fallback_used: false,
                         total_elapsed_ms: elapsed,
                     },
@@ -115,7 +129,15 @@ impl RemoteApiProvider {
                         provider_kind: "RemoteApi".to_string(),
                         model: Some(self.config.model.clone()),
                         tasks: vec![format!("{:?}", profile.task)],
-                        calls: vec![],
+                        calls: vec![ProviderCallReport {
+                            call_id: "call_1".to_string(),
+                            model: Some(self.config.model.clone()),
+                            input_tokens: None,
+                            output_tokens: None,
+                            elapsed_ms: elapsed,
+                            success: false,
+                            error: Some(format!("E_PAYLOAD: {}", e)),
+                        }],
                         fallback_used: false,
                         total_elapsed_ms: elapsed,
                     },
@@ -128,10 +150,9 @@ impl RemoteApiProvider {
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
         let (text, parsed_json, input_tokens, output_tokens) = match response {
-            Ok(api_text) => {
-                let parsed = serde_json::from_str::<serde_json::Value>(&api_text).ok();
-                let tokens = extract_token_usage(&api_text);
-                (api_text, parsed, tokens.0, tokens.1)
+            Ok(raw) => {
+                let parsed = serde_json::from_str::<serde_json::Value>(&raw.content).ok();
+                (raw.content, parsed, raw.input_tokens, raw.output_tokens)
             }
             Err(e) => {
                 diagnostics.push(Diagnostic::new(DiagnosticLevel::Error, "E_API_CALL", &e));
@@ -284,7 +305,15 @@ impl RemoteApiProvider {
     }
 
     /// Send the HTTP request to the configured endpoint.
-    async fn send_request(&self, payload: &serde_json::Value) -> Result<String, String> {
+    /// Returns a structured response with content and token usage from the full response body.
+    struct ApiRawResponse {
+        content: String,
+        input_tokens: Option<u32>,
+        output_tokens: Option<u32>,
+    }
+
+    /// Send the request and return a structured response with token usage.
+    async fn send_request(&self, payload: &serde_json::Value) -> Result<ApiRawResponse, String> {
         let endpoint = self
             .config
             .endpoint
@@ -300,7 +329,7 @@ impl RemoteApiProvider {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_millis(self.config.timeout_ms))
             .build()
-            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+            .map_err(|e| format!("E_API_HTTP: Failed to create HTTP client: {}", e))?;
 
         let mut req = client.post(endpoint).json(payload);
 
@@ -308,21 +337,41 @@ impl RemoteApiProvider {
             req = req.header("Authorization", format!("Bearer {}", key));
         }
 
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
+        let resp = req.send().await.map_err(|e| {
+            if e.is_timeout() {
+                format!(
+                    "E_API_TIMEOUT: Request timed out after {}ms",
+                    self.config.timeout_ms
+                )
+            } else if e.is_connect() {
+                format!("E_API_HTTP: Connection failed: {}", e)
+            } else {
+                format!("E_API_HTTP: Request failed: {}", e)
+            }
+        })?;
         let status = resp.status();
         let body = resp
             .text()
             .await
-            .map_err(|e| format!("Failed to read response body: {}", e))?;
+            .map_err(|e| format!("E_API_HTTP: Failed to read response body: {}", e))?;
 
+        if status.as_u16() == 401 {
+            return Err("E_API_AUTH: Authentication failed (status 401)".to_string());
+        }
+        if status.as_u16() == 429 {
+            return Err("E_API_RATE_LIMIT: Rate limited (status 429)".to_string());
+        }
         if !status.is_success() {
-            return Err(format!("API error {}: {}", status.as_u16(), body));
+            return Err(format!("E_API_HTTP: API error {}: {}", status.as_u16(), body));
         }
 
-        Ok(extract_content_from_openai_response(&body))
+        let content = extract_content_from_openai_response(&body);
+        let (input_tokens, output_tokens) = extract_token_usage(&body);
+        Ok(ApiRawResponse {
+            content,
+            input_tokens,
+            output_tokens,
+        })
     }
 }
 
