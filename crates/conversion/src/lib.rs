@@ -6,7 +6,6 @@ pub mod document_cleaner;
 pub mod document_converter;
 pub mod docx_reader;
 pub mod export_format;
-pub mod exporter;
 pub mod html;
 pub mod html_parser;
 pub mod latex;

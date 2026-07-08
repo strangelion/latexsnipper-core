@@ -3,6 +3,75 @@ use serde::{Deserialize, Serialize};
 use crate::{Diagnostic, ExportedAsset};
 
 // ---------------------------------------------------------------------------
+// SemanticFormat — semantic conversion formats (for formula/text conversion)
+// ---------------------------------------------------------------------------
+
+/// Semantic conversion formats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SemanticFormat {
+    Latex,
+    LatexDisplay,
+    LatexEquation,
+    Typst,
+    MarkdownInline,
+    MarkdownBlock,
+    MathML,
+    OMML,
+    Html,
+    PlainText,
+    JsonAst,
+}
+
+// ---------------------------------------------------------------------------
+// ExportFormat — file/export formats (for document export)
+// ---------------------------------------------------------------------------
+
+/// File/export formats for document export.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExportFormat {
+    AstJson,
+    PlainText,
+    Markdown,
+    Latex,
+    Typst,
+    Html,
+    MathML,
+    OMML,
+    Svg,
+    Pdf,
+    Png,
+    Docx,
+    Pptx,
+    Xlsx,
+    OoxmlFragment,
+    ClipboardHtml,
+    ClipboardRtf,
+}
+
+// ---------------------------------------------------------------------------
+// TargetFormat — unified target format
+// ---------------------------------------------------------------------------
+
+/// Unified target format, combining semantic and export formats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetFormat {
+    Semantic(SemanticFormat),
+    Export(ExportFormat),
+}
+
+impl From<SemanticFormat> for TargetFormat {
+    fn from(format: SemanticFormat) -> Self {
+        TargetFormat::Semantic(format)
+    }
+}
+
+impl From<ExportFormat> for TargetFormat {
+    fn from(format: ExportFormat) -> Self {
+        TargetFormat::Export(format)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ExportArtifact — the result of an export operation
 // ---------------------------------------------------------------------------
 

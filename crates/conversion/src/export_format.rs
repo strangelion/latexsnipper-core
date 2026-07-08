@@ -1,3 +1,8 @@
+// Re-export platform-level types from ast to avoid duplicate definitions.
+// SemanticFormat, ExportFormat, and TargetFormat are defined locally for now
+// since they carry conversion-specific variants that may not apply at the ast level.
+pub use latexsnipper_ast::{FidelityLevel, FormatCapability};
+
 use serde::{Deserialize, Serialize};
 
 /// Semantic conversion formats (for formula/text conversion).
@@ -55,30 +60,4 @@ impl From<ExportFormat> for TargetFormat {
     fn from(format: ExportFormat) -> Self {
         TargetFormat::Export(format)
     }
-}
-
-/// Fidelity level for format conversion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FidelityLevel {
-    Lossless,
-    MostlyLossless,
-    SemanticOnly,
-    VisualOnly,
-    BestEffort,
-}
-
-/// Capability information for a format conversion.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FormatCapability {
-    pub input: Option<String>,
-    pub output: Option<String>,
-    pub supports_formula: bool,
-    pub supports_table: bool,
-    pub supports_image: bool,
-    pub supports_svg: bool,
-    pub supports_style: bool,
-    pub supports_layout: bool,
-    pub supports_office_objects: bool,
-    pub fidelity: FidelityLevel,
-    pub notes: Vec<String>,
 }

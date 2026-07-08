@@ -1,13 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// Provider type classification.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ModelProviderKind {
-    LocalOnnx,
-    LocalPlugin,
-    RemoteApi,
-    RemoteVlm,
-}
+// Re-export platform-level provider kind from ast to avoid duplicate definitions.
+pub use latexsnipper_ast::ModelProviderKind;
 
 /// Configuration for a remote API provider.
 #[derive(Debug, Clone, Serialize, Deserialize)]

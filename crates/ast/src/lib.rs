@@ -26,9 +26,9 @@ pub use block::{
 pub use builder::DocumentBuilder;
 pub use document::{Document, Page};
 pub use format::{
-    CapabilityMatrix, ConversionContext, ExportArtifact, ExportOptions, FidelityLevel,
+    CapabilityMatrix, ConversionContext, ExportArtifact, ExportFormat, ExportOptions, FidelityLevel,
     FormatCapability, ImportOptions, LossKind, ModelCapability, ModelProviderKind, PdfExportMode,
-    PdfExportOptions, RenderOptions,
+    PdfExportOptions, RenderOptions, SemanticFormat, TargetFormat,
 };
 pub use formula::{Formula, FormulaSource};
 pub use formula_layout::{
@@ -41,9 +41,9 @@ pub use input::{
     RecognizeInput, RecognizeOptions,
 };
 pub use media::{
-    AssetBundle, AssetExportPolicy, AssetFormat, AssetId, AssetManifest, AssetManifestEntry,
-    AssetResolver as MediaAssetResolver, AssetStorage, Diagnostic, DiagnosticLevel, ExportedAsset,
-    MediaAsset, MediaRole,
+    AssetBundle, AssetExportPolicy, AssetExporter, AssetFormat, AssetId, AssetManifest,
+    AssetManifestEntry, AssetReferenceResolver, AssetResolver as MediaAssetResolver, AssetStore,
+    AssetStorage, Diagnostic, DiagnosticLevel, ExportedAsset, MediaAsset, MediaRole,
 };
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;

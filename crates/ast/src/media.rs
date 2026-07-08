@@ -201,28 +201,45 @@ pub enum AssetExportPolicy {
 }
 
 // ---------------------------------------------------------------------------
-// AssetResolver trait — resolves asset IDs to bytes/paths/data URIs
+// Three-level asset resolution traits
 // ---------------------------------------------------------------------------
 
-/// Resolver that converts an AssetId into concrete byte content or file paths.
-pub trait AssetResolver {
-    /// Resolve the asset's raw bytes.
-    fn resolve_bytes(&self, id: &AssetId) -> std::result::Result<Vec<u8>, String>;
+/// Level 1: Where assets live — raw storage access.
+pub trait AssetStore {
+    /// Retrieve raw bytes for a given asset.
+    fn get_bytes(&self, id: &AssetId) -> std::result::Result<Vec<u8>, String>;
+    /// Look up the full asset metadata.
+    fn get_asset(&self, id: &AssetId) -> Option<&MediaAsset>;
+}
 
-    /// Resolve to a local file path, if available.
-    fn resolve_path(&self, id: &AssetId)
-        -> std::result::Result<Option<std::path::PathBuf>, String>;
+/// Level 2: How to reference an asset in the current output format.
+/// Each output format (HTML, Markdown, LaTeX, etc.) resolves asset IDs
+/// to format-specific reference strings (data URIs, file paths, etc.).
+pub trait AssetReferenceResolver {
+    /// Resolve an asset ID to a string reference for the current output format.
+    fn resolve_reference(&self, id: &AssetId) -> std::result::Result<String, String>;
+}
 
-    /// Build a data URI string (e.g. "data:image/png;base64,...").
-    fn resolve_data_uri(&self, id: &AssetId) -> std::result::Result<String, String>;
-
-    /// Export the asset to a target directory, returning metadata.
+/// Level 3: How to export/copy an asset to a target directory.
+pub trait AssetExporter {
+    /// Export an asset to a target directory, returning metadata about the export.
     fn export_asset(
         &self,
         id: &AssetId,
         target_dir: &std::path::Path,
     ) -> std::result::Result<ExportedAsset, String>;
 }
+
+// ---------------------------------------------------------------------------
+// Backward-compatible composite trait
+// ---------------------------------------------------------------------------
+
+/// Composite trait covering all three asset resolution levels.
+/// New code should implement `AssetStore`, `AssetReferenceResolver`, and `AssetExporter` individually.
+/// This trait is automatically implemented for any type that implements all three.
+pub trait AssetResolver: AssetStore + AssetReferenceResolver + AssetExporter {}
+
+impl<T> AssetResolver for T where T: AssetStore + AssetReferenceResolver + AssetExporter {}
 
 // ---------------------------------------------------------------------------
 // AssetBundle — a collection of assets for bulk export / clipboard bundles
