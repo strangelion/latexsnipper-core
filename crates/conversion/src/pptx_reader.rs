@@ -19,7 +19,8 @@ pub fn read_pptx(path: impl AsRef<Path>) -> Result<Document> {
 
     // Read presentation.xml for slide list and rels for path resolution
     let pres_xml = read_entry(&mut archive, "ppt/presentation.xml")?;
-    let pres_rels_xml = read_entry(&mut archive, "ppt/_rels/presentation.xml.rels").unwrap_or_default();
+    let pres_rels_xml =
+        read_entry(&mut archive, "ppt/_rels/presentation.xml.rels").unwrap_or_default();
     let pres_rels = parse_rels(&pres_rels_xml);
     let slide_rels = parse_slide_rels(&pres_xml, &pres_rels);
 
@@ -46,19 +47,23 @@ pub fn read_pptx(path: impl AsRef<Path>) -> Result<Document> {
 
     Ok(Document {
         metadata: Metadata {
-            language: None, created_at: None,
-            ocr_model: Some("pptx".to_string()), ocr_version: Some("1.0".to_string()),
+            language: None,
+            created_at: None,
+            ocr_model: Some("pptx".to_string()),
+            ocr_version: Some("1.0".to_string()),
             ocr_time_ms: None,
         },
         pages,
-        assets: Vec::new(), diagnostics: Vec::new(),
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
     })
 }
 
 fn read_entry(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<String> {
-    let mut file = archive.by_name(name)
+    let mut file = archive
+        .by_name(name)
         .map_err(|_| SnipperError::Export(format!("Entry '{}' not found", name)))?;
     let mut content = String::new();
     file.read_to_string(&mut content)
@@ -66,7 +71,10 @@ fn read_entry(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Resul
     Ok(content)
 }
 
-fn parse_slide_rels(pres_xml: &str, pres_rels: &std::collections::HashMap<String, String>) -> Vec<(String, String)> {
+fn parse_slide_rels(
+    pres_xml: &str,
+    pres_rels: &std::collections::HashMap<String, String>,
+) -> Vec<(String, String)> {
     let mut slides = Vec::new();
     let mut reader = Reader::from_str(pres_xml);
     reader.config_mut().trim_text(true);
@@ -81,8 +89,12 @@ fn parse_slide_rels(pres_xml: &str, pres_rels: &std::collections::HashMap<String
                     for attr in e.attributes().flatten() {
                         let k = attr.key.as_ref().to_vec();
                         let v = String::from_utf8_lossy(&attr.value).to_string();
-                        if k == b"id" { id = v.clone(); }
-                        if k.ends_with(b"id") || k == b"r:id" { r_id = v; }
+                        if k == b"id" {
+                            id = v.clone();
+                        }
+                        if k.ends_with(b"id") || k == b"r:id" {
+                            r_id = v;
+                        }
                     }
                     slides.push((id, r_id));
                 }
@@ -96,23 +108,32 @@ fn parse_slide_rels(pres_xml: &str, pres_rels: &std::collections::HashMap<String
 
     // Use relationships to resolve slide files, with fallback
     if !slides.is_empty() {
-        let resolved: Vec<(String, String)> = slides.iter().map(|(_id, r_id)| {
-            // Try to resolve via presentation rels
-            if let Some(target) = pres_rels.get(r_id.as_str()) {
-                let slide_path = if target.starts_with("slides/") || target.starts_with("slides\\") {
-                    format!("ppt/{}", target)
-                } else if !target.contains('/') {
-                    format!("ppt/slides/{}", target)
+        let resolved: Vec<(String, String)> = slides
+            .iter()
+            .map(|(_id, r_id)| {
+                // Try to resolve via presentation rels
+                if let Some(target) = pres_rels.get(r_id.as_str()) {
+                    let slide_path =
+                        if target.starts_with("slides/") || target.starts_with("slides\\") {
+                            format!("ppt/{}", target)
+                        } else if !target.contains('/') {
+                            format!("ppt/slides/{}", target)
+                        } else {
+                            format!("ppt/{}", target)
+                        };
+                    let name = slide_path
+                        .trim_end_matches(".xml")
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or("slide1")
+                        .to_string();
+                    (slide_path, name)
                 } else {
-                    format!("ppt/{}", target)
-                };
-                let name = slide_path.trim_end_matches(".xml").rsplit('/').next().unwrap_or("slide1").to_string();
-                (slide_path, name)
-            } else {
-                let n = r_id.trim_start_matches("rId");
-                (format!("ppt/slides/slide{}.xml", n), format!("slide{}", n))
-            }
-        }).collect();
+                    let n = r_id.trim_start_matches("rId");
+                    (format!("ppt/slides/slide{}.xml", n), format!("slide{}", n))
+                }
+            })
+            .collect();
         return resolved;
     }
 
@@ -136,10 +157,16 @@ fn parse_rels(xml: &str) -> std::collections::HashMap<String, String> {
                     let mut id = String::new();
                     let mut target = String::new();
                     for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"Id" { id = String::from_utf8_lossy(&attr.value).to_string(); }
-                        if attr.key.as_ref() == b"Target" { target = String::from_utf8_lossy(&attr.value).to_string(); }
+                        if attr.key.as_ref() == b"Id" {
+                            id = String::from_utf8_lossy(&attr.value).to_string();
+                        }
+                        if attr.key.as_ref() == b"Target" {
+                            target = String::from_utf8_lossy(&attr.value).to_string();
+                        }
                     }
-                    if !id.is_empty() { rels.insert(id, target); }
+                    if !id.is_empty() {
+                        rels.insert(id, target);
+                    }
                 }
             }
             Ok(Event::Eof) => break,
@@ -174,7 +201,14 @@ fn parse_slide_body(
             Ok(Event::Start(ref e)) => {
                 let tag = e.name().as_ref().to_vec();
                 match tag.as_slice() {
-                    b"p:sp" | b"sp" => { shape_type.clear(); blocks.push(Block::Paragraph(ParagraphBlock { inlines: Vec::new(), geometry: None, source: None })); }
+                    b"p:sp" | b"sp" => {
+                        shape_type.clear();
+                        blocks.push(Block::Paragraph(ParagraphBlock {
+                            inlines: Vec::new(),
+                            geometry: None,
+                            source: None,
+                        }));
+                    }
                     b"p:txBody" | b"txBody" => in_text_body = true,
                     b"a:p" | b"p" if in_text_body => {
                         in_paragraph = true;
@@ -188,14 +222,20 @@ fn parse_slide_body(
                     b"a:rPr" | b"rPr" => {
                         for attr in e.attributes().flatten() {
                             let k = attr.key.as_ref().to_vec();
-                            if k == b"b" || k == b"bold" { run_bold = String::from_utf8_lossy(&attr.value) == "1"; }
-                            if k == b"i" || k == b"italic" { run_italic = String::from_utf8_lossy(&attr.value) == "1"; }
+                            if k == b"b" || k == b"bold" {
+                                run_bold = String::from_utf8_lossy(&attr.value) == "1";
+                            }
+                            if k == b"i" || k == b"italic" {
+                                run_italic = String::from_utf8_lossy(&attr.value) == "1";
+                            }
                         }
                     }
                     b"a:t" | b"t" if in_run => in_t = true,
                     b"p:pic" | b"pic" => {
                         // Extract image from blipFill
-                        let img_id = e.attributes().flatten()
+                        let img_id = e
+                            .attributes()
+                            .flatten()
                             .find(|a| a.key.as_ref().ends_with(b"embed"))
                             .and_then(|a| {
                                 let id = String::from_utf8_lossy(&a.value).to_string();
@@ -213,10 +253,15 @@ fn parse_slide_body(
                                     let b64 = base64_encode(&img_bytes);
                                     blocks.push(Block::Paragraph(ParagraphBlock {
                                         inlines: vec![Inline::Image(ImageInline {
-                                            asset_id: None, image_data: Some(b64),
-                                            width: None, height: None, alt_text: None, source: None,
+                                            asset_id: None,
+                                            image_data: Some(b64),
+                                            width: None,
+                                            height: None,
+                                            alt_text: None,
+                                            source: None,
                                         })],
-                                        geometry: None, source: None,
+                                        geometry: None,
+                                        source: None,
                                     }));
                                 }
                             }
@@ -277,10 +322,16 @@ fn base64_encode(bytes: &[u8]) -> String {
         let triple = (b0 << 16) | (b1 << 8) | b2;
         result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
         result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
-        if chunk.len() > 1 { result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char); }
-        else { result.push('='); }
-        if chunk.len() > 2 { result.push(CHARS[(triple & 0x3F) as usize] as char); }
-        else { result.push('='); }
+        if chunk.len() > 1 {
+            result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(CHARS[(triple & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
     }
     result
 }
@@ -310,25 +361,37 @@ mod tests {
         zip.add_directory("ppt/slides/_rels/", opts()).unwrap();
 
         zip.start_file("ppt/presentation.xml", opts()).unwrap();
-        write!(zip, "<?xml version=\"1.0\"?>
+        write!(
+            zip,
+            "<?xml version=\"1.0\"?>
 <p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">
   <p:sldIdLst><p:sldId id=\"256\" r:id=\"rId1\"/></p:sldIdLst>
-</p:presentation>").unwrap();
+</p:presentation>"
+        )
+        .unwrap();
 
         zip.start_file("ppt/slides/slide1.xml", opts()).unwrap();
-        write!(zip, "<?xml version=\"1.0\"?>
+        write!(
+            zip,
+            "<?xml version=\"1.0\"?>
 <p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">
   <p:spTree>
     <p:sp><p:txBody><a:p xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">
       <a:r><a:t>Hello from PPTX</a:t></a:r>
     </a:p></p:txBody></p:sp>
   </p:spTree>
-</p:sld>").unwrap();
+</p:sld>"
+        )
+        .unwrap();
 
-        zip.start_file("ppt/slides/_rels/slide1.xml.rels", opts()).unwrap();
-        write!(zip, "<?xml version=\"1.0\"?>
+        zip.start_file("ppt/slides/_rels/slide1.xml.rels", opts())
+            .unwrap();
+        write!(
+            zip,
+            "<?xml version=\"1.0\"?>
 <Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>"
-        ).unwrap();
+        )
+        .unwrap();
 
         zip.finish().unwrap();
         path

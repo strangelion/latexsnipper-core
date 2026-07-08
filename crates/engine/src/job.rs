@@ -86,17 +86,19 @@ impl Job {
         path: impl Into<String>,
         producer_stage_id: Option<String>,
     ) {
-        self.artifacts.artifacts.push(latexsnipper_ast::ArtifactEntry {
-            id: id.into(),
-            kind,
-            path: path.into(),
-            mime_type: None,
-            format: None,
-            checksum_sha256: None,
-            size_bytes: None,
-            producer_stage_id,
-            source_artifact_ids: Vec::new(),
-        });
+        self.artifacts
+            .artifacts
+            .push(latexsnipper_ast::ArtifactEntry {
+                id: id.into(),
+                kind,
+                path: path.into(),
+                mime_type: None,
+                format: None,
+                checksum_sha256: None,
+                size_bytes: None,
+                producer_stage_id,
+                source_artifact_ids: Vec::new(),
+            });
     }
 }
 

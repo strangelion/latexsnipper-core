@@ -296,7 +296,10 @@ fn render_quote(q: &latexsnipper_ast::QuoteBlock, assets: &[MediaAsset]) -> Stri
 
 fn render_code(c: &latexsnipper_ast::CodeBlock) -> String {
     if let Some(lang) = &c.language {
-        format!("\\begin{{lstlisting}}[language={}]\n{}\n\\end{{lstlisting}}", lang, c.code)
+        format!(
+            "\\begin{{lstlisting}}[language={}]\n{}\n\\end{{lstlisting}}",
+            lang, c.code
+        )
     } else {
         format!("\\begin{{lstlisting}}\n{}\n\\end{{lstlisting}}", c.code)
     }
@@ -317,7 +320,10 @@ fn render_description_list(
             items.push(content);
         }
     }
-    format!("\\begin{{description}}\n{}\n\\end{{description}}", items.join("\n"))
+    format!(
+        "\\begin{{description}}\n{}\n\\end{{description}}",
+        items.join("\n")
+    )
 }
 
 fn render_theorem(t: &latexsnipper_ast::TheoremBlock, assets: &[MediaAsset]) -> String {
@@ -336,7 +342,10 @@ fn render_proof(p: &latexsnipper_ast::ProofBlock, assets: &[MediaAsset]) -> Stri
 
 fn render_minipage(m: &latexsnipper_ast::MinipageBlock, assets: &[MediaAsset]) -> String {
     let content = render_blocks(&m.content, assets);
-    format!("\\begin{{minipage}}{{{}}}\n{}\n\\end{{minipage}}", m.width, content)
+    format!(
+        "\\begin{{minipage}}{{{}}}\n{}\n\\end{{minipage}}",
+        m.width, content
+    )
 }
 
 fn render_float(f: &latexsnipper_ast::FloatBlock, assets: &[MediaAsset]) -> String {
@@ -371,7 +380,10 @@ fn render_table(t: &latexsnipper_ast::TableBlock, assets: &[MediaAsset]) -> Stri
                 let content = render_inlines(&cell.inlines, assets);
                 let mut result = String::new();
                 if cell.colspan > 1 {
-                    result.push_str(&format!("\\multicolumn{{{}}}{{|c|}}{{{}}}", cell.colspan, content));
+                    result.push_str(&format!(
+                        "\\multicolumn{{{}}}{{|c|}}{{{}}}",
+                        cell.colspan, content
+                    ));
                 } else {
                     result.push_str(&content);
                 }

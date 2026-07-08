@@ -373,8 +373,14 @@ mod tests {
     fn make_page(blocks: Vec<Block>) -> Document {
         Document {
             metadata: Metadata::default(),
-            pages: vec![Page { width: 800.0, height: 600.0, blocks, page_number: Some(1) }],
-            assets: Vec::new(), diagnostics: Vec::new(),
+            pages: vec![Page {
+                width: 800.0,
+                height: 600.0,
+                blocks,
+                page_number: Some(1),
+            }],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
         }
@@ -392,10 +398,17 @@ mod tests {
     fn test_remove_empty_blocks() {
         let doc = make_page(vec![
             text_block("Hello", 10.0, 10.0, 0.95),
-            text_block("", 10.0, 40.0, 0.9),   // empty
+            text_block("", 10.0, 40.0, 0.9), // empty
             text_block("World", 10.0, 70.0, 0.95),
         ]);
-        let result = clean_document(&doc, &CleanerOptions { remove_empty: true, deduplicate: false, ..Default::default() });
+        let result = clean_document(
+            &doc,
+            &CleanerOptions {
+                remove_empty: true,
+                deduplicate: false,
+                ..Default::default()
+            },
+        );
         assert_eq!(result.blocks_removed, 1);
         assert_eq!(result.cleaned_document.block_count(), 2);
     }
@@ -404,15 +417,25 @@ mod tests {
     fn test_merge_adjacent_blocks() {
         let doc = make_page(vec![
             text_block("Hello", 10.0, 10.0, 0.95),
-            text_block("World", 110.0, 10.0, 0.95),  // same line
+            text_block("World", 110.0, 10.0, 0.95), // same line
         ]);
-        let result = clean_document(&doc, &CleanerOptions {
-            merge_y_threshold: 8.0, remove_empty: false, deduplicate: false,
-            ..Default::default()
-        });
+        let result = clean_document(
+            &doc,
+            &CleanerOptions {
+                merge_y_threshold: 8.0,
+                remove_empty: false,
+                deduplicate: false,
+                ..Default::default()
+            },
+        );
         // Should merge "Hello" and "World" into one block
-        assert_eq!(result.blocks_merged, 1, "should merge 2 blocks into 1: {} -> {}",
-            doc.block_count(), result.cleaned_document.block_count());
+        assert_eq!(
+            result.blocks_merged,
+            1,
+            "should merge 2 blocks into 1: {} -> {}",
+            doc.block_count(),
+            result.cleaned_document.block_count()
+        );
         assert_eq!(result.cleaned_document.block_count(), 1);
     }
 
@@ -420,46 +443,66 @@ mod tests {
     fn test_deduplicate_blocks() {
         let doc = make_page(vec![
             text_block("Duplicate", 10.0, 10.0, 0.95),
-            text_block("Duplicate", 10.0, 40.0, 0.95),  // duplicate
+            text_block("Duplicate", 10.0, 40.0, 0.95), // duplicate
             text_block("Unique", 10.0, 70.0, 0.95),
         ]);
-        let result = clean_document(&doc, &CleanerOptions {
-            deduplicate: true, remove_empty: false, merge_y_threshold: 0.0,
-            ..Default::default()
-        });
+        let result = clean_document(
+            &doc,
+            &CleanerOptions {
+                deduplicate: true,
+                remove_empty: false,
+                merge_y_threshold: 0.0,
+                ..Default::default()
+            },
+        );
         assert_eq!(result.blocks_removed, 1);
         assert_eq!(result.cleaned_document.block_count(), 2);
     }
 
     #[test]
     fn test_low_confidence_diagnostic() {
-        let doc = make_page(vec![
-            text_block("Low conf", 10.0, 10.0, 0.2),
-        ]);
-        let result = clean_document(&doc, &CleanerOptions {
-            min_confidence: 0.5, remove_empty: false, deduplicate: false, merge_y_threshold: 0.0,
-            ..Default::default()
-        });
-        assert!(result.diagnostics_added.iter().any(|d| d.code == "E_LOW_CONFIDENCE"));
+        let doc = make_page(vec![text_block("Low conf", 10.0, 10.0, 0.2)]);
+        let result = clean_document(
+            &doc,
+            &CleanerOptions {
+                min_confidence: 0.5,
+                remove_empty: false,
+                deduplicate: false,
+                merge_y_threshold: 0.0,
+                ..Default::default()
+            },
+        );
+        assert!(result
+            .diagnostics_added
+            .iter()
+            .any(|d| d.code == "E_LOW_CONFIDENCE"));
     }
 
     #[test]
     fn test_whitespace_normalization() {
-        let doc = make_page(vec![
-            Block::Paragraph(ParagraphBlock {
-                inlines: vec![Inline::Text(TextRun::new("  Hello   World  "))],
-                geometry: Some(Rect::new(10.0, 10.0, 100.0, 20.0)),
-                source: Some(SourceInfo::new()),
-            }),
-        ]);
-        let result = clean_document(&doc, &CleanerOptions {
-            normalize_whitespace: true, remove_empty: false, deduplicate: false, merge_y_threshold: 0.0,
-            ..Default::default()
-        });
+        let doc = make_page(vec![Block::Paragraph(ParagraphBlock {
+            inlines: vec![Inline::Text(TextRun::new("  Hello   World  "))],
+            geometry: Some(Rect::new(10.0, 10.0, 100.0, 20.0)),
+            source: Some(SourceInfo::new()),
+        })]);
+        let result = clean_document(
+            &doc,
+            &CleanerOptions {
+                normalize_whitespace: true,
+                remove_empty: false,
+                deduplicate: false,
+                merge_y_threshold: 0.0,
+                ..Default::default()
+            },
+        );
         let cleaned = &result.cleaned_document;
         if let Block::Paragraph(p) = &cleaned.pages[0].blocks[0] {
             if let Inline::Text(t) = &p.inlines[0] {
-                assert_eq!(t.text, "Hello World", "should normalize whitespace: '{}'", t.text);
+                assert_eq!(
+                    t.text, "Hello World",
+                    "should normalize whitespace: '{}'",
+                    t.text
+                );
             }
         }
     }
@@ -467,14 +510,23 @@ mod tests {
     #[test]
     fn test_all_options_combined() {
         let doc = make_page(vec![
-            text_block("", 10.0, 10.0, 0.9),    // empty → removed
+            text_block("", 10.0, 10.0, 0.9), // empty → removed
             text_block("A", 10.0, 50.0, 0.95),
             text_block("B", 110.0, 50.0, 0.95), // same line → merged
             text_block("A", 10.0, 90.0, 0.2),   // duplicate + low conf
         ]);
         let result = clean_document(&doc, &CleanerOptions::default());
-        assert!(result.blocks_removed >= 1, "should remove empty and duplicate");
-        assert!(result.blocks_merged == 0 || result.blocks_merged > 0, "merge behavior");
-        assert!(!result.diagnostics_added.is_empty(), "should have low confidence diag");
+        assert!(
+            result.blocks_removed >= 1,
+            "should remove empty and duplicate"
+        );
+        assert!(
+            result.blocks_merged == 0 || result.blocks_merged > 0,
+            "merge behavior"
+        );
+        assert!(
+            !result.diagnostics_added.is_empty(),
+            "should have low confidence diag"
+        );
     }
 }

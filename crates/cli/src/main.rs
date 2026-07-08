@@ -1,7 +1,5 @@
 use clap::{Parser, Subcommand};
-use latexsnipper_ast::{
-    CapabilityMatrix, FidelityLevel, FormatCapability, LossKind,
-};
+use latexsnipper_ast::{CapabilityMatrix, FidelityLevel, FormatCapability, LossKind};
 use latexsnipper_conversion::OutputFormat;
 use latexsnipper_engine::{sdk::Snipper, DocumentParseMode, EngineConfig, RecognizeMode};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
@@ -520,7 +518,11 @@ fn main() {
             println!("Try 'snipper play' for a hidden mini-game!");
         }
 
-        Commands::Capabilities { format, input, output } => {
+        Commands::Capabilities {
+            format,
+            input,
+            output,
+        } => {
             let matrix = build_capability_matrix();
             let filtered = filter_capabilities(&matrix, input.as_deref(), output.as_deref());
             match format.as_str() {
@@ -1002,10 +1004,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_layout: true,
                 supports_office_objects: false,
                 fidelity: FidelityLevel::SemanticOnly,
-                known_loss: vec![
-                    LossKind::StyleLoss,
-                    LossKind::OfficeObjectPreviewOnly,
-                ],
+                known_loss: vec![LossKind::StyleLoss, LossKind::OfficeObjectPreviewOnly],
                 notes: vec![
                     "full LaTeX document with amsmath".to_string(),
                     "Office Shape/Chart blocks rendered empty".to_string(),
@@ -1040,9 +1039,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::Lossless,
                 known_loss: vec![],
-                notes: vec![
-                    "formula-only output".to_string(),
-                ],
+                notes: vec!["formula-only output".to_string()],
             },
             FormatCapability {
                 input: Some("AST".to_string()),
@@ -1056,9 +1053,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::Lossless,
                 known_loss: vec![],
-                notes: vec![
-                    "Office MathML for Word equation insertion".to_string(),
-                ],
+                notes: vec!["Office MathML for Word equation insertion".to_string()],
             },
             FormatCapability {
                 input: Some("AST".to_string()),
@@ -1072,9 +1067,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::VisualOnly,
                 known_loss: vec![LossKind::OfficeObjectPreviewOnly],
-                notes: vec![
-                    "visual render, not semantic editing".to_string(),
-                ],
+                notes: vec!["visual render, not semantic editing".to_string()],
             },
             FormatCapability {
                 input: Some("AST".to_string()),
@@ -1088,9 +1081,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::VisualOnly,
                 known_loss: vec![LossKind::OfficeObjectPreviewOnly],
-                notes: vec![
-                    "visual render via printpdf".to_string(),
-                ],
+                notes: vec!["visual render via printpdf".to_string()],
             },
             FormatCapability {
                 input: Some("AST".to_string()),
@@ -1108,9 +1099,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                     LossKind::FormulaDowngraded,
                     LossKind::LayoutLoss,
                 ],
-                notes: vec![
-                    "text-only extraction".to_string(),
-                ],
+                notes: vec!["text-only extraction".to_string()],
             },
             FormatCapability {
                 input: Some("Markdown".to_string()),
@@ -1152,9 +1141,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::Lossless,
                 known_loss: vec![],
-                notes: vec![
-                    "formula-level conversion only".to_string(),
-                ],
+                notes: vec!["formula-level conversion only".to_string()],
             },
             FormatCapability {
                 input: Some("LaTeX".to_string()),
@@ -1168,9 +1155,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::Lossless,
                 known_loss: vec![],
-                notes: vec![
-                    "formula-level conversion only".to_string(),
-                ],
+                notes: vec!["formula-level conversion only".to_string()],
             },
             FormatCapability {
                 input: Some("OMML".to_string()),
@@ -1184,9 +1169,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::Lossless,
                 known_loss: vec![],
-                notes: vec![
-                    "formula-level conversion only".to_string(),
-                ],
+                notes: vec!["formula-level conversion only".to_string()],
             },
             FormatCapability {
                 input: Some("MathML".to_string()),
@@ -1200,9 +1183,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::Lossless,
                 known_loss: vec![],
-                notes: vec![
-                    "formula-level conversion only".to_string(),
-                ],
+                notes: vec!["formula-level conversion only".to_string()],
             },
             FormatCapability {
                 input: Some("Typst".to_string()),
@@ -1216,9 +1197,7 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 supports_office_objects: false,
                 fidelity: FidelityLevel::Lossless,
                 known_loss: vec![],
-                notes: vec![
-                    "formula-level conversion only".to_string(),
-                ],
+                notes: vec!["formula-level conversion only".to_string()],
             },
             FormatCapability {
                 input: Some("Markdown".to_string()),
@@ -1313,7 +1292,10 @@ fn print_capabilities_table(matrix: &CapabilityMatrix) {
     println!("  LaTeXSnipper Core — Conversion Capabilities");
     println!("  Schema v{}", matrix.schema_version);
     println!();
-    println!("  {:<36} {:<10} {:<8} {:<26}", "Conversion", "Fidelity", "Formulas", "Loss");
+    println!(
+        "  {:<36} {:<10} {:<8} {:<26}",
+        "Conversion", "Fidelity", "Formulas", "Loss"
+    );
     println!("  {:-<36} {:-<10} {:-<8} {:-<26}", "", "", "", "");
     for entry in &matrix.entries {
         let label = format!(
@@ -1348,15 +1330,37 @@ fn print_capabilities_markdown(matrix: &CapabilityMatrix) {
         println!("| Property | Value |");
         println!("|---|---|");
         println!("| Fidelity | {} |", format_fidelity(&entry.fidelity));
-        println!("| Formulas | {} |", if entry.supports_formula { "✓" } else { "✗" });
-        println!("| Tables   | {} |", if entry.supports_table { "✓" } else { "✗" });
-        println!("| Images   | {} |", if entry.supports_image { "✓" } else { "✗" });
-        println!("| SVG      | {} |", if entry.supports_svg { "✓" } else { "✗" });
-        println!("| Style    | {} |", if entry.supports_style { "✓" } else { "✗" });
-        println!("| Layout   | {} |", if entry.supports_layout { "✓" } else { "✗" });
+        println!(
+            "| Formulas | {} |",
+            if entry.supports_formula { "✓" } else { "✗" }
+        );
+        println!(
+            "| Tables   | {} |",
+            if entry.supports_table { "✓" } else { "✗" }
+        );
+        println!(
+            "| Images   | {} |",
+            if entry.supports_image { "✓" } else { "✗" }
+        );
+        println!(
+            "| SVG      | {} |",
+            if entry.supports_svg { "✓" } else { "✗" }
+        );
+        println!(
+            "| Style    | {} |",
+            if entry.supports_style { "✓" } else { "✗" }
+        );
+        println!(
+            "| Layout   | {} |",
+            if entry.supports_layout { "✓" } else { "✗" }
+        );
         println!(
             "| Office   | {} |",
-            if entry.supports_office_objects { "✓" } else { "✗" }
+            if entry.supports_office_objects {
+                "✓"
+            } else {
+                "✗"
+            }
         );
         println!("| Known loss | {} |", format_losses(&entry.known_loss));
         if !entry.notes.is_empty() {

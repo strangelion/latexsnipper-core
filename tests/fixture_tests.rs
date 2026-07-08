@@ -9,9 +9,10 @@ fn test_fixture_docx() {
     assert!(!doc.pages.is_empty(), "DOCX should have pages");
     // Office-created DOCX should have at least one paragraph
     let has_text = doc.all_blocks().iter().any(|b| match b {
-        latexsnipper_ast::Block::Paragraph(p) => {
-            p.inlines.iter().any(|i| matches!(i, latexsnipper_ast::Inline::Text(_)))
-        }
+        latexsnipper_ast::Block::Paragraph(p) => p
+            .inlines
+            .iter()
+            .any(|i| matches!(i, latexsnipper_ast::Inline::Text(_))),
         _ => false,
     });
     assert!(has_text, "DOCX should contain a paragraph with text");
@@ -29,7 +30,10 @@ fn test_fixture_xlsx() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/xlsx/test.xlsx");
     let doc = read_xlsx(path).expect("XLSX fixture should parse");
     assert!(!doc.pages.is_empty(), "XLSX should have at least one sheet");
-    let has_table = doc.all_blocks().iter().any(|b| matches!(b, latexsnipper_ast::Block::Table(_)));
+    let has_table = doc
+        .all_blocks()
+        .iter()
+        .any(|b| matches!(b, latexsnipper_ast::Block::Table(_)));
     assert!(has_table, "XLSX should contain a table block");
 }
 
@@ -43,7 +47,10 @@ fn test_fixture_svg() {
 
 #[test]
 fn test_fixture_markdown() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/markdown/test.md");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/markdown/test.md"
+    );
     let md = std::fs::read_to_string(path).expect("Markdown fixture should be readable");
     let doc = parse_markdown_to_document(&md);
     assert!(doc.block_count() > 0, "Markdown should parse to blocks");
@@ -71,5 +78,8 @@ fn test_fixture_latex() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/latex/test.tex");
     let tex = std::fs::read_to_string(path).expect("LaTeX fixture should be readable");
     assert!(!tex.is_empty());
-    assert!(tex.contains("documentclass") || tex.contains("begin"), "LaTeX should contain recognizable content");
+    assert!(
+        tex.contains("documentclass") || tex.contains("begin"),
+        "LaTeX should contain recognizable content"
+    );
 }

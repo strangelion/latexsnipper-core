@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Inline, NodeId, Rect, SourceInfo};
-use crate::style::{BoxStyle, ChartAxis, ChartData, ChartLegend, ChartType, EmbeddedObjectKind, ShapeStyle, ShapeType, AnnotationKind};
 use crate::media::MediaRole;
 use crate::span::BlockPolicy;
+use crate::style::{
+    AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartType, EmbeddedObjectKind,
+    ShapeStyle, ShapeType,
+};
+use crate::{Inline, NodeId, Rect, SourceInfo};
 
 /// A layout block in the document.
 ///

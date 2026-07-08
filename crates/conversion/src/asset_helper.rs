@@ -44,7 +44,11 @@ pub fn resolve_image_html(assets: &[MediaAsset], asset_id: &Option<AssetId>, alt
 }
 
 /// Build a Markdown image reference `![alt](src)`.
-pub fn resolve_image_markdown(assets: &[MediaAsset], asset_id: &Option<AssetId>, alt: &str) -> String {
+pub fn resolve_image_markdown(
+    assets: &[MediaAsset],
+    asset_id: &Option<AssetId>,
+    alt: &str,
+) -> String {
     let src = resolve_asset_ref(assets, asset_id);
     if src.is_empty() {
         format!("![{}](image.png)", alt)

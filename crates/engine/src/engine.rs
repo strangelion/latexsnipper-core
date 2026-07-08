@@ -498,7 +498,9 @@ impl SnipperEngine {
                                 }
                                 buf
                             }
-                            Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_)
+                            Block::Chart(_)
+                            | Block::Shape(_)
+                            | Block::EmbeddedObject(_)
                             | Block::Annotation(_) => String::new(),
                         };
 

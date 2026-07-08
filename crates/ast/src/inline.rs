@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Formula, SourceInfo};
 use crate::style::TextStyle;
+use crate::{Formula, SourceInfo};
 
 /// Citation style for academic references.
 #[derive(Debug, Clone, Serialize, Deserialize)]

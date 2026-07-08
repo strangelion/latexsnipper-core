@@ -38,7 +38,11 @@ impl AssetResolver for SimpleAssetResolver {
             latexsnipper_ast::AssetStorage::FilePath { path } => path.clone(),
             latexsnipper_ast::AssetStorage::Uri { uri } => uri.clone(),
             latexsnipper_ast::AssetStorage::InlineBase64 { data } => {
-                format!("data:{};base64,{}", asset.mime_type.as_deref().unwrap_or("image/png"), data)
+                format!(
+                    "data:{};base64,{}",
+                    asset.mime_type.as_deref().unwrap_or("image/png"),
+                    data
+                )
             }
             _ => format!("asset:{}", asset_id.0),
         })

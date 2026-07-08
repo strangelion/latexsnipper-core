@@ -27,15 +27,15 @@ pub use builder::DocumentBuilder;
 pub use document::{Document, Page};
 pub use format::{
     CapabilityMatrix, ConversionContext, ExportArtifact, ExportOptions, FidelityLevel,
-    FormatCapability, ImportOptions, LossKind, ModelCapability, ModelProviderKind,
-    PdfExportMode, PdfExportOptions, RenderOptions,
+    FormatCapability, ImportOptions, LossKind, ModelCapability, ModelProviderKind, PdfExportMode,
+    PdfExportOptions, RenderOptions,
 };
 pub use formula::{Formula, FormulaSource};
 pub use formula_layout::{
     categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory, SymbolInfo,
 };
 pub use geometry::{Point, Quad, Rect, Size};
-pub use inline::{CodeInline, CiteStyle, ImageInline, Inline, LinkInline, SpanInline, TextRun};
+pub use inline::{CiteStyle, CodeInline, ImageInline, Inline, LinkInline, SpanInline, TextRun};
 pub use input::{
     InputFormat, InputSourceDescriptor, InputStorage, OfficeInsertKind, OutputLevel, PageRange,
     RecognizeInput, RecognizeOptions,
@@ -48,10 +48,10 @@ pub use media::{
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;
 pub use report::{
-    ArtifactEntry, ArtifactKind, ArtifactManifest, BlockSummary, ConfidenceSummary,
-    CredentialRef, CredentialSource, DocumentReport, EventRecord, InputSummary, JobRoot,
-    ProviderCallReport, ProviderReport, RetryPolicy, StageInput, StageKind, StageOutput,
-    StageReport, StageSpec, StageStatus, UnsupportedFeature,
+    ArtifactEntry, ArtifactKind, ArtifactManifest, BlockSummary, ConfidenceSummary, CredentialRef,
+    CredentialSource, DocumentReport, EventRecord, InputSummary, JobRoot, ProviderCallReport,
+    ProviderReport, RetryPolicy, StageInput, StageKind, StageOutput, StageReport, StageSpec,
+    StageStatus, UnsupportedFeature,
 };
 pub use span::{
     BlockPolicy, CoordinateSpace, NodeId, NodeIdGenerator, PdfSourceInfo, Position, Provenance,

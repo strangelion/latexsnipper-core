@@ -78,12 +78,8 @@ impl ExportService {
         let tree = RenderTree::from_document(doc);
 
         let content = match format {
-            VisualFormat::Svg => {
-                SvgGenerator.generate(&tree)?.into_bytes()
-            }
-            VisualFormat::Pdf => {
-                PdfGenerator.generate(&tree)?.into_bytes()
-            }
+            VisualFormat::Svg => SvgGenerator.generate(&tree)?.into_bytes(),
+            VisualFormat::Pdf => PdfGenerator.generate(&tree)?.into_bytes(),
             VisualFormat::Png => {
                 return Err(latexsnipper_foundation::SnipperError::Export(
                     "PNG export requires SVG→PNG rasterization step. \
@@ -91,9 +87,7 @@ impl ExportService {
                         .into(),
                 ));
             }
-            VisualFormat::PlainText => {
-                TextGenerator.generate(&tree)?.into_bytes()
-            }
+            VisualFormat::PlainText => TextGenerator.generate(&tree)?.into_bytes(),
         };
 
         Ok(ExportArtifact {
@@ -122,6 +116,10 @@ impl ExportService {
 
     /// List all supported visual formats.
     pub fn supported_formats() -> Vec<VisualFormat> {
-        vec![VisualFormat::Svg, VisualFormat::Pdf, VisualFormat::PlainText]
+        vec![
+            VisualFormat::Svg,
+            VisualFormat::Pdf,
+            VisualFormat::PlainText,
+        ]
     }
 }

@@ -26,8 +26,7 @@ pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
 
     // Read document.xml
     let document_xml = read_entry(&mut archive, "word/document.xml")?;
-    let rels_xml = read_entry(&mut archive, "word/_rels/document.xml.rels")
-        .unwrap_or_default();
+    let rels_xml = read_entry(&mut archive, "word/_rels/document.xml.rels").unwrap_or_default();
 
     // Parse relationships
     let rels = parse_rels(&rels_xml);
@@ -153,7 +152,9 @@ fn parse_document_body(
                     b"w:hyperlink" | b"hyperlink" if in_paragraph => {
                         in_hyperlink = true;
                         hyperlink_inlines.clear();
-                        hyperlink_target = e.attributes().flatten()
+                        hyperlink_target = e
+                            .attributes()
+                            .flatten()
                             .find(|a| a.key.as_ref() == b"r:id" || a.key.as_ref() == b"id")
                             .and_then(|a| {
                                 let id = String::from_utf8_lossy(&a.value).to_string();
@@ -166,7 +167,9 @@ fn parse_document_body(
                     }
                     b"wp:inline" | b"inline" => {}
                     b"a:blip" | b"blip" => {
-                        drawing_id = e.attributes().flatten()
+                        drawing_id = e
+                            .attributes()
+                            .flatten()
                             .find(|a| a.key.as_ref() == b"r:embed" || a.key.as_ref() == b"embed")
                             .and_then(|a| {
                                 let id = String::from_utf8_lossy(&a.value).to_string();
@@ -302,12 +305,17 @@ mod tests {
 
         zip.add_directory("word/", opts()).unwrap();
         zip.start_file("word/document.xml", opts()).unwrap();
-        write!(zip, r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        write!(
+            zip,
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:body>
 <w:p><w:r><w:t>{}</w:t></w:r></w:p>
 </w:body>
-</w:document>"#, text).unwrap();
+</w:document>"#,
+            text
+        )
+        .unwrap();
 
         let _file = zip.finish().unwrap();
         path
@@ -319,9 +327,23 @@ mod tests {
         let doc = read_docx(&path).unwrap();
         assert_eq!(doc.pages.len(), 1);
         assert!(doc.block_count() > 0);
-        let text = doc.all_blocks().iter()
-            .map(|b| match b { Block::Paragraph(p) => { p.inlines.iter().map(|i| match i { Inline::Text(t) => t.text.clone(), _ => String::new() }).collect::<Vec<_>>().join(" ") } _ => String::new() })
-            .collect::<Vec<_>>().join(" ");
+        let text = doc
+            .all_blocks()
+            .iter()
+            .map(|b| match b {
+                Block::Paragraph(p) => p
+                    .inlines
+                    .iter()
+                    .map(|i| match i {
+                        Inline::Text(t) => t.text.clone(),
+                        _ => String::new(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                _ => String::new(),
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
         assert!(text.contains("Hello from DOCX"), "text: {}", text);
         std::fs::remove_file(&path).ok();
     }

@@ -65,10 +65,8 @@ impl DiagramUnderstandingService {
     pub async fn understand_diagram(&self, image_base64: &str) -> DiagramUnderstandingResult {
         let profile = Self::diagram_extraction_profile();
 
-        let (result, mut diagnostics, report) = self
-            .provider
-            .execute(&profile, Some(image_base64))
-            .await;
+        let (result, mut diagnostics, report) =
+            self.provider.execute(&profile, Some(image_base64)).await;
 
         if !result.is_usable() {
             return DiagramUnderstandingResult {
@@ -224,9 +222,8 @@ impl DiagramUnderstandingService {
                 let shape_connections: Vec<DiagramConnection> = connections
                     .iter()
                     .filter(|c| {
-                        id.as_ref().is_some_and(|sid| {
-                            c.from_id == *sid || c.to_id == *sid
-                        })
+                        id.as_ref()
+                            .is_some_and(|sid| c.from_id == *sid || c.to_id == *sid)
                     })
                     .cloned()
                     .collect();
@@ -237,7 +234,11 @@ impl DiagramUnderstandingService {
                         text,
                         geometry: Some(Rect::new(x, y, w, h)),
                         style,
-                        source: Some(SourceInfo::new().with_confidence(0.9).with_region(Rect::new(x, y, w, h))),
+                        source: Some(
+                            SourceInfo::new()
+                                .with_confidence(0.9)
+                                .with_region(Rect::new(x, y, w, h)),
+                        ),
                     },
                     shape_id: id,
                     connections: shape_connections,

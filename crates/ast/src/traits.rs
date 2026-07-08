@@ -34,11 +34,7 @@ pub trait SemanticConverter {
 /// Exports a Document AST to a file/visual format (SVG, PDF, DOCX fragment, etc.).
 pub trait Exporter {
     fn target_format(&self) -> &str;
-    fn export(
-        &self,
-        doc: &Document,
-        options: &ExportOptions,
-    ) -> Result<ExportArtifact, String>;
+    fn export(&self, doc: &Document, options: &ExportOptions) -> Result<ExportArtifact, String>;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,9 +58,5 @@ pub trait Renderer {
 pub trait OfficeAdapter {
     fn read_selection(&self) -> Result<InputSourceDescriptor, String>;
     fn insert_document(&self, doc: &Document, kind: &str) -> Result<(), String>;
-    fn insert_artifact(
-        &self,
-        artifact: &ExportArtifact,
-        kind: &str,
-    ) -> Result<(), String>;
+    fn insert_artifact(&self, artifact: &ExportArtifact, kind: &str) -> Result<(), String>;
 }

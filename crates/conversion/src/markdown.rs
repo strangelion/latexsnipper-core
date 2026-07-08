@@ -199,7 +199,11 @@ fn render_blocks(blocks: &[Block], mode: &MarkdownMode, assets: &[MediaAsset]) -
         .join("\n")
 }
 
-fn render_list(l: &latexsnipper_ast::ListBlock, mode: &MarkdownMode, assets: &[MediaAsset]) -> String {
+fn render_list(
+    l: &latexsnipper_ast::ListBlock,
+    mode: &MarkdownMode,
+    assets: &[MediaAsset],
+) -> String {
     let mut parts = Vec::new();
     for item in &l.items {
         let text = render_inlines(&item.inlines, mode, assets);
@@ -209,7 +213,11 @@ fn render_list(l: &latexsnipper_ast::ListBlock, mode: &MarkdownMode, assets: &[M
     parts.join("\n")
 }
 
-fn render_quote(q: &latexsnipper_ast::QuoteBlock, mode: &MarkdownMode, assets: &[MediaAsset]) -> String {
+fn render_quote(
+    q: &latexsnipper_ast::QuoteBlock,
+    mode: &MarkdownMode,
+    assets: &[MediaAsset],
+) -> String {
     let content = render_blocks(&q.blocks, mode, assets);
     let mut result = content
         .lines()

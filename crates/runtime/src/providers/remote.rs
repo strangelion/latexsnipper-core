@@ -6,9 +6,7 @@
 //! All remote outputs are validated against the configured JSON schema before
 //! being returned; schema violations produce diagnostics instead of panicking.
 
-use latexsnipper_ast::{
-    Diagnostic, DiagnosticLevel, ProviderCallReport, ProviderReport,
-};
+use latexsnipper_ast::{Diagnostic, DiagnosticLevel, ProviderCallReport, ProviderReport};
 use std::time::Instant;
 
 use crate::api_provider::{ApiProviderConfig, PromptProfile, UploadPolicy};
@@ -64,12 +62,14 @@ impl RemoteApiProvider {
         // 1. Check upload policy
         if let Some(img) = image_base64 {
             if !self.may_upload(img) {
-                diagnostics.push(Diagnostic::new(
-                    DiagnosticLevel::Error,
-                    "E_UPLOAD_BLOCKED",
-                    "Upload policy prevented image transmission",
-                )
-                .with_recoverable(true));
+                diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticLevel::Error,
+                        "E_UPLOAD_BLOCKED",
+                        "Upload policy prevented image transmission",
+                    )
+                    .with_recoverable(true),
+                );
                 let elapsed = start.elapsed().as_millis() as u64;
                 return (
                     RemoteApiResult {
@@ -98,11 +98,7 @@ impl RemoteApiProvider {
         let payload = match self.build_payload(profile, image_base64) {
             Ok(p) => p,
             Err(e) => {
-                diagnostics.push(Diagnostic::new(
-                    DiagnosticLevel::Error,
-                    "E_PAYLOAD",
-                    &e,
-                ));
+                diagnostics.push(Diagnostic::new(DiagnosticLevel::Error, "E_PAYLOAD", &e));
                 let elapsed = start.elapsed().as_millis() as u64;
                 return (
                     RemoteApiResult {
@@ -138,11 +134,7 @@ impl RemoteApiProvider {
                 (api_text, parsed, tokens.0, tokens.1)
             }
             Err(e) => {
-                diagnostics.push(Diagnostic::new(
-                    DiagnosticLevel::Error,
-                    "E_API_CALL",
-                    &e,
-                ));
+                diagnostics.push(Diagnostic::new(DiagnosticLevel::Error, "E_API_CALL", &e));
                 let report = ProviderReport {
                     provider_id: report_id,
                     provider_kind: "RemoteApi".to_string(),
@@ -176,21 +168,22 @@ impl RemoteApiProvider {
         };
 
         // 4. Schema validation
-        let schema_valid = if let (Some(schema), Some(json)) =
-            (&profile.output_schema, &parsed_json)
-        {
-            validate_json_against_schema(json, schema)
-        } else {
-            true
-        };
+        let schema_valid =
+            if let (Some(schema), Some(json)) = (&profile.output_schema, &parsed_json) {
+                validate_json_against_schema(json, schema)
+            } else {
+                true
+            };
 
         if !schema_valid {
-            diagnostics.push(Diagnostic::new(
-                DiagnosticLevel::Warning,
-                "E_SCHEMA_OUTPUT",
-                "API response did not match the expected output schema",
-            )
-            .with_recoverable(true));
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticLevel::Warning,
+                    "E_SCHEMA_OUTPUT",
+                    "API response did not match the expected output schema",
+                )
+                .with_recoverable(true),
+            );
         }
 
         // 5. Build report
@@ -230,7 +223,9 @@ impl RemoteApiProvider {
     fn may_upload(&self, _image_base64: &str) -> bool {
         match self.config.upload_policy {
             UploadPolicy::Never => false,
-            UploadPolicy::CroppedRegionsOnly | UploadPolicy::WholePage | UploadPolicy::WholeDocument => true,
+            UploadPolicy::CroppedRegionsOnly
+            | UploadPolicy::WholePage
+            | UploadPolicy::WholeDocument => true,
         }
     }
 
@@ -313,7 +308,10 @@ impl RemoteApiProvider {
             req = req.header("Authorization", format!("Bearer {}", key));
         }
 
-        let resp = req.send().await.map_err(|e| format!("Request failed: {}", e))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
         let status = resp.status();
         let body = resp
             .text()

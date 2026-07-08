@@ -94,24 +94,37 @@ fn write_pptx() {
     zip.add_directory("ppt/slides/_rels/", opts()).unwrap();
 
     zip.start_file("ppt/presentation.xml", opts()).unwrap();
-    write!(zip, r#"<?xml version="1.0"?>
+    write!(
+        zip,
+        r#"<?xml version="1.0"?>
 <p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>
-</p:presentation>"#).unwrap();
+</p:presentation>"#
+    )
+    .unwrap();
 
     zip.start_file("ppt/slides/slide1.xml", opts()).unwrap();
-    write!(zip, r#"<?xml version="1.0"?>
+    write!(
+        zip,
+        r#"<?xml version="1.0"?>
 <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:spTree>
     <p:sp><p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
       <a:r><a:rPr b="1" i="1"/><a:t>Hello PPTX</a:t></a:r>
     </a:p></p:txBody></p:sp>
   </p:spTree>
-</p:sld>"#).unwrap();
+</p:sld>"#
+    )
+    .unwrap();
 
-    zip.start_file("ppt/slides/_rels/slide1.xml.rels", opts()).unwrap();
-    write!(zip, r#"<?xml version="1.0"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>"#).unwrap();
+    zip.start_file("ppt/slides/_rels/slide1.xml.rels", opts())
+        .unwrap();
+    write!(
+        zip,
+        r#"<?xml version="1.0"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>"#
+    )
+    .unwrap();
 
     zip.finish().unwrap();
     println!("  ✅ PPTX");
@@ -135,10 +148,14 @@ fn write_xlsx() {
     zip.add_directory("xl/worksheets/", opts()).unwrap();
 
     zip.start_file("xl/workbook.xml", opts()).unwrap();
-    write!(zip, r#"<?xml version="1.0"?>
+    write!(
+        zip,
+        r#"<?xml version="1.0"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets>
-</workbook>"#).unwrap();
+</workbook>"#
+    )
+    .unwrap();
 
     zip.start_file("xl/worksheets/sheet1.xml", opts()).unwrap();
     write!(zip, r#"<?xml version="1.0"?>
@@ -155,12 +172,17 @@ fn write_xlsx() {
 }
 
 fn write_pdf_with_typst() {
-    let typst_src = "#set page(width: 200pt, height: 100pt)\nHello *PDF* from Typst!\n\n$E = m c^2$";
+    let typst_src =
+        "#set page(width: 200pt, height: 100pt)\nHello *PDF* from Typst!\n\n$E = m c^2$";
     let typst_file = fixtures_dir().join("pdf/test.typ");
     std::fs::write(&typst_file, typst_src).unwrap();
 
     let status = std::process::Command::new("typst")
-        .args(["compile", &typst_file.to_string_lossy(), &fixtures_dir().join("pdf/test.pdf").to_string_lossy()])
+        .args([
+            "compile",
+            &typst_file.to_string_lossy(),
+            &fixtures_dir().join("pdf/test.pdf").to_string_lossy(),
+        ])
         .status();
     match status {
         Ok(s) if s.success() => {
@@ -180,10 +202,15 @@ fn write_pdf_lopdf() {
     let mut doc = Document::new();
     let mut page_dict = Dictionary::new();
     page_dict.set("Type", Object::Name(b"Page".to_vec()));
-    page_dict.set("MediaBox", Object::Array(vec![
-        Object::Integer(0), Object::Integer(0),
-        Object::Integer(612), Object::Integer(792),
-    ]));
+    page_dict.set(
+        "MediaBox",
+        Object::Array(vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(612),
+            Object::Integer(792),
+        ]),
+    );
     let page_id = doc.add_object(page_dict);
     let mut pages_dict = Dictionary::new();
     pages_dict.set("Type", Object::Name(b"Pages".to_vec()));

@@ -243,7 +243,11 @@ fn render_quote(q: &latexsnipper_ast::QuoteBlock, assets: &[MediaAsset]) -> Stri
 
 fn render_code(c: &latexsnipper_ast::CodeBlock) -> String {
     if let Some(lang) = &c.language {
-        format!("<pre><code class=\"language-{}\">{}</code></pre>", lang, xml_escape(&c.code))
+        format!(
+            "<pre><code class=\"language-{}\">{}</code></pre>",
+            lang,
+            xml_escape(&c.code)
+        )
     } else {
         format!("<pre><code>{}</code></pre>", xml_escape(&c.code))
     }
@@ -272,12 +276,18 @@ fn render_description_list(
 fn render_theorem(t: &latexsnipper_ast::TheoremBlock, assets: &[MediaAsset]) -> String {
     let content = render_blocks(&t.content, assets);
     let number = t.number.as_deref().unwrap_or("");
-    format!("<div class=\"theorem\"><strong>{}. {}</strong>\n{}</div>", t.name, number, content)
+    format!(
+        "<div class=\"theorem\"><strong>{}. {}</strong>\n{}</div>",
+        t.name, number, content
+    )
 }
 
 fn render_proof(p: &latexsnipper_ast::ProofBlock, assets: &[MediaAsset]) -> String {
     let content = render_blocks(&p.content, assets);
-    format!("<div class=\"proof\"><em>Proof.</em>\n{}<span class=\"qed\">□</span></div>", content)
+    format!(
+        "<div class=\"proof\"><em>Proof.</em>\n{}<span class=\"qed\">□</span></div>",
+        content
+    )
 }
 
 fn render_table(t: &latexsnipper_ast::TableBlock, assets: &[MediaAsset]) -> String {
@@ -302,14 +312,17 @@ fn render_table(t: &latexsnipper_ast::TableBlock, assets: &[MediaAsset]) -> Stri
                 let mut style = "border: 1pt solid black; padding: 4pt;".to_string();
                 if let Some(bw) = cell.border_width {
                     let mut border = format!("border: {}px", bw);
-                    let bs = cell.border_style.map(|s| match s {
-                        latexsnipper_ast::BorderStyle::None => "none",
-                        latexsnipper_ast::BorderStyle::Solid => "solid",
-                        latexsnipper_ast::BorderStyle::Dashed => "dashed",
-                        latexsnipper_ast::BorderStyle::Dotted => "dotted",
-                        latexsnipper_ast::BorderStyle::Double => "double",
-                        _ => "solid",
-                    }).unwrap_or("solid");
+                    let bs = cell
+                        .border_style
+                        .map(|s| match s {
+                            latexsnipper_ast::BorderStyle::None => "none",
+                            latexsnipper_ast::BorderStyle::Solid => "solid",
+                            latexsnipper_ast::BorderStyle::Dashed => "dashed",
+                            latexsnipper_ast::BorderStyle::Dotted => "dotted",
+                            latexsnipper_ast::BorderStyle::Double => "double",
+                            _ => "solid",
+                        })
+                        .unwrap_or("solid");
                     border.push_str(&format!(" {}", bs));
                     if let Some(bc) = &cell.border_color {
                         border.push_str(&format!(" {}", bc));

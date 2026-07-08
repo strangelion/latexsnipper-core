@@ -123,8 +123,14 @@ fn parse_rect(
     attrs: &std::collections::HashMap<String, String>,
     transform: &Option<String>,
 ) -> Option<ShapeBlock> {
-    let x = attrs.get("x").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-    let y = attrs.get("y").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+    let x = attrs
+        .get("x")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let y = attrs
+        .get("y")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
     let w = attrs.get("width").and_then(|v| v.parse::<f32>().ok())?;
     let h = attrs.get("height").and_then(|v| v.parse::<f32>().ok())?;
 
@@ -142,14 +148,26 @@ fn parse_circle_ellipse(
     attrs: &std::collections::HashMap<String, String>,
     transform: &Option<String>,
 ) -> Option<ShapeBlock> {
-    let cx = attrs.get("cx").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-    let cy = attrs.get("cy").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+    let cx = attrs
+        .get("cx")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let cy = attrs
+        .get("cy")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
     let (w, h) = if tag == "circle" {
         let r = attrs.get("r").and_then(|v| v.parse::<f32>().ok())?;
         (r * 2.0, r * 2.0)
     } else {
-        let rx = attrs.get("rx").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-        let ry = attrs.get("ry").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+        let rx = attrs
+            .get("rx")
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0);
+        let ry = attrs
+            .get("ry")
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0);
         (rx * 2.0, ry * 2.0)
     };
 
@@ -169,10 +187,22 @@ fn parse_line(
     attrs: &std::collections::HashMap<String, String>,
     transform: &Option<String>,
 ) -> Option<ShapeBlock> {
-    let x1 = attrs.get("x1").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-    let y1 = attrs.get("y1").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-    let x2 = attrs.get("x2").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-    let y2 = attrs.get("y2").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+    let x1 = attrs
+        .get("x1")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let y1 = attrs
+        .get("y1")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let x2 = attrs
+        .get("x2")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let y2 = attrs
+        .get("y2")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
 
     Some(ShapeBlock {
         shape_type: ShapeType::Line,
@@ -202,8 +232,18 @@ fn parse_poly(
 
     let min_x = coords.iter().step_by(2).cloned().fold(f32::MAX, f32::min);
     let max_x = coords.iter().step_by(2).cloned().fold(f32::MIN, f32::max);
-    let min_y = coords.iter().skip(1).step_by(2).cloned().fold(f32::MAX, f32::min);
-    let max_y = coords.iter().skip(1).step_by(2).cloned().fold(f32::MIN, f32::max);
+    let min_y = coords
+        .iter()
+        .skip(1)
+        .step_by(2)
+        .cloned()
+        .fold(f32::MAX, f32::min);
+    let max_y = coords
+        .iter()
+        .skip(1)
+        .step_by(2)
+        .cloned()
+        .fold(f32::MIN, f32::max);
 
     Some(ShapeBlock {
         shape_type: ShapeType::Custom,
@@ -235,17 +275,31 @@ fn parse_geometry(
     attrs: &std::collections::HashMap<String, String>,
     transform: &Option<String>,
 ) -> Option<Rect> {
-    let x = attrs.get("x").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-    let y = attrs.get("y").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-    let w = attrs.get("width").and_then(|v| v.parse::<f32>().ok()).unwrap_or(100.0);
-    let h = attrs.get("height").and_then(|v| v.parse::<f32>().ok()).unwrap_or(20.0);
+    let x = attrs
+        .get("x")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let y = attrs
+        .get("y")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let w = attrs
+        .get("width")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(100.0);
+    let h = attrs
+        .get("height")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(20.0);
     Some(apply_transform(Rect::new(x, y, w, h), transform))
 }
 
 fn parse_style(attrs: &std::collections::HashMap<String, String>) -> Option<ShapeStyle> {
     let fill = attrs.get("fill").or(attrs.get("fill-opacity"));
     let stroke = attrs.get("stroke");
-    let stroke_width = attrs.get("stroke-width").and_then(|v| v.parse::<f32>().ok());
+    let stroke_width = attrs
+        .get("stroke-width")
+        .and_then(|v| v.parse::<f32>().ok());
 
     if fill.is_none() && stroke.is_none() && stroke_width.is_none() {
         return None;
@@ -284,7 +338,12 @@ fn apply_transform(rect: Rect, transform: &Option<String>) -> Rect {
                 .filter_map(|s| s.trim().parse::<f32>().ok())
                 .collect();
             if parts.len() >= 2 {
-                return Rect::new(rect.x + parts[0], rect.y + parts[1], rect.width, rect.height);
+                return Rect::new(
+                    rect.x + parts[0],
+                    rect.y + parts[1],
+                    rect.width,
+                    rect.height,
+                );
             }
         }
     }

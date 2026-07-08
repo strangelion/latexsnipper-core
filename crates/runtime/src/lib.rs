@@ -36,11 +36,11 @@ pub use model_validation::{
     validate_model_bytes, ValidationReport,
 };
 pub use plugin_loader::load_plugins_from_dir;
-#[cfg(feature = "remote-api")]
-pub use providers::remote::{RemoteApiProvider, RemoteApiResult};
 #[cfg(target_os = "windows")]
 pub use providers::onnx::OnnxRuntimeBackend;
 #[cfg(target_os = "windows")]
 pub use providers::onnx::{Acceleration, Platform};
+#[cfg(feature = "remote-api")]
+pub use providers::remote::{RemoteApiProvider, RemoteApiResult};
 pub use providers::stub::StubRuntime;
 pub use session::InferenceSession;

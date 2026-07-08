@@ -65,10 +65,18 @@ pub enum MediaRole {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 pub enum AssetStorage {
-    InlineBase64 { data: String },
-    FilePath { path: String },
-    Uri { uri: String },
-    BytesRef { id: String },
+    InlineBase64 {
+        data: String,
+    },
+    FilePath {
+        path: String,
+    },
+    Uri {
+        uri: String,
+    },
+    BytesRef {
+        id: String,
+    },
     OfficeRelationship {
         r_id: String,
         part_name: Option<String>,
@@ -131,7 +139,11 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn new(level: DiagnosticLevel, code: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn new(
+        level: DiagnosticLevel,
+        code: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             level,
             code: code.into(),
@@ -198,7 +210,8 @@ pub trait AssetResolver {
     fn resolve_bytes(&self, id: &AssetId) -> std::result::Result<Vec<u8>, String>;
 
     /// Resolve to a local file path, if available.
-    fn resolve_path(&self, id: &AssetId) -> std::result::Result<Option<std::path::PathBuf>, String>;
+    fn resolve_path(&self, id: &AssetId)
+        -> std::result::Result<Option<std::path::PathBuf>, String>;
 
     /// Build a data URI string (e.g. "data:image/png;base64,...").
     fn resolve_data_uri(&self, id: &AssetId) -> std::result::Result<String, String>;

@@ -49,7 +49,8 @@ impl OfficeInsertService {
                 OfficeInsertResult {
                     content: omml.into_bytes(),
                     insert_kind: OfficeInsertKind::OMath,
-                    mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.math",
+                    mime_type:
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.math",
                     description: "Editable OMML equation for Word".to_string(),
                 }
             }
@@ -84,7 +85,12 @@ impl OfficeInsertService {
 
     fn prepare_for_word(doc: &Document) -> OfficeInsertResult {
         // Priority 1: If the document contains only formulas → OMath
-        if doc.block_count() > 0 && doc.all_blocks().iter().all(|b| matches!(b, latexsnipper_ast::Block::Formula(_))) {
+        if doc.block_count() > 0
+            && doc
+                .all_blocks()
+                .iter()
+                .all(|b| matches!(b, latexsnipper_ast::Block::Formula(_)))
+        {
             let latex = doc
                 .all_blocks()
                 .iter()
@@ -99,7 +105,8 @@ impl OfficeInsertService {
                 return OfficeInsertResult {
                     content: omml.into_bytes(),
                     insert_kind: OfficeInsertKind::OMath,
-                    mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.math",
+                    mime_type:
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.math",
                     description: "Editable OMML equation for Word".to_string(),
                 };
             }
@@ -128,7 +135,8 @@ impl OfficeInsertService {
             content: html.into_bytes(),
             insert_kind: OfficeInsertKind::HtmlClipboard,
             mime_type: "text/html",
-            description: "HTML content for PowerPoint (SVG export available via ExportService)".to_string(),
+            description: "HTML content for PowerPoint (SVG export available via ExportService)"
+                .to_string(),
         }
     }
 
@@ -150,7 +158,9 @@ impl OfficeInsertService {
                                     .iter()
                                     .map(|i| match i {
                                         latexsnipper_ast::Inline::Text(t) => t.text.clone(),
-                                        latexsnipper_ast::Inline::Formula(f) => f.as_latex().to_string(),
+                                        latexsnipper_ast::Inline::Formula(f) => {
+                                            f.as_latex().to_string()
+                                        }
                                         _ => String::new(),
                                     })
                                     .collect::<Vec<_>>()

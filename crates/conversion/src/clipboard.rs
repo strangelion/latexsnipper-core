@@ -115,19 +115,11 @@ fn block_to_plain_text(block: &Block) -> String {
             .join("\n"),
         Block::TableOfContents => "Table of Contents".to_string(),
         Block::Theorem(t) => {
-            let content: Vec<String> = t
-                .content
-                .iter()
-                .map(block_to_plain_text)
-                .collect();
+            let content: Vec<String> = t.content.iter().map(block_to_plain_text).collect();
             format!("{}.\n{}", t.name, content.join("\n"))
         }
         Block::Proof(p) => {
-            let content: Vec<String> = p
-                .content
-                .iter()
-                .map(block_to_plain_text)
-                .collect();
+            let content: Vec<String> = p.content.iter().map(block_to_plain_text).collect();
             format!("Proof.\n{}□", content.join("\n"))
         }
         Block::Minipage(m) => m
@@ -289,10 +281,7 @@ fn block_to_clipboard_html(block: &Block) -> Option<String> {
                 .collect();
             Some(format!("<{}>{}</{}>", tag, items.join(""), tag))
         }
-        Block::Code(c) => Some(format!(
-            "<pre><code>{}</code></pre>",
-            html_escape(&c.code)
-        )),
+        Block::Code(c) => Some(format!("<pre><code>{}</code></pre>", html_escape(&c.code))),
         Block::Quote(q) => {
             let content: Vec<String> = q
                 .blocks

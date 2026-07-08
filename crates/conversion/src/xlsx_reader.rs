@@ -37,12 +37,15 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
         let sheet_xml = match read_entry(&mut archive, &sheet_file) {
             Ok(x) => x,
             Err(_) => {
-                if sheet_idx > 1 { break; }
+                if sheet_idx > 1 {
+                    break;
+                }
                 continue;
             }
         };
 
-        let sheet_name = sheet_names.get(&sheet_idx)
+        let sheet_name = sheet_names
+            .get(&sheet_idx)
             .cloned()
             .unwrap_or_else(|| format!("Sheet{}", sheet_idx));
 
@@ -52,14 +55,20 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
         blocks.push(Block::Table(table));
 
         // Add sheet name as heading
-        blocks.insert(0, Block::Heading(HeadingBlock {
-            level: 2,
-            inlines: vec![Inline::Text(TextRun::new(sheet_name))],
-            id: None, geometry: None, source: None,
-        }));
+        blocks.insert(
+            0,
+            Block::Heading(HeadingBlock {
+                level: 2,
+                inlines: vec![Inline::Text(TextRun::new(sheet_name))],
+                id: None,
+                geometry: None,
+                source: None,
+            }),
+        );
 
         pages.push(Page {
-            width: 800.0, height: 600.0,
+            width: 800.0,
+            height: 600.0,
             blocks,
             page_number: Some(sheet_idx as u32),
         });
@@ -67,19 +76,23 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
 
     Ok(Document {
         metadata: Metadata {
-            language: None, created_at: None,
-            ocr_model: Some("xlsx".to_string()), ocr_version: Some("1.0".to_string()),
+            language: None,
+            created_at: None,
+            ocr_model: Some("xlsx".to_string()),
+            ocr_version: Some("1.0".to_string()),
             ocr_time_ms: None,
         },
         pages,
-        assets: Vec::new(), diagnostics: Vec::new(),
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
     })
 }
 
 fn read_entry(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<String> {
-    let mut file = archive.by_name(name)
+    let mut file = archive
+        .by_name(name)
         .map_err(|_| SnipperError::Export(format!("Entry '{}' not found in XLSX", name)))?;
     let mut content = String::new();
     file.read_to_string(&mut content)
@@ -105,16 +118,30 @@ fn read_shared_strings(archive: &mut zip::ZipArchive<std::fs::File>) -> Vec<Stri
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag = e.name().as_ref().to_vec();
-                if tag == b"si" { in_si = true; current.clear(); }
-                if tag == b"t" && in_si { in_t = true; }
+                if tag == b"si" {
+                    in_si = true;
+                    current.clear();
+                }
+                if tag == b"t" && in_si {
+                    in_t = true;
+                }
             }
             Ok(Event::Text(ref e)) => {
-                if in_t { if let Ok(t) = e.unescape() { current.push_str(&t); } }
+                if in_t {
+                    if let Ok(t) = e.unescape() {
+                        current.push_str(&t);
+                    }
+                }
             }
             Ok(Event::End(ref e)) => {
                 let tag = e.name().as_ref().to_vec();
-                if tag == b"t" { in_t = false; }
-                if tag == b"si" { in_si = false; strings.push(current.clone()); }
+                if tag == b"t" {
+                    in_t = false;
+                }
+                if tag == b"si" {
+                    in_si = false;
+                    strings.push(current.clone());
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -146,7 +173,9 @@ fn parse_sheet_names(xml: &str) -> HashMap<usize, String> {
                     }
                     if !name.is_empty() {
                         // sheetId attribute is the 1-based index
-                        let id = e.attributes().flatten()
+                        let id = e
+                            .attributes()
+                            .flatten()
                             .find(|a| a.key.as_ref() == b"sheetId")
                             .and_then(|a| String::from_utf8_lossy(&a.value).parse::<usize>().ok())
                             .unwrap_or(sheet_idx);
@@ -176,10 +205,16 @@ fn parse_rels(xml: &str) -> HashMap<String, String> {
                     let mut id = String::new();
                     let mut target = String::new();
                     for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"Id" { id = String::from_utf8_lossy(&attr.value).to_string(); }
-                        if attr.key.as_ref() == b"Target" { target = String::from_utf8_lossy(&attr.value).to_string(); }
+                        if attr.key.as_ref() == b"Id" {
+                            id = String::from_utf8_lossy(&attr.value).to_string();
+                        }
+                        if attr.key.as_ref() == b"Target" {
+                            target = String::from_utf8_lossy(&attr.value).to_string();
+                        }
                     }
-                    if !id.is_empty() { rels.insert(id, target); }
+                    if !id.is_empty() {
+                        rels.insert(id, target);
+                    }
                 }
             }
             Ok(Event::Eof) => break,
@@ -226,9 +261,15 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                         for attr in e.attributes().flatten() {
                             let k = attr.key.as_ref().to_vec();
                             let v = String::from_utf8_lossy(&attr.value).to_string();
-                            if k == b"r" { current_cell_ref = v.clone(); }
-                            if k == b"t" { current_cell_type = v.clone(); }
-                            if k == b"s" { current_cell_type = v; }
+                            if k == b"r" {
+                                current_cell_ref = v.clone();
+                            }
+                            if k == b"t" {
+                                current_cell_type = v.clone();
+                            }
+                            if k == b"s" {
+                                current_cell_type = v;
+                            }
                         }
                     }
                     b"v" if in_c => in_v = true,
@@ -239,10 +280,14 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
             }
             Ok(Event::Text(ref e)) => {
                 if in_v {
-                    if let Ok(t) = e.unescape() { current_cell_value.push_str(&t); }
+                    if let Ok(t) = e.unescape() {
+                        current_cell_value.push_str(&t);
+                    }
                 }
                 if in_is_t {
-                    if let Ok(t) = e.unescape() { current_is_text.push_str(&t); }
+                    if let Ok(t) = e.unescape() {
+                        current_is_text.push_str(&t);
+                    }
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -272,16 +317,24 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                     b"row" => {
                         in_row = false;
                         // Build row of cells
-                        let table_row: Vec<TableCell> = current_row_cells.iter().map(|(_, val, typ)| {
-                            let resolved = resolve_cell_value(val, typ, shared_strings);
-                            TableCell {
-                                inlines: vec![Inline::Text(TextRun::new(resolved))],
-                                colspan: 1, rowspan: 1,
-                                border_style: None, border_width: None, border_color: None,
-                                background: None, alignment: None,
-                                geometry: None, source: None,
-                            }
-                        }).collect();
+                        let table_row: Vec<TableCell> = current_row_cells
+                            .iter()
+                            .map(|(_, val, typ)| {
+                                let resolved = resolve_cell_value(val, typ, shared_strings);
+                                TableCell {
+                                    inlines: vec![Inline::Text(TextRun::new(resolved))],
+                                    colspan: 1,
+                                    rowspan: 1,
+                                    border_style: None,
+                                    border_width: None,
+                                    border_color: None,
+                                    background: None,
+                                    alignment: None,
+                                    geometry: None,
+                                    source: None,
+                                }
+                            })
+                            .collect();
 
                         // Fill gaps for proper column alignment
                         if !table_row.is_empty() {
@@ -299,7 +352,11 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
         buf.clear();
     }
 
-    TableBlock { rows, geometry: None, source: None }
+    TableBlock {
+        rows,
+        geometry: None,
+        source: None,
+    }
 }
 
 fn resolve_cell_value(value: &str, cell_type: &str, shared_strings: &[String]) -> String {
@@ -307,13 +364,22 @@ fn resolve_cell_value(value: &str, cell_type: &str, shared_strings: &[String]) -
         "s" => {
             // Shared string: value is the index
             if let Ok(idx) = value.parse::<usize>() {
-                shared_strings.get(idx).cloned().unwrap_or_else(|| format!("[ref {}]", idx))
+                shared_strings
+                    .get(idx)
+                    .cloned()
+                    .unwrap_or_else(|| format!("[ref {}]", idx))
             } else {
                 value.to_string()
             }
         }
         "inline" | "str" => value.to_string(),
-        "b" => if value == "1" { "TRUE".to_string() } else { "FALSE".to_string() },
+        "b" => {
+            if value == "1" {
+                "TRUE".to_string()
+            } else {
+                "FALSE".to_string()
+            }
+        }
         "e" => format!("={}", value),
         _ => value.to_string(), // number or other
     }
@@ -365,7 +431,10 @@ mod tests {
         let path = create_minimal_xlsx("p");
         let doc = read_xlsx(&path).unwrap();
         assert!(!doc.pages.is_empty(), "should have at least one sheet");
-        let has_table = doc.all_blocks().iter().any(|b| matches!(b, Block::Table(_)));
+        let has_table = doc
+            .all_blocks()
+            .iter()
+            .any(|b| matches!(b, Block::Table(_)));
         assert!(has_table, "should contain a table block");
         std::fs::remove_file(&path).ok();
     }

@@ -61,17 +61,24 @@ pub fn overlay_pdf(
             let pdf_y = page_height - y - font_size;
             let escaped = escape_pdf_string(&text);
 
-            ops.push(Operation::new("Tf", vec![
-                Object::Name(b"Helvetica".to_vec()),
-                Object::Integer(font_size as i64),
-            ]));
-            ops.push(Operation::new("Td", vec![
-                Object::Real(x),
-                Object::Real(pdf_y),
-            ]));
-            ops.push(Operation::new("Tj", vec![
-                Object::String(escaped.into_bytes(), lopdf::StringFormat::Literal),
-            ]));
+            ops.push(Operation::new(
+                "Tf",
+                vec![
+                    Object::Name(b"Helvetica".to_vec()),
+                    Object::Integer(font_size as i64),
+                ],
+            ));
+            ops.push(Operation::new(
+                "Td",
+                vec![Object::Real(x), Object::Real(pdf_y)],
+            ));
+            ops.push(Operation::new(
+                "Tj",
+                vec![Object::String(
+                    escaped.into_bytes(),
+                    lopdf::StringFormat::Literal,
+                )],
+            ));
         }
 
         ops.push(Operation::new("ET", vec![]));
@@ -100,11 +107,15 @@ pub fn overlay_pdf(
 }
 
 fn collect_text(inlines: &[Inline]) -> String {
-    inlines.iter().map(|i| match i {
-        Inline::Text(t) => t.text.clone(),
-        Inline::Formula(f) => f.as_latex().to_string(),
-        _ => String::new(),
-    }).collect::<Vec<_>>().join(" ")
+    inlines
+        .iter()
+        .map(|i| match i {
+            Inline::Text(t) => t.text.clone(),
+            Inline::Formula(f) => f.as_latex().to_string(),
+            _ => String::new(),
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn get_page_height(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Option<f32> {
@@ -141,10 +152,15 @@ mod tests {
         let mut doc = lopdf::Document::new();
         let mut dict = lopdf::Dictionary::new();
         dict.set("Type", Object::Name(b"Page".to_vec()));
-        dict.set("MediaBox", Object::Array(vec![
-            Object::Integer(0), Object::Integer(0),
-            Object::Integer(612), Object::Integer(792),
-        ]));
+        dict.set(
+            "MediaBox",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(612),
+                Object::Integer(792),
+            ]),
+        );
         let page_id = doc.add_object(dict);
 
         let mut pages_dict = lopdf::Dictionary::new();
@@ -179,7 +195,8 @@ mod tests {
 
         let mut doc = Document::new();
         doc.pages.push(Page {
-            width: 612.0, height: 792.0,
+            width: 612.0,
+            height: 792.0,
             blocks: vec![Block::Paragraph(ParagraphBlock {
                 inlines: vec![Inline::Text(TextRun::new("Hello PDF Overlay"))],
                 geometry: Some(Rect::new(72.0, 700.0, 200.0, 14.0)),
@@ -191,7 +208,10 @@ mod tests {
         let result = overlay_pdf(&src, &doc, &out);
         assert!(result.is_ok(), "overlay should succeed: {:?}", result);
         assert!(out.exists(), "output file should exist");
-        assert!(out.metadata().unwrap().len() > 0, "output should not be empty");
+        assert!(
+            out.metadata().unwrap().len() > 0,
+            "output should not be empty"
+        );
 
         std::fs::remove_file(&src).ok();
         std::fs::remove_file(&out).ok();

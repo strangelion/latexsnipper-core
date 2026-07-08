@@ -3,8 +3,8 @@ pub mod asset_resolver;
 pub mod clipboard;
 pub mod converter;
 pub mod document_cleaner;
-pub mod docx_reader;
 pub mod document_converter;
+pub mod docx_reader;
 pub mod export_format;
 pub mod exporter;
 pub mod html;
@@ -33,18 +33,15 @@ pub mod word_ooxml_table_parser;
 pub mod word_ooxml_table_writer;
 pub mod xlsx_reader;
 
-pub use asset_helper::{resolve_asset_ref, resolve_image_html, resolve_image_latex, resolve_image_markdown, resolve_image_typst};
+pub use asset_helper::{
+    resolve_asset_ref, resolve_image_html, resolve_image_latex, resolve_image_markdown,
+    resolve_image_typst,
+};
 pub use clipboard::ClipboardBundle;
 pub use converter::Converter;
 pub use document_cleaner::{clean_document, CleanResult, CleanerOptions};
-pub use docx_reader::read_docx;
-pub use office_insert::{OfficeInsertResult, OfficeInsertService};
-pub use pdf_native::extract_pdf_text;
-pub use pdf_overlay::overlay_pdf;
-pub use pptx_reader::read_pptx;
-pub use svg_parser::parse_svg_to_shapes;
-pub use xlsx_reader::read_xlsx;
 pub use document_converter::{DocumentConverter, OutputFormat};
+pub use docx_reader::read_docx;
 pub use html::HtmlConverter;
 pub use html_parser::parse_html_to_document;
 pub use latex::{LatexConverter, LatexDisplayConverter, LatexEquationConverter};
@@ -52,8 +49,13 @@ pub use markdown::{MarkdownBlockConverter, MarkdownInlineConverter};
 pub use markdown_parser::parse_markdown_to_document;
 pub use mathml::{MathmlAttrConverter, MathmlConverter, MathmlMConverter, MathmlMmlConverter};
 pub use mathml_parser::parse_mathml_to_latex;
+pub use office_insert::{OfficeInsertResult, OfficeInsertService};
 pub use omml::OmmlConverter;
 pub use omml_parser::parse_omml_to_latex;
+pub use pdf_native::extract_pdf_text;
+pub use pdf_overlay::overlay_pdf;
+pub use pptx_reader::read_pptx;
+pub use svg_parser::parse_svg_to_shapes;
 pub use table_export::TableExporter;
 pub use table_parser::{
     parse_html_table, parse_latex_table, parse_markdown_table, parse_tsv_table, parse_typst_table,
@@ -62,6 +64,7 @@ pub use typst::TypstConverter;
 pub use typst_parser::parse_typst_to_latex;
 pub use word_ooxml_table_parser::parse_word_table_ooxml;
 pub use word_ooxml_table_writer::write_word_table_ooxml;
+pub use xlsx_reader::read_xlsx;
 
 #[cfg(test)]
 mod tests {

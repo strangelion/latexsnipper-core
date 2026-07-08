@@ -79,7 +79,10 @@ fn get_page_size(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Option<(f
     None
 }
 
-fn extract_page_text(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Result<Vec<TextFragment>> {
+fn extract_page_text(
+    pdf: &lopdf::Document,
+    object_id: lopdf::ObjectId,
+) -> Result<Vec<TextFragment>> {
     let mut fragments = Vec::new();
     let mut pos_x = 0.0f32;
     let mut pos_y = 0.0f32;
@@ -125,14 +128,28 @@ fn extract_page_text(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Resul
             "Tj" => {
                 if let Some(text) = operands.first().and_then(extract_text_obj) {
                     let tw = estimate_text_width(&text, font_size);
-                    fragments.push(TextFragment { text, x: pos_x, y: pos_y, width: tw, height: font_size * 1.2, font_size });
+                    fragments.push(TextFragment {
+                        text,
+                        x: pos_x,
+                        y: pos_y,
+                        width: tw,
+                        height: font_size * 1.2,
+                        font_size,
+                    });
                 }
             }
             "'" => {
                 pos_y -= font_size * 1.2;
                 if let Some(text) = operands.first().and_then(extract_text_obj) {
                     let tw = estimate_text_width(&text, font_size);
-                    fragments.push(TextFragment { text, x: pos_x, y: pos_y, width: tw, height: font_size * 1.2, font_size });
+                    fragments.push(TextFragment {
+                        text,
+                        x: pos_x,
+                        y: pos_y,
+                        width: tw,
+                        height: font_size * 1.2,
+                        font_size,
+                    });
                 }
             }
             "\"" => {
@@ -142,14 +159,28 @@ fn extract_page_text(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Resul
                 pos_y -= font_size * 1.2;
                 if let Some(text) = operands.get(2).and_then(extract_text_obj) {
                     let tw = estimate_text_width(&text, font_size);
-                    fragments.push(TextFragment { text, x: pos_x, y: pos_y, width: tw, height: font_size * 1.2, font_size });
+                    fragments.push(TextFragment {
+                        text,
+                        x: pos_x,
+                        y: pos_y,
+                        width: tw,
+                        height: font_size * 1.2,
+                        font_size,
+                    });
                 }
             }
             "TJ" => {
                 let text = extract_tj_text(op);
                 if !text.is_empty() {
                     let tw = estimate_text_width(&text, font_size);
-                    fragments.push(TextFragment { text, x: pos_x, y: pos_y, width: tw, height: font_size * 1.2, font_size });
+                    fragments.push(TextFragment {
+                        text,
+                        x: pos_x,
+                        y: pos_y,
+                        width: tw,
+                        height: font_size * 1.2,
+                        font_size,
+                    });
                 }
             }
             _ => {}

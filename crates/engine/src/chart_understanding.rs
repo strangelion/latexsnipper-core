@@ -50,16 +50,11 @@ impl ChartUnderstandingService {
     /// Returns a `ChartBlock` populated with detected axes, series, legend,
     /// and chart type. If the VLM fails or returns invalid data, diagnostics
     /// are populated and a fallback `ChartBlock` is returned.
-    pub async fn understand_chart(
-        &self,
-        image_base64: &str,
-    ) -> ChartUnderstandingResult {
+    pub async fn understand_chart(&self, image_base64: &str) -> ChartUnderstandingResult {
         let profile = Self::chart_extraction_profile();
 
-        let (result, mut diagnostics, report) = self
-            .provider
-            .execute(&profile, Some(image_base64))
-            .await;
+        let (result, mut diagnostics, report) =
+            self.provider.execute(&profile, Some(image_base64)).await;
 
         if !result.is_usable() {
             return ChartUnderstandingResult {
@@ -231,9 +226,7 @@ impl ChartUnderstandingService {
 
         let legend = json["legend"].as_object().map(|_| ChartLegend {
             visible: json["legend"]["visible"].as_bool().unwrap_or(true),
-            position: json["legend"]["position"]
-                .as_str()
-                .map(|s| s.to_string()),
+            position: json["legend"]["position"].as_str().map(|s| s.to_string()),
         });
 
         ChartBlock {

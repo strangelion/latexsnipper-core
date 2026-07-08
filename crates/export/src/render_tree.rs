@@ -225,9 +225,7 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             let nodes: Vec<RenderNode> = tb.content.iter().filter_map(convert_block).collect();
             Some(RenderNode::Paragraph(nodes))
         }
-        Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_) | Block::Annotation(_) => {
-            None
-        }
+        Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_) | Block::Annotation(_) => None,
     }
 }
 
@@ -266,7 +264,10 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<RenderNode> {
             Inline::Span(s) => {
                 let nodes = convert_inlines(&s.content);
                 if nodes.len() == 1 {
-                    nodes.into_iter().next().unwrap_or(RenderNode::Text(String::new()))
+                    nodes
+                        .into_iter()
+                        .next()
+                        .unwrap_or(RenderNode::Text(String::new()))
                 } else {
                     RenderNode::Text(
                         nodes
