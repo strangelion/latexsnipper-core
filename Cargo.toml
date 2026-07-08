@@ -84,6 +84,8 @@ latexsnipper-foundation = { path = "crates/foundation" }
 latexsnipper-export = { path = "crates/export" }
 serde_json.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+lopdf = "0.34"
 
 [[example]]
 name = "ast_demo"
@@ -108,6 +110,10 @@ path = "examples/pdf_export.rs"
 [[example]]
 name = "ctc_ocr_model"
 path = "examples/ctc_ocr_model/main.rs"
+
+[[example]]
+name = "generate_fixtures"
+path = "tools/generate_fixtures.rs"
 
 [[test]]
 name = "integration"

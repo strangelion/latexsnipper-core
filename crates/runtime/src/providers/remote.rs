@@ -370,10 +370,8 @@ fn validate_json_against_schema(json: &serde_json::Value, schema: &serde_json::V
 
     if let Some(properties) = schema.get("properties").and_then(|v| v.as_object()) {
         for (key, prop_schema) in properties {
-            if json.get(key).is_none() {
-                if prop_schema.get("default").is_none() {
-                    return false;
-                }
+            if json.get(key).is_none() && prop_schema.get("default").is_none() {
+                return false;
             }
         }
     }
