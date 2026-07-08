@@ -17,9 +17,11 @@ pub fn read_pptx(path: impl AsRef<Path>) -> Result<Document> {
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| SnipperError::Export(format!("Failed to read PPTX archive: {}", e)))?;
 
-    // Read presentation.xml for slide list
+    // Read presentation.xml for slide list and rels for path resolution
     let pres_xml = read_entry(&mut archive, "ppt/presentation.xml")?;
-    let slide_rels = parse_slide_rels(&pres_xml);
+    let pres_rels_xml = read_entry(&mut archive, "ppt/_rels/presentation.xml.rels").unwrap_or_default();
+    let pres_rels = parse_rels(&pres_rels_xml);
+    let slide_rels = parse_slide_rels(&pres_xml, &pres_rels);
 
     let mut pages = Vec::new();
 
@@ -64,7 +66,7 @@ fn read_entry(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Resul
     Ok(content)
 }
 
-fn parse_slide_rels(pres_xml: &str) -> Vec<(String, String)> {
+fn parse_slide_rels(pres_xml: &str, pres_rels: &std::collections::HashMap<String, String>) -> Vec<(String, String)> {
     let mut slides = Vec::new();
     let mut reader = Reader::from_str(pres_xml);
     reader.config_mut().trim_text(true);
@@ -92,17 +94,33 @@ fn parse_slide_rels(pres_xml: &str) -> Vec<(String, String)> {
         buf.clear();
     }
 
-    // Look up slide files from relationships
-    // Fallback: slides are in ppt/slides/slideN.xml
-    if slides.is_empty() {
-        for i in 1..=50 {
-            slides.push((i.to_string(), format!("rId{}", i)));
-        }
+    // Use relationships to resolve slide files, with fallback
+    if !slides.is_empty() {
+        let resolved: Vec<(String, String)> = slides.iter().map(|(_id, r_id)| {
+            // Try to resolve via presentation rels
+            if let Some(target) = pres_rels.get(r_id.as_str()) {
+                let slide_path = if target.starts_with("slides/") || target.starts_with("slides\\") {
+                    format!("ppt/{}", target)
+                } else if !target.contains('/') {
+                    format!("ppt/slides/{}", target)
+                } else {
+                    format!("ppt/{}", target)
+                };
+                let name = slide_path.trim_end_matches(".xml").rsplit('/').next().unwrap_or("slide1").to_string();
+                (slide_path, name)
+            } else {
+                let n = r_id.trim_start_matches("rId");
+                (format!("ppt/slides/slide{}.xml", n), format!("slide{}", n))
+            }
+        }).collect();
+        return resolved;
     }
 
-    slides.iter().map(|(_id, r_id)| {
-        format!("ppt/slides/slide{}.xml", r_id.trim_start_matches("rId"))
-    }).enumerate().map(|(i, f)| (f, format!("slide{}", i + 1))).collect()
+    // Fallback: enumerate slide1..slide50
+    for i in 1..=50 {
+        slides.push((format!("ppt/slides/slide{}.xml", i), format!("slide{}", i)));
+    }
+    slides
 }
 
 fn parse_rels(xml: &str) -> std::collections::HashMap<String, String> {

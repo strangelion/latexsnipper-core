@@ -205,14 +205,13 @@ fn write_pdf_lopdf() {
 }
 
 fn main() {
-    println!("Generating test fixtures...");
+    println!("Generating text-based test fixtures...");
     write_svg();
     write_markdown();
     write_html();
     write_latex();
-    write_docx();
-    write_pptx();
-    write_xlsx();
-    write_pdf_with_typst();
-    println!("\nAll fixtures generated in tests/fixtures/");
+    // Office (DOCX/PPTX/XLSX) and PDF fixtures are created manually to match
+    // real Office app output. See tests/fixtures/<format>/ for the actual files.
+    // To regenerate: open Office app, create file, save to fixtures dir.
+    println!("\nText fixtures generated. Office/PDF fixtures are in tests/fixtures/");
 }
