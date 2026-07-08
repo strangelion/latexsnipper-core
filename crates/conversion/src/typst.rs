@@ -89,9 +89,10 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
             }
         }
         Block::TextBox(tb) => render_blocks(&tb.content, assets),
-        Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_) | Block::Annotation(_) => {
-            String::new()
-        }
+        Block::Chart(c) => format!("*[Chart: {:?}]*", c.chart_type),
+        Block::Shape(s) => format!("*[Shape: {:?}]*", s.shape_type),
+        Block::EmbeddedObject(e) => format!("*[Embedded: {:?}]*", e.kind),
+        Block::Annotation(a) => format!("*[Annotation: {:?}]*", a.kind),
     }
 }
 

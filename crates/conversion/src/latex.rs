@@ -164,9 +164,12 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
         Block::Minipage(m) => render_minipage(m, assets),
         Block::Float(f) => render_float(f, assets),
         Block::TextBox(tb) => render_blocks(&tb.content, assets),
-        Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_) | Block::Annotation(_) => {
-            String::new()
+        Block::Chart(c) => format!("% [Chart: {:?}]\n\\textit{{[chart]}}", c.chart_type),
+        Block::Shape(s) => format!("% [Shape: {:?}]\n\\textit{{[shape]}}", s.shape_type),
+        Block::EmbeddedObject(e) => {
+            format!("% [Embedded object: {:?}]\n\\textit{{[embedded]}}", e.kind)
         }
+        Block::Annotation(a) => format!("% [Annotation: {:?}]\n\\textit{{[annotation]}}", a.kind),
     }
 }
 

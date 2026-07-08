@@ -44,6 +44,12 @@ pub enum RenderNode {
         asset_id: Option<AssetId>,
         caption: Vec<RenderNode>,
     },
+    /// An unsupported block type that could not be rendered.
+    /// Includes a diagnostic message for observability.
+    Unsupported {
+        block_type: &'static str,
+        message: String,
+    },
     Page(Vec<RenderNode>),
 }
 
@@ -225,7 +231,22 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             let nodes: Vec<RenderNode> = tb.content.iter().filter_map(convert_block).collect();
             Some(RenderNode::Paragraph(nodes))
         }
-        Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_) | Block::Annotation(_) => None,
+        Block::Chart(c) => Some(RenderNode::Unsupported {
+            block_type: "chart",
+            message: format!("{:?}", c.chart_type),
+        }),
+        Block::Shape(s) => Some(RenderNode::Unsupported {
+            block_type: "shape",
+            message: format!("{:?}", s.shape_type),
+        }),
+        Block::EmbeddedObject(e) => Some(RenderNode::Unsupported {
+            block_type: "embedded_object",
+            message: format!("{:?}", e.kind),
+        }),
+        Block::Annotation(a) => Some(RenderNode::Unsupported {
+            block_type: "annotation",
+            message: format!("{:?}", a.kind),
+        }),
     }
 }
 
@@ -288,7 +309,7 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<RenderNode> {
                         _ => String::new(),
                     })
                     .collect::<String>();
-                RenderNode::Text(format!("[{}](l.target)", text))
+                RenderNode::Text(format!("[{}]({})", text, l.target))
             }
             Inline::Code(c) => RenderNode::Text(c.code.clone()),
             Inline::Superscript(inner) | Inline::Subscript(inner) => {

@@ -324,6 +324,17 @@ fn render_node(
             );
             Ok(RenderResult::Ok(*y - LINE_HEIGHT))
         }
+        RenderNode::Unsupported { block_type, message } => {
+            let text = format!("[unsupported {}: {}]", block_type, message);
+            layer.use_text(
+                &text,
+                FONT_SIZE,
+                Mm(MARGIN_LEFT * 0.3528),
+                Mm(*y * 0.3528),
+                font,
+            );
+            Ok(RenderResult::Ok(*y - LINE_HEIGHT))
+        }
     }
 }
 
@@ -360,6 +371,9 @@ fn node_to_text(node: &RenderNode) -> String {
             } else {
                 render_nodes_to_text(caption)
             }
+        }
+        RenderNode::Unsupported { block_type, message } => {
+            format!("[unsupported {}: {}]", block_type, message)
         }
     }
 }

@@ -137,10 +137,24 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
             let content = render_blocks(&tb.content, assets);
             format!("<div class=\"textbox\">{}</div>", content)
         }
-        Block::Chart(_) => "<div class=\"chart\">[chart]</div>".to_string(),
-        Block::Shape(_) => String::new(),
-        Block::EmbeddedObject(_) => "<div class=\"embedded\">[embedded]</div>".to_string(),
-        Block::Annotation(_) => String::new(),
+        Block::Chart(c) => {
+            format!("<div class=\"chart\" title=\"{:?}\">[chart]</div>", c.chart_type)
+        }
+        Block::Shape(s) => {
+            format!("<div class=\"shape\" title=\"{:?}\">[shape]</div>", s.shape_type)
+        }
+        Block::EmbeddedObject(e) => {
+            format!(
+                "<div class=\"embedded\" title=\"{:?}\">[embedded]</div>",
+                e.kind
+            )
+        }
+        Block::Annotation(a) => {
+            format!(
+                "<div class=\"annotation\" title=\"{:?}\">[annotation]</div>",
+                a.kind
+            )
+        }
     }
 }
 
