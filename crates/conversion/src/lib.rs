@@ -30,6 +30,7 @@ pub mod typst;
 pub mod typst_parser;
 pub mod word_ooxml_table_parser;
 pub mod word_ooxml_table_writer;
+pub mod xlsx_reader;
 
 pub use asset_helper::{resolve_asset_ref, resolve_image_html, resolve_image_latex, resolve_image_markdown, resolve_image_typst};
 pub use clipboard::ClipboardBundle;
@@ -40,6 +41,7 @@ pub use office_insert::{OfficeInsertResult, OfficeInsertService};
 pub use pdf_native::extract_pdf_text;
 pub use pptx_reader::read_pptx;
 pub use svg_parser::parse_svg_to_shapes;
+pub use xlsx_reader::read_xlsx;
 pub use document_converter::{DocumentConverter, OutputFormat};
 pub use html::HtmlConverter;
 pub use html_parser::parse_html_to_document;
