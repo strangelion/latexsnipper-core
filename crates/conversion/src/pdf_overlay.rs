@@ -132,3 +132,69 @@ fn escape_pdf_string(s: &str) -> String {
         .replace('\r', "\\r")
         .replace('\t', "\\t")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_minimal_pdf(path: &std::path::Path) {
+        // Create a minimal valid PDF using lopdf
+        let mut doc = lopdf::Document::new();
+        let mut dict = lopdf::Dictionary::new();
+        dict.set("Type", Object::Name(b"Page".to_vec()));
+        dict.set("MediaBox", Object::Array(vec![
+            Object::Integer(0), Object::Integer(0),
+            Object::Integer(612), Object::Integer(792),
+        ]));
+        let page_id = doc.add_object(dict);
+
+        let mut pages_dict = lopdf::Dictionary::new();
+        pages_dict.set("Type", Object::Name(b"Pages".to_vec()));
+        pages_dict.set("Kids", Object::Array(vec![Object::Reference(page_id)]));
+        pages_dict.set("Count", Object::Integer(1));
+        let pages_id = doc.add_object(pages_dict);
+
+        // Update page's parent reference
+        if let Ok(obj) = doc.get_object_mut(page_id) {
+            if let Object::Dictionary(ref mut d) = obj {
+                d.set("Parent", Object::Reference(pages_id));
+            }
+        }
+
+        let mut catalog = lopdf::Dictionary::new();
+        catalog.set("Type", Object::Name(b"Catalog".to_vec()));
+        catalog.set("Pages", Object::Reference(pages_id));
+        let catalog_id = doc.add_object(catalog);
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+
+        doc.save(path).unwrap();
+    }
+
+    #[test]
+    fn test_overlay_pdf_creates_output() {
+        let dir = std::env::temp_dir();
+        let src = dir.join(format!("test_overlay_src_{}.pdf", std::process::id()));
+        let out = dir.join(format!("test_overlay_out_{}.pdf", std::process::id()));
+
+        create_minimal_pdf(&src);
+
+        let mut doc = Document::new();
+        doc.pages.push(Page {
+            width: 612.0, height: 792.0,
+            blocks: vec![Block::Paragraph(ParagraphBlock {
+                inlines: vec![Inline::Text(TextRun::new("Hello PDF Overlay"))],
+                geometry: Some(Rect::new(72.0, 700.0, 200.0, 14.0)),
+                source: Some(SourceInfo::new().with_page(0)),
+            })],
+            page_number: Some(1),
+        });
+
+        let result = overlay_pdf(&src, &doc, &out);
+        assert!(result.is_ok(), "overlay should succeed: {:?}", result);
+        assert!(out.exists(), "output file should exist");
+        assert!(out.metadata().unwrap().len() > 0, "output should not be empty");
+
+        std::fs::remove_file(&src).ok();
+        std::fs::remove_file(&out).ok();
+    }
+}

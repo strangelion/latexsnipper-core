@@ -266,3 +266,61 @@ fn base64_encode(bytes: &[u8]) -> String {
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn create_minimal_pptx(suffix: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("test_pptx_{}_{}.pptx", suffix, std::process::id()));
+        let file = std::fs::File::create(&path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let opts = || zip::write::FileOptions::default();
+
+        zip.add_directory("_rels/", opts()).unwrap();
+        zip.start_file("[Content_Types].xml", opts()).unwrap();
+        write!(zip, r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide"/>
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+</Types>"#).unwrap();
+
+        zip.add_directory("ppt/", opts()).unwrap();
+        zip.add_directory("ppt/slides/", opts()).unwrap();
+        zip.add_directory("ppt/slides/_rels/", opts()).unwrap();
+
+        zip.start_file("ppt/presentation.xml", opts()).unwrap();
+        write!(zip, "<?xml version=\"1.0\"?>
+<p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">
+  <p:sldIdLst><p:sldId id=\"256\" r:id=\"rId1\"/></p:sldIdLst>
+</p:presentation>").unwrap();
+
+        zip.start_file("ppt/slides/slide1.xml", opts()).unwrap();
+        write!(zip, "<?xml version=\"1.0\"?>
+<p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">
+  <p:spTree>
+    <p:sp><p:txBody><a:p xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">
+      <a:r><a:t>Hello from PPTX</a:t></a:r>
+    </a:p></p:txBody></p:sp>
+  </p:spTree>
+</p:sld>").unwrap();
+
+        zip.start_file("ppt/slides/_rels/slide1.xml.rels", opts()).unwrap();
+        write!(zip, "<?xml version=\"1.0\"?>
+<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>"
+        ).unwrap();
+
+        zip.finish().unwrap();
+        path
+    }
+
+    #[test]
+    fn test_read_pptx_simple() {
+        let path = create_minimal_pptx("p");
+        let doc = read_pptx(&path).unwrap();
+        assert!(!doc.pages.is_empty(), "should have at least one slide");
+        std::fs::remove_file(&path).ok();
+    }
+}

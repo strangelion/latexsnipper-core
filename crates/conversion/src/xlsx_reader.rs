@@ -318,3 +318,55 @@ fn resolve_cell_value(value: &str, cell_type: &str, shared_strings: &[String]) -
         _ => value.to_string(), // number or other
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn create_minimal_xlsx(suffix: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("test_xlsx_{}_{}.xlsx", suffix, std::process::id()));
+        let file = std::fs::File::create(&path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let opts = || zip::write::FileOptions::default();
+
+        zip.start_file("[Content_Types].xml", opts()).unwrap();
+        write!(zip, r#"<?xml version="1.0"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+</Types>"#).unwrap();
+
+        zip.add_directory("xl/", opts()).unwrap();
+        zip.add_directory("xl/worksheets/", opts()).unwrap();
+
+        zip.start_file("xl/workbook.xml", opts()).unwrap();
+        write!(zip, r#"<?xml version="1.0"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></sheets>
+</workbook>"#).unwrap();
+
+        zip.start_file("xl/worksheets/sheet1.xml", opts()).unwrap();
+        write!(zip, r#"<?xml version="1.0"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1"><c r="A1" t="inline"><is><t>Hello</t></is></c><c r="B1" t="inline"><is><t>World</t></is></c></row>
+    <row r="2"><c r="A2" t="inline"><is><t>42</t></is></c><c r="B2" t="inline"><is><t>3.14</t></is></c></row>
+  </sheetData>
+</worksheet>"#).unwrap();
+
+        zip.finish().unwrap();
+        path
+    }
+
+    #[test]
+    fn test_read_xlsx_simple() {
+        let path = create_minimal_xlsx("p");
+        let doc = read_xlsx(&path).unwrap();
+        assert!(!doc.pages.is_empty(), "should have at least one sheet");
+        let has_table = doc.all_blocks().iter().any(|b| matches!(b, Block::Table(_)));
+        assert!(has_table, "should contain a table block");
+        std::fs::remove_file(&path).ok();
+    }
+}
