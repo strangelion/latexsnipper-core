@@ -115,6 +115,9 @@ impl PageBuilder {
         let formula = Formula::latex(latex);
         self.blocks.push(Block::Formula(FormulaBlock {
             formula,
+            label: None,
+            number: None,
+            environment: None,
             geometry: None,
             source: None,
         }));
@@ -172,6 +175,8 @@ impl PageBuilder {
             height: self.height,
             blocks: self.blocks,
             page_number: None,
+            layout: None,
+            background_asset_id: None,
         }
     }
 }

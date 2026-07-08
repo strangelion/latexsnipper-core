@@ -126,6 +126,9 @@ impl HandwritingRecognizerNode {
                                     f.confidence = result.confidence;
                                     blocks.push(Block::Formula(FormulaBlock {
                                         formula: f,
+                                        label: None,
+                                        number: None,
+                                        environment: None,
                                         geometry: Some(Rect::new(
                                             x as f32, y as f32, w as f32, h as f32,
                                         )),

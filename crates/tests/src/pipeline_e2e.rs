@@ -190,6 +190,9 @@ fn test_formula_pipeline_e2e() {
                     f.confidence = result.confidence;
                     blocks.push(Block::Formula(FormulaBlock {
                         formula: f,
+                        label: None,
+                        number: None,
+                        environment: None,
                         geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                         source: Some(SourceInfo::new()),
                     }));
@@ -207,12 +210,15 @@ fn test_formula_pipeline_e2e() {
             height: rgb.height() as f32,
             blocks,
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
     println!("3. Built Document AST with {} blocks", doc.block_count());
 
@@ -411,12 +417,15 @@ fn test_text_pipeline_e2e() {
             height: rgb.height() as f32,
             blocks,
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
     println!("3. Built Document AST with {} blocks", doc.block_count());
 
@@ -519,6 +528,9 @@ fn test_mixed_pipeline_e2e() {
                     f.confidence = result.confidence;
                     all_blocks.push(Block::Formula(FormulaBlock {
                         formula: f,
+                        label: None,
+                        number: None,
+                        environment: None,
                         geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                         source: Some(SourceInfo::new()),
                     }));
@@ -680,12 +692,15 @@ fn test_mixed_pipeline_e2e() {
             height: rgb.height() as f32,
             blocks: all_blocks,
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
     println!("4. Built Document AST with {} blocks", doc.block_count());
 

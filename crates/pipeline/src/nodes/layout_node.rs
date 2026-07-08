@@ -118,11 +118,16 @@ fn layout_label_to_region_kind(label: &str) -> RegionKind {
         "figure" => RegionKind::Figure,
         "figure_caption" => RegionKind::Caption,
         "table" => RegionKind::Table,
-        "table_caption" => RegionKind::Caption,
+        "table_caption" => RegionKind::TableCaption,
         "header" => RegionKind::Header,
         "footer" => RegionKind::Footer,
-        "reference" => RegionKind::Unknown,
+        "reference" => RegionKind::Reference,
         "equation" => RegionKind::FormulaDisplay,
+        "code_block" => RegionKind::CodeBlock,
+        "page_number" => RegionKind::PageNumber,
+        "footnote" => RegionKind::Footnote,
+        "watermark" => RegionKind::Watermark,
+        "separator" => RegionKind::Separator,
         _ => RegionKind::Unknown,
     }
 }

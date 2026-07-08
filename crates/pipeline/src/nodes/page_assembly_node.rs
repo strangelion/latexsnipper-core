@@ -75,6 +75,8 @@ impl PipelineNode for PageAssemblyNode {
                 height: page_image.height() as f32,
                 blocks: sorted_blocks,
                 page_number: Some(page_number),
+                layout: None,
+                background_asset_id: None,
             });
         }
 
@@ -87,6 +89,7 @@ impl PipelineNode for PageAssemblyNode {
             id_gen: NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         };
 
         log::info!(
@@ -178,11 +181,17 @@ mod tests {
         ctx.artifacts.formula_blocks = vec![
             Block::Formula(FormulaBlock {
                 formula: Formula::latex("E=mc^2"),
+                label: None,
+                number: None,
+                environment: None,
                 geometry: Some(Rect::new(10.0, 20.0, 100.0, 30.0)),
                 source: Some(SourceInfo::new().with_page(0)),
             }),
             Block::Formula(FormulaBlock {
                 formula: Formula::latex("F=ma"),
+                label: None,
+                number: None,
+                environment: None,
                 geometry: Some(Rect::new(10.0, 10.0, 80.0, 25.0)),
                 source: Some(SourceInfo::new().with_page(1)),
             }),

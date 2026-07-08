@@ -38,6 +38,8 @@ pub fn extract_pdf_text(path: impl AsRef<Path>) -> Result<Document> {
             height: page_size.1,
             blocks,
             page_number: Some(page_num),
+            layout: None,
+            background_asset_id: None,
         });
     }
 
@@ -49,6 +51,7 @@ pub fn extract_pdf_text(path: impl AsRef<Path>) -> Result<Document> {
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     })
 }
 

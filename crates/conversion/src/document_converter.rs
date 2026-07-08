@@ -139,16 +139,22 @@ impl DocumentConverter {
                         source_info: None,
                         layout: None,
                     },
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 })],
                 page_number: None,
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         };
         DocumentConverter::new(format).convert(&doc)
     }

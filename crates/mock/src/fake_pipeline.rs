@@ -93,6 +93,9 @@ impl FakePipeline {
                 f.confidence = result.confidence;
                 blocks.push(Block::Formula(FormulaBlock {
                     formula: f,
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: Some(detection.rect),
                     source: None,
                 }));
@@ -113,12 +116,15 @@ impl FakePipeline {
                 height: 0.0,
                 blocks,
                 page_number: None,
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         })
     }
 }

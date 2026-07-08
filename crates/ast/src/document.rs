@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AssetId, Block, Diagnostic, Inline, MediaAsset, Metadata, NodeIdGenerator, NoteDefinition,
+    AssetId, Block, Diagnostic, DocumentOutline, Inline, MediaAsset, Metadata, NodeIdGenerator,
+    NoteDefinition,
 };
 
 /// Top-level document — the single source of truth.
@@ -30,6 +31,10 @@ pub struct Document {
     /// Footnotes and endnotes referenced by the document body.
     #[serde(default)]
     pub notes: Vec<NoteDefinition>,
+
+    /// Document outline / table of contents.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline: Option<DocumentOutline>,
 }
 
 fn default_schema_version() -> String {
@@ -46,6 +51,7 @@ impl Clone for Document {
             id_gen: NodeIdGenerator::new(),
             schema_version: self.schema_version.clone(),
             notes: self.notes.clone(),
+            outline: self.outline.clone(),
         }
     }
 }
@@ -57,6 +63,10 @@ pub struct Page {
     pub height: f32,
     pub blocks: Vec<Block>,
     pub page_number: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<crate::block::PageLayout>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_asset_id: Option<crate::AssetId>,
 }
 
 impl Page {
@@ -86,6 +96,7 @@ impl Document {
             id_gen: NodeIdGenerator::new(),
             schema_version: default_schema_version(),
             notes: Vec::new(),
+            outline: None,
         }
     }
 
@@ -128,6 +139,7 @@ impl Document {
             id_gen: NodeIdGenerator::new(),
             schema_version: self.schema_version.clone(),
             notes: self.notes.clone(),
+            outline: self.outline.clone(),
         }
     }
 
@@ -147,6 +159,7 @@ impl Document {
             id_gen: NodeIdGenerator::new(),
             schema_version: self.schema_version.clone(),
             notes: self.notes.clone(),
+            outline: self.outline.clone(),
         }
     }
 

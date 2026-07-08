@@ -52,6 +52,14 @@ pub struct TextStyle {
     pub color: Option<Color>,
     pub background: Option<Color>,
     pub vertical_align: Option<VerticalAlign>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underline_style: Option<UnderlineStyle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<TextDirection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub letter_spacing: Option<f32>,
 }
 
 /// Paragraph style.
@@ -211,6 +219,10 @@ fn merge_style(base: &TextStyle, overrides: &TextStyle) -> TextStyle {
             .clone()
             .or_else(|| base.background.clone()),
         vertical_align: overrides.vertical_align.or(base.vertical_align),
+        underline_style: overrides.underline_style.or(base.underline_style),
+        language: overrides.language.clone().or_else(|| base.language.clone()),
+        direction: overrides.direction.or(base.direction),
+        letter_spacing: overrides.letter_spacing.or(base.letter_spacing),
     }
 }
 
@@ -399,4 +411,58 @@ pub enum PathCommand {
 pub struct ShapeGroup {
     pub shapes: Vec<super::block::ShapeBlock>,
     pub transform: Option<super::style::Transform2D>,
+}
+
+// ---------------------------------------------------------------------------
+// Length / LengthUnit
+// ---------------------------------------------------------------------------
+
+/// A length value with an associated unit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Length {
+    pub value: f32,
+    pub unit: LengthUnit,
+}
+
+/// Unit of measurement for a length value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LengthUnit {
+    Pt,
+    Px,
+    Emu,
+    Mm,
+    Cm,
+    Inch,
+    Percent,
+    Em,
+    Ex,
+    TextWidth,
+    Unknown,
+}
+
+// ---------------------------------------------------------------------------
+// TableBorder / BorderSide
+// ---------------------------------------------------------------------------
+
+/// Per-cell table border specification.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TableBorder {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top: Option<BorderSide>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right: Option<BorderSide>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bottom: Option<BorderSide>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left: Option<BorderSide>,
+}
+
+/// A single side of a table cell border.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BorderSide {
+    pub style: crate::BorderStyle,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
 }

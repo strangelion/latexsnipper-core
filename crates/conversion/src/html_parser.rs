@@ -1,7 +1,7 @@
 use latexsnipper_ast::{
-    Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, Inline, ListBlock, ListItem,
-    ListStyle, Metadata, NodeIdGenerator, NumberingStyle, Page, ParagraphBlock, QuoteBlock,
-    TextRun,
+    AssetFormat, AssetId, AssetStorage, Block, BulletStyle, CodeBlock, Document, Formula,
+    FormulaBlock, ImageInline, Inline, ListBlock, ListItem, ListStyle, MediaAsset, MediaRole,
+    Metadata, NodeIdGenerator, NumberingStyle, Page, ParagraphBlock, QuoteBlock, TextRun,
 };
 
 /// Parsed HTML tag: (tag_name, attributes, self_closing, end_position)
@@ -12,6 +12,7 @@ type ParsedTag = (String, Vec<(String, String)>, bool, usize);
 pub fn parse_html_to_document(html: &str) -> Document {
     let mut blocks: Vec<Block> = Vec::new();
     let mut current_inlines: Vec<Inline> = Vec::new();
+    let mut assets: Vec<MediaAsset> = Vec::new();
 
     let chars: Vec<char> = html.chars().collect();
     let len = chars.len();
@@ -55,7 +56,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
                     "p" => {
                         flush_paragraph(&mut blocks, &mut current_inlines);
                         let content = extract_tag_content(&chars, end, &tag);
-                        let inlines = parse_inline_html(&content);
+                        let inlines = parse_inline_html(&content, &mut assets);
                         if !inlines.is_empty() {
                             blocks.push(Block::Paragraph(ParagraphBlock {
                                 inlines,
@@ -113,10 +114,43 @@ pub fn parse_html_to_document(html: &str) -> Document {
                         i = find_closing_tag(&chars, end, "code").unwrap_or(len);
                         continue;
                     }
+                    // Image
+                    "img" => {
+                        let src = get_attr(&attrs, "src").unwrap_or_default();
+                        let alt = get_attr(&attrs, "alt").unwrap_or_default();
+                        if !src.is_empty() {
+                            let asset_id = AssetId(format!("html-img-{}", assets.len()));
+                            let format = guess_format_from_src(&src);
+                            assets.push(MediaAsset {
+                                id: asset_id.clone(),
+                                format,
+                                mime_type: None,
+                                role: MediaRole::Photo,
+                                storage: AssetStorage::Uri { uri: src },
+                                width: None,
+                                height: None,
+                                dpi: None,
+                                color_space: None,
+                                checksum_sha256: None,
+                                alt_text: Some(alt.clone()),
+                                metadata: Default::default(),
+                            });
+                            current_inlines.push(Inline::Image(ImageInline {
+                                asset_id: Some(asset_id),
+                                image_data: None,
+                                width: None,
+                                height: None,
+                                alt_text: if alt.is_empty() { None } else { Some(alt) },
+                                source: None,
+                            }));
+                        }
+                        i = end;
+                        continue;
+                    }
                     // Bold
                     "strong" | "b" => {
                         let content = extract_tag_content(&chars, end, &tag);
-                        let inlines = parse_inline_html(&content);
+                        let inlines = parse_inline_html(&content, &mut assets);
                         for mut inline in inlines {
                             if let Inline::Text(t) = &mut inline {
                                 t.bold = Some(true);
@@ -129,7 +163,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
                     // Italic
                     "em" | "i" => {
                         let content = extract_tag_content(&chars, end, &tag);
-                        let inlines = parse_inline_html(&content);
+                        let inlines = parse_inline_html(&content, &mut assets);
                         for mut inline in inlines {
                             if let Inline::Text(t) = &mut inline {
                                 t.italic = Some(true);
@@ -142,7 +176,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
                     // Underline
                     "u" => {
                         let content = extract_tag_content(&chars, end, "u");
-                        let inlines = parse_inline_html(&content);
+                        let inlines = parse_inline_html(&content, &mut assets);
                         for mut inline in inlines {
                             if let Inline::Text(t) = &mut inline {
                                 t.underline = Some(true);
@@ -172,7 +206,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
                     "ul" => {
                         flush_paragraph(&mut blocks, &mut current_inlines);
                         let content = extract_tag_content(&chars, end, "ul");
-                        let items = parse_list_items(&content, false);
+                        let items = parse_list_items(&content, false, &mut assets);
                         blocks.push(Block::List(ListBlock {
                             style: Some(ListStyle::Bullet(BulletStyle::Disc)),
                             start: None,
@@ -187,7 +221,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
                     "ol" => {
                         flush_paragraph(&mut blocks, &mut current_inlines);
                         let content = extract_tag_content(&chars, end, "ol");
-                        let items = parse_list_items(&content, true);
+                        let items = parse_list_items(&content, true, &mut assets);
                         blocks.push(Block::List(ListBlock {
                             style: Some(ListStyle::Ordered(NumberingStyle::Decimal)),
                             start: None,
@@ -218,6 +252,9 @@ pub fn parse_html_to_document(html: &str) -> Document {
                         let formula_str = content.trim().to_string();
                         blocks.push(Block::Formula(FormulaBlock {
                             formula: Formula::latex(&formula_str),
+                            label: None,
+                            number: None,
+                            environment: None,
                             geometry: None,
                             source: None,
                         }));
@@ -247,12 +284,15 @@ pub fn parse_html_to_document(html: &str) -> Document {
             height: 0.0,
             blocks,
             page_number: None,
+            layout: None,
+            background_asset_id: None,
         }],
-        assets: Vec::new(),
+        assets,
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     }
 }
 
@@ -457,7 +497,7 @@ fn strip_html_tags(html: &str) -> String {
     result
 }
 
-fn parse_inline_html(html: &str) -> Vec<Inline> {
+fn parse_inline_html(html: &str, assets: &mut Vec<MediaAsset>) -> Vec<Inline> {
     let mut inlines = Vec::new();
     let chars: Vec<char> = html.chars().collect();
     let len = chars.len();
@@ -496,11 +536,11 @@ fn parse_inline_html(html: &str) -> Vec<Inline> {
 
         // HTML tag
         if chars[i] == '<' {
-            if let Some((tag, _, _, end)) = parse_tag(&chars, i) {
+            if let Some((tag, ref attrs, _, end)) = parse_tag(&chars, i) {
                 match tag.as_str() {
                     "strong" | "b" => {
                         let content = extract_tag_content(&chars, end, &tag);
-                        let inner = parse_inline_html(&content);
+                        let inner = parse_inline_html(&content, assets);
                         for mut inline in inner {
                             if let Inline::Text(t) = &mut inline {
                                 t.bold = Some(true);
@@ -512,7 +552,7 @@ fn parse_inline_html(html: &str) -> Vec<Inline> {
                     }
                     "em" | "i" => {
                         let content = extract_tag_content(&chars, end, &tag);
-                        let inner = parse_inline_html(&content);
+                        let inner = parse_inline_html(&content, assets);
                         for mut inline in inner {
                             if let Inline::Text(t) = &mut inline {
                                 t.italic = Some(true);
@@ -524,7 +564,7 @@ fn parse_inline_html(html: &str) -> Vec<Inline> {
                     }
                     "u" => {
                         let content = extract_tag_content(&chars, end, "u");
-                        let inner = parse_inline_html(&content);
+                        let inner = parse_inline_html(&content, assets);
                         for mut inline in inner {
                             if let Inline::Text(t) = &mut inline {
                                 t.underline = Some(true);
@@ -558,6 +598,38 @@ fn parse_inline_html(html: &str) -> Vec<Inline> {
                         i = end;
                         continue;
                     }
+                    "img" => {
+                        let src = get_attr(attrs, "src").unwrap_or_default();
+                        let alt = get_attr(attrs, "alt").unwrap_or_default();
+                        if !src.is_empty() {
+                            let asset_id = AssetId(format!("html-img-{}", assets.len()));
+                            let format = guess_format_from_src(&src);
+                            assets.push(MediaAsset {
+                                id: asset_id.clone(),
+                                format,
+                                mime_type: None,
+                                role: MediaRole::Photo,
+                                storage: AssetStorage::Uri { uri: src },
+                                width: None,
+                                height: None,
+                                dpi: None,
+                                color_space: None,
+                                checksum_sha256: None,
+                                alt_text: Some(alt.clone()),
+                                metadata: Default::default(),
+                            });
+                            inlines.push(Inline::Image(ImageInline {
+                                asset_id: Some(asset_id),
+                                image_data: None,
+                                width: None,
+                                height: None,
+                                alt_text: if alt.is_empty() { None } else { Some(alt) },
+                                source: None,
+                            }));
+                        }
+                        i = end;
+                        continue;
+                    }
                     _ => {
                         i = end;
                         continue;
@@ -578,7 +650,7 @@ fn parse_inline_html(html: &str) -> Vec<Inline> {
     inlines
 }
 
-fn parse_list_items(content: &str, _ordered: bool) -> Vec<ListItem> {
+fn parse_list_items(content: &str, _ordered: bool, assets: &mut Vec<MediaAsset>) -> Vec<ListItem> {
     let mut items = Vec::new();
     let chars: Vec<char> = content.chars().collect();
     let len = chars.len();
@@ -604,7 +676,7 @@ fn parse_list_items(content: &str, _ordered: bool) -> Vec<ListItem> {
             let content_start = i + 4;
             if let Some(end) = find_closing_tag(&chars, content_start, "li") {
                 let item_content: String = chars[content_start..end].iter().collect();
-                let inlines = parse_inline_html(&item_content);
+                let inlines = parse_inline_html(&item_content, assets);
                 items.push(ListItem {
                     marker: None,
                     content: vec![Block::Paragraph(ParagraphBlock {
@@ -626,6 +698,26 @@ fn parse_list_items(content: &str, _ordered: bool) -> Vec<ListItem> {
     }
 
     items
+}
+
+fn guess_format_from_src(src: &str) -> AssetFormat {
+    if src.ends_with(".png") || src.contains("image/png") {
+        AssetFormat::Png
+    } else if src.ends_with(".jpg") || src.ends_with(".jpeg") || src.contains("image/jpeg") {
+        AssetFormat::Jpeg
+    } else if src.ends_with(".gif") || src.contains("image/gif") {
+        AssetFormat::Gif
+    } else if src.ends_with(".webp") || src.contains("image/webp") {
+        AssetFormat::Webp
+    } else if src.ends_with(".svg") || src.contains("image/svg") {
+        AssetFormat::Svg
+    } else if src.ends_with(".bmp") || src.contains("image/bmp") {
+        AssetFormat::Bmp
+    } else if src.ends_with(".tiff") || src.ends_with(".tif") {
+        AssetFormat::Tiff
+    } else {
+        AssetFormat::Unknown
+    }
 }
 
 #[cfg(test)]

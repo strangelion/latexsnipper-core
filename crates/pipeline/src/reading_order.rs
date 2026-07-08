@@ -79,6 +79,9 @@ mod tests {
     fn make_formula_block(latex: &str, x: f32, y: f32) -> Block {
         Block::Formula(FormulaBlock {
             formula: Formula::latex(latex),
+            label: None,
+            number: None,
+            environment: None,
             geometry: Some(Rect::new(x, y, 50.0, 20.0)),
             source: Some(SourceInfo::new()),
         })

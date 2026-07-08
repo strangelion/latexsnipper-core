@@ -144,6 +144,9 @@ impl Snipper {
                         f.confidence = result.confidence;
                         blocks.push(Block::Formula(FormulaBlock {
                             formula: f,
+                            label: None,
+                            number: None,
+                            environment: None,
                             geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                             source: Some(SourceInfo::new()),
                         }));
@@ -159,12 +162,15 @@ impl Snipper {
                     height: img.height() as f32,
                     blocks,
                     page_number: Some(1),
+                    layout: None,
+                    background_asset_id: None,
                 }],
                 assets: Vec::new(),
                 diagnostics: Vec::new(),
                 id_gen: NodeIdGenerator::new(),
                 schema_version: "1.0.0".to_string(),
                 notes: Vec::new(),
+                outline: None,
             };
 
             Ok(Self { document: doc })

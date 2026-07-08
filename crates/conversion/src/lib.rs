@@ -92,6 +92,9 @@ mod tests {
                             f.confidence = 0.95;
                             f
                         },
+                        label: None,
+                        number: None,
+                        environment: None,
                         geometry: None,
                         source: None,
                     }),
@@ -101,17 +104,23 @@ mod tests {
                             f.confidence = 0.92;
                             f
                         },
+                        label: None,
+                        number: None,
+                        environment: None,
                         geometry: None,
                         source: None,
                     }),
                 ],
                 page_number: Some(1),
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         }
     }
 
@@ -287,16 +296,22 @@ mod tests {
                 height: 0.0,
                 blocks: vec![Block::Formula(FormulaBlock {
                     formula: Formula::latex("\\frac{a}{b}"),
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 })],
                 page_number: None,
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         };
         let converter = OmmlConverter;
         let result = converter.convert(&doc).unwrap();
@@ -314,16 +329,22 @@ mod tests {
                 height: 0.0,
                 blocks: vec![Block::Formula(FormulaBlock {
                     formula: Formula::latex("\\frac{a}{b}"),
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 })],
                 page_number: None,
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         };
         let converter = MathmlConverter;
         let result = converter.convert(&doc).unwrap();

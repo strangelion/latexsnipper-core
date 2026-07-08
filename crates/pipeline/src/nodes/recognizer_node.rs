@@ -139,6 +139,9 @@ impl RecognizerNode {
                                 f.confidence = result.confidence;
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
+                                    label: None,
+                                    number: None,
+                                    environment: None,
                                     geometry: Some(det.rect),
                                     source: Some(
                                         SourceInfo::new()
@@ -256,6 +259,9 @@ impl RecognizerNode {
                                 f.confidence = result.confidence;
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
+                                    label: None,
+                                    number: None,
+                                    environment: None,
                                     geometry: Some(Rect::new(
                                         x as f32, y as f32, w as f32, h as f32,
                                     )),
@@ -298,6 +304,9 @@ impl RecognizerNode {
                             f.confidence = 0.9;
                             blocks.push(Block::Formula(FormulaBlock {
                                 formula: f,
+                                label: None,
+                                number: None,
+                                environment: None,
                                 geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
                                 source: Some(SourceInfo::new().with_page(ctx.current_page)),
                             }));

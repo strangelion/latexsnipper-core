@@ -1,7 +1,8 @@
 use latexsnipper_ast::{
-    Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, FormulaSource, Inline,
-    ListBlock, ListItem, ListStyle, Metadata, NodeIdGenerator, NumberingStyle, Page,
-    ParagraphBlock, QuoteBlock, TextRun,
+    AssetFormat, AssetId, AssetStorage, Block, BulletStyle, CodeBlock, Document, Formula,
+    FormulaBlock, FormulaSource, ImageInline, Inline, ListBlock, ListItem, ListStyle, MediaAsset,
+    MediaRole, Metadata, NodeIdGenerator, NumberingStyle, Page, ParagraphBlock, QuoteBlock,
+    TextRun,
 };
 
 /// Parse a Markdown string into a Document AST.
@@ -10,6 +11,7 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
     let mut blocks: Vec<Block> = Vec::new();
     let mut current_inlines: Vec<Inline> = Vec::new();
     let mut blockquote_lines: Vec<String> = Vec::new();
+    let mut assets: Vec<MediaAsset> = Vec::new();
 
     let lines: Vec<&str> = md.lines().collect();
     let mut i = 0;
@@ -23,6 +25,9 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
             let formula_str = line.trim()[2..line.trim().len() - 2].trim();
             blocks.push(Block::Formula(FormulaBlock {
                 formula: Formula::latex(formula_str),
+                label: None,
+                number: None,
+                environment: None,
                 geometry: None,
                 source: None,
             }));
@@ -45,6 +50,9 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
             let formula_str = formula_lines.join("\n").trim().to_string();
             blocks.push(Block::Formula(FormulaBlock {
                 formula: Formula::latex(&formula_str),
+                label: None,
+                number: None,
+                environment: None,
                 geometry: None,
                 source: None,
             }));
@@ -129,7 +137,7 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
             let mut items = vec![ListItem {
                 marker: None,
                 content: vec![Block::Paragraph(ParagraphBlock {
-                    inlines: parse_inline_text(item_text),
+                    inlines: parse_inline_text(item_text, &mut assets),
                     geometry: None,
                     source: None,
                     style: None,
@@ -145,7 +153,7 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
                         items.push(ListItem {
                             marker: None,
                             content: vec![Block::Paragraph(ParagraphBlock {
-                                inlines: parse_inline_text(t),
+                                inlines: parse_inline_text(t, &mut assets),
                                 geometry: None,
                                 source: None,
                                 style: None,
@@ -181,7 +189,7 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
         }
 
         // Regular text - parse inline formatting
-        let inlines = parse_inline_line(line);
+        let inlines = parse_inline_line(line, &mut assets);
         current_inlines.extend(inlines);
         i += 1;
     }
@@ -195,12 +203,15 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
             height: 0.0,
             blocks,
             page_number: None,
+            layout: None,
+            background_asset_id: None,
         }],
-        assets: Vec::new(),
+        assets,
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     }
 }
 
@@ -294,7 +305,7 @@ fn parse_list_item(line: &str) -> Option<(bool, &str)> {
     None
 }
 
-fn parse_inline_text(text: &str) -> Vec<Inline> {
+fn parse_inline_text(text: &str, assets: &mut Vec<MediaAsset>) -> Vec<Inline> {
     let mut inlines = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let len = chars.len();
@@ -314,6 +325,43 @@ fn parse_inline_text(text: &str) -> Vec<Inline> {
             }
         }
 
+        // Image: ![alt](url)
+        if chars[i] == '!' && i + 1 < len && chars[i + 1] == '[' {
+            if let Some(end) = find_image_end(&chars, i + 2) {
+                let inner: String = chars[i + 2..end].iter().collect();
+                if let Some(url_start) = inner.find("](") {
+                    let alt = inner[..url_start].to_string();
+                    let url = inner[url_start + 2..].to_string();
+                    let asset_id = AssetId(format!("md-img-{}", assets.len()));
+                    let format = guess_format_from_url(&url);
+                    assets.push(MediaAsset {
+                        id: asset_id.clone(),
+                        format,
+                        mime_type: None,
+                        role: MediaRole::Photo,
+                        storage: AssetStorage::Uri { uri: url },
+                        width: None,
+                        height: None,
+                        dpi: None,
+                        color_space: None,
+                        checksum_sha256: None,
+                        alt_text: Some(alt.clone()),
+                        metadata: Default::default(),
+                    });
+                    inlines.push(Inline::Image(ImageInline {
+                        asset_id: Some(asset_id),
+                        image_data: None,
+                        width: None,
+                        height: None,
+                        alt_text: Some(alt),
+                        source: None,
+                    }));
+                    i = end + 1;
+                    continue;
+                }
+            }
+        }
+
         // Bold: **text** or __text__
         if i + 1 < len && (chars[i] == '*' && chars[i + 1] == '*')
             || (chars[i] == '_' && chars[i + 1] == '_')
@@ -321,7 +369,7 @@ fn parse_inline_text(text: &str) -> Vec<Inline> {
             let marker = chars[i];
             if let Some(end) = find_double_marker_end(&chars, i + 2, marker) {
                 let inner: String = chars[i + 2..end].iter().collect();
-                let inner_inlines = parse_inline_text(&inner);
+                let inner_inlines = parse_inline_text(&inner, assets);
                 for mut inline in inner_inlines {
                     if let Inline::Text(t) = &mut inline {
                         t.bold = Some(true);
@@ -338,7 +386,7 @@ fn parse_inline_text(text: &str) -> Vec<Inline> {
             let marker = chars[i];
             if let Some(end) = find_single_marker_end(&chars, i + 1, marker) {
                 let inner: String = chars[i + 1..end].iter().collect();
-                let inner_inlines = parse_inline_text(&inner);
+                let inner_inlines = parse_inline_text(&inner, assets);
                 for mut inline in inner_inlines {
                     if let Inline::Text(t) = &mut inline {
                         t.italic = Some(true);
@@ -380,8 +428,8 @@ fn parse_inline_text(text: &str) -> Vec<Inline> {
     inlines
 }
 
-fn parse_inline_line(line: &str) -> Vec<Inline> {
-    parse_inline_text(line)
+fn parse_inline_line(line: &str, assets: &mut Vec<MediaAsset>) -> Vec<Inline> {
+    parse_inline_text(line, assets)
 }
 
 fn find_double_marker_end(chars: &[char], start: usize, marker: char) -> Option<usize> {
@@ -467,6 +515,55 @@ pub fn parse_markdown_to_latex(md: &str) -> Result<String, String> {
         }
     }
     Ok(result)
+}
+
+fn find_image_end(chars: &[char], start: usize) -> Option<usize> {
+    let mut depth = 1;
+    let mut i = start;
+    while i < chars.len() {
+        match chars[i] {
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    // Expect '(' after ']'
+                    if i + 1 < chars.len() && chars[i + 1] == '(' {
+                        let mut j = i + 2;
+                        while j < chars.len() && chars[j] != ')' {
+                            j += 1;
+                        }
+                        if j < chars.len() {
+                            return Some(j);
+                        }
+                    }
+                    return None;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn guess_format_from_url(url: &str) -> AssetFormat {
+    if url.ends_with(".png") || url.contains("image/png") {
+        AssetFormat::Png
+    } else if url.ends_with(".jpg") || url.ends_with(".jpeg") || url.contains("image/jpeg") {
+        AssetFormat::Jpeg
+    } else if url.ends_with(".gif") || url.contains("image/gif") {
+        AssetFormat::Gif
+    } else if url.ends_with(".webp") || url.contains("image/webp") {
+        AssetFormat::Webp
+    } else if url.ends_with(".svg") || url.contains("image/svg") {
+        AssetFormat::Svg
+    } else if url.ends_with(".bmp") || url.contains("image/bmp") {
+        AssetFormat::Bmp
+    } else if url.ends_with(".tiff") || url.ends_with(".tif") {
+        AssetFormat::Tiff
+    } else {
+        AssetFormat::Unknown
+    }
 }
 
 #[cfg(test)]

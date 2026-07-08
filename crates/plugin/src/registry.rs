@@ -136,6 +136,8 @@ mod tests {
                     height: 0.0,
                     blocks: vec![],
                     page_number: None,
+                    layout: None,
+                    background_asset_id: None,
                 });
             }
             Ok(())

@@ -373,10 +373,30 @@ pub struct ParagraphBlock {
 pub struct FormulaBlock {
     /// The formula content.
     pub formula: crate::Formula,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<FormulaEnvironment>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+}
+
+/// The kind of formula environment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FormulaEnvironment {
+    Equation,
+    Align,
+    Gather,
+    Multline,
+    Cases,
+    Matrix,
+    Inline,
+    Display,
+    Unknown,
 }
 
 /// A table block.
@@ -510,13 +530,39 @@ pub enum CellDataType {
     Empty,
 }
 
-/// Flexible table-level style (to be expanded).
+/// Table-level style.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TableStyle {}
+pub struct TableStyle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub border_collapse: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignment: Option<crate::TextAlignment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub banded_rows: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub banded_columns: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_row: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_row: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_column: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_column: Option<bool>,
+}
 
-/// Flexible cell-level style (to be expanded).
+/// Cell-level style.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TableCellStyle {}
+pub struct TableCellStyle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<crate::Color>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vertical_align: Option<crate::VerticalAlign>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub horizontal_align: Option<crate::TextAlignment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub border: Option<crate::TableBorder>,
+}
 
 /// An image/figure block.
 ///
@@ -548,6 +594,12 @@ pub struct FigureBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 impl FigureBlock {
@@ -770,6 +822,12 @@ pub struct FloatBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 /// A text box block (Office/PDF/PPT).
@@ -789,6 +847,12 @@ pub struct TextBoxBlock {
     pub style: Option<BoxStyle>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 /// A chart block (Excel/PPT/paper figures).
@@ -809,6 +873,12 @@ pub struct ChartBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 /// A shape block (Office arrow, rectangle, flowchart shape).
@@ -839,6 +909,18 @@ pub struct EmbeddedObjectBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prog_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_ref: Option<crate::AssetId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_as_icon: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
 }
 
 /// An annotation block (comment, highlight, ink, etc.).
@@ -970,6 +1052,10 @@ pub struct FormFieldBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
 }
 
 /// The kind of form field.
@@ -1042,6 +1128,10 @@ pub struct QrCodeBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1058,6 +1148,10 @@ pub struct GraphBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
 }
 
 /// A single data point in a graph.

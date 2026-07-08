@@ -238,6 +238,9 @@ impl ChartUnderstandingService {
             legend,
             geometry: None,
             source: None,
+            transform: None,
+            layer: None,
+            accessibility: None,
         }
     }
 
@@ -251,6 +254,9 @@ impl ChartUnderstandingService {
             legend: None,
             geometry: None,
             source: None,
+            transform: None,
+            layer: None,
+            accessibility: None,
         }
     }
 }

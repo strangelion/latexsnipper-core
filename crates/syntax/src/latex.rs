@@ -19,12 +19,15 @@ impl Parser for LatexParser {
                 height: 0.0,
                 blocks,
                 page_number: None,
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         })
     }
 
@@ -105,6 +108,9 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                 }
                 blocks.push(Block::Formula(FormulaBlock {
                     formula: Formula::latex(formula),
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 }));
@@ -139,6 +145,9 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                         f.display_mode = false;
                         f
                     },
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 }));

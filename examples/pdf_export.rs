@@ -46,6 +46,9 @@ fn main() {
                             source_info: None,
                             layout: None,
                         },
+                        label: None,
+                        number: None,
+                        environment: None,
                         geometry: None,
                         source: None,
                     }),
@@ -188,6 +191,8 @@ fn main() {
                     }),
                 ],
                 page_number: Some(1),
+                layout: None,
+                background_asset_id: None,
             },
             Page {
                 width: 800.0,
@@ -208,6 +213,8 @@ fn main() {
                     }),
                 ],
                 page_number: Some(2),
+                layout: None,
+                background_asset_id: None,
             },
         ],
         assets: Vec::new(),
@@ -215,6 +222,7 @@ fn main() {
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
 
     // Build render tree

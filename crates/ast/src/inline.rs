@@ -29,6 +29,8 @@ pub enum Inline {
         /// Footnote content.
         content: Box<Inline>,
     },
+    /// A reference to a note (footnote/endnote).
+    NoteRef(NoteRefInline),
     /// A label: \label{key} (not rendered, used for cross-references).
     Label {
         /// Reference key.
@@ -185,6 +187,8 @@ pub struct LinkInline {
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_target: Option<LinkTarget>,
 }
 
 /// An inline code span.

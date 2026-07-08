@@ -11,6 +11,9 @@ fn formulas_doc(count: usize, latex: &str) -> Document {
         .map(|_| {
             Block::Formula(FormulaBlock {
                 formula: Formula::latex(latex),
+                label: None,
+                number: None,
+                environment: None,
                 geometry: None,
                 source: None,
             })
@@ -26,6 +29,8 @@ fn formulas_doc(count: usize, latex: &str) -> Document {
             page_number: Some(1),
         }],
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+        notes: Vec::new(),
+        outline: None,
     }
 }
 

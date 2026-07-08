@@ -6,6 +6,7 @@
 
 use latexsnipper_ast::{Quad, Rect};
 use latexsnipper_inference::DetectionBox;
+use serde::{Deserialize, Serialize};
 
 use crate::artifacts::RecognizedTable;
 
@@ -13,19 +14,48 @@ use crate::artifacts::RecognizedTable;
 pub type RegionId = usize;
 
 /// Kind of content a region represents.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RegionKind {
     TextLine,
     TextParagraph,
+    TextBlock,
+    Heading,
+    Caption,
     FormulaInline,
     FormulaDisplay,
+    EquationNumber,
     Table,
     TableCell,
+    TableCaption,
     Figure,
-    Caption,
-    Heading,
+    Photo,
+    Screenshot,
+    Diagram,
+    Flowchart,
+    Chart,
+    Plot,
+    Icon,
+    Logo,
+    CodeBlock,
+    AlgorithmBlock,
     Header,
     Footer,
+    PageNumber,
+    Footnote,
+    Reference,
+    Bibliography,
+    TextBox,
+    Callout,
+    Sidebar,
+    Annotation,
+    Comment,
+    FormField,
+    Separator,
+    Watermark,
+    Stamp,
+    Signature,
+    Barcode,
+    QrCode,
     Unknown,
 }
 
@@ -106,21 +136,51 @@ pub struct ResolvedRegion {
 // ── priority ordering for conflict resolution ─────────────────────────
 
 /// Priority ranking: higher = wins conflicts.
+/// Ordering: Table > Chart > Formula > Heading > Caption > TextBox > TextParagraph > TextLine > Header/Footer > Watermark
 #[allow(dead_code)]
 fn kind_priority(kind: RegionKind) -> u8 {
     match kind {
         RegionKind::Table => 100,
-        RegionKind::Figure => 90,
+        RegionKind::Figure => 97,
+        RegionKind::Photo => 96,
+        RegionKind::Screenshot => 95,
+        RegionKind::Chart => 94,
+        RegionKind::Diagram => 93,
+        RegionKind::Flowchart => 92,
+        RegionKind::Plot => 91,
+        RegionKind::Icon => 90,
+        RegionKind::Logo => 89,
         RegionKind::FormulaDisplay => 80,
-        RegionKind::FormulaInline => 70,
+        RegionKind::FormulaInline => 79,
+        RegionKind::EquationNumber => 78,
+        RegionKind::CodeBlock => 70,
+        RegionKind::AlgorithmBlock => 69,
         RegionKind::Heading => 60,
-        RegionKind::Caption => 50,
+        RegionKind::Caption => 55,
+        RegionKind::TableCaption => 54,
+        RegionKind::TextBox => 50,
+        RegionKind::Callout => 49,
+        RegionKind::Sidebar => 48,
+        RegionKind::TextBlock => 45,
         RegionKind::TextParagraph => 40,
         RegionKind::TextLine => 30,
+        RegionKind::Annotation => 25,
+        RegionKind::Comment => 24,
         RegionKind::Header => 20,
-        RegionKind::Footer => 10,
-        RegionKind::Unknown => 0,
+        RegionKind::Footer => 19,
+        RegionKind::PageNumber => 18,
+        RegionKind::Footnote => 17,
+        RegionKind::Reference => 16,
+        RegionKind::Bibliography => 15,
+        RegionKind::FormField => 12,
+        RegionKind::Separator => 11,
+        RegionKind::Watermark => 5,
+        RegionKind::Stamp => 4,
+        RegionKind::Signature => 3,
+        RegionKind::Barcode => 2,
+        RegionKind::QrCode => 1,
         RegionKind::TableCell => 0, // resolved by parent Table
+        RegionKind::Unknown => 0,
     }
 }
 

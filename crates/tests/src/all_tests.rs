@@ -122,10 +122,15 @@ mod ast_tests {
             height: 600.0,
             blocks: vec![Block::Formula(FormulaBlock {
                 formula: Formula::latex("E=mc^2"),
+                label: None,
+                number: None,
+                environment: None,
                 geometry: None,
                 source: None,
             })],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         });
         let json = serde_json::to_string_pretty(&doc).unwrap();
         let restored: Document = serde_json::from_str(&json).unwrap();
@@ -431,6 +436,9 @@ mod conversion_tests {
                         f.confidence = 0.95;
                         f
                     },
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 }),
@@ -440,17 +448,23 @@ mod conversion_tests {
                         f.confidence = 0.92;
                         f
                     },
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 }),
             ],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     });
 
     #[test]
@@ -523,16 +537,22 @@ mod conversion_tests {
                 height: 0.0,
                 blocks: vec![Block::Formula(FormulaBlock {
                     formula: Formula::latex("\\frac{a}{b}"),
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 })],
                 page_number: None,
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         };
         let r = OmmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<m:num>"));
@@ -548,16 +568,22 @@ mod conversion_tests {
                 height: 0.0,
                 blocks: vec![Block::Formula(FormulaBlock {
                     formula: Formula::latex("\\frac{a}{b}"),
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 })],
                 page_number: None,
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         };
         let r = MathmlConverter.convert(&doc).unwrap();
         assert!(r.contains("<mfrac>"));
@@ -756,6 +782,8 @@ mod plugin_tests {
                     height: 0.0,
                     blocks: vec![],
                     page_number: None,
+                    layout: None,
+                    background_asset_id: None,
                 });
             }
             Ok(())

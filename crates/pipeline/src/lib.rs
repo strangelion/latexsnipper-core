@@ -42,6 +42,9 @@ pub use simple::{MockCropper, MockDetector, MockRecognizer, SimpleContext, Simpl
 // Re-export core types for downstream users
 pub use latexsnipper_foundation::SnipperError;
 
+// Re-export region graph types
+pub use crate::region_graph::RegionKind;
+
 // Re-export commonly used AST types (used in pipeline output)
 pub use latexsnipper_ast::{
     Block, Document, Formula, FormulaBlock, Inline, Page, ParagraphBlock, SourceInfo, TableBlock,

@@ -216,12 +216,15 @@ fn roundtrip_tables_to_all_formats() {
                 height: 600.0,
                 blocks: vec![Block::Table(table.clone())],
                 page_number: Some(1),
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         };
 
         for (format, format_name) in &formats {
@@ -257,12 +260,15 @@ fn roundtrip_5x6_table() {
             height: 600.0,
             blocks: vec![Block::Table(table)],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
 
     let formats = [
@@ -294,12 +300,15 @@ fn roundtrip_formula_table() {
             height: 600.0,
             blocks: vec![Block::Table(table)],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
 
     // All formats should produce non-empty output
@@ -328,12 +337,15 @@ fn roundtrip_merged_cells() {
             height: 600.0,
             blocks: vec![Block::Table(table)],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
 
     // HTML output should contain colspan
@@ -415,12 +427,15 @@ fn roundtrip_styled_table() {
             height: 600.0,
             blocks: vec![Block::Table(table)],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
 
     // HTML output should contain styling

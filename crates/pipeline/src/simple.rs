@@ -174,6 +174,9 @@ impl Stage for MockRecognizer {
                     let formula = Formula::latex(&crop.content);
                     blocks.push(Block::Formula(FormulaBlock {
                         formula,
+                        label: None,
+                        number: None,
+                        environment: None,
                         geometry: Some(latexsnipper_ast::Rect::new(
                             crop.region.x,
                             crop.region.y,
@@ -204,6 +207,8 @@ impl Stage for MockRecognizer {
             height: 600.0,
             blocks,
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         });
 
         log::info!(

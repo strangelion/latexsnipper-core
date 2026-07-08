@@ -17,16 +17,22 @@ fn formula_doc(latex: &str) -> Document {
             height: 600.0,
             blocks: vec![Block::Formula(FormulaBlock {
                 formula: Formula::latex(latex),
+                label: None,
+                number: None,
+                environment: None,
                 geometry: Some(Rect::new(1.0, 2.0, 3.0, 4.0)),
                 source: None,
             })],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     }
 }
 
@@ -37,6 +43,8 @@ fn ast_document_roundtrip_preserves_public_shape() {
         width: 320.0,
         height: 240.0,
         page_number: Some(7),
+        layout: None,
+        background_asset_id: None,
         blocks: vec![Block::Paragraph(ParagraphBlock {
             inlines: vec![
                 Inline::Text(TextRun::new("Area: ")),
@@ -65,6 +73,8 @@ fn ast_text_collector_visits_nested_inline_formula() {
             width: 0.0,
             height: 0.0,
             page_number: None,
+            layout: None,
+            background_asset_id: None,
             blocks: vec![Block::Paragraph(ParagraphBlock {
                 inlines: vec![
                     Inline::Text(TextRun::new("f=")),
@@ -80,6 +90,7 @@ fn ast_text_collector_visits_nested_inline_formula() {
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
 
     let mut collector = TextCollector::new();

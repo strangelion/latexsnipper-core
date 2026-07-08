@@ -71,6 +71,8 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
             height: 600.0,
             blocks,
             page_number: Some(sheet_idx as u32),
+            layout: None,
+            background_asset_id: None,
         });
     }
 
@@ -88,6 +90,7 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     })
 }
 

@@ -245,6 +245,7 @@ fn render_inlines(inlines: &[Inline], assets: &[MediaAsset]) -> String {
                 let inner = render_inlines(&[*content.clone()], assets);
                 parts.push(format!("<sup>{}</sup>", inner));
             }
+            Inline::NoteRef(_) => parts.push("<sup>[note]</sup>".to_string()),
             Inline::Label { key } => {
                 parts.push(format!("<a id=\"{}\"></a>", key));
             }

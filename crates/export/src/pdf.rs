@@ -399,6 +399,7 @@ mod tests {
             nodes: vec![RenderNode::Page(vec![RenderNode::Text(
                 "Hello World".into(),
             )])],
+            diagnostics: Vec::new(),
         };
         let generator = PdfGenerator;
         let output = generator.generate(&tree).unwrap();
@@ -446,6 +447,7 @@ mod tests {
                 },
                 RenderNode::HorizontalRule,
             ])],
+            diagnostics: Vec::new(),
         };
         let generator = PdfGenerator;
         let output = generator.generate(&tree).unwrap();

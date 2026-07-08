@@ -172,6 +172,7 @@ fn render_inlines(inlines: &[Inline], _mode: &MarkdownMode, assets: &[MediaAsset
                 let inner = render_inlines(&[*content.clone()], _mode, assets);
                 parts.push(format!("[^{}]", inner));
             }
+            Inline::NoteRef(n) => parts.push(format!("[^{}]", n.note_id)),
             Inline::Label { .. } => {}
             Inline::Reference { key, .. } => {
                 parts.push(format!("[@{}]", key));

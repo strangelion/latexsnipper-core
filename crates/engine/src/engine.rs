@@ -578,12 +578,15 @@ impl SnipperEngine {
                 height: ctx.image.as_ref().map_or(0.0, |i| i.height() as f32),
                 blocks,
                 page_number: Some(1),
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         })
     }
 
@@ -624,6 +627,8 @@ impl SnipperEngine {
                 height: page_img.height() as f32,
                 blocks,
                 page_number: Some((page_idx + 1) as u32),
+                layout: None,
+                background_asset_id: None,
             });
         }
 
@@ -641,6 +646,7 @@ impl SnipperEngine {
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         })
     }
 

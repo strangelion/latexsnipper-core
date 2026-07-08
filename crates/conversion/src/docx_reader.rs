@@ -47,12 +47,15 @@ pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
             height: 0.0,
             blocks,
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets,
         diagnostics: docx_diags,
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     })
 }
 
@@ -242,6 +245,7 @@ fn parse_document_body(
                                 target: hyperlink_target.clone(),
                                 title: None,
                                 source: None,
+                                link_target: None,
                             }));
                         }
                         in_hyperlink = false;

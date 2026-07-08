@@ -185,6 +185,7 @@ fn inline_to_plain_text(inline: &Inline) -> String {
         Inline::Footnote { content } => {
             format!("[^{}]", inline_to_plain_text(content))
         }
+        Inline::NoteRef(n) => format!("[note: {}]", n.note_id),
         Inline::Label { .. } => String::new(),
         Inline::Reference { key, .. } => format!("({})", key),
         Inline::Citation { key, .. } => format!("[{}]", key),

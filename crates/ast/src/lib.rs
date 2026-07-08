@@ -20,12 +20,12 @@ pub use block::{
     AnnotationBlock, BibliographyBlock, BibliographyEntry, Block, BorderStyle, CellAlignment,
     CellDataType, ChartBlock, ChemicalFormulaBlock, CodeBlock, ColumnLayout, DataPoint,
     DescriptionItem, DescriptionListBlock, EmbeddedObjectBlock, FigureBlock, FloatBlock,
-    FormFieldBlock, FormFieldKind, FormulaBlock, GraphBlock, GraphType, HandwritingBlock,
-    HeaderFooterBlock, HeaderFooterKind, HeaderFooterScope, HeadingBlock, HorizontalRuleBlock,
-    ListBlock, ListItem, MinipageBlock, PageBreakBlock, PageLayout, PageMargin, PageOrientation,
-    ParagraphBlock, ProofBlock, QrCodeBlock, QuoteBlock, Revision, RevisionKind, SectionBreakBlock,
-    SectionBreakKind, ShapeBlock, TableBlock, TableCell, TableCellStyle, TableColumn, TableRow,
-    TableStyle, TextBoxBlock, TheoremBlock,
+    FormFieldBlock, FormFieldKind, FormulaBlock, FormulaEnvironment, GraphBlock, GraphType,
+    HandwritingBlock, HeaderFooterBlock, HeaderFooterKind, HeaderFooterScope, HeadingBlock,
+    HorizontalRuleBlock, ListBlock, ListItem, MinipageBlock, PageBreakBlock, PageLayout,
+    PageMargin, PageOrientation, ParagraphBlock, ProofBlock, QrCodeBlock, QuoteBlock, Revision,
+    RevisionKind, SectionBreakBlock, SectionBreakKind, ShapeBlock, TableBlock, TableCell,
+    TableCellStyle, TableColumn, TableRow, TableStyle, TextBoxBlock, TheoremBlock,
 };
 pub use builder::DocumentBuilder;
 pub use document::{Document, Page};
@@ -70,11 +70,12 @@ pub use span::{
     ProvenanceOperation, SourceInfo, Span,
 };
 pub use style::{
-    effective_text_style, AccessibilityInfo, AnnotationKind, BoxStyle, BulletStyle, ChartAxis,
-    ChartData, ChartLegend, ChartSeries, ChartType, Color, EmbeddedObjectKind, FontWeight,
-    LayerInfo, ListStyle, NumberingStyle, OfficeApp, OfficeSourceInfo, ParagraphStyle, PathCommand,
-    ShapeGroup, ShapeStyle, ShapeType, TextAlignment, TextDirection, TextStyle, Transform2D,
-    UnderlineStyle, VectorPath, VerticalAlign,
+    effective_text_style, AccessibilityInfo, AnnotationKind, BorderSide, BoxStyle, BulletStyle,
+    ChartAxis, ChartData, ChartLegend, ChartSeries, ChartType, Color, EmbeddedObjectKind,
+    FontWeight, LayerInfo, Length, LengthUnit, ListStyle, NumberingStyle, OfficeApp,
+    OfficeSourceInfo, ParagraphStyle, PathCommand, ShapeGroup, ShapeStyle, ShapeType, TableBorder,
+    TextAlignment, TextDirection, TextStyle, Transform2D, UnderlineStyle, VectorPath,
+    VerticalAlign,
 };
 pub use traits::{Exporter, Importer, OfficeAdapter, Renderer, SemanticConverter, StageRunner};
 pub use visitor::{DocumentVisitor, TextCollector};

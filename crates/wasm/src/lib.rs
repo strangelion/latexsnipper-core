@@ -221,17 +221,23 @@ pub fn formula_to_document(latex: &str, format: &str) -> Result<String, JsValue>
             blocks: vec![latexsnipper_ast::Block::Formula(
                 latexsnipper_ast::FormulaBlock {
                     formula: latexsnipper_ast::Formula::latex(latex),
+                    label: None,
+                    number: None,
+                    environment: None,
                     geometry: None,
                     source: None,
                 },
             )],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         }],
         assets: Vec::new(),
         diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
         notes: Vec::new(),
+        outline: None,
     };
 
     let doc_json = serde_json::to_string(&doc).map_err(err_to_js)?;

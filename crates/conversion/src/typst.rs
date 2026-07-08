@@ -140,6 +140,7 @@ fn render_inlines(inlines: &[Inline], assets: &[MediaAsset]) -> String {
                 let inner = render_inlines(&[*content.clone()], assets);
                 parts.push(format!("#footnote({})", inner));
             }
+            Inline::NoteRef(n) => parts.push(format!("#footnote({})", n.note_id)),
             Inline::Label { key } => {
                 parts.push(format!("<label={}>", key));
             }

@@ -70,6 +70,8 @@ pub struct CleanResult {
 ///         }),
 ///     ],
 ///     page_number: Some(1),
+///     layout: None,
+///     background_asset_id: None,
 /// });
 ///
 /// let result = clean_document(&doc, &CleanerOptions::default());
@@ -136,6 +138,8 @@ pub fn clean_document(doc: &Document, options: &CleanerOptions) -> CleanResult {
             height: page.height,
             blocks,
             page_number: page.page_number,
+            layout: None,
+            background_asset_id: None,
         });
     }
 
@@ -148,6 +152,7 @@ pub fn clean_document(doc: &Document, options: &CleanerOptions) -> CleanResult {
             id_gen: NodeIdGenerator::new(),
             schema_version: doc.schema_version.clone(),
             notes: Vec::new(),
+            outline: None,
         },
         blocks_removed,
         blocks_merged,
@@ -389,12 +394,15 @@ mod tests {
                 height: 600.0,
                 blocks,
                 page_number: Some(1),
+                layout: None,
+                background_asset_id: None,
             }],
             assets: Vec::new(),
             diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
+            outline: None,
         }
     }
 

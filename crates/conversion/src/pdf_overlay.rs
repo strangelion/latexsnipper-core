@@ -204,6 +204,8 @@ mod tests {
                 style: None,
             })],
             page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         });
 
         let result = overlay_pdf(&src, &doc, &out);

@@ -1,10 +1,13 @@
-use latexsnipper_ast::{AssetId, Block, Document, Inline};
+use latexsnipper_ast::{
+    AssetId, Block, Diagnostic, DiagnosticLevel, Document, Inline, W_BLOCK_DOWNGRADED,
+};
 
 /// An intermediate representation between AST and final output.
 /// Avoids re-traversing the AST for each export format.
 #[derive(Debug, Clone)]
 pub struct RenderTree {
     pub nodes: Vec<RenderNode>,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,29 +60,33 @@ impl RenderTree {
     /// Build a RenderTree from a Document.
     pub fn from_document(doc: &Document) -> Self {
         let mut nodes = Vec::new();
+        let mut diagnostics = Vec::new();
 
         for page in &doc.pages {
             let mut page_nodes = Vec::new();
             for block in &page.blocks {
-                if let Some(node) = convert_block(block) {
+                if let Some(node) = convert_block(block, &mut diagnostics) {
                     page_nodes.push(node);
                 }
             }
             nodes.push(RenderNode::Page(page_nodes));
         }
 
-        Self { nodes }
+        diagnostics.extend(doc.diagnostics.clone());
+
+        Self { nodes, diagnostics }
     }
 
     /// Build a RenderTree from specific pages of a Document.
     pub fn from_document_pages(doc: &Document, page_indices: &[usize]) -> Self {
         let mut nodes = Vec::new();
+        let mut diagnostics = Vec::new();
 
         for &idx in page_indices {
             if let Some(page) = doc.get_page(idx) {
                 let mut page_nodes = Vec::new();
                 for block in &page.blocks {
-                    if let Some(node) = convert_block(block) {
+                    if let Some(node) = convert_block(block, &mut diagnostics) {
                         page_nodes.push(node);
                     }
                 }
@@ -87,7 +94,9 @@ impl RenderTree {
             }
         }
 
-        Self { nodes }
+        diagnostics.extend(doc.diagnostics.clone());
+
+        Self { nodes, diagnostics }
     }
 
     /// Get the number of pages.
@@ -104,7 +113,7 @@ impl RenderTree {
     }
 }
 
-fn convert_block(block: &Block) -> Option<RenderNode> {
+fn convert_block(block: &Block, diags: &mut Vec<Diagnostic>) -> Option<RenderNode> {
     match block {
         Block::Heading(h) => {
             let inlines = convert_inlines(&h.inlines);
@@ -153,7 +162,12 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             let items: Vec<Vec<RenderNode>> = l
                 .items
                 .iter()
-                .map(|item| item.content.iter().filter_map(convert_block).collect())
+                .map(|item| {
+                    item.content
+                        .iter()
+                        .filter_map(|b| convert_block(b, diags))
+                        .collect()
+                })
                 .collect();
             Some(RenderNode::List {
                 ordered: l.is_ordered(),
@@ -165,7 +179,11 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             code: c.code.clone(),
         }),
         Block::Quote(q) => {
-            let inner: Vec<RenderNode> = q.blocks.iter().filter_map(convert_block).collect();
+            let inner: Vec<RenderNode> = q
+                .blocks
+                .iter()
+                .filter_map(|b| convert_block(b, diags))
+                .collect();
             Some(RenderNode::Quote(inner))
         }
         Block::HorizontalRule(_) => Some(RenderNode::HorizontalRule),
@@ -183,7 +201,7 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
                         nodes.extend(convert_inlines(label));
                     }
                     for block in &item.content {
-                        if let Some(node) = convert_block(block) {
+                        if let Some(node) = convert_block(block, diags) {
                             nodes.push(node);
                         }
                     }
@@ -205,7 +223,7 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
         Block::Theorem(t) => {
             let mut nodes = vec![RenderNode::Text(format!("{}.", t.name))];
             for block in &t.content {
-                if let Some(node) = convert_block(block) {
+                if let Some(node) = convert_block(block, diags) {
                     nodes.push(node);
                 }
             }
@@ -214,7 +232,7 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
         Block::Proof(p) => {
             let mut nodes = vec![RenderNode::Text("Proof.".to_string())];
             for block in &p.content {
-                if let Some(node) = convert_block(block) {
+                if let Some(node) = convert_block(block, diags) {
                     nodes.push(node);
                 }
             }
@@ -222,69 +240,205 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             Some(RenderNode::Paragraph(nodes))
         }
         Block::Minipage(m) => {
-            let nodes: Vec<RenderNode> = m.content.iter().filter_map(convert_block).collect();
+            let nodes: Vec<RenderNode> = m
+                .content
+                .iter()
+                .filter_map(|b| convert_block(b, diags))
+                .collect();
             Some(RenderNode::Paragraph(nodes))
         }
         Block::Float(f) => {
-            let nodes: Vec<RenderNode> = f.content.iter().filter_map(convert_block).collect();
+            let nodes: Vec<RenderNode> = f
+                .content
+                .iter()
+                .filter_map(|b| convert_block(b, diags))
+                .collect();
             Some(RenderNode::Paragraph(nodes))
         }
         Block::TextBox(tb) => {
-            let nodes: Vec<RenderNode> = tb.content.iter().filter_map(convert_block).collect();
+            let nodes: Vec<RenderNode> = tb
+                .content
+                .iter()
+                .filter_map(|b| convert_block(b, diags))
+                .collect();
             Some(RenderNode::Paragraph(nodes))
         }
-        Block::Chart(c) => Some(RenderNode::Unsupported {
-            block_type: "chart",
-            message: format!("{:?}", c.chart_type),
-        }),
-        Block::Shape(s) => Some(RenderNode::Unsupported {
-            block_type: "shape",
-            message: format!("{:?}", s.shape_type),
-        }),
-        Block::EmbeddedObject(e) => Some(RenderNode::Unsupported {
-            block_type: "embedded_object",
-            message: format!("{:?}", e.kind),
-        }),
-        Block::Annotation(a) => Some(RenderNode::Unsupported {
-            block_type: "annotation",
-            message: format!("{:?}", a.kind),
-        }),
-        Block::PageBreak(_) => Some(RenderNode::Unsupported {
-            block_type: "page_break",
-            message: String::new(),
-        }),
-        Block::SectionBreak(sb) => Some(RenderNode::Unsupported {
-            block_type: "section_break",
-            message: format!("{:?}", sb.kind),
-        }),
-        Block::HeaderFooter(hf) => Some(RenderNode::Unsupported {
-            block_type: "header_footer",
-            message: format!("{:?} {:?}", hf.kind, hf.applies_to),
-        }),
-        Block::Bibliography(bb) => Some(RenderNode::Unsupported {
-            block_type: "bibliography",
-            message: format!("{} entries", bb.entries.len()),
-        }),
-        Block::FormField(ff) => Some(RenderNode::Unsupported {
-            block_type: "form_field",
-            message: format!("{:?}", ff.kind),
-        }),
-        Block::Revision(r) => Some(RenderNode::Unsupported {
-            block_type: "revision",
-            message: format!("{:?}", r.kind),
-        }),
-        Block::ChemicalFormula(cf) => Some(RenderNode::Unsupported {
-            block_type: "chemical_formula",
-            message: cf.formula.clone(),
-        }),
-        Block::QrCode(_) => Some(RenderNode::Unsupported {
-            block_type: "qr_code",
-            message: String::new(),
-        }),
-        Block::Graph(g) => Some(RenderNode::Unsupported {
-            block_type: "graph",
-            message: format!("{:?}", g.graph_type),
-        }),
+        Block::Chart(c) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "chart block ({:?}) is not supported in render tree output",
+                    c.chart_type
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "chart",
+                message: format!("{:?}", c.chart_type),
+            })
+        }
+        Block::Shape(s) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "shape block ({:?}) is not supported in render tree output",
+                    s.shape_type
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "shape",
+                message: format!("{:?}", s.shape_type),
+            })
+        }
+        Block::EmbeddedObject(e) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "embedded object ({:?}) is not supported in render tree output",
+                    e.kind
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "embedded_object",
+                message: format!("{:?}", e.kind),
+            })
+        }
+        Block::Annotation(a) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "annotation block ({:?}) is not supported in render tree output",
+                    a.kind
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "annotation",
+                message: format!("{:?}", a.kind),
+            })
+        }
+        Block::PageBreak(_) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                "page break block is not supported in render tree output",
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "page_break",
+                message: String::new(),
+            })
+        }
+        Block::SectionBreak(sb) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "section break block ({:?}) is not supported in render tree output",
+                    sb.kind
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "section_break",
+                message: format!("{:?}", sb.kind),
+            })
+        }
+        Block::HeaderFooter(hf) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "header/footer block ({:?} {:?}) is not supported in render tree output",
+                    hf.kind, hf.applies_to
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "header_footer",
+                message: format!("{:?} {:?}", hf.kind, hf.applies_to),
+            })
+        }
+        Block::Bibliography(bb) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "bibliography block ({} entries) is not supported in render tree output",
+                    bb.entries.len()
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "bibliography",
+                message: format!("{} entries", bb.entries.len()),
+            })
+        }
+        Block::FormField(ff) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "form field block ({:?}) is not supported in render tree output",
+                    ff.kind
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "form_field",
+                message: format!("{:?}", ff.kind),
+            })
+        }
+        Block::Revision(r) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "revision block ({:?}) is not supported in render tree output",
+                    r.kind
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "revision",
+                message: format!("{:?}", r.kind),
+            })
+        }
+        Block::ChemicalFormula(cf) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "chemical formula block ({}) is not supported in render tree output",
+                    cf.formula
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "chemical_formula",
+                message: cf.formula.clone(),
+            })
+        }
+        Block::QrCode(_) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                "QR code block is not supported in render tree output",
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "qr_code",
+                message: String::new(),
+            })
+        }
+        Block::Graph(g) => {
+            diags.push(Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_BLOCK_DOWNGRADED,
+                format!(
+                    "graph block ({:?}) is not supported in render tree output",
+                    g.graph_type
+                ),
+            ));
+            Some(RenderNode::Unsupported {
+                block_type: "graph",
+                message: format!("{:?}", g.graph_type),
+            })
+        }
     }
 }
 
@@ -316,6 +470,7 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<RenderNode> {
                         .collect::<String>()
                 ))
             }
+            Inline::NoteRef(n) => RenderNode::Text(format!("[note: {}]", n.note_id)),
             Inline::Label { key } => RenderNode::Text(format!("[label={}]", key)),
             Inline::Reference { key, .. } => RenderNode::Text(format!("({})", key)),
             Inline::Citation { key, .. } => RenderNode::Text(format!("[{}]", key)),
