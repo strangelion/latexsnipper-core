@@ -14,50 +14,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Moved `SemanticFormat`/`ExportFormat`/`TargetFormat` to `latexsnipper-ast` as platform contracts
   - Removed duplicate `Exporter` trait from conversion crate (dead code)
   - Split `AssetResolver` into `AssetStore` + `AssetReferenceResolver` + `AssetExporter` three-layer traits
+  - `ExportFormat`, `SemanticFormat`, `TargetFormat` now exported from `latexsnipper-ast::format`
 
 - **Asset Normalization (Phase B)**
-  - `Document::normalize_assets()` — promotes legacy `image_data` to `MediaAsset` with deduplication
-  - `Document::validate_asset_refs()` — detects dangling `asset_id` references
-  - `AssetNormalizeReport` with created/reused/missing counts
+  - `Document::add_asset()`, `Document::get_asset()` — asset management convenience methods
+  - `Document::validate_asset_refs()` — detects dangling `asset_id` references, returns diagnostics
+  - `Document::migrate_legacy_image_data()` — promotes legacy `image_data` to `MediaAsset` entries
+  - `Block::inlines_mut()` — mutable inline accessor for block traversal
   - DOCX/PPTX readers now create `MediaAsset` entries and use `asset_id` instead of raw `image_data`
-  - `FigureBlock.caption_inlines: Option<Vec<Inline>>` — structured caption with full inline support
-  - `SnipperImageDescriptor` struct replaces `RecognizeInput::Image(String)` placeholder
+  - `guess_image_format()` helper for file extension → `AssetFormat` resolution
 
 - **Full Block Coverage (Phase C)**
+  - `RenderNode::Unsupported { block_type, message }` — visible degradation instead of silent drop
   - Markdown/HTML/LaTeX/Typst converters now produce visible placeholders for:
     `ChartBlock`, `ShapeBlock`, `EmbeddedObjectBlock`, `AnnotationBlock`
-  - `RenderTree` emits `Paragraph(vec![Text(...)])` for these block types (visible in SVG/PDF/Text)
-  - HTML clipboard (`ClipboardBundle`) covers all 21 block types — no silent drops
+  - HTML converter: type-aware `<div class="chart/shape/...">` with `title` attribute
+  - RenderTree emits `Unsupported` for chart/shape/embedded/annotation (visible in SVG/PDF/Text)
+  - SVG/PDF/Text export generators handle `RenderNode::Unsupported`
 
 - **StageSpec Execution Loop (Phase D)**
-  - `StageExecutor` trait in `ast::traits` alongside Exporter/Importer/SemanticConverter
-  - `PipelineManifest::from_stage_specs()` adapter — bridges job contracts to pipeline execution
-  - `JobRoot::ensure_dirs()` — creates standard job directory tree
-  - `Job::persist_to_root()` — writes `artifacts.json`, `events.jsonl`, `stages.json`, `diagnostics.json`
-  - CLI: `--job-root` and `--emit-report` flags for `snipper job run`
-  - `PipelineArtifacts::to_artifact_manifest()` — converts pipeline results to platform manifest
-  - `EventRecord::now()` — UTC timestamp generator without external chrono dependency
+  - `StageRunner` trait in `ast::traits` with `kind()` and `run()` methods
+  - `PipelineManifest::from_stage_specs()` — bridges job contract specs to pipeline execution
+  - `JobRoot::ensure_dirs()` — creates standard 11-directory job tree
+  - `DecodeStage`, `RecognizeStage`, `ConvertStage`, `ExportStage` — concrete runner implementations
 
 - **Office/PDF Utility Loop (Phase E)**
-  - `ooxml_fragment::write_ooxml_fragment()` — converts AST blocks to Word OOXML body XML
-  - OfficeInsertService now tries: OMath → OOXML Fragment → Clipboard Bundle (3-level fallback)
-  - 7 well-known diagnostic codes: `W_SMARTART_NOT_SUPPORTED`, `W_OLE_OBJECT_PREVIEW_ONLY`,
-    `W_OFFICE_CHART_PREVIEW_ONLY`, `W_SHAPE_NOT_SUPPORTED`, `W_OFFICE_ANNOTATION_DROPPED`,
-    `W_PDF_NATIVE_EXTRACTION_INCOMPLETE`, `W_PDF_OBJECT_PREVIEW_ONLY`
-  - DOCX reader detects SmartArt/OLE/Charts and emits corresponding diagnostics
+  - 12 diagnostic code constants: `W_SMARTART_NOT_SUPPORTED`, `W_OLE_NOT_SUPPORTED`,
+    `W_CHART_DATA_SIMPLIFIED`, `W_MEDIA_NOT_SUPPORTED`, `W_ACTIVEX_NOT_SUPPORTED`,
+    `W_FORM_FIELD_NOT_SUPPORTED`, `W_REVISION_NOT_FULLY_PRESERVED`, `W_BLOCK_DOWNGRADED`,
+    `I_LEGACY_IMAGE_MIGRATED`, `W_MISSING_ASSET_REF`, `E_API_CALL_FAILED`, `E_SCHEMA_VALIDATION_FAILED`
+  - DOCX reader detects SmartArt (`mc:AlternateContent`), OLE (`o:OLEObject`), Charts (`c:chartSpace`) — emits diagnostics
 
 - **API/VLM Stabilization (Phase F)**
-  - 8 standardized API error codes: `E_API_HTTP`, `E_API_TIMEOUT`, `E_API_AUTH`,
-    `E_API_RATE_LIMIT`, `E_API_INVALID_JSON`, `E_API_SCHEMA_MISMATCH`, `E_API_UPLOAD_BLOCKED`,
-    `E_API_RESPONSE_EMPTY`
-  - HTTP status-aware error mapping (401→AUTH, 429→RATE_LIMIT, timeout→TIMEOUT)
-  - Two-stage JSON schema validation: lightweight (default) + `json-schema-validation` feature flag
-  - Empty response → `E_API_RESPONSE_EMPTY`, invalid JSON → `E_API_INVALID_JSON`
-  - 9 mock contract tests for schema, token extraction, upload policy, and content parsing
+  - `RemoteApiResult::is_usable()` now includes `schema_valid` check
+  - `is_usable_for_profile()` — per-profile usability considering optional schema
+  - `send_request()` returns `ApiRawResponse` struct with content + token usage from raw body
+  - HTTP status-aware error mapping: 401→`E_API_AUTH`, 429→`E_API_RATE_LIMIT`, timeout→`E_API_TIMEOUT`
+  - `ProviderReport` always has populated `calls` (even on error paths — upload blocked, payload build fail)
+  - `UploadScope` enum (`CroppedRegion`, `PageImage`, `WholeDocument`) with `UploadPolicy::allows()`
+  - `ApiRawResponse` extracted to module scope for `cargo fmt` compliance
 
-- **Documentation & Reporting**
-  - `DocumentReport::from_document()` generates structured reports with:
-    block counts by type, confidence statistics (mean/min/max), asset summary by storage
+- **P0 Type Additions**
+  - `TextDirection` (`Ltr`/`Rtl`/`Auto`) and `UnderlineStyle` (`Single`/`Double`/`Dotted`/`Dashed`/`Wavy`) enums in style.rs
+  - `Transform2D` struct with rotation/scale/translate/skew fields in style.rs
+  - `LayerInfo` struct with z_index/locked/hidden/group_id fields in style.rs
+  - `TextRun.style: Option<TextStyle>` — style field alongside legacy bold/italic/underline/strikethrough
+  - `NoteKind` (`Footnote`/`Endnote`), `NoteRefInline`, `NoteDefinition` for structured footnotes
+  - `FigureBlock::caption_inlines_or_legacy()` and `caption_plain_text()` accessor methods
+  - All converters (Markdown/HTML/LaTeX/Typst/RenderTree) updated to use caption accessors
+  - `PipelineDiagnosticEvent → ast::Diagnostic` From impl for cross-system diagnostic mapping
   - `DocumentReport::with_stage_reports()` / `with_provider_reports()` chaining
   - `CapabilityMatrix::query(input, output)` and `explain_loss(input, output)` methods
   - `effective_text_style()` with `merge_style()` — style inheritance rules

@@ -4,10 +4,11 @@
 
 **可组合的 Rust 数学 OCR 引擎，支持文档理解和多格式处理。**
 
-[![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)]()
+[![Rust](https://img.shields.io/badge/Rust-1.96+-orange?logo=rust)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
 [![Status](https://img.shields.io/badge/Status-架构稳定-yellow)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20WASM-lightgrey)]()
+[![Clippy](https://img.shields.io/badge/Clippy-0%20warnings-brightgreen)]()
 
 **一次构建，处处运行。**
 

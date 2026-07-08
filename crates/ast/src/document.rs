@@ -192,15 +192,11 @@ impl Document {
 
     /// Walk all FigureBlock and ImageInline asset references in the document
     /// checking they exist in the assets list.
-    fn check_block_asset_refs(
-        block: &Block,
-        asset_ids: &[&AssetId],
-        diags: &mut Vec<Diagnostic>,
-    ) {
+    fn check_block_asset_refs(block: &Block, asset_ids: &[&AssetId], diags: &mut Vec<Diagnostic>) {
         match block {
             Block::Figure(f) => {
                 if let Some(ref aid) = f.asset_id {
-                    if !asset_ids.iter().any(|id| *id == aid) {
+                    if !asset_ids.contains(&aid) {
                         diags.push(
                             Diagnostic::warning(
                                 "W_MISSING_ASSET_REF",
@@ -247,7 +243,7 @@ impl Document {
         for inline in block.inlines() {
             if let Inline::Image(img) = inline {
                 if let Some(ref aid) = img.asset_id {
-                    if !asset_ids.iter().any(|id| *id == aid) {
+                    if !asset_ids.contains(&aid) {
                         diags.push(
                             Diagnostic::warning(
                                 "W_MISSING_ASSET_REF",

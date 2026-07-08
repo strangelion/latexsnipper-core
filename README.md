@@ -4,10 +4,11 @@
 
 **One-stop solution from images to multi-format documents**
 
-[![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)]()
+[![Rust](https://img.shields.io/badge/Rust-1.96+-orange?logo=rust)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
 [![Status](https://img.shields.io/badge/Status-Core%20Pipeline%20Working-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)]()
+[![Clippy](https://img.shields.io/badge/Clippy-0%20warnings-brightgreen)]()
 
 **One line of code, images to LaTeX/Markdown/Typst**
 
@@ -88,17 +89,23 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **Diagram → Shape/Graph** | ✅ | VLM-powered diagram understanding |
 | **Document→Report** | ✅ | `DocumentReport::from_document()` with block/confidence/asset summaries |
 | **Capability query** | ✅ | `CapabilityMatrix::query()` / `explain_loss()` |
-| **Asset normalization** | ✅ | `normalize_assets()` promotes legacy data, deduplicates |
-| **StageExecutor trait** | ✅ | `StageSpec` → `PipelineManifest` adapter |
-| **Job persistence** | ✅ | `Job::persist_to_root()` writes artifacts/events/reports |
+| **Asset normalization** | ✅ | `migrate_legacy_image_data()` promotes legacy data, `validate_asset_refs()` |
+| **StageRunner trait** | ✅ | `DecodeStage`/`RecognizeStage`/`ConvertStage`/`ExportStage` implementations |
+| **Job persistence** | ✅ | `JobRoot::ensure_dirs()` creates 11-directory job tree |
 | **OOXML fragment** | ✅ | `write_ooxml_fragment()` — AST → Word body XML |
 | **Clipboard bundle** | ✅ | HTML+RTF+PlainText+PNG multi-format |
 | **Office insertion** | ✅ | Auto-select OMath/SVG/HTML per app |
-| **Document cleaning** | ✅ | Merge/remove/dedup/normalize blocks |
-| **Remote API** | ✅ | OpenAI-compatible VLM provider |
-| **API error codes** | ✅ | 8 standardized codes (auth, timeout, rate limit, etc.) |
+| **FigureBlock caption** | ✅ | `caption_inlines_or_legacy()` / `caption_plain_text()` accessors |
+| **Upload policy** | ✅ | `UploadScope` granular control via `UploadPolicy::allows()` |
+| **Diagnostic codes** | ✅ | 12 standardized codes (SmartArt/OLE/Chart/media/API warnings) |
+| **API error codes** | ✅ | 8 codes (auth, timeout, rate limit, schema, etc.) |
 | **Schema validation** | ✅ | Two-stage (lightweight + feature-gated full) |
+| **Pipeline diagnostics** | ✅ | `From<DiagnosticEvent> for ast::Diagnostic` mapping |
 | **Capability matrix** | ✅ | `snipper capabilities` |
+| **TextRun.style** | ✅ | `Option<TextStyle>` alongside legacy bold/italic/underline |
+| **TextDirection/UnderlineStyle** | ✅ | Style enums for LTR/RTL/underline variants |
+| **Transform2D/LayerInfo** | ✅ | 2D transforms and z-order for blocks |
+| **NoteDefinition** | ✅ | Structured footnote/endnote with multi-block content |
 
 ---
 

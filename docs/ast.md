@@ -17,16 +17,21 @@ Document
     ├── width, height, page_number
     └── Block[]
         ├── Paragraph → Inline[]
-        │   ├── Text → TextRun (text, bold, italic, underline, strikethrough)
+        │   ├── Text → TextRun (text, style, bold, italic, underline, strikethrough)
         │   ├── Formula → FormulaSource
-        │   ├── Image → ImageInline
+        │   ├── Image → ImageInline (asset_id, width, height, alt_text)
         │   ├── Footnote → Inline
         │   ├── Label → key
         │   ├── Reference → key, eq_ref
-        │   └── Citation → key, style
+        │   ├── Citation → key, style
+        │   ├── LineBreak / SoftBreak
+        │   ├── Span → content, style
+        │   ├── Link → target, content
+        │   ├── Code → code, language
+        │   └── Superscript/Subscript → content
         ├── Formula → FormulaBlock
         ├── Table → TableCell[][] (colspan, rowspan)
-        ├── Figure → FigureBlock (asset_id, caption, caption_inlines, role, policy)
+        ├── Figure → FigureBlock (asset_id, caption_inlines_or_legacy(), role, policy)
         ├── TextBox → TextBoxBlock (content, rotation_deg, z_index, style)
         ├── Chart → ChartBlock (chart_type, title, asset_id, data, axes)
         ├── Shape → ShapeBlock (shape_type, text, geometry, style)
@@ -51,17 +56,17 @@ Document
 | 模块 | 文件 | 说明 |
 |---|---|---|
 | `document` | document.rs | Document, Page |
-| `block` | block.rs | Block enum (21 variants), all block structs |
-| `inline` | inline.rs | Inline enum (15 variants), TextRun, SpanInline, LinkInline, ImageInline |
+| `block` | block.rs | Block enum (25 variants), all block structs |
+| `inline` | inline.rs | Inline enum (15+ variants), TextRun, SpanInline, LinkInline, ImageInline, NoteRefInline |
 | `formula` | formula.rs | Formula, FormulaSource (Latex/Omml/Typst/MathML) |
 | `formula_layout` | formula_layout.rs | FormulaLayout, FormulaNode, SymbolInfo |
 | `span` | span.rs | SourceInfo, Provenance, BlockPolicy, CoordinateSpace, NodeId |
-| `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType |
-| `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits |
-| `format` | format.rs | ExportArtifact, CapabilityMatrix, LossKind, FidelityLevel, SemanticFormat, ExportFormat, TargetFormat |
-| `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest, ProviderReport |
-| `input` | input.rs | InputFormat, InputSourceDescriptor, RecognizeInput, SnipperImageDescriptor |
-| `traits` | traits.rs | Importer, SemanticConverter, Exporter, Renderer, OfficeAdapter, StageExecutor |
+| `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType, TextDirection, UnderlineStyle, Transform2D, LayerInfo |
+| `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits, 12 diagnostic code constants |
+| `format` | format.rs | ExportArtifact, CapabilityMatrix, LossKind, FidelityLevel, SemanticFormat, ExportFormat, TargetFormat, PdfExportMode |
+| `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest, ProviderReport, EventRecord |
+| `input` | input.rs | InputFormat (19 variants), InputSourceDescriptor, RecognizeInput, SnipperImageDescriptor |
+| `traits` | traits.rs | Importer, SemanticConverter, Exporter, Renderer, OfficeAdapter, StageRunner |
 | `geometry` | geometry.rs | Rect, Point, Size |
 | `metadata` | metadata.rs | Metadata, OcrMetadata |
 | `operation` | operation.rs | Operation enum（支持 undo/redo） |
@@ -76,8 +81,13 @@ Document
 pub struct Document {
     pub metadata: Metadata,
     pub pages: Vec<Page>,
+    pub assets: Vec<MediaAsset>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub id_gen: NodeIdGenerator,
+    pub schema_version: String,
 }
-// methods: new(), block_count(), all_blocks()
+// methods: new(), block_count(), all_blocks(), add_asset(), get_asset(),
+//          validate_asset_refs(), migrate_legacy_image_data()
 ```
 
 #### 页面过滤方法

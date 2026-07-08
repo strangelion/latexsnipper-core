@@ -156,10 +156,13 @@ fn render_node(node: &RenderNode, svg: &mut String, y: i32) -> i32 {
             ));
             y + 20
         }
-        RenderNode::Unsupported { block_type, message } => {
+        RenderNode::Unsupported {
+            block_type,
+            message,
+        } => {
             svg.push_str(&format!(
                 "  <text x=\"20\" y=\"{}\" font-family=\"serif\" font-size=\"14\" fill=\"gray\" font-style=\"italic\">[unsupported {}: {}]</text>\n",
-                y, escape_xml(block_type), escape_xml(&message)
+                y, escape_xml(block_type), escape_xml(message)
             ));
             y + 20
         }
@@ -204,7 +207,10 @@ fn node_to_text(node: &RenderNode) -> String {
                 render_nodes_to_text(caption)
             }
         }
-        RenderNode::Unsupported { block_type, message } => {
+        RenderNode::Unsupported {
+            block_type,
+            message,
+        } => {
             format!("[unsupported {}: {}]", block_type, message)
         }
     }

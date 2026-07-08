@@ -180,25 +180,34 @@ fn parse_document_body(
                     }
                     // Detect SmartArt/OLE/Chart for diagnostic warnings
                     b"mc:AlternateContent" | b"AlternateContent" => {
-                        diagnostics.push(Diagnostic::new(
-                            DiagnosticLevel::Warning,
-                            latexsnipper_ast::W_SMARTART_NOT_SUPPORTED,
-                            "SmartArt graphic detected; will be rendered as preview only",
-                        ).with_recoverable(true));
+                        diagnostics.push(
+                            Diagnostic::new(
+                                DiagnosticLevel::Warning,
+                                latexsnipper_ast::W_SMARTART_NOT_SUPPORTED,
+                                "SmartArt graphic detected; will be rendered as preview only",
+                            )
+                            .with_recoverable(true),
+                        );
                     }
                     b"o:OLEObject" | b"OLEObject" | b"w:oleObject" => {
-                        diagnostics.push(Diagnostic::new(
-                            DiagnosticLevel::Warning,
-                            latexsnipper_ast::W_OLE_NOT_SUPPORTED,
-                            "OLE embedded object detected; placeholder used",
-                        ).with_recoverable(true));
+                        diagnostics.push(
+                            Diagnostic::new(
+                                DiagnosticLevel::Warning,
+                                latexsnipper_ast::W_OLE_NOT_SUPPORTED,
+                                "OLE embedded object detected; placeholder used",
+                            )
+                            .with_recoverable(true),
+                        );
                     }
                     b"c:chartSpace" | b"chartSpace" | b"c:chart" => {
-                        diagnostics.push(Diagnostic::new(
-                            DiagnosticLevel::Warning,
-                            latexsnipper_ast::W_CHART_DATA_SIMPLIFIED,
-                            "Embedded chart detected; data may be simplified",
-                        ).with_recoverable(true));
+                        diagnostics.push(
+                            Diagnostic::new(
+                                DiagnosticLevel::Warning,
+                                latexsnipper_ast::W_CHART_DATA_SIMPLIFIED,
+                                "Embedded chart detected; data may be simplified",
+                            )
+                            .with_recoverable(true),
+                        );
                     }
                     _ => {}
                 }
@@ -245,7 +254,7 @@ fn parse_document_body(
                                 if img_file.read_to_end(&mut img_bytes).is_ok() {
                                     let b64 = base64_encode(&img_bytes);
                                     let asset_id = AssetId(format!("docx-img-{}", assets.len()));
-                                    let format = guess_image_format(&img_rel);
+                                    let format = guess_image_format(img_rel);
                                     assets.push(MediaAsset {
                                         id: asset_id.clone(),
                                         format,

@@ -9,7 +9,14 @@
 use latexsnipper_ast::{Diagnostic, DiagnosticLevel, ProviderCallReport, ProviderReport};
 use std::time::Instant;
 
-use crate::api_provider::{ApiProviderConfig, PromptProfile, UploadPolicy};
+use crate::api_provider::{ApiProviderConfig, PromptProfile, UploadScope};
+
+/// Raw API response with content and token usage extracted from the full response body.
+struct ApiRawResponse {
+    content: String,
+    input_tokens: Option<u32>,
+    output_tokens: Option<u32>,
+}
 
 /// Result of a single remote API call.
 #[derive(Debug, Clone)]
@@ -99,7 +106,10 @@ impl RemoteApiProvider {
                             output_tokens: None,
                             elapsed_ms: elapsed,
                             success: false,
-                            error: Some("E_UPLOAD_BLOCKED: Upload policy prevented image transmission".to_string()),
+                            error: Some(
+                                "E_UPLOAD_BLOCKED: Upload policy prevented image transmission"
+                                    .to_string(),
+                            ),
                         }],
                         fallback_used: false,
                         total_elapsed_ms: elapsed,
@@ -299,14 +309,6 @@ impl RemoteApiProvider {
         Ok(body)
     }
 
-    /// Send the HTTP request to the configured endpoint.
-    /// Returns a structured response with content and token usage from the full response body.
-    struct ApiRawResponse {
-        content: String,
-        input_tokens: Option<u32>,
-        output_tokens: Option<u32>,
-    }
-
     /// Send the request and return a structured response with token usage.
     async fn send_request(&self, payload: &serde_json::Value) -> Result<ApiRawResponse, String> {
         let endpoint = self
@@ -357,7 +359,11 @@ impl RemoteApiProvider {
             return Err("E_API_RATE_LIMIT: Rate limited (status 429)".to_string());
         }
         if !status.is_success() {
-            return Err(format!("E_API_HTTP: API error {}: {}", status.as_u16(), body));
+            return Err(format!(
+                "E_API_HTTP: API error {}: {}",
+                status.as_u16(),
+                body
+            ));
         }
 
         let content = extract_content_from_openai_response(&body);
