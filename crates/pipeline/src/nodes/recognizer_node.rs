@@ -173,6 +173,7 @@ impl RecognizerNode {
                                 inlines: vec![Inline::Text(TextRun::new(text))],
                                 geometry: Some(det.rect),
                                 source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                style: None,
                             }));
                         }
                     }
@@ -341,6 +342,7 @@ impl RecognizerNode {
                             inlines: vec![Inline::Text(TextRun::new(text))],
                             geometry: Some(det.rect),
                             source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                            style: None,
                         }));
                     }
                 }
@@ -418,6 +420,7 @@ impl RecognizerNode {
                                             .with_confidence(det.confidence)
                                             .with_region(det.rect),
                                     ),
+                                    style: None,
                                 }));
                             }
                         }

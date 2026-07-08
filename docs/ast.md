@@ -26,7 +26,12 @@ Document
         │   └── Citation → key, style
         ├── Formula → FormulaBlock
         ├── Table → TableCell[][] (colspan, rowspan)
-        ├── Figure → FigureBlock (image_data, caption)
+        ├── Figure → FigureBlock (asset_id, caption, caption_inlines, role, policy)
+        ├── TextBox → TextBoxBlock (content, rotation_deg, z_index, style)
+        ├── Chart → ChartBlock (chart_type, title, asset_id, data, axes)
+        ├── Shape → ShapeBlock (shape_type, text, geometry, style)
+        ├── EmbeddedObject → EmbeddedObjectBlock (kind, asset_id, preview_asset_id)
+        ├── Annotation → AnnotationBlock (kind, content, author, target)
         ├── List → ListItem[] (ordered)
         ├── Quote → Block[]
         ├── Code → language, code
@@ -46,13 +51,22 @@ Document
 | 模块 | 文件 | 说明 |
 |---|---|---|
 | `document` | document.rs | Document, Page |
-| `block` | block.rs | Block enum, ParagraphBlock, FormulaBlock, TableBlock, FigureBlock |
-| `inline` | inline.rs | Inline enum, TextRun, ImageInline |
+| `block` | block.rs | Block enum (21 variants), all block structs |
+| `inline` | inline.rs | Inline enum (15 variants), TextRun, SpanInline, LinkInline, ImageInline |
 | `formula` | formula.rs | Formula, FormulaSource (Latex/Omml/Typst/MathML) |
+| `formula_layout` | formula_layout.rs | FormulaLayout, FormulaNode, SymbolInfo |
+| `span` | span.rs | SourceInfo, Provenance, BlockPolicy, CoordinateSpace, NodeId |
+| `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType |
+| `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits |
+| `format` | format.rs | ExportArtifact, CapabilityMatrix, LossKind, FidelityLevel, SemanticFormat, ExportFormat, TargetFormat |
+| `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest, ProviderReport |
+| `input` | input.rs | InputFormat, InputSourceDescriptor, RecognizeInput, SnipperImageDescriptor |
+| `traits` | traits.rs | Importer, SemanticConverter, Exporter, Renderer, OfficeAdapter, StageExecutor |
 | `geometry` | geometry.rs | Rect, Point, Size |
 | `metadata` | metadata.rs | Metadata, OcrMetadata |
 | `operation` | operation.rs | Operation enum（支持 undo/redo） |
 | `visitor` | visitor.rs | DocumentVisitor trait, TextCollector |
+| `builder` | builder.rs | DocumentBuilder, PageBuilder, ParagraphBuilder |
 
 ## 关键类型
 

@@ -249,6 +249,9 @@ pub struct ParagraphBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    /// Paragraph-level style.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<crate::ParagraphStyle>,
 }
 
 /// A standalone formula block (display math).
@@ -344,9 +347,14 @@ pub struct FigureBlock {
     /// DEPRECATED: Use `asset_id` instead. This field is kept for backward compatibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_data: Option<String>,
-    /// Optional caption text.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional caption text (plain text only).
+    /// DEPRECATED: Use `caption_inlines` instead for structured content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caption: Option<String>,
+    /// Structured caption with full inline support (formulas, formatting, links).
+    /// When set, takes priority over `caption`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption_inlines: Option<Vec<crate::Inline>>,
     /// Semantic role of the figure (photo, diagram, chart, etc.).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<MediaRole>,

@@ -202,6 +202,7 @@ fn flush_paragraph(blocks: &mut Vec<Block>, inlines: &mut Vec<Inline>) {
             inlines: trimmed,
             geometry: None,
             source: None,
+            style: None,
         }));
     }
     inlines.clear();

@@ -86,10 +86,18 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **SVG → ShapeBlock** | ✅ | Parse SVG primitives to AST shapes |
 | **Chart → ChartBlock** | ✅ | VLM-powered chart data extraction |
 | **Diagram → Shape/Graph** | ✅ | VLM-powered diagram understanding |
-| **Clipboard bundle** | ✅ | HTML + RTF + PlainText multi-format |
+| **Document→Report** | ✅ | `DocumentReport::from_document()` with block/confidence/asset summaries |
+| **Capability query** | ✅ | `CapabilityMatrix::query()` / `explain_loss()` |
+| **Asset normalization** | ✅ | `normalize_assets()` promotes legacy data, deduplicates |
+| **StageExecutor trait** | ✅ | `StageSpec` → `PipelineManifest` adapter |
+| **Job persistence** | ✅ | `Job::persist_to_root()` writes artifacts/events/reports |
+| **OOXML fragment** | ✅ | `write_ooxml_fragment()` — AST → Word body XML |
+| **Clipboard bundle** | ✅ | HTML+RTF+PlainText+PNG multi-format |
 | **Office insertion** | ✅ | Auto-select OMath/SVG/HTML per app |
 | **Document cleaning** | ✅ | Merge/remove/dedup/normalize blocks |
 | **Remote API** | ✅ | OpenAI-compatible VLM provider |
+| **API error codes** | ✅ | 8 standardized codes (auth, timeout, rate limit, etc.) |
+| **Schema validation** | ✅ | Two-stage (lightweight + feature-gated full) |
 | **Capability matrix** | ✅ | `snipper capabilities` |
 
 ---
@@ -257,7 +265,7 @@ Engine
 ```
 crates/
 ├── foundation/     ✅ Error, Result, Logger, Config, EventBus
-├── ast/            ✅ Document AST — single source of truth
+├── ast/            ✅ Document AST — single source of truth (incl. report, format, traits)
 ├── tensor/         ✅ Inference I/O tensors
 ├── image/          ✅ Platform-independent image processing + PDF rendering
 ├── runtime/        ✅ RuntimeBackend + InferenceSession + ModelResolver + ModelPackage + ModelRegistry + Validation
@@ -265,7 +273,7 @@ crates/
 ├── inference/      ✅ Detection + Recognition pipelines + ModelPackage adapters
 ├── pipeline/       ✅ Node-based async pipeline + PipelineArtifacts + ReadingOrder
 ├── syntax/         ✅ LaTeX/Typst/Markdown Parser + Renderer
-├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
+├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML + DOCX/PPTX/XLSX readers
 ├── export/         ✅ RenderTree → SVG/Text/PDF (printpdf), page selection
 ├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
 ├── api-types/      ✅ Public API types (RecognizeMode, Request, Response, StreamItem)
@@ -274,7 +282,7 @@ crates/
 ├── mock/           ✅ Fake implementations for testing
 ├── ffi/            ✅ Android JNI + iOS C FFI
 ├── wasm/           ✅ WebAssembly bindings with Tract backend
-├── cli/            ✅ CLI tool (recognize/parse/render/version/play)
+├── cli/            ✅ CLI tool (recognize/parse/render/version/play) with job management
 └── tests/          ✅ Integration tests (15+ tests with real models)
 ```
 

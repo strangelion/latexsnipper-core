@@ -28,6 +28,7 @@ pub fn extract_pdf_text(path: impl AsRef<Path>) -> Result<Document> {
                             .with_confidence(1.0)
                             .with_region(Rect::new(f.x, f.y, f.width, f.height)),
                     ),
+                    style: None,
                 })
             })
             .collect();

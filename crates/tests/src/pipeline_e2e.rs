@@ -395,6 +395,7 @@ fn test_text_pipeline_e2e() {
                         inlines: vec![Inline::Text(TextRun::new(text))],
                         geometry: Some(Rect::new(bx as f32, by as f32, bw as f32, bh as f32)),
                         source: Some(SourceInfo::new()),
+                        style: None,
                     }));
                 }
             }
@@ -649,6 +650,7 @@ fn test_mixed_pipeline_e2e() {
                                                     bx as f32, by as f32, bw as f32, bh as f32,
                                                 )),
                                                 source: Some(SourceInfo::new()),
+                                                style: None,
                                             }));
                                         }
                                     }

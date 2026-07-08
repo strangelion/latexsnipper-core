@@ -14,6 +14,7 @@ pub fn fake_document() -> Document {
                     inlines: vec![Inline::Text(TextRun::new("Given the equation "))],
                     geometry: None,
                     source: None,
+                    style: None,
                 }),
                 Block::Formula(FormulaBlock {
                     formula: {
@@ -29,6 +30,7 @@ pub fn fake_document() -> Document {
                     inlines: vec![Inline::Text(TextRun::new(", we can derive the following:"))],
                     geometry: None,
                     source: None,
+                    style: None,
                 }),
                 Block::Formula(FormulaBlock {
                     formula: {

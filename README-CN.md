@@ -96,8 +96,10 @@ LaTeXSnipper Core 采用严格的**四层架构**：
 | **SVG** | `ExportService` | 视觉渲染输出 |
 | **PDF** | `ExportService` | 视觉渲染输出 (printpdf) |
 | **Clipboard** | `ClipboardBundle` | HTML+RTF+PlainText 多格式剪贴板 |
+| **OOXML 片段** | `ooxml_fragment` | Word 正文 XML（含文本/公式/图片/表格） |
 | **Office** | `OfficeInsertService` | 按应用自动选择 OMath/SVG/HTML |
 | **PDF overlay** | `pdf_overlay.rs` | 在源 PDF 上叠加文本 |
+| **作业报告** | `Job::persist_to_root` | artifacts/events/stages/diagnostics 持久化 |
 
 ---
 
@@ -174,7 +176,7 @@ Engine
 ```
 crates/
 ├── foundation/     ✅ 错误、Result、日志、配置、事件总线
-├── ast/            ✅ 文档 AST — 唯一数据源
+├── ast/            ✅ 文档 AST — 唯一数据源（含报告、格式、trait 定义）
 ├── tensor/         ✅ 推理 I/O 张量
 ├── image/          ✅ 平台无关图像处理 + PDF 渲染
 ├── runtime/        ✅ RuntimeBackend + InferenceSession + ModelResolver + ModelPackage + ModelRegistry + Validation
@@ -182,7 +184,7 @@ crates/
 ├── inference/      ✅ 检测 + 识别管线 + ModelPackage 适配器
 ├── pipeline/       ✅ 节点化异步流水线 + PipelineArtifacts + ReadingOrder
 ├── syntax/         ✅ LaTeX/Typst/Markdown 解析器 + 渲染器
-├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML
+├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML + DOCX/PPTX/XLSX 读取
 ├── export/         ✅ RenderTree → SVG/Text/PDF（printpdf），页面选择
 ├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
 ├── api-types/      ✅ 公共 API 类型（RecognizeMode、Request、Response、StreamItem）
@@ -191,7 +193,7 @@ crates/
 ├── mock/           ✅ 测试用 Fake 实现
 ├── ffi/            ✅ Android JNI + iOS C FFI
 ├── wasm/           ✅ WebAssembly 绑定
-├── cli/            ✅ 命令行工具（recognize/parse/render/version/play）
+├── cli/            ✅ 命令行工具（recognize/parse/render/version/play）含作业管理
 └── tests/          ✅ 集成测试
 ```
 

@@ -58,9 +58,9 @@ pub use span::{
     ProvenanceOperation, SourceInfo, Span,
 };
 pub use style::{
-    AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartSeries, ChartType, Color,
-    EmbeddedObjectKind, FontWeight, OfficeApp, OfficeSourceInfo, ParagraphStyle, ShapeStyle,
-    ShapeType, TextAlignment, TextStyle, VerticalAlign,
+    effective_text_style, AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartSeries,
+    ChartType, Color, EmbeddedObjectKind, FontWeight, OfficeApp, OfficeSourceInfo, ParagraphStyle,
+    ShapeStyle, ShapeType, TextAlignment, TextStyle, VerticalAlign,
 };
 pub use traits::{Exporter, Importer, OfficeAdapter, Renderer, SemanticConverter};
 pub use visitor::{DocumentVisitor, TextCollector};

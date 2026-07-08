@@ -60,6 +60,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
                                 inlines,
                                 geometry: None,
                                 source: None,
+                                style: None,
                             }));
                         }
                         i = find_closing_tag(&chars, end, &tag).unwrap_or(len);
@@ -267,6 +268,7 @@ fn flush_paragraph(blocks: &mut Vec<Block>, inlines: &mut Vec<Inline>) {
             inlines: trimmed,
             geometry: None,
             source: None,
+            style: None,
         }));
     }
     inlines.clear();

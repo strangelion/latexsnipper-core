@@ -422,6 +422,7 @@ mod conversion_tests {
                     inlines: vec![Inline::Text(TextRun::new("Given "))],
                     geometry: None,
                     source: None,
+                    style: None,
                 }),
                 Block::Formula(FormulaBlock {
                     formula: {

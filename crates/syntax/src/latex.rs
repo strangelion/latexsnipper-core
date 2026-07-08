@@ -99,6 +99,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                         inlines: vec![Inline::Text(TextRun::new(before))],
                         geometry: None,
                         source: None,
+                        style: None,
                     }));
                 }
                 blocks.push(Block::Formula(FormulaBlock {
@@ -128,6 +129,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                         inlines: vec![Inline::Text(TextRun::new(before))],
                         geometry: None,
                         source: None,
+                        style: None,
                     }));
                 }
                 blocks.push(Block::Formula(FormulaBlock {
@@ -151,6 +153,7 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                 inlines: vec![Inline::Text(TextRun::new(text))],
                 geometry: None,
                 source: None,
+                style: None,
             }));
         }
         break;

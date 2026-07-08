@@ -84,6 +84,7 @@ mod tests {
                         inlines: vec![Inline::Text(TextRun::new("Given the equation "))],
                         geometry: None,
                         source: None,
+                        style: None,
                     }),
                     Block::Formula(FormulaBlock {
                         formula: {

@@ -9,62 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Platform Type System (v2 Plan Phases 0-6)**
-  - `Document.schema_version`, `Diagnostic.recoverable`/`data` fields
-  - `MediaAsset` expansions: `OoxmlPart`, `PdfXObject`, `PdfObject`, `Background`, `Watermark`
-  - `AssetExportPolicy`, `ExportedAsset`, `AssetBundle`, `AssetManifest`
-  - `AssetResolver` trait with `resolve_bytes`/`resolve_path`/`resolve_data_uri`/`export_asset`
-  - `Format.rs`: `ExportArtifact`, `LossKind`, `FormatCapability`, `CapabilityMatrix`, `PdfExportMode`, `ImportOptions`, `ExportOptions`, `ModelCapability`, `ModelProviderKind`
-  - `SourceInfo` extended: `region`, `quad`, `coordinate_space`, `stable_id`, `provider_id`, `artifact_id`, `asset_id`, `pdf`
-  - `CoordinateSpace` enum, `PdfSourceInfo`, `Provenance`/`ProvenanceOperation`, `BlockPolicy`
-  - `InputStorage::OfficeSelection`, `InputSourceDescriptor.password_ref`
-  - `RecognizeInput`/`RecognizeOptions`/`OutputLevel` types
-  - `FigureBlock.role`/`policy`, `TextBoxBlock.rotation_deg`/`z_index`, `ImageInline.alt_text`
-  - `ChartSeries` export from AST crate
+- **Contract Deduplication (Phase A)**
+  - Unified `ModelProviderKind`, `FidelityLevel`, `FormatCapability` — single canonical definition in `latexsnipper-ast`
+  - Moved `SemanticFormat`/`ExportFormat`/`TargetFormat` to `latexsnipper-ast` as platform contracts
+  - Removed duplicate `Exporter` trait from conversion crate (dead code)
+  - Split `AssetResolver` into `AssetStore` + `AssetReferenceResolver` + `AssetExporter` three-layer traits
 
-- **Report & Job Infrastructure (Phase 3)**
-  - `JobRoot` standard directory layout
-  - `StageSpec`/`StageReport`/`ArtifactManifest`/`ArtifactKind`/`EventRecord`
-  - `DocumentReport`/`ProviderReport` with `InputSummary`, `BlockSummary`, `ProviderCallReport`
-  - engine `Job` upgraded with `artifacts`/`stages`/`diagnostics`/`events` fields
-  - `job run`/`inspect` CLI commands
+- **Asset Normalization (Phase B)**
+  - `Document::normalize_assets()` — promotes legacy `image_data` to `MediaAsset` with deduplication
+  - `Document::validate_asset_refs()` — detects dangling `asset_id` references
+  - `AssetNormalizeReport` with created/reused/missing counts
+  - DOCX/PPTX readers now create `MediaAsset` entries and use `asset_id` instead of raw `image_data`
+  - `FigureBlock.caption_inlines: Option<Vec<Inline>>` — structured caption with full inline support
+  - `SnipperImageDescriptor` struct replaces `RecognizeInput::Image(String)` placeholder
 
-- **Format Traits & Services (Phase 4)**
-  - `Importer`/`SemanticConverter`/`Exporter`/`Renderer`/`OfficeAdapter` traits
-  - `ExportService` unifies SVG/PDF/PlainText export via `VisualFormat`
-  - `ClipboardBundle` multi-format output (HTML+RTF+PlainText+PNG)
-  - `OfficeInsertService` with per-app format auto-selection (Word/PowerPoint/Excel)
-  - `parse_svg_to_shapes()` extracts Rectangle/Ellipse/Line/Text from SVG XML
-  - `pdf_native::extract_pdf_text()` using lopdf content stream parsing
+- **Full Block Coverage (Phase C)**
+  - Markdown/HTML/LaTeX/Typst converters now produce visible placeholders for:
+    `ChartBlock`, `ShapeBlock`, `EmbeddedObjectBlock`, `AnnotationBlock`
+  - `RenderTree` emits `Paragraph(vec![Text(...)])` for these block types (visible in SVG/PDF/Text)
+  - HTML clipboard (`ClipboardBundle`) covers all 21 block types — no silent drops
 
-- **Remote API Integration (Phase 6)**
-  - `RemoteApiProvider` — OpenAI-compatible HTTP client with schema validation
-  - `chart_understanding::ChartUnderstandingService` — VLM chart extraction
-  - `diagram_understanding::DiagramUnderstandingService` — VLM diagram to Shape/Graph AST
-  - Feature-gated via `remote-api` Cargo feature
+- **StageSpec Execution Loop (Phase D)**
+  - `StageExecutor` trait in `ast::traits` alongside Exporter/Importer/SemanticConverter
+  - `PipelineManifest::from_stage_specs()` adapter — bridges job contracts to pipeline execution
+  - `JobRoot::ensure_dirs()` — creates standard job directory tree
+  - `Job::persist_to_root()` — writes `artifacts.json`, `events.jsonl`, `stages.json`, `diagnostics.json`
+  - CLI: `--job-root` and `--emit-report` flags for `snipper job run`
+  - `PipelineArtifacts::to_artifact_manifest()` — converts pipeline results to platform manifest
+  - `EventRecord::now()` — UTC timestamp generator without external chrono dependency
 
-- **Advanced Document Understanding (Phase 7)**
-  - `docx_reader::read_docx()` — extracts paragraphs, runs, images from .docx
-  - `pptx_reader::read_pptx()` — extracts text, shapes, images from .pptx
-  - `xlsx_reader::read_xlsx()` — extracts tables from .xlsx
-  - `pdf_overlay::overlay_pdf()` — overlays AST text onto existing PDF
-  - `document_cleaner::clean_document()` — removes empties, merges adjacent blocks,
-    deduplicates, adds low-confidence diagnostics, normalizes whitespace
-  - `convert` capability with `--input`/`--output` filters
+- **Office/PDF Utility Loop (Phase E)**
+  - `ooxml_fragment::write_ooxml_fragment()` — converts AST blocks to Word OOXML body XML
+  - OfficeInsertService now tries: OMath → OOXML Fragment → Clipboard Bundle (3-level fallback)
+  - 7 well-known diagnostic codes: `W_SMARTART_NOT_SUPPORTED`, `W_OLE_OBJECT_PREVIEW_ONLY`,
+    `W_OFFICE_CHART_PREVIEW_ONLY`, `W_SHAPE_NOT_SUPPORTED`, `W_OFFICE_ANNOTATION_DROPPED`,
+    `W_PDF_NATIVE_EXTRACTION_INCOMPLETE`, `W_PDF_OBJECT_PREVIEW_ONLY`
+  - DOCX reader detects SmartArt/OLE/Charts and emits corresponding diagnostics
 
-- **CLI Enhancements**
-  - `snipper capabilities` — shows conversion capability matrix
-  - `snipper capabilities --format markdown` — detailed format view
-  - `snipper capabilities --input ast --output markdown` — filtered view
-  - `snipper job run` / `snipper job inspect` — job management
+- **API/VLM Stabilization (Phase F)**
+  - 8 standardized API error codes: `E_API_HTTP`, `E_API_TIMEOUT`, `E_API_AUTH`,
+    `E_API_RATE_LIMIT`, `E_API_INVALID_JSON`, `E_API_SCHEMA_MISMATCH`, `E_API_UPLOAD_BLOCKED`,
+    `E_API_RESPONSE_EMPTY`
+  - HTTP status-aware error mapping (401→AUTH, 429→RATE_LIMIT, timeout→TIMEOUT)
+  - Two-stage JSON schema validation: lightweight (default) + `json-schema-validation` feature flag
+  - Empty response → `E_API_RESPONSE_EMPTY`, invalid JSON → `E_API_INVALID_JSON`
+  - 9 mock contract tests for schema, token extraction, upload policy, and content parsing
 
-- **Testing**
-  - In-memory DOCX/PPTX/XLSX reader tests (via zip::ZipWriter)
-  - PDF overlay e2e test (lopdf → overlay → verify output)
-  - 6 DocumentCleaner edge case tests
-  - SVG parser: 7 unit tests for all element types
-  - ExportService doc-test (was `ignore`, now runs)
-  - 208 conversion tests, all passing
+- **Documentation & Reporting**
+  - `DocumentReport::from_document()` generates structured reports with:
+    block counts by type, confidence statistics (mean/min/max), asset summary by storage
+  - `DocumentReport::with_stage_reports()` / `with_provider_reports()` chaining
+  - `CapabilityMatrix::query(input, output)` and `explain_loss(input, output)` methods
+  - `effective_text_style()` with `merge_style()` — style inheritance rules
+  - `ParagraphBlock.style: Option<ParagraphStyle>` — paragraph-level style support
+
+### Changed
+- `FigureBlock.caption` deprecated in favor of `caption_inlines: Option<Vec<Inline>>`
+- `RecognizeInput::Image(String)` → `RecognizeInput::Image(SnipperImageDescriptor)`
+- `ParagraphBlock` now has `style: Option<ParagraphStyle>` field
+- `RemoteApiProvider` returns specific error codes based on HTTP status
+- DOCX reader extracts images as `MediaAsset` entries with `asset_id`
+- PPTX reader extracts images as `MediaAsset` entries with `asset_id`
+- `ChartBlock`/`ShapeBlock`/`EmbeddedObjectBlock`/`AnnotationBlock` no longer silently dropped — produce visible placeholders with type info
+
+### Fixed
+- Bin (various): `ParagraphBlock` missing `style` field in 20+ files across workspace
+- Clipboard `block_to_clipboard_html` dropped 10+ block types silently
+- RenderTree filtered out Chart/Shape/EmbeddedObject/Annotation to `None`
 
 ### Changed
 - Block enum variants expanded: TextBox, Chart, Shape, EmbeddedObject, Annotation

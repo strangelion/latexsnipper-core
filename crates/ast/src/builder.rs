@@ -214,6 +214,7 @@ impl ParagraphBuilder {
             inlines: self.inlines,
             geometry: None,
             source: None,
+            style: None,
         }
     }
 }

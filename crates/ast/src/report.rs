@@ -306,6 +306,133 @@ pub struct DocumentReport {
     pub timings_ms: std::collections::HashMap<String, u64>,
 }
 
+impl DocumentReport {
+    /// Generate a report from a Document AST by walking all blocks and assets.
+    ///
+    /// Computes:
+    /// - `page_count` from Document.pages.len()
+    /// - `block_summary` by counting each Block variant
+    /// - `asset_summary` by counting assets by storage/format
+    /// - `confidence_summary` from formulas, tables, and detected regions
+    /// - `diagnostics` copied directly from Document.diagnostics
+    pub fn from_document(doc: &crate::Document) -> Self {
+        let page_count = doc.pages.len();
+
+        // Block summary
+        let mut total_blocks = 0usize;
+        let mut paragraphs = 0usize;
+        let mut formulas = 0usize;
+        let mut tables = 0usize;
+        let mut figures = 0usize;
+        let mut other = 0usize;
+        for block in doc.all_blocks() {
+            total_blocks += 1;
+            match block {
+                crate::Block::Paragraph(_) => paragraphs += 1,
+                crate::Block::Formula(_) => formulas += 1,
+                crate::Block::Table(_) => tables += 1,
+                crate::Block::Figure(_) => figures += 1,
+                _ => other += 1,
+            }
+        }
+
+        // Confidence summary
+        let mut confidences: Vec<f32> = Vec::new();
+        for block in doc.all_blocks() {
+            if let crate::Block::Formula(f) = block {
+                confidences.push(f.formula.confidence);
+            }
+            if let crate::Block::Table(t) = block {
+                for row in &t.rows {
+                    for cell in row {
+                        for inline in &cell.inlines {
+                            if let crate::Inline::Formula(f) = inline {
+                                confidences.push(f.confidence);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let confidence_summary = if confidences.is_empty() {
+            ConfidenceSummary {
+                mean: None,
+                min: None,
+                max: None,
+            }
+        } else {
+            let sum: f32 = confidences.iter().sum();
+            let min = confidences.iter().cloned().fold(f32::MAX, f32::min);
+            let max = confidences.iter().cloned().fold(f32::MIN, f32::max);
+            ConfidenceSummary {
+                mean: Some(sum / confidences.len() as f32),
+                min: Some(min),
+                max: Some(max),
+            }
+        };
+
+        // Asset summary
+        let total_assets = doc.assets.len();
+        let embedded = doc
+            .assets
+            .iter()
+            .filter(|a| matches!(a.storage, crate::AssetStorage::InlineBase64 { .. }))
+            .count();
+        let referenced = total_assets.saturating_sub(embedded);
+
+        Self {
+            schema_version: doc.schema_version.clone(),
+            document_id: doc.metadata.language.clone(),
+            input_summary: InputSummary {
+                format: doc.metadata.ocr_model.clone(),
+                filename: None,
+                page_count,
+                file_size_bytes: None,
+            },
+            page_count,
+            block_summary: BlockSummary {
+                total: total_blocks,
+                paragraphs,
+                formulas,
+                tables,
+                figures,
+                other,
+            },
+            asset_summary: AssetSummary {
+                total: total_assets,
+                embedded,
+                referenced,
+                total_size_bytes: None,
+            },
+            confidence_summary,
+            unsupported_features: Vec::new(),
+            diagnostics: doc.diagnostics.clone(),
+            timings_ms: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Attach stage reports to this document report.
+    pub fn with_stage_reports(mut self, stages: &[StageReport]) -> Self {
+        for stage in stages {
+            if stage.status == StageStatus::Failed {
+                self.diagnostics.extend(stage.diagnostics.clone());
+            }
+        }
+        self
+    }
+
+    /// Attach provider reports to this document report.
+    pub fn with_provider_reports(mut self, providers: &[ProviderReport]) -> Self {
+        for provider in providers {
+            self.timings_ms.insert(
+                format!("provider.{}", provider.provider_id),
+                provider.total_elapsed_ms,
+            );
+        }
+        self
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ProviderReport
 // ---------------------------------------------------------------------------

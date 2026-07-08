@@ -193,6 +193,7 @@ impl Stage for MockRecognizer {
                             crop.region.height,
                         )),
                         source: None,
+                        style: None,
                     }));
                 }
             }

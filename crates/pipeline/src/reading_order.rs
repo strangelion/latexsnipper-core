@@ -72,6 +72,7 @@ mod tests {
             inlines: vec![Inline::Text(TextRun::new(text))],
             geometry: Some(Rect::new(x, y, 100.0, 20.0)),
             source: Some(SourceInfo::new()),
+            style: None,
         })
     }
 

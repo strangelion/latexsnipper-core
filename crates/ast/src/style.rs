@@ -189,3 +189,66 @@ pub enum OfficeApp {
     PowerPoint,
     Excel,
 }
+
+/// Merge two TextStyles, with `overrides` taking priority over `base`.
+///
+/// Any `Some` value in `overrides` replaces the corresponding field in `base`.
+/// `None` fields are inherited from `base`.
+fn merge_style(base: &TextStyle, overrides: &TextStyle) -> TextStyle {
+    TextStyle {
+        font_family: overrides
+            .font_family
+            .clone()
+            .or_else(|| base.font_family.clone()),
+        font_size: overrides.font_size.or(base.font_size),
+        font_weight: overrides.font_weight.or(base.font_weight),
+        italic: overrides.italic.or(base.italic),
+        underline: overrides.underline.or(base.underline),
+        strikethrough: overrides.strikethrough.or(base.strikethrough),
+        color: overrides.color.clone().or_else(|| base.color.clone()),
+        background: overrides
+            .background
+            .clone()
+            .or_else(|| base.background.clone()),
+        vertical_align: overrides.vertical_align.or(base.vertical_align),
+    }
+}
+
+/// Compute the effective TextStyle for a TextRun, considering:
+///
+/// 1. The run's individual `style: Option<TextStyle>` (when TextRun has migrated to use it)
+/// 2. The run's legacy `bold`/`italic`/`underline`/`strikethrough` fields
+/// 3. An optional inherited style from `SpanInline.style` or `ParagraphBlock.style`
+///
+/// Priority (highest wins): run.style > run.legacy > inherited > defaults
+pub fn effective_text_style(
+    run_bold: Option<bool>,
+    run_italic: Option<bool>,
+    run_underline: Option<bool>,
+    run_strikethrough: Option<bool>,
+    run_style: Option<&TextStyle>,
+    inherited: Option<&TextStyle>,
+) -> TextStyle {
+    let mut result = inherited.cloned().unwrap_or_default();
+
+    // Apply run-level style overlay
+    if let Some(style) = run_style {
+        result = merge_style(&result, style);
+    }
+
+    // Apply legacy format flags (they override style fields)
+    if let Some(true) = run_bold {
+        result.font_weight = Some(FontWeight::Bold);
+    }
+    if run_italic == Some(true) {
+        result.italic = Some(true);
+    }
+    if run_underline == Some(true) {
+        result.underline = Some(true);
+    }
+    if run_strikethrough == Some(true) {
+        result.strikethrough = Some(true);
+    }
+
+    result
+}

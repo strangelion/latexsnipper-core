@@ -35,6 +35,7 @@ fn main() {
                         ],
                         geometry: None,
                         source: None,
+                        style: None,
                     }),
                     Block::Formula(FormulaBlock {
                         formula: Formula {
@@ -146,6 +147,7 @@ fn main() {
                         inlines: vec![Inline::Text(TextRun::new("This is page 2 content."))],
                         geometry: None,
                         source: None,
+                        style: None,
                     }),
                 ],
                 page_number: Some(2),

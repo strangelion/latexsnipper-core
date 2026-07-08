@@ -207,6 +207,7 @@ fn parse_slide_body(
                             inlines: Vec::new(),
                             geometry: None,
                             source: None,
+                            style: None,
                         }));
                     }
                     b"p:txBody" | b"txBody" => in_text_body = true,
@@ -262,6 +263,7 @@ fn parse_slide_body(
                                         })],
                                         geometry: None,
                                         source: None,
+                                        style: None,
                                     }));
                                 }
                             }

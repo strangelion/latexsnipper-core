@@ -241,6 +241,7 @@ fn parse_document_body(
                                 inlines: std::mem::take(&mut current_paragraph_inlines),
                                 geometry: None,
                                 source: Some(SourceInfo::new().with_producer("docx")),
+                                style: None,
                             }));
                         }
                     }

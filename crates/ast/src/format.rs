@@ -82,6 +82,40 @@ pub struct CapabilityMatrix {
     pub entries: Vec<FormatCapability>,
 }
 
+impl CapabilityMatrix {
+    /// Query the capability for a specific input → output conversion.
+    ///
+    /// Returns the first matching format capability whose `input` and `output`
+    /// fields contain the given labels (case-insensitive substring match).
+    pub fn query(&self, input: &str, output: &str) -> Option<&FormatCapability> {
+        let input_lower = input.to_lowercase();
+        let output_lower = output.to_lowercase();
+        self.entries.iter().find(|e| {
+            let i_matches = e
+                .input
+                .as_deref()
+                .map(|i| i.to_lowercase().contains(&input_lower))
+                .unwrap_or(false);
+            let o_matches = e
+                .output
+                .as_deref()
+                .map(|o| o.to_lowercase().contains(&output_lower))
+                .unwrap_or(false);
+            i_matches && o_matches
+        })
+    }
+
+    /// Explain the known loss types for a specific input → output conversion.
+    ///
+    /// Returns a reference to the `known_loss` vector for the matching entry,
+    /// or an empty slice if no match is found.
+    pub fn explain_loss(&self, input: &str, output: &str) -> &[LossKind] {
+        self.query(input, output)
+            .map(|e| e.known_loss.as_slice())
+            .unwrap_or(&[])
+    }
+}
+
 // ---------------------------------------------------------------------------
 // PdfExportOptions
 // ---------------------------------------------------------------------------

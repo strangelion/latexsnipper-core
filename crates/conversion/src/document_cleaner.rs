@@ -60,11 +60,13 @@ pub struct CleanResult {
 ///             inlines: vec![Inline::Text(TextRun::new("Hello "))],
 ///             geometry: Some(Rect::new(10.0, 10.0, 30.0, 20.0)),
 ///             source: Some(SourceInfo::new().with_confidence(0.95)),
+///             style: None,
 ///         }),
 ///         Block::Paragraph(ParagraphBlock {
 ///             inlines: vec![Inline::Text(TextRun::new("World"))],
 ///             geometry: Some(Rect::new(40.0, 10.0, 30.0, 20.0)),
 ///             source: Some(SourceInfo::new().with_confidence(0.95)),
+///             style: None,
 ///         }),
 ///     ],
 ///     page_number: Some(1),
@@ -340,6 +342,7 @@ fn merge_adjacent_blocks(blocks: &[Block], y_threshold: f32) -> (Vec<Block>, usi
                 inlines: accumulated,
                 geometry: merged_geom,
                 source: p.source.clone(),
+                style: None,
             }));
             i = j;
         } else {
@@ -391,6 +394,7 @@ mod tests {
             inlines: vec![Inline::Text(TextRun::new(text))],
             geometry: Some(Rect::new(x, y, 100.0, 20.0)),
             source: Some(SourceInfo::new().with_confidence(conf)),
+            style: None,
         })
     }
 
@@ -484,6 +488,7 @@ mod tests {
             inlines: vec![Inline::Text(TextRun::new("  Hello   World  "))],
             geometry: Some(Rect::new(10.0, 10.0, 100.0, 20.0)),
             source: Some(SourceInfo::new()),
+            style: None,
         })]);
         let result = clean_document(
             &doc,

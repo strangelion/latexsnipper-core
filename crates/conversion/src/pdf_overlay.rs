@@ -201,6 +201,7 @@ mod tests {
                 inlines: vec![Inline::Text(TextRun::new("Hello PDF Overlay"))],
                 geometry: Some(Rect::new(72.0, 700.0, 200.0, 14.0)),
                 source: Some(SourceInfo::new().with_page(0)),
+                style: None,
             })],
             page_number: Some(1),
         });

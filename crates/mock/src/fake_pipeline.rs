@@ -101,6 +101,7 @@ impl FakePipeline {
                     inlines: vec![Inline::Text(TextRun::new(result.text))],
                     geometry: Some(detection.rect),
                     source: None,
+                    style: None,
                 }));
             }
         }

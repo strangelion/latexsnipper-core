@@ -43,6 +43,7 @@ fn ast_document_roundtrip_preserves_public_shape() {
             ],
             geometry: Some(Rect::new(10.0, 20.0, 30.0, 40.0)),
             source: None,
+            style: None,
         })],
     });
 
@@ -70,6 +71,7 @@ fn ast_text_collector_visits_nested_inline_formula() {
                 ],
                 geometry: None,
                 source: None,
+                style: None,
             })],
         }],
         assets: Vec::new(),
