@@ -22,7 +22,10 @@ fn formula_doc(latex: &str) -> Document {
             })],
             page_number: Some(1),
         }],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
     }
 }
 
@@ -69,7 +72,10 @@ fn ast_text_collector_visits_nested_inline_formula() {
                 source: None,
             })],
         }],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
     };
 
     let mut collector = TextCollector::new();

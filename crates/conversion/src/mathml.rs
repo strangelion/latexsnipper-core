@@ -100,6 +100,7 @@ fn convert_mathml(doc: &Document, mode: MathmlMode) -> Result<String> {
                             Inline::Citation { key, .. } => {
                                 parts.push(format!("<mtext>[{}]</mtext>", key));
                             }
+                            _ => {}
                         }
                     }
                 }

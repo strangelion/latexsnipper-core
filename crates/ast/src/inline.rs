@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{Formula, SourceInfo};
+use crate::style::TextStyle;
 
 /// Citation style for academic references.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +48,20 @@ pub enum Inline {
         /// Citation style.
         style: CiteStyle,
     },
+    /// A hard line break.
+    LineBreak,
+    /// A soft line break (paragraph break within same block).
+    SoftBreak,
+    /// A styled span containing nested inlines.
+    Span(SpanInline),
+    /// A hyperlink.
+    Link(LinkInline),
+    /// An inline code span.
+    Code(CodeInline),
+    /// Superscript content.
+    Superscript(Vec<Inline>),
+    /// Subscript content.
+    Subscript(Vec<Inline>),
 }
 
 impl Inline {
@@ -123,9 +138,54 @@ impl TextRun {
 /// An inline image.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageInline {
+    /// Reference to a media asset in the document's asset collection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset_id: Option<crate::AssetId>,
+    /// DEPRECATED: Use `asset_id` instead. This field is kept for backward compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_data: Option<String>, // base64 or path
     pub width: Option<f32>,
     pub height: Option<f32>,
+    /// Alternative text description.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alt_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A styled span containing nested inlines.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpanInline {
+    /// Nested inline content.
+    pub content: Vec<Inline>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<TextStyle>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A hyperlink.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkInline {
+    /// Link text content.
+    pub content: Vec<Inline>,
+    /// Target URL or path.
+    pub target: String,
+    /// Optional tooltip/title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// An inline code span.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeInline {
+    /// The code content.
+    pub code: String,
+    /// Optional language hint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
 }

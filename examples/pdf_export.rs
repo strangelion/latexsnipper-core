@@ -151,7 +151,10 @@ fn main() {
                 page_number: Some(2),
             },
         ],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
     };
 
     // Build render tree

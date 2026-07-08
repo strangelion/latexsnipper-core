@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{Inline, NodeId, Rect, SourceInfo};
+use crate::style::{BoxStyle, ChartAxis, ChartData, ChartLegend, ChartType, EmbeddedObjectKind, ShapeStyle, ShapeType, AnnotationKind};
+use crate::media::MediaRole;
+use crate::span::BlockPolicy;
 
 /// A layout block in the document.
 ///
@@ -41,6 +44,16 @@ pub enum Block {
     Minipage(MinipageBlock),
     /// A float environment (\begin{figure} or \begin{table}).
     Float(FloatBlock),
+    /// A text box (Office/PDF/PPT).
+    TextBox(TextBoxBlock),
+    /// A chart block (Excel/PPT/论文图片).
+    Chart(ChartBlock),
+    /// A shape block (Office arrow, rectangle, flowchart shape).
+    Shape(ShapeBlock),
+    /// An embedded object (OLE, Office Chart, SmartArt, etc.).
+    EmbeddedObject(EmbeddedObjectBlock),
+    /// An annotation/comment/highlight.
+    Annotation(AnnotationBlock),
 }
 
 impl Block {
@@ -63,6 +76,11 @@ impl Block {
             Block::Proof(p) => p.source.as_ref(),
             Block::Minipage(m) => m.source.as_ref(),
             Block::Float(f) => f.source.as_ref(),
+            Block::TextBox(tb) => tb.source.as_ref(),
+            Block::Chart(c) => c.source.as_ref(),
+            Block::Shape(s) => s.source.as_ref(),
+            Block::EmbeddedObject(e) => e.source.as_ref(),
+            Block::Annotation(a) => a.source.as_ref(),
         }
     }
 
@@ -90,6 +108,11 @@ impl Block {
             Block::Proof(p) => p.source.as_mut(),
             Block::Minipage(m) => m.source.as_mut(),
             Block::Float(f) => f.source.as_mut(),
+            Block::TextBox(tb) => tb.source.as_mut(),
+            Block::Chart(c) => c.source.as_mut(),
+            Block::Shape(s) => s.source.as_mut(),
+            Block::EmbeddedObject(e) => e.source.as_mut(),
+            Block::Annotation(a) => a.source.as_mut(),
         }
     }
 
@@ -112,6 +135,11 @@ impl Block {
             Block::Proof(p) => p.geometry.as_ref(),
             Block::Minipage(m) => m.geometry.as_ref(),
             Block::Float(f) => f.geometry.as_ref(),
+            Block::TextBox(tb) => tb.geometry.as_ref(),
+            Block::Chart(c) => c.geometry.as_ref(),
+            Block::Shape(s) => s.geometry.as_ref(),
+            Block::EmbeddedObject(e) => e.geometry.as_ref(),
+            Block::Annotation(a) => a.geometry.as_ref(),
         }
     }
 
@@ -148,6 +176,11 @@ impl Block {
             Block::Proof(p) => p.content.iter().flat_map(|b| b.inlines()).collect(),
             Block::Minipage(m) => m.content.iter().flat_map(|b| b.inlines()).collect(),
             Block::Float(f) => f.content.iter().flat_map(|b| b.inlines()).collect(),
+            Block::TextBox(tb) => tb.content.iter().flat_map(|b| b.inlines()).collect(),
+            Block::Chart(c) => c.title.iter().flat_map(|t| t.iter()).collect(),
+            Block::Shape(s) => s.text.iter().collect(),
+            Block::EmbeddedObject(_) => vec![],
+            Block::Annotation(a) => a.content.iter().collect(),
         }
     }
 
@@ -170,6 +203,11 @@ impl Block {
             Block::Proof(_) => "proof",
             Block::Minipage(_) => "minipage",
             Block::Float(_) => "float",
+            Block::TextBox(_) => "text_box",
+            Block::Chart(_) => "chart",
+            Block::Shape(_) => "shape",
+            Block::EmbeddedObject(_) => "embedded_object",
+            Block::Annotation(_) => "annotation",
         }
     }
 }
@@ -291,12 +329,22 @@ pub struct TableCell {
 /// Used for standalone images with optional caption.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FigureBlock {
-    /// Image data (base64 encoded or file path).
+    /// Reference to a media asset in the document's asset collection.
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset_id: Option<crate::AssetId>,
+    /// Image data (base64 encoded or file path).
+    /// DEPRECATED: Use `asset_id` instead. This field is kept for backward compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_data: Option<String>,
     /// Optional caption text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caption: Option<String>,
+    /// Semantic role of the figure (photo, diagram, chart, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<MediaRole>,
+    /// Per-block processing policy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy: Option<BlockPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -477,6 +525,91 @@ pub struct FloatBlock {
     /// Optional placement specifier (e.g., "htbp").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A text box block (Office/PDF/PPT).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextBoxBlock {
+    /// Content blocks inside the text box.
+    pub content: Vec<Block>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    /// Rotation in degrees.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotation_deg: Option<f32>,
+    /// Z-index for layering.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub z_index: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<BoxStyle>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A chart block (Excel/PPT/paper figures).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartBlock {
+    pub chart_type: ChartType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<Vec<Inline>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset_id: Option<crate::AssetId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<ChartData>,
+    #[serde(default)]
+    pub axes: Vec<ChartAxis>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub legend: Option<ChartLegend>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A shape block (Office arrow, rectangle, flowchart shape).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShapeBlock {
+    pub shape_type: ShapeType,
+    #[serde(default)]
+    pub text: Vec<Inline>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<ShapeStyle>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// An embedded object block (OLE, Office Chart, SmartArt, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddedObjectBlock {
+    pub kind: EmbeddedObjectKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset_id: Option<crate::AssetId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview_asset_id: Option<crate::AssetId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// An annotation block (comment, highlight, ink, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnotationBlock {
+    pub kind: AnnotationKind,
+    #[serde(default)]
+    pub content: Vec<Inline>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<NodeId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]

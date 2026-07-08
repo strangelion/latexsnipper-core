@@ -13,5 +13,6 @@ categories.workspace = true
 latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
 log.workspace = true
+serde.workspace = true
 quick-xml = "0.37"
 regex = "1"

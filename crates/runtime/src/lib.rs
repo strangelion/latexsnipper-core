@@ -1,4 +1,5 @@
 pub mod acceleration;
+pub mod api_provider;
 pub mod backend;
 pub mod model_handle;
 pub mod model_package;
@@ -11,6 +12,10 @@ pub mod providers;
 pub mod session;
 
 pub use acceleration::AccelerationMode;
+pub use api_provider::{
+    ApiKeyResolver, ApiProviderConfig, ModelProviderKind, PromptExample, PromptProfile, PromptTask,
+    UploadPolicy,
+};
 pub use backend::RuntimeBackend;
 pub use model_handle::ModelHandle;
 pub use model_package::{

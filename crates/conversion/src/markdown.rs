@@ -1,6 +1,7 @@
-use latexsnipper_ast::{Block, Document, Formula, FormulaSource, Inline};
+use latexsnipper_ast::{Block, Document, Formula, FormulaSource, Inline, MediaAsset};
 use latexsnipper_foundation::Result;
 
+use crate::asset_helper::{resolve_asset_ref, resolve_image_markdown};
 use crate::converter::Converter;
 
 /// Converts Document AST to Markdown with MathJax ($...$ inline, $$...$$ display).
@@ -49,7 +50,7 @@ fn convert_markdown(doc: &Document, mode: MarkdownMode) -> Result<String> {
 
     for page in &doc.pages {
         for block in &page.blocks {
-            let rendered = render_block(block, &mode);
+            let rendered = render_block(block, &mode, &doc.assets);
             if !rendered.is_empty() {
                 parts.push(rendered);
             }
@@ -59,15 +60,15 @@ fn convert_markdown(doc: &Document, mode: MarkdownMode) -> Result<String> {
     Ok(parts.join("\n\n"))
 }
 
-fn render_block(block: &Block, mode: &MarkdownMode) -> String {
+fn render_block(block: &Block, mode: &MarkdownMode, assets: &[MediaAsset]) -> String {
     match block {
         Block::Heading(h) => {
             let prefix = "#".repeat(h.level as usize);
-            let text = render_inlines(&h.inlines, mode);
+            let text = render_inlines(&h.inlines, mode, assets);
             format!("{} {}", prefix, text)
         }
         Block::Paragraph(p) => {
-            let text = render_inlines(&p.inlines, mode);
+            let text = render_inlines(&p.inlines, mode, assets);
             if text.is_empty() {
                 String::new()
             } else {
@@ -82,44 +83,51 @@ fn render_block(block: &Block, mode: &MarkdownMode) -> String {
                 format!("${}$", content)
             }
         }
-        Block::Table(t) => render_table(t),
+        Block::Table(t) => render_table(t, mode, assets),
         Block::Figure(f) => {
-            if let Some(caption) = &f.caption {
-                if let Some(data) = &f.image_data {
-                    format!("![{}](data:image/png;base64,{})", caption, data)
-                } else {
-                    format!("![{}](image.png)", caption)
-                }
+            let caption = f.caption.as_deref().unwrap_or("figure");
+            if let Some(data) = &f.image_data {
+                // Legacy path: inline base64 data
+                format!("![{}](data:image/png;base64,{})", caption, data)
             } else {
-                String::new()
+                let src = resolve_asset_ref(assets, &f.asset_id);
+                if src.is_empty() {
+                    format!("![{}](image.png)", caption)
+                } else {
+                    format!("![{}]({})", caption, src)
+                }
             }
         }
-        Block::List(l) => render_list(l, mode),
-        Block::Quote(q) => render_quote(q, mode),
+        Block::List(l) => render_list(l, mode, assets),
+        Block::Quote(q) => render_quote(q, mode, assets),
         Block::Code(c) => render_code(c),
         Block::HorizontalRule(_) => "\n---\n".to_string(),
         Block::Handwriting(hw) => {
-            let text = render_inlines(&hw.inlines, mode);
+            let text = render_inlines(&hw.inlines, mode, assets);
             format!("> *Handwriting:* {}", text)
         }
-        Block::DescriptionList(dl) => render_description_list(dl, mode),
+        Block::DescriptionList(dl) => render_description_list(dl, mode, assets),
         Block::TableOfContents => "目录".to_string(),
-        Block::Theorem(t) => render_theorem(t, mode),
-        Block::Proof(p) => render_proof(p, mode),
-        Block::Minipage(m) => render_blocks(&m.content, mode),
+        Block::Theorem(t) => render_theorem(t, mode, assets),
+        Block::Proof(p) => render_proof(p, mode, assets),
+        Block::Minipage(m) => render_blocks(&m.content, mode, assets),
         Block::Float(f) => {
-            let content = render_blocks(&f.content, mode);
+            let content = render_blocks(&f.content, mode, assets);
             if let Some(caption) = &f.caption {
-                let caption_text = render_inlines(caption, mode);
+                let caption_text = render_inlines(caption, mode, assets);
                 format!("{}\n*{}*", content, caption_text)
             } else {
                 content
             }
         }
+        Block::TextBox(tb) => render_blocks(&tb.content, mode, assets),
+        Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_) | Block::Annotation(_) => {
+            String::new()
+        }
     }
 }
 
-fn render_inlines(inlines: &[Inline], _mode: &MarkdownMode) -> String {
+fn render_inlines(inlines: &[Inline], _mode: &MarkdownMode, assets: &[MediaAsset]) -> String {
     let mut parts = Vec::new();
     for inline in inlines {
         match inline {
@@ -142,25 +150,158 @@ fn render_inlines(inlines: &[Inline], _mode: &MarkdownMode) -> String {
                 };
                 parts.push(formatted);
             }
-            Inline::Image(_) => {
-                parts.push("![image](image.png)".to_string());
+            Inline::Image(img) => {
+                parts.push(resolve_image_markdown(assets, &img.asset_id, "image"));
             }
             Inline::Footnote { content } => {
-                let inner = render_inlines(&[*content.clone()], _mode);
+                let inner = render_inlines(&[*content.clone()], _mode, assets);
                 parts.push(format!("[^{}]", inner));
             }
-            Inline::Label { .. } => {
-                // Labels are not rendered in Markdown
-            }
+            Inline::Label { .. } => {}
             Inline::Reference { key, .. } => {
                 parts.push(format!("[@{}]", key));
             }
             Inline::Citation { key, .. } => {
                 parts.push(format!("[@{}]", key));
             }
+            Inline::LineBreak | Inline::SoftBreak => {
+                parts.push("\n".to_string());
+            }
+            Inline::Span(s) => {
+                parts.push(render_inlines(&s.content, _mode, assets));
+            }
+            Inline::Link(l) => {
+                let text = render_inlines(&l.content, _mode, assets);
+                parts.push(format!("[{}]({})", text, l.target));
+            }
+            Inline::Code(c) => {
+                parts.push(format!("`{}`", c.code));
+            }
+            Inline::Superscript(inner) => {
+                parts.push(render_inlines(inner, _mode, assets));
+            }
+            Inline::Subscript(inner) => {
+                parts.push(render_inlines(inner, _mode, assets));
+            }
         }
     }
     parts.join(" ")
+}
+
+// ── Helper forwarders to avoid changing every helper signature ──
+// Each passes the `assets` slice down the render chain.
+
+fn render_blocks(blocks: &[Block], mode: &MarkdownMode, assets: &[MediaAsset]) -> String {
+    blocks
+        .iter()
+        .map(|b| render_block(b, mode, assets))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_list(l: &latexsnipper_ast::ListBlock, mode: &MarkdownMode, assets: &[MediaAsset]) -> String {
+    let mut parts = Vec::new();
+    for item in &l.items {
+        let text = render_inlines(&item.inlines, mode, assets);
+        let prefix = if l.ordered { "1." } else { "-" };
+        parts.push(format!("{} {}", prefix, text));
+    }
+    parts.join("\n")
+}
+
+fn render_quote(q: &latexsnipper_ast::QuoteBlock, mode: &MarkdownMode, assets: &[MediaAsset]) -> String {
+    let content = render_blocks(&q.blocks, mode, assets);
+    let mut result = content
+        .lines()
+        .map(|line| format!("> {}", line))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if let Some(attr) = &q.attribution {
+        result.push_str(&format!("\n> — {}", attr));
+    }
+    result
+}
+
+fn render_code(c: &latexsnipper_ast::CodeBlock) -> String {
+    if let Some(lang) = &c.language {
+        format!("```{}\n{}\n```", lang, c.code)
+    } else {
+        format!("```\n{}\n```", c.code)
+    }
+}
+
+fn render_description_list(
+    dl: &latexsnipper_ast::DescriptionListBlock,
+    mode: &MarkdownMode,
+    assets: &[MediaAsset],
+) -> String {
+    let mut parts = Vec::new();
+    for item in &dl.items {
+        if let Some(label) = &item.label {
+            let label_text = render_inlines(label, mode, assets);
+            parts.push(format!("- **{}**", label_text));
+        }
+        for block in &item.content {
+            let content = render_block(block, mode, assets);
+            if !content.is_empty() {
+                parts.push(format!("  {}", content));
+            }
+        }
+    }
+    parts.join("\n")
+}
+
+fn render_theorem(
+    t: &latexsnipper_ast::TheoremBlock,
+    mode: &MarkdownMode,
+    assets: &[MediaAsset],
+) -> String {
+    let content = render_blocks(&t.content, mode, assets);
+    let number = t.number.as_deref().unwrap_or("");
+    format!("**{}. {}**\n{}", t.name, number, content)
+}
+
+fn render_proof(
+    p: &latexsnipper_ast::ProofBlock,
+    mode: &MarkdownMode,
+    assets: &[MediaAsset],
+) -> String {
+    let content = render_blocks(&p.content, mode, assets);
+    format!("*Proof.*\n{}□", content)
+}
+
+fn render_table(
+    t: &latexsnipper_ast::TableBlock,
+    mode: &MarkdownMode,
+    assets: &[MediaAsset],
+) -> String {
+    if t.rows.is_empty() {
+        return String::new();
+    }
+
+    let mut lines = Vec::new();
+
+    // Header row
+    let header: Vec<String> = t.rows[0]
+        .iter()
+        .map(|cell| render_inlines(&cell.inlines, mode, assets))
+        .collect();
+    lines.push(format!("| {} |", header.join(" | ")));
+
+    // Separator
+    let sep: Vec<&str> = t.rows[0].iter().map(|_| "---").collect();
+    lines.push(format!("| {} |", sep.join(" | ")));
+
+    // Data rows
+    for row in t.rows.iter().skip(1) {
+        let cells: Vec<String> = row
+            .iter()
+            .map(|cell| render_inlines(&cell.inlines, mode, assets))
+            .collect();
+        lines.push(format!("| {} |", cells.join(" | ")));
+    }
+
+    lines.join("\n")
 }
 
 fn convert_formula_to_markdown(f: &Formula) -> String {
@@ -172,234 +313,6 @@ fn convert_formula_to_markdown(f: &Formula) -> String {
     }
 }
 
-fn typst_to_latex(typst: &str) -> String {
-    let mut result = typst.to_string();
-    let mappings = [
-        ("sqrt(", "\\sqrt{"),
-        ("integral", "\\int"),
-        ("sum", "\\sum"),
-        ("product", "\\prod"),
-        ("infinity", "\\infty"),
-        ("pi", "\\pi"),
-        ("alpha", "\\alpha"),
-        ("beta", "\\beta"),
-        ("gamma", "\\gamma"),
-        ("delta", "\\delta"),
-        ("theta", "\\theta"),
-        ("lambda", "\\lambda"),
-        ("sigma", "\\sigma"),
-        ("omega", "\\omega"),
-        ("plus.minus", "\\pm"),
-        ("times", "\\times"),
-        ("div", "\\div"),
-        ("dot", "\\cdot"),
-        ("lt.eq", "\\leq"),
-        ("gt.eq", "\\geq"),
-        ("neq", "\\neq"),
-        ("approx", "\\approx"),
-        ("rightarrow", "\\rightarrow"),
-        ("leftarrow", "\\leftarrow"),
-        ("in", "\\in"),
-        ("notin", "\\notin"),
-        ("subset", "\\subset"),
-        ("cup", "\\cup"),
-        ("cap", "\\cap"),
-    ];
-
-    for (from, to) in &mappings {
-        result = result.replace(from, to);
-    }
-
-    result
-}
-
-fn render_list(l: &latexsnipper_ast::ListBlock, mode: &MarkdownMode) -> String {
-    let mut items = Vec::new();
-    for (i, item) in l.items.iter().enumerate() {
-        let prefix = if l.ordered {
-            format!("{}.", i + 1)
-        } else {
-            "-".to_string()
-        };
-        let text = render_inlines(&item.inlines, mode);
-        items.push(format!("{} {}", prefix, text));
-    }
-    items.join("\n")
-}
-
-fn render_description_list(
-    dl: &latexsnipper_ast::DescriptionListBlock,
-    mode: &MarkdownMode,
-) -> String {
-    let mut items = Vec::new();
-    for item in &dl.items {
-        let content = render_blocks(&item.content, mode);
-        if let Some(label) = &item.label {
-            let label_text = render_inlines(label, mode);
-            items.push(format!("**{}**\n: {}", label_text, content));
-        } else {
-            items.push(format!(": {}", content));
-        }
-    }
-    items.join("\n\n")
-}
-
-fn render_theorem(t: &latexsnipper_ast::TheoremBlock, mode: &MarkdownMode) -> String {
-    let content = render_blocks(&t.content, mode);
-    format!("**{}.** {}", t.name, content)
-}
-
-fn render_proof(p: &latexsnipper_ast::ProofBlock, mode: &MarkdownMode) -> String {
-    let content = render_blocks(&p.content, mode);
-    format!("**Proof.** {} □", content)
-}
-
-fn render_blocks(blocks: &[latexsnipper_ast::Block], mode: &MarkdownMode) -> String {
-    blocks
-        .iter()
-        .map(|b| render_block(b, mode))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn render_quote(q: &latexsnipper_ast::QuoteBlock, mode: &MarkdownMode) -> String {
-    let mut lines = Vec::new();
-    for block in &q.blocks {
-        let rendered = render_block(block, mode);
-        for line in rendered.lines() {
-            lines.push(format!("> {}", line));
-        }
-    }
-    if let Some(attr) = &q.attribution {
-        lines.push(format!("> — {}", attr));
-    }
-    lines.join("\n")
-}
-
-fn render_code(c: &latexsnipper_ast::CodeBlock) -> String {
-    match &c.language {
-        Some(lang) => format!("```{}\n{}\n```", lang, c.code),
-        None => format!("```\n{}\n```", c.code),
-    }
-}
-
-fn render_table(t: &latexsnipper_ast::TableBlock) -> String {
-    if t.rows.is_empty() {
-        return String::new();
-    }
-
-    // Check if any cell has colspan/rowspan — if so, use HTML table
-    let has_merge = t
-        .rows
-        .iter()
-        .any(|row| row.iter().any(|cell| cell.colspan > 1 || cell.rowspan > 1));
-
-    if has_merge {
-        return render_html_table_for_markdown(t);
-    }
-
-    // Plain Markdown pipe table
-    let cols = t.rows[0].len();
-    let mut lines = Vec::new();
-
-    let header: Vec<String> = t.rows[0]
-        .iter()
-        .map(|cell| {
-            let text: String = cell
-                .inlines
-                .iter()
-                .filter_map(|i| {
-                    if let Inline::Text(t) = i {
-                        Some(t.text.as_str())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            text
-        })
-        .collect();
-    lines.push(format!("| {} |", header.join(" | ")));
-    lines.push(format!("| {} |", "---|".repeat(cols)));
-
-    for row in &t.rows[1..] {
-        let cells: Vec<String> = row
-            .iter()
-            .map(|cell| {
-                let text: String = cell
-                    .inlines
-                    .iter()
-                    .filter_map(|i| {
-                        if let Inline::Text(t) = i {
-                            Some(t.text.as_str())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                text
-            })
-            .collect();
-        lines.push(format!("| {} |", cells.join(" | ")));
-    }
-
-    lines.join("\n")
-}
-
-/// Render table as HTML for Markdown when cells have colspan/rowspan.
-fn render_html_table_for_markdown(t: &latexsnipper_ast::TableBlock) -> String {
-    let mut lines = vec!["<table>".to_string()];
-
-    if let Some(first_row) = t.rows.first() {
-        lines.push("  <thead><tr>".to_string());
-        for cell in first_row {
-            let text = extract_cell_text_plain(&cell.inlines);
-            let mut attrs = String::new();
-            if cell.colspan > 1 {
-                attrs.push_str(&format!(" colspan=\"{}\"", cell.colspan));
-            }
-            if cell.rowspan > 1 {
-                attrs.push_str(&format!(" rowspan=\"{}\"", cell.rowspan));
-            }
-            lines.push(format!("    <th{}>{}</th>", attrs, text));
-        }
-        lines.push("  </tr></thead>".to_string());
-    }
-
-    if t.rows.len() > 1 {
-        lines.push("  <tbody>".to_string());
-        for row in &t.rows[1..] {
-            lines.push("    <tr>".to_string());
-            for cell in row {
-                let text = extract_cell_text_plain(&cell.inlines);
-                let mut attrs = String::new();
-                if cell.colspan > 1 {
-                    attrs.push_str(&format!(" colspan=\"{}\"", cell.colspan));
-                }
-                if cell.rowspan > 1 {
-                    attrs.push_str(&format!(" rowspan=\"{}\"", cell.rowspan));
-                }
-                lines.push(format!("    <td{}>{}</td>", attrs, text));
-            }
-            lines.push("    </tr>".to_string());
-        }
-        lines.push("  </tbody>".to_string());
-    }
-
-    lines.push("</table>".to_string());
-    lines.join("\n")
-}
-
-fn extract_cell_text_plain(inlines: &[Inline]) -> String {
-    inlines
-        .iter()
-        .filter_map(|i| {
-            if let Inline::Text(t) = i {
-                Some(t.text.as_str())
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+fn typst_to_latex(s: &str) -> String {
+    s.to_string()
 }

@@ -81,5 +81,13 @@ fn render_text(node: &RenderNode) -> String {
         }
         RenderNode::HorizontalRule => "---".to_string(),
         RenderNode::Page(_) => String::new(),
+        RenderNode::Image { alt_text, .. } => alt_text.clone().unwrap_or_else(|| "[image]".to_string()),
+        RenderNode::Figure { caption, .. } => {
+            if caption.is_empty() {
+                "[figure]".to_string()
+            } else {
+                render_nodes_to_text(caption)
+            }
+        }
     }
 }

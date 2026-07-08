@@ -163,7 +163,10 @@ fn windows_main() {
             blocks,
             page_number: Some(1),
         }],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
     };
     println!("\n3. Document AST: {} blocks\n", doc.block_count());
 

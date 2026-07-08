@@ -32,6 +32,7 @@ impl Converter for OmmlConverter {
                                 Inline::Citation { key, .. } => {
                                     parts.push(format!("[{}]", key));
                                 }
+                                _ => {}
                             }
                         }
                     }

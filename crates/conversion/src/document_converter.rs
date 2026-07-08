@@ -4,6 +4,7 @@ use latexsnipper_ast::{
 use latexsnipper_foundation::Result;
 
 use crate::converter::Converter;
+use crate::export_format::ExportFormat;
 use crate::{
     HtmlConverter, LatexConverter, LatexDisplayConverter, LatexEquationConverter,
     MarkdownBlockConverter, MarkdownInlineConverter, MathmlConverter, OmmlConverter,
@@ -11,6 +12,9 @@ use crate::{
 };
 
 /// Supported output formats.
+///
+/// NOTE: These are semantic conversion formats, not file export formats.
+/// For file export (SVG, PDF, PNG, DOCX, etc.), use `ExportFormat` in the export module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Latex,
@@ -60,6 +64,20 @@ impl OutputFormat {
             OutputFormat::MarkdownInline | OutputFormat::MarkdownBlock => "md",
             OutputFormat::MathML | OutputFormat::OMML => "xml",
             OutputFormat::Html => "html",
+        }
+    }
+
+    /// Convert to ExportFormat.
+    pub fn to_export_format(&self) -> ExportFormat {
+        match self {
+            OutputFormat::Latex | OutputFormat::LatexDisplay | OutputFormat::LatexEquation => {
+                ExportFormat::Latex
+            }
+            OutputFormat::Typst => ExportFormat::Typst,
+            OutputFormat::MarkdownInline | OutputFormat::MarkdownBlock => ExportFormat::Markdown,
+            OutputFormat::MathML => ExportFormat::MathML,
+            OutputFormat::OMML => ExportFormat::OMML,
+            OutputFormat::Html => ExportFormat::Html,
         }
     }
 }
@@ -126,7 +144,10 @@ impl DocumentConverter {
                 })],
                 page_number: None,
             }],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
+            schema_version: "1.0.0".to_string(),
         };
         DocumentConverter::new(format).convert(&doc)
     }

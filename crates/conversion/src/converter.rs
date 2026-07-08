@@ -5,6 +5,12 @@ use latexsnipper_foundation::Result;
 ///
 /// Unlike `syntax::Renderer` which handles syntax-level rendering,
 /// `Converter` handles format-level transformation (e.g., AST → OMML XML).
+///
+/// NOTE: Image asset resolution is now handled via `asset_helper::resolve_asset_ref`
+///   and friends, which are called by all format converters.
+///
+/// TODO(phase4): deprecate this trait in favor of `crate::SemanticConverter` from the AST crate,
+///   which provides richer context via `ConversionContext` and works alongside `Exporter`/`Renderer`.
 pub trait Converter {
     /// Convert a Document to the target format.
     fn convert(&self, doc: &Document) -> Result<String>;

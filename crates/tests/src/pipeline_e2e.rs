@@ -208,7 +208,10 @@ fn test_formula_pipeline_e2e() {
             blocks,
             page_number: Some(1),
         }],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
     };
     println!("3. Built Document AST with {} blocks", doc.block_count());
 
@@ -407,7 +410,10 @@ fn test_text_pipeline_e2e() {
             blocks,
             page_number: Some(1),
         }],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
     };
     println!("3. Built Document AST with {} blocks", doc.block_count());
 
@@ -662,7 +668,7 @@ fn test_mixed_pipeline_e2e() {
         ay.partial_cmp(&by).unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // 5. Build Document AST
+    // 4. Build Document AST
     let doc = Document {
         metadata: Metadata::default(),
         pages: vec![Page {
@@ -671,7 +677,10 @@ fn test_mixed_pipeline_e2e() {
             blocks: all_blocks,
             page_number: Some(1),
         }],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
     };
     println!("4. Built Document AST with {} blocks", doc.block_count());
 

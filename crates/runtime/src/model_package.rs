@@ -15,6 +15,15 @@ pub enum ModelTask {
     TableStructure,
     LayoutAnalysis,
     HandwritingRecognition,
+    VisionLanguageRecognition,
+    DocumentUnderstanding,
+    FormulaCorrection,
+    TextCorrection,
+    TableSemanticParsing,
+    DiagramUnderstanding,
+    ChartUnderstanding,
+    ReadingOrderAnalysis,
+    StyleClassification,
 }
 
 /// Tensor specification for model inputs/outputs.

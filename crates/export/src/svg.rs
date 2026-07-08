@@ -135,6 +135,26 @@ fn render_node(node: &RenderNode, svg: &mut String, y: i32) -> i32 {
             y + 10
         }
         RenderNode::Page(_) => y,
+        RenderNode::Image { alt_text, .. } => {
+            let text = alt_text.as_deref().unwrap_or("[image]");
+            svg.push_str(&format!(
+                "  <text x=\"20\" y=\"{}\" font-family=\"serif\" font-size=\"14\" font-style=\"italic\">{}</text>\n",
+                y, escape_xml(text)
+            ));
+            y + 20
+        }
+        RenderNode::Figure { caption, .. } => {
+            let text = if caption.is_empty() {
+                "[figure]".to_string()
+            } else {
+                render_nodes_to_text(caption)
+            };
+            svg.push_str(&format!(
+                "  <text x=\"20\" y=\"{}\" font-family=\"serif\" font-size=\"14\">{}</text>\n",
+                y, escape_xml(&text)
+            ));
+            y + 20
+        }
     }
 }
 
@@ -166,6 +186,14 @@ fn node_to_text(node: &RenderNode) -> String {
         RenderNode::Quote(nodes) => render_nodes_to_text(nodes),
         RenderNode::HorizontalRule => "---".to_string(),
         RenderNode::Page(_) => String::new(),
+        RenderNode::Image { alt_text, .. } => alt_text.clone().unwrap_or_else(|| "[image]".to_string()),
+        RenderNode::Figure { caption, .. } => {
+            if caption.is_empty() {
+                "[figure]".to_string()
+            } else {
+                render_nodes_to_text(caption)
+            }
+        }
     }
 }
 

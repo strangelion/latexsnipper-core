@@ -1,5 +1,9 @@
+pub mod asset_helper;
+pub mod asset_resolver;
 pub mod converter;
 pub mod document_converter;
+pub mod export_format;
+pub mod exporter;
 pub mod html;
 pub mod html_parser;
 pub mod latex;
@@ -20,6 +24,7 @@ pub mod typst_parser;
 pub mod word_ooxml_table_parser;
 pub mod word_ooxml_table_writer;
 
+pub use asset_helper::{resolve_asset_ref, resolve_image_html, resolve_image_latex, resolve_image_markdown, resolve_image_typst};
 pub use converter::Converter;
 pub use document_converter::{DocumentConverter, OutputFormat};
 pub use html::HtmlConverter;
@@ -81,7 +86,10 @@ mod tests {
                 ],
                 page_number: Some(1),
             }],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+            schema_version: "1.0.0".to_string(),
         }
     }
 
@@ -262,7 +270,10 @@ mod tests {
                 })],
                 page_number: None,
             }],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+            schema_version: "1.0.0".to_string(),
         };
         let converter = OmmlConverter;
         let result = converter.convert(&doc).unwrap();
@@ -285,7 +296,10 @@ mod tests {
                 })],
                 page_number: None,
             }],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+            schema_version: "1.0.0".to_string(),
         };
         let converter = MathmlConverter;
         let result = converter.convert(&doc).unwrap();

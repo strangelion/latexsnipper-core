@@ -92,6 +92,7 @@ fn manifest_to_config(manifest: &ModelManifest) -> latexsnipper_model::ModelConf
         latexsnipper_runtime::ModelTask::TableStructure => "slanet",
         latexsnipper_runtime::ModelTask::LayoutAnalysis => "picodet_layout",
         latexsnipper_runtime::ModelTask::HandwritingRecognition => "trocr",
+        _ => "unknown",
     };
 
     latexsnipper_model::ModelConfig {

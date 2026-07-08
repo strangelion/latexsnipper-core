@@ -485,6 +485,21 @@ impl SnipperEngine {
                                 }
                                 buf
                             }
+                            Block::TextBox(tb) => {
+                                let mut buf = String::new();
+                                for block in &tb.content {
+                                    if let Block::Paragraph(p) = block {
+                                        for inline in &p.inlines {
+                                            if let Inline::Text(t) = inline {
+                                                buf.push_str(&t.text);
+                                            }
+                                        }
+                                    }
+                                }
+                                buf
+                            }
+                            Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_)
+                            | Block::Annotation(_) => String::new(),
                         };
 
                         let confidence = match block {
@@ -551,7 +566,10 @@ impl SnipperEngine {
                 blocks,
                 page_number: Some(1),
             }],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+            schema_version: "1.0.0".to_string(),
         })
     }
 
@@ -604,7 +622,10 @@ impl SnipperEngine {
         Ok(Document {
             metadata: Metadata::default(),
             pages: doc_pages,
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+            schema_version: "1.0.0".to_string(),
         })
     }
 

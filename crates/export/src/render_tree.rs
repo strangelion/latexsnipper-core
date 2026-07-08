@@ -1,4 +1,4 @@
-use latexsnipper_ast::{Block, Document, Inline};
+use latexsnipper_ast::{AssetId, Block, Document, Inline};
 
 /// An intermediate representation between AST and final output.
 /// Avoids re-traversing the AST for each export format.
@@ -32,6 +32,18 @@ pub enum RenderNode {
     },
     Quote(Vec<RenderNode>),
     HorizontalRule,
+    /// An inline image referenced by its asset ID.
+    Image {
+        asset_id: Option<AssetId>,
+        width: Option<f32>,
+        height: Option<f32>,
+        alt_text: Option<String>,
+    },
+    /// A figure block with an optional asset and caption.
+    Figure {
+        asset_id: Option<AssetId>,
+        caption: Vec<RenderNode>,
+    },
     Page(Vec<RenderNode>),
 }
 
@@ -115,6 +127,20 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
                 .collect();
             Some(RenderNode::Table { rows })
         }
+        Block::Figure(f) => {
+            let caption = f
+                .caption
+                .as_ref()
+                .map(|c| {
+                    // Simple text render of caption
+                    vec![RenderNode::Text(c.clone())]
+                })
+                .unwrap_or_default();
+            Some(RenderNode::Figure {
+                asset_id: f.asset_id.clone(),
+                caption,
+            })
+        }
         Block::List(l) => {
             let items: Vec<Vec<RenderNode>> = l
                 .items
@@ -135,7 +161,6 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             Some(RenderNode::Quote(inner))
         }
         Block::HorizontalRule(_) => Some(RenderNode::HorizontalRule),
-        Block::Figure(_) => None,
         Block::Handwriting(hw) => {
             let inlines = convert_inlines(&hw.inlines);
             Some(RenderNode::Paragraph(inlines))
@@ -196,6 +221,13 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             let nodes: Vec<RenderNode> = f.content.iter().filter_map(convert_block).collect();
             Some(RenderNode::Paragraph(nodes))
         }
+        Block::TextBox(tb) => {
+            let nodes: Vec<RenderNode> = tb.content.iter().filter_map(convert_block).collect();
+            Some(RenderNode::Paragraph(nodes))
+        }
+        Block::Chart(_) | Block::Shape(_) | Block::EmbeddedObject(_) | Block::Annotation(_) => {
+            None
+        }
     }
 }
 
@@ -208,7 +240,12 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<RenderNode> {
                 latex: f.as_latex().to_string(),
                 display_mode: f.display_mode,
             },
-            Inline::Image(_) => RenderNode::Text(String::new()),
+            Inline::Image(img) => RenderNode::Image {
+                asset_id: img.asset_id.clone(),
+                width: img.width,
+                height: img.height,
+                alt_text: img.alt_text.clone(),
+            },
             Inline::Footnote { content } => {
                 let inner = convert_inlines(&[*content.clone()]);
                 RenderNode::Text(format!(
@@ -225,6 +262,46 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<RenderNode> {
             Inline::Label { key } => RenderNode::Text(format!("[label={}]", key)),
             Inline::Reference { key, .. } => RenderNode::Text(format!("({})", key)),
             Inline::Citation { key, .. } => RenderNode::Text(format!("[{}]", key)),
+            Inline::LineBreak | Inline::SoftBreak => RenderNode::Text("\n".to_string()),
+            Inline::Span(s) => {
+                let nodes = convert_inlines(&s.content);
+                if nodes.len() == 1 {
+                    nodes.into_iter().next().unwrap_or(RenderNode::Text(String::new()))
+                } else {
+                    RenderNode::Text(
+                        nodes
+                            .iter()
+                            .map(|n| match n {
+                                RenderNode::Text(t) => t.clone(),
+                                _ => String::new(),
+                            })
+                            .collect(),
+                    )
+                }
+            }
+            Inline::Link(l) => {
+                let text = convert_inlines(&l.content)
+                    .iter()
+                    .map(|n| match n {
+                        RenderNode::Text(t) => t.clone(),
+                        _ => String::new(),
+                    })
+                    .collect::<String>();
+                RenderNode::Text(format!("[{}](l.target)", text))
+            }
+            Inline::Code(c) => RenderNode::Text(c.code.clone()),
+            Inline::Superscript(inner) | Inline::Subscript(inner) => {
+                let nodes = convert_inlines(inner);
+                RenderNode::Text(
+                    nodes
+                        .iter()
+                        .map(|n| match n {
+                            RenderNode::Text(t) => t.clone(),
+                            _ => String::new(),
+                        })
+                        .collect(),
+                )
+            }
         })
         .collect()
 }

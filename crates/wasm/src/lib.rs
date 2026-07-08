@@ -227,7 +227,10 @@ pub fn formula_to_document(latex: &str, format: &str) -> Result<String, JsValue>
             )],
             page_number: Some(1),
         }],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
         id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
     };
 
     let doc_json = serde_json::to_string(&doc).map_err(err_to_js)?;

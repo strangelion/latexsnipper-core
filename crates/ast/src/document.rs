@@ -1,15 +1,33 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Block, Metadata, NodeIdGenerator};
+use crate::{Block, Diagnostic, MediaAsset, Metadata, NodeIdGenerator};
 
 /// Top-level document — the single source of truth.
+///
+/// TODO(phase1): add `normalize_assets()` to compute checksums, fill mime/role/size
+/// TODO(phase4): integrate with unified Importer/Exporter trait dispatch
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Document {
     pub metadata: Metadata,
     pub pages: Vec<Page>,
+
+    #[serde(default)]
+    pub assets: Vec<MediaAsset>,
+
+    #[serde(default)]
+    pub diagnostics: Vec<Diagnostic>,
+
     #[serde(skip)]
     #[serde(default = "NodeIdGenerator::new")]
     pub id_gen: NodeIdGenerator,
+
+    /// Schema version for compatibility tracking.
+    #[serde(default = "default_schema_version")]
+    pub schema_version: String,
+}
+
+fn default_schema_version() -> String {
+    "1.0.0".to_string()
 }
 
 impl Clone for Document {
@@ -17,7 +35,10 @@ impl Clone for Document {
         Self {
             metadata: self.metadata.clone(),
             pages: self.pages.clone(),
+            assets: self.assets.clone(),
+            diagnostics: self.diagnostics.clone(),
             id_gen: NodeIdGenerator::new(),
+            schema_version: self.schema_version.clone(),
         }
     }
 }
@@ -53,7 +74,10 @@ impl Document {
         Self {
             metadata: Metadata::default(),
             pages: Vec::new(),
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
+            schema_version: default_schema_version(),
         }
     }
 
@@ -91,7 +115,10 @@ impl Document {
         Self {
             metadata: self.metadata.clone(),
             pages,
+            assets: self.assets.clone(),
+            diagnostics: self.diagnostics.clone(),
             id_gen: NodeIdGenerator::new(),
+            schema_version: self.schema_version.clone(),
         }
     }
 
@@ -106,7 +133,10 @@ impl Document {
         Self {
             metadata: self.metadata.clone(),
             pages,
+            assets: self.assets.clone(),
+            diagnostics: self.diagnostics.clone(),
             id_gen: NodeIdGenerator::new(),
+            schema_version: self.schema_version.clone(),
         }
     }
 

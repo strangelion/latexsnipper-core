@@ -82,7 +82,10 @@ impl PipelineNode for PageAssemblyNode {
         ctx.document = Document {
             metadata: Metadata::default(),
             pages,
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
             id_gen: NodeIdGenerator::new(),
+            schema_version: "1.0.0".to_string(),
         };
 
         log::info!(

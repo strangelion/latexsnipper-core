@@ -298,6 +298,32 @@ fn render_node(
             Ok(RenderResult::Ok(*y - LINE_HEIGHT))
         }
         RenderNode::Page(_) => Ok(RenderResult::Ok(*y)),
+        RenderNode::Image { alt_text, .. } => {
+            let text = alt_text.as_deref().unwrap_or("[image]");
+            layer.use_text(
+                text,
+                FONT_SIZE,
+                Mm(MARGIN_LEFT * 0.3528),
+                Mm(*y * 0.3528),
+                font,
+            );
+            Ok(RenderResult::Ok(*y - LINE_HEIGHT))
+        }
+        RenderNode::Figure { caption, .. } => {
+            let text = if caption.is_empty() {
+                "[figure]".to_string()
+            } else {
+                render_nodes_to_text(caption)
+            };
+            layer.use_text(
+                &text,
+                FONT_SIZE,
+                Mm(MARGIN_LEFT * 0.3528),
+                Mm(*y * 0.3528),
+                font,
+            );
+            Ok(RenderResult::Ok(*y - LINE_HEIGHT))
+        }
     }
 }
 
@@ -325,6 +351,14 @@ fn node_to_text(node: &RenderNode) -> String {
         RenderNode::Quote(nodes) => render_nodes_to_text(nodes),
         RenderNode::HorizontalRule => "---".to_string(),
         RenderNode::Page(_) => String::new(),
+        RenderNode::Image { alt_text, .. } => alt_text.clone().unwrap_or_else(|| "[image]".to_string()),
+        RenderNode::Figure { caption, .. } => {
+            if caption.is_empty() {
+                "[figure]".to_string()
+            } else {
+                render_nodes_to_text(caption)
+            }
+        }
     }
 }
 

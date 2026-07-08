@@ -90,12 +90,39 @@ impl std::fmt::Display for Position {
     }
 }
 
+/// The coordinate space in which geometry values are expressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CoordinateSpace {
+    /// Raw image pixel coordinates.
+    ImagePixels,
+    /// PDF points (1 pt = 1/72 inch).
+    PdfPoints,
+    /// Office English Metric Units (EMU).
+    OfficeEmu,
+    /// Normalized [0,1] coordinate space.
+    Normalized01,
+    /// Logical page coordinates (e.g., CSS px).
+    PageLogical,
+}
+
+/// PDF-specific source information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PdfSourceInfo {
+    pub page_index: usize,
+    pub object_id: Option<String>,
+    pub xobject_name: Option<String>,
+    pub text_span_id: Option<String>,
+}
+
 /// Source location information for an AST node.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SourceInfo {
     /// Unique node identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_id: Option<NodeId>,
+    /// Stable identifier that survives re-processing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stable_id: Option<String>,
     /// Byte span in source text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub span: Option<Span>,
@@ -107,6 +134,36 @@ pub struct SourceInfo {
     /// `None` means page-agnostic (single-page input or unknown).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub page: Option<usize>,
+    /// Bounding rectangle in the source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<crate::Rect>,
+    /// Precise quadrilateral (for rotated content).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quad: Option<crate::Quad>,
+    /// Coordinate space that region/quad values use.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coordinate_space: Option<CoordinateSpace>,
+    /// Confidence score from recognition.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
+    /// Producer/tool that created this node.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub producer: Option<String>,
+    /// Provider ID if this node was produced by a remote API/VLM.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    /// Artifact entry ID if this node's source is tracked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifact_id: Option<String>,
+    /// Media asset ID if this node was derived from an asset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset_id: Option<crate::AssetId>,
+    /// Office application source information.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub office: Option<crate::OfficeSourceInfo>,
+    /// PDF-specific source information.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pdf: Option<PdfSourceInfo>,
 }
 
 impl SourceInfo {
@@ -119,6 +176,11 @@ impl SourceInfo {
         self
     }
 
+    pub fn with_stable_id(mut self, id: impl Into<String>) -> Self {
+        self.stable_id = Some(id.into());
+        self
+    }
+
     pub fn with_span(mut self, span: Span) -> Self {
         self.span = Some(span);
         self
@@ -126,6 +188,31 @@ impl SourceInfo {
 
     pub fn with_position(mut self, pos: Position) -> Self {
         self.position = Some(pos);
+        self
+    }
+
+    pub fn with_region(mut self, rect: crate::Rect) -> Self {
+        self.region = Some(rect);
+        self
+    }
+
+    pub fn with_quad(mut self, quad: crate::Quad) -> Self {
+        self.quad = Some(quad);
+        self
+    }
+
+    pub fn with_coordinate_space(mut self, cs: CoordinateSpace) -> Self {
+        self.coordinate_space = Some(cs);
+        self
+    }
+
+    pub fn with_confidence(mut self, conf: f32) -> Self {
+        self.confidence = Some(conf);
+        self
+    }
+
+    pub fn with_producer(mut self, producer: impl Into<String>) -> Self {
+        self.producer = Some(producer.into());
         self
     }
 
@@ -156,6 +243,54 @@ impl Default for NodeIdGenerator {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// ---------------------------------------------------------------------------
+// Provenance — tracks how a node was produced or transformed
+// ---------------------------------------------------------------------------
+
+/// Records the provenance of an AST node or artifact.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Provenance {
+    pub node_id: Option<NodeId>,
+    pub artifact_id: Option<String>,
+    pub stage_id: Option<String>,
+    pub provider_id: Option<String>,
+    pub model_id: Option<String>,
+    pub operation: ProvenanceOperation,
+    pub confidence: Option<f32>,
+    pub timestamp: Option<String>,
+}
+
+/// The type of operation that produced or changed a node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProvenanceOperation {
+    Decoded,
+    Detected,
+    Recognized,
+    Normalized,
+    Converted,
+    Exported,
+    EnhancedByApi,
+    Degraded,
+    ManuallyEdited,
+}
+
+// ---------------------------------------------------------------------------
+// BlockPolicy — per-block processing policy
+// ---------------------------------------------------------------------------
+
+/// Controls what operations should (or should not) be applied to a block.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BlockPolicy {
+    pub recognize: Option<bool>,
+    pub convert: Option<bool>,
+    pub export: Option<bool>,
+    pub editable: Option<bool>,
+    pub preserve_layout: Option<bool>,
+    pub preserve_asset: Option<bool>,
+    pub allow_remote_api: Option<bool>,
+    pub translate: Option<bool>,
 }
 
 #[cfg(test)]

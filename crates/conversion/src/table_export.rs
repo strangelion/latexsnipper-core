@@ -102,6 +102,7 @@ fn extract_cell_text(inlines: &[Inline]) -> String {
             Inline::Citation { key, .. } => {
                 parts.push(format!("[{}]", key));
             }
+            _ => {}
         }
     }
     parts.join(" ")
@@ -137,6 +138,7 @@ fn render_cell_html(inlines: &[Inline]) -> String {
             Inline::Citation { key, .. } => {
                 parts.push(format!("<cite>{}</cite>", key));
             }
+            _ => {}
         }
     }
     parts.join(" ")
