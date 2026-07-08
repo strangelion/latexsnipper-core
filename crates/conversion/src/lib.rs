@@ -1,5 +1,6 @@
 pub mod asset_helper;
 pub mod asset_resolver;
+pub mod clipboard;
 pub mod converter;
 pub mod document_converter;
 pub mod export_format;
@@ -25,6 +26,7 @@ pub mod word_ooxml_table_parser;
 pub mod word_ooxml_table_writer;
 
 pub use asset_helper::{resolve_asset_ref, resolve_image_html, resolve_image_latex, resolve_image_markdown, resolve_image_typst};
+pub use clipboard::ClipboardBundle;
 pub use converter::Converter;
 pub use document_converter::{DocumentConverter, OutputFormat};
 pub use html::HtmlConverter;
