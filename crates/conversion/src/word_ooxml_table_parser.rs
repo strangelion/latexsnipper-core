@@ -3,7 +3,9 @@
 //! Uses regex-based parsing to extract table structure from Word's OOXML.
 //! Supports horizontal merge (gridSpan/colspan) and vertical merge (vMerge/rowspan).
 
-use latexsnipper_ast::{Inline, TableBlock, TableCell, TextRun};
+use latexsnipper_ast::{
+    Block, Inline, ParagraphBlock, TableBlock, TableCell, TableRow, TextRun,
+};
 use regex::Regex;
 
 /// Intermediate cell data before rowspan resolution.
@@ -122,16 +124,24 @@ pub fn parse_word_table_ooxml(xml: &str) -> Option<TableBlock> {
                 }
             }
 
-            let inlines = if rc.text.is_empty() {
+            let content = if rc.text.is_empty() {
                 Vec::new()
             } else {
-                vec![Inline::Text(TextRun::new(rc.text.clone()))]
+                vec![Block::Paragraph(ParagraphBlock {
+                    inlines: vec![Inline::Text(TextRun::new(rc.text.clone()))],
+                    geometry: None,
+                    source: None,
+                    style: None,
+                })]
             };
 
             cells.push(TableCell {
-                inlines,
+                content,
                 colspan: rc.colspan,
                 rowspan,
+                data_type: None,
+                formula: None,
+                style: None,
                 border_style: None,
                 border_width: None,
                 border_color: None,
@@ -143,12 +153,19 @@ pub fn parse_word_table_ooxml(xml: &str) -> Option<TableBlock> {
         }
 
         if !cells.is_empty() {
-            rows.push(cells);
+            rows.push(TableRow {
+                cells,
+                height: None,
+                is_header: false,
+            });
         }
     }
 
     Some(TableBlock {
         rows,
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     })
@@ -174,8 +191,8 @@ mod tests {
 
         let table = parse_word_table_ooxml(xml).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0].len(), 2);
-        assert_eq!(table.rows[1].len(), 2);
+        assert_eq!(table.rows[0].cells.len(), 2);
+        assert_eq!(table.rows[1].cells.len(), 2);
     }
 
     #[test]
@@ -189,8 +206,8 @@ mod tests {
 
         let table = parse_word_table_ooxml(xml).unwrap();
         assert_eq!(table.rows.len(), 1);
-        assert_eq!(table.rows[0].len(), 2);
-        assert_eq!(table.rows[0][0].colspan, 2);
+        assert_eq!(table.rows[0].cells.len(), 2);
+        assert_eq!(table.rows[0].cells[0].colspan, 2);
     }
 
     #[test]
@@ -221,12 +238,12 @@ mod tests {
         let table = parse_word_table_ooxml(xml).unwrap();
         assert_eq!(table.rows.len(), 2);
         // Row 0, cell A: rowspan=2
-        assert_eq!(table.rows[0][0].rowspan, 2);
-        assert_eq!(table.rows[0][0].colspan, 1);
+        assert_eq!(table.rows[0].cells[0].rowspan, 2);
+        assert_eq!(table.rows[0].cells[0].colspan, 1);
         // Row 0, cell B: normal
-        assert_eq!(table.rows[0][1].rowspan, 1);
+        assert_eq!(table.rows[0].cells[1].rowspan, 1);
         // Row 1: only cell C remains (A's continuation is skipped)
-        assert_eq!(table.rows[1].len(), 1);
+        assert_eq!(table.rows[1].cells.len(), 1);
     }
 
     #[test]
@@ -243,7 +260,7 @@ mod tests {
 
         let table = parse_word_table_ooxml(xml).unwrap();
         assert_eq!(table.rows.len(), 1); // continuation row skipped
-        assert_eq!(table.rows[0][0].rowspan, 2);
+        assert_eq!(table.rows[0].cells[0].rowspan, 2);
     }
 
     #[test]
@@ -266,12 +283,12 @@ mod tests {
 
         let table = parse_word_table_ooxml(xml).unwrap();
         assert_eq!(table.rows.len(), 3); // all 3 rows survive; continuation cells are skipped within each row
-        assert_eq!(table.rows[0][0].rowspan, 3);
+        assert_eq!(table.rows[0].cells[0].rowspan, 3);
         // Row 1: only C (A's continuation skipped)
-        assert_eq!(table.rows[1].len(), 1);
-        assert_eq!(table.rows[1][0].inlines.len(), 1);
+        assert_eq!(table.rows[1].cells.len(), 1);
+        assert_eq!(table.rows[1].cells[0].collect_inlines().len(), 1);
         // Row 2: only D (A's continuation skipped)
-        assert_eq!(table.rows[2].len(), 1);
+        assert_eq!(table.rows[2].cells.len(), 1);
     }
 
     #[test]
@@ -289,7 +306,7 @@ mod tests {
 </w:tbl>"#;
 
         let table = parse_word_table_ooxml(xml).unwrap();
-        assert_eq!(table.rows[0][0].colspan, 2);
-        assert_eq!(table.rows[0][0].rowspan, 2);
+        assert_eq!(table.rows[0].cells[0].colspan, 2);
+        assert_eq!(table.rows[0].cells[0].rowspan, 2);
     }
 }

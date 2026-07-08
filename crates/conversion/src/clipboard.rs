@@ -75,8 +75,12 @@ fn block_to_plain_text(block: &Block) -> String {
             let mut rows = Vec::new();
             for row in &t.rows {
                 let cells: Vec<String> = row
+                    .cells
                     .iter()
-                    .map(|cell| inlines_to_plain_text(&cell.inlines))
+                    .map(|cell| {
+                        let inlines = cell.collect_inlines();
+                        inlines_to_plain_text(&inlines)
+                    })
                     .collect();
                 rows.push(cells.join("\t"));
             }
@@ -255,9 +259,11 @@ fn block_to_clipboard_html(block: &Block) -> Option<String> {
             let mut rows = Vec::new();
             for row in &t.rows {
                 let cells: Vec<String> = row
+                    .cells
                     .iter()
                     .map(|cell| {
-                        let content = inlines_to_clipboard_html(&cell.inlines);
+                        let inlines = cell.collect_inlines();
+                        let content = inlines_to_clipboard_html(&inlines);
                         format!("<td>{}</td>", content)
                     })
                     .collect();

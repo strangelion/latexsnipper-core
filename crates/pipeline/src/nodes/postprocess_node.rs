@@ -98,8 +98,10 @@ fn normalize_block_inlines(block: &mut latexsnipper_ast::Block) {
         Block::Heading(ref mut h) => normalize_inlines(&mut h.inlines),
         Block::Table(ref mut t) => {
             for row in &mut t.rows {
-                for cell in row.iter_mut() {
-                    normalize_inlines(&mut cell.inlines);
+                for cell in &mut row.cells {
+                    for block in &mut cell.content {
+                        normalize_block_inlines(block);
+                    }
                 }
             }
         }

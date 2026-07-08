@@ -366,9 +366,9 @@ impl DocumentReport {
             }
             if let crate::Block::Table(t) = block {
                 for row in &t.rows {
-                    for cell in row {
-                        for inline in &cell.inlines {
-                            if let crate::Inline::Formula(f) = inline {
+                    for cell in &row.cells {
+                        for inline in cell.collect_inlines() {
+                            if let crate::Inline::Formula(f) = &inline {
                                 confidences.push(f.confidence);
                             }
                         }

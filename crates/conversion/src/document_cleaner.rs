@@ -176,8 +176,11 @@ fn block_text(block: &Block) -> String {
         Block::Table(t) => t
             .rows
             .iter()
-            .flat_map(|row| row.iter())
-            .map(|cell| inlines_to_text(&cell.inlines))
+            .flat_map(|row| row.cells.iter())
+            .map(|cell| {
+                let inlines = cell.collect_inlines();
+                inlines_to_text(&inlines)
+            })
             .collect::<Vec<_>>()
             .join(" "),
         Block::Quote(q) => q
@@ -265,8 +268,10 @@ fn normalize_block_whitespace(block: &mut Block) {
         Block::Handwriting(hw) => normalize_inlines_whitespace(&mut hw.inlines),
         Block::Table(t) => {
             for row in &mut t.rows {
-                for cell in row.iter_mut() {
-                    normalize_inlines_whitespace(&mut cell.inlines);
+                for cell in &mut row.cells {
+                    for block in &mut cell.content {
+                        normalize_block_whitespace(block);
+                    }
                 }
             }
         }

@@ -157,10 +157,24 @@ impl TableRecognizerNode {
                 )
                 .await;
 
+            let content = if inlines.is_empty() {
+                Vec::new()
+            } else {
+                vec![Block::Paragraph(ParagraphBlock {
+                    inlines,
+                    geometry: None,
+                    source: None,
+                    style: None,
+                })]
+            };
+
             let table_cell = TableCell {
-                inlines,
+                content,
                 colspan,
                 rowspan,
+                data_type: None,
+                formula: None,
+                style: None,
                 border_style: None,
                 border_width: None,
                 border_color: None,
@@ -176,16 +190,28 @@ impl TableRecognizerNode {
         }
 
         // Sort cells in each row by column position
-        for row in &mut rows {
-            row.sort_by(|a, b| {
+        for row_cells in &mut rows {
+            row_cells.sort_by(|a, b| {
                 let ax = a.geometry.as_ref().map_or(0.0, |g| g.x);
                 let bx = b.geometry.as_ref().map_or(0.0, |g| g.x);
                 ax.partial_cmp(&bx).unwrap_or(std::cmp::Ordering::Equal)
             });
         }
 
+        let table_rows: Vec<TableRow> = rows
+            .into_iter()
+            .map(|cells| TableRow {
+                cells,
+                height: None,
+                is_header: false,
+            })
+            .collect();
+
         let table_block = Block::Table(TableBlock {
-            rows,
+            rows: table_rows,
+            columns: vec![],
+            caption: None,
+            style: None,
             geometry: Some(table_rect),
             source: Some(SourceInfo::new()),
         });

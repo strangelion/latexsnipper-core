@@ -338,9 +338,11 @@ fn render_table(t: &latexsnipper_ast::TableBlock, assets: &[MediaAsset]) -> Stri
     let mut rows = Vec::new();
     for row in &t.rows {
         let cells: Vec<String> = row
+            .cells
             .iter()
             .map(|cell| {
-                let content = render_inlines(&cell.inlines, assets);
+                let cell_inlines = cell.collect_inlines();
+                let content = render_inlines(&cell_inlines, assets);
                 let mut attrs = String::new();
                 if cell.colspan > 1 {
                     attrs.push_str(&format!(" colspan=\"{}\"", cell.colspan));

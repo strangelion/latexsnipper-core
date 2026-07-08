@@ -300,20 +300,28 @@ fn render_table(
 
     // Header row
     let header: Vec<String> = t.rows[0]
+        .cells
         .iter()
-        .map(|cell| render_inlines(&cell.inlines, mode, assets))
+        .map(|cell| {
+            let cell_inlines = cell.collect_inlines();
+            render_inlines(&cell_inlines, mode, assets)
+        })
         .collect();
     lines.push(format!("| {} |", header.join(" | ")));
 
     // Separator
-    let sep: Vec<&str> = t.rows[0].iter().map(|_| "---").collect();
+    let sep: Vec<&str> = t.rows[0].cells.iter().map(|_| "---").collect();
     lines.push(format!("| {} |", sep.join(" | ")));
 
     // Data rows
     for row in t.rows.iter().skip(1) {
         let cells: Vec<String> = row
+            .cells
             .iter()
-            .map(|cell| render_inlines(&cell.inlines, mode, assets))
+            .map(|cell| {
+                let cell_inlines = cell.collect_inlines();
+                render_inlines(&cell_inlines, mode, assets)
+            })
             .collect();
         lines.push(format!("| {} |", cells.join(" | ")));
     }

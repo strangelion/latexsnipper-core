@@ -175,8 +175,9 @@ impl Block {
             Block::Table(t) => t
                 .rows
                 .iter()
-                .flat_map(|row| row.iter())
-                .flat_map(|cell| cell.inlines.iter())
+                .flat_map(|row| row.cells.iter())
+                .flat_map(|cell| cell.content.iter())
+                .flat_map(|b| b.inlines())
                 .collect(),
             Block::Figure(_) => vec![],
             Block::List(l) => l
@@ -222,13 +223,7 @@ impl Block {
             Block::Heading(h) => Some(h.inlines.iter_mut().collect()),
             Block::Paragraph(p) => Some(p.inlines.iter_mut().collect()),
             Block::Formula(_) => None,
-            Block::Table(t) => Some(
-                t.rows
-                    .iter_mut()
-                    .flat_map(|row| row.iter_mut())
-                    .flat_map(|cell| cell.inlines.iter_mut())
-                    .collect(),
-            ),
+            Block::Table(_) => None,
             Block::Figure(_) => None,
             Block::List(_) => None,
             Block::Quote(_) => None,
@@ -338,11 +333,20 @@ pub struct FormulaBlock {
 
 /// A table block.
 ///
-/// Contains rows of cells, each cell can have inline content.
+/// Contains rows and columns with rich cell content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableBlock {
-    /// Table rows, each row is a vector of cells.
-    pub rows: Vec<Vec<TableCell>>,
+    /// Table rows.
+    pub rows: Vec<TableRow>,
+    /// Table columns.
+    #[serde(default)]
+    pub columns: Vec<TableColumn>,
+    /// Optional caption.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<Vec<Inline>>,
+    /// Table-level style.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<TableStyle>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -377,12 +381,21 @@ pub enum CellAlignment {
 /// A table cell.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableCell {
-    /// Inline content of the cell.
-    pub inlines: Vec<Inline>,
+    /// Block content of the cell (replaces `inlines` — more flexible).
+    pub content: Vec<Block>,
     /// Number of columns this cell spans.
     pub colspan: u32,
     /// Number of rows this cell spans.
     pub rowspan: u32,
+    /// The type of data in this cell (text, number, boolean, date, formula, empty).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_type: Option<CellDataType>,
+    /// Optional formula string (e.g., "SUM(A1:A10)").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula: Option<String>,
+    /// Cell-level style.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<TableCellStyle>,
     /// Border style for this cell.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub border_style: Option<BorderStyle>,
@@ -403,6 +416,59 @@ pub struct TableCell {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
 }
+
+impl TableCell {
+    /// Collect all inline elements from cell content blocks.
+    pub fn collect_inlines(&self) -> Vec<Inline> {
+        self.content
+            .iter()
+            .flat_map(|b| b.inlines().into_iter().cloned())
+            .collect()
+    }
+}
+
+/// A table row with optional height and header flag.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableRow {
+    /// Cells in this row.
+    pub cells: Vec<TableCell>,
+    /// Row height in points.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<f32>,
+    /// Whether this is a header row.
+    #[serde(default)]
+    pub is_header: bool,
+}
+
+/// A table column with optional width.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableColumn {
+    /// Column width in points.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<f32>,
+    /// Whether this is a header column.
+    #[serde(default)]
+    pub is_header: bool,
+}
+
+/// The type of data stored in a cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CellDataType {
+    Text,
+    Number,
+    Boolean,
+    Date,
+    Formula,
+    Empty,
+}
+
+/// Flexible table-level style (to be expanded).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TableStyle {}
+
+/// Flexible cell-level style (to be expanded).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TableCellStyle {}
 
 /// An image/figure block.
 ///

@@ -384,15 +384,17 @@ fn render_table(t: &latexsnipper_ast::TableBlock, assets: &[MediaAsset]) -> Stri
         return String::new();
     }
 
-    let col_count = t.rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    let col_count = t.rows.iter().map(|r| r.cells.len()).max().unwrap_or(0);
     let col_spec = "|".to_string() + &"c|".repeat(col_count);
 
     let mut rows = Vec::new();
     for row in &t.rows {
         let cells: Vec<String> = row
+            .cells
             .iter()
             .map(|cell| {
-                let content = render_inlines(&cell.inlines, assets);
+                let cell_inlines = cell.collect_inlines();
+                let content = render_inlines(&cell_inlines, assets);
                 let mut result = String::new();
                 if cell.colspan > 1 {
                     result.push_str(&format!(

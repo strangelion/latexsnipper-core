@@ -6,40 +6,77 @@
 //! Run: cargo test --test table_roundtrip
 
 use latexsnipper_ast::*;
+
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
 
 // ============================================================================
 // Test Tables
 // ============================================================================
 
+/// Helper to create a TableCell with default styling and text content.
+fn make_cell(text: &str, colspan: u32, rowspan: u32) -> TableCell {
+    let mut cell = if text.is_empty() {
+        TableCell {
+            content: vec![],
+            colspan,
+            rowspan,
+            data_type: None,
+            formula: None,
+            style: None,
+            border_style: None,
+            border_width: None,
+            border_color: None,
+            background: None,
+            alignment: None,
+            geometry: None,
+            source: None,
+        }
+    } else {
+        TableCell {
+            content: vec![Block::Paragraph(ParagraphBlock {
+                inlines: vec![Inline::Text(TextRun::new(text.to_string()))],
+                geometry: None,
+                source: None,
+                style: None,
+            })],
+            colspan,
+            rowspan,
+            data_type: None,
+            formula: None,
+            style: None,
+            border_style: None,
+            border_width: None,
+            border_color: None,
+            background: None,
+            alignment: None,
+            geometry: None,
+            source: None,
+        }
+    };
+    cell.colspan = colspan;
+    cell.rowspan = rowspan;
+    cell
+}
+
 /// Helper to create a simple table.
 fn simple_table(rows: usize, cols: usize, prefix: &str) -> TableBlock {
     let mut table_rows = Vec::new();
     for r in 0..rows {
-        let mut row = Vec::new();
+        let mut row_cells = Vec::new();
         for c in 0..cols {
-            row.push(make_cell(&format!("{}{}{}", prefix, r + 1, c + 1), 1, 1));
+            row_cells.push(make_cell(&format!("{}{}{}", prefix, r + 1, c + 1), 1, 1));
         }
-        table_rows.push(row);
+        table_rows.push(TableRow {
+            cells: row_cells,
+            height: None,
+            is_header: false,
+        });
     }
     TableBlock {
         rows: table_rows,
-        geometry: None,
-        source: None,
-    }
-}
-
-/// Helper to create a TableCell with default styling.
-fn make_cell(text: &str, colspan: u32, rowspan: u32) -> TableCell {
-    TableCell {
-        inlines: vec![Inline::Text(TextRun::new(text.to_string()))],
-        colspan,
-        rowspan,
-        border_style: None,
-        border_width: None,
-        border_color: None,
-        background: None,
-        alignment: None,
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     }
@@ -49,13 +86,24 @@ fn make_cell(text: &str, colspan: u32, rowspan: u32) -> TableCell {
 fn merged_table() -> TableBlock {
     TableBlock {
         rows: vec![
-            vec![make_cell("AB", 2, 1), make_cell("C", 1, 1)],
-            vec![
-                make_cell("D", 1, 1),
-                make_cell("E", 1, 1),
-                make_cell("F", 1, 1),
-            ],
+            TableRow {
+                cells: vec![make_cell("AB", 2, 1), make_cell("C", 1, 1)],
+                height: None,
+                is_header: false,
+            },
+            TableRow {
+                cells: vec![
+                    make_cell("D", 1, 1),
+                    make_cell("E", 1, 1),
+                    make_cell("F", 1, 1),
+                ],
+                height: None,
+                is_header: false,
+            },
         ],
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     }
@@ -65,9 +113,17 @@ fn merged_table() -> TableBlock {
 fn formula_table() -> TableBlock {
     fn formula_cell(text: &str) -> TableCell {
         TableCell {
-            inlines: vec![Inline::Formula(Formula::latex(text))],
+            content: vec![Block::Paragraph(ParagraphBlock {
+                inlines: vec![Inline::Formula(Formula::latex(text))],
+                geometry: None,
+                source: None,
+                style: None,
+            })],
             colspan: 1,
             rowspan: 1,
+            data_type: None,
+            formula: None,
+            style: None,
             border_style: None,
             border_width: None,
             border_color: None,
@@ -80,9 +136,20 @@ fn formula_table() -> TableBlock {
 
     TableBlock {
         rows: vec![
-            vec![formula_cell("E=mc^2"), formula_cell(r"\frac{a}{b}")],
-            vec![formula_cell(r"\sum x_i"), formula_cell(r"\int f(x) dx")],
+            TableRow {
+                cells: vec![formula_cell("E=mc^2"), formula_cell(r"\frac{a}{b}")],
+                height: None,
+                is_header: false,
+            },
+            TableRow {
+                cells: vec![formula_cell(r"\sum x_i"), formula_cell(r"\int f(x) dx")],
+                height: None,
+                is_header: false,
+            },
         ],
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     }
@@ -92,37 +159,26 @@ fn formula_table() -> TableBlock {
 fn empty_cells_table() -> TableBlock {
     TableBlock {
         rows: vec![
-            vec![
-                TableCell {
-                    inlines: vec![],
-                    colspan: 1,
-                    rowspan: 1,
-                    border_style: None,
-                    border_width: None,
-                    border_color: None,
-                    background: None,
-                    alignment: None,
-                    geometry: None,
-                    source: None,
-                },
-                make_cell("B", 1, 1),
-            ],
-            vec![
-                make_cell("C", 1, 1),
-                TableCell {
-                    inlines: vec![],
-                    colspan: 1,
-                    rowspan: 1,
-                    border_style: None,
-                    border_width: None,
-                    border_color: None,
-                    background: None,
-                    alignment: None,
-                    geometry: None,
-                    source: None,
-                },
-            ],
+            TableRow {
+                cells: vec![
+                    make_cell("", 1, 1),
+                    make_cell("B", 1, 1),
+                ],
+                height: None,
+                is_header: false,
+            },
+            TableRow {
+                cells: vec![
+                    make_cell("C", 1, 1),
+                    make_cell("", 1, 1),
+                ],
+                height: None,
+                is_header: false,
+            },
         ],
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     }
@@ -298,33 +354,55 @@ fn roundtrip_merged_cells() {
 /// Test table with styling.
 #[test]
 fn roundtrip_styled_table() {
+    fn cell_with_style(text: &str, border_style: Option<latexsnipper_ast::BorderStyle>, border_width: Option<u32>, border_color: Option<String>, background: Option<String>, alignment: Option<latexsnipper_ast::CellAlignment>) -> TableCell {
+        TableCell {
+            content: vec![Block::Paragraph(ParagraphBlock {
+                inlines: vec![Inline::Text(TextRun::new(text.to_string()))],
+                geometry: None,
+                source: None,
+                style: None,
+            })],
+            colspan: 1,
+            rowspan: 1,
+            data_type: None,
+            formula: None,
+            style: None,
+            border_style,
+            border_width,
+            border_color,
+            background,
+            alignment,
+            geometry: None,
+            source: None,
+        }
+    }
+
     let table = TableBlock {
-        rows: vec![vec![
-            TableCell {
-                inlines: vec![Inline::Text(TextRun::new("Bold".to_string()))],
-                colspan: 1,
-                rowspan: 1,
-                border_style: Some(latexsnipper_ast::BorderStyle::Solid),
-                border_width: Some(2),
-                border_color: Some("red".to_string()),
-                background: Some("#ffff00".to_string()),
-                alignment: Some(latexsnipper_ast::CellAlignment::Center),
-                geometry: None,
-                source: None,
-            },
-            TableCell {
-                inlines: vec![Inline::Text(TextRun::new("Normal".to_string()))],
-                colspan: 1,
-                rowspan: 1,
-                border_style: Some(latexsnipper_ast::BorderStyle::Dashed),
-                border_width: Some(1),
-                border_color: Some("blue".to_string()),
-                background: None,
-                alignment: Some(latexsnipper_ast::CellAlignment::Right),
-                geometry: None,
-                source: None,
-            },
-        ]],
+        rows: vec![TableRow {
+            cells: vec![
+                cell_with_style(
+                    "Bold",
+                    Some(latexsnipper_ast::BorderStyle::Solid),
+                    Some(2),
+                    Some("red".to_string()),
+                    Some("#ffff00".to_string()),
+                    Some(latexsnipper_ast::CellAlignment::Center),
+                ),
+                cell_with_style(
+                    "Normal",
+                    Some(latexsnipper_ast::BorderStyle::Dashed),
+                    Some(1),
+                    Some("blue".to_string()),
+                    None,
+                    Some(latexsnipper_ast::CellAlignment::Right),
+                ),
+            ],
+            height: None,
+            is_header: false,
+        }],
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     };

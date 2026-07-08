@@ -17,13 +17,13 @@ pub mod traits;
 pub mod visitor;
 
 pub use block::{
-    AnnotationBlock, Block, BorderStyle, CellAlignment, ChartBlock, CodeBlock, ColumnLayout,
-    DescriptionItem, DescriptionListBlock, EmbeddedObjectBlock, FigureBlock, FloatBlock,
-    FormulaBlock, HandwritingBlock, HeaderFooterBlock, HeaderFooterKind, HeaderFooterScope,
-    HeadingBlock, HorizontalRuleBlock, ListBlock, ListItem, MinipageBlock, PageBreakBlock,
-    PageLayout, PageMargin, PageOrientation, ParagraphBlock, ProofBlock, QuoteBlock,
-    SectionBreakBlock, SectionBreakKind, ShapeBlock, TableBlock, TableCell, TextBoxBlock,
-    TheoremBlock,
+    AnnotationBlock, Block, BorderStyle, CellAlignment, CellDataType, ChartBlock, CodeBlock,
+    ColumnLayout, DescriptionItem, DescriptionListBlock, EmbeddedObjectBlock, FigureBlock,
+    FloatBlock, FormulaBlock, HandwritingBlock, HeaderFooterBlock, HeaderFooterKind,
+    HeaderFooterScope, HeadingBlock, HorizontalRuleBlock, ListBlock, ListItem, MinipageBlock,
+    PageBreakBlock, PageLayout, PageMargin, PageOrientation, ParagraphBlock, ProofBlock,
+    QuoteBlock, SectionBreakBlock, SectionBreakKind, ShapeBlock, TableBlock, TableCell,
+    TableCellStyle, TableColumn, TableRow, TableStyle, TextBoxBlock, TheoremBlock,
 };
 pub use builder::DocumentBuilder;
 pub use document::{Document, Page};

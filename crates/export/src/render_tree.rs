@@ -126,8 +126,12 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
                 .rows
                 .iter()
                 .map(|row| {
-                    row.iter()
-                        .map(|cell| convert_inlines(&cell.inlines))
+                    row.cells
+                        .iter()
+                        .map(|cell| {
+                            let inlines = cell.collect_inlines();
+                            convert_inlines(&inlines)
+                        })
                         .collect()
                 })
                 .collect();

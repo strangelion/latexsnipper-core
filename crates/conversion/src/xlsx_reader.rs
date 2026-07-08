@@ -228,7 +228,7 @@ fn parse_rels(xml: &str) -> HashMap<String, String> {
 }
 
 fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
-    let mut rows: Vec<Vec<TableCell>> = Vec::new();
+    let mut rows: Vec<TableRow> = Vec::new();
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -323,9 +323,17 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                             .map(|(_, val, typ)| {
                                 let resolved = resolve_cell_value(val, typ, shared_strings);
                                 TableCell {
-                                    inlines: vec![Inline::Text(TextRun::new(resolved))],
+                                    content: vec![Block::Paragraph(ParagraphBlock {
+                                        inlines: vec![Inline::Text(TextRun::new(resolved))],
+                                        geometry: None,
+                                        source: None,
+                                        style: None,
+                                    })],
                                     colspan: 1,
                                     rowspan: 1,
+                                    data_type: None,
+                                    formula: None,
+                                    style: None,
                                     border_style: None,
                                     border_width: None,
                                     border_color: None,
@@ -339,7 +347,11 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
 
                         // Fill gaps for proper column alignment
                         if !table_row.is_empty() {
-                            rows.push(table_row);
+                            rows.push(TableRow {
+                                cells: table_row,
+                                height: None,
+                                is_header: false,
+                            });
                         }
                     }
                     b"sheetData" => in_sheet_data = false,
@@ -355,6 +367,9 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
 
     TableBlock {
         rows,
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     }

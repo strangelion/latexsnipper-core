@@ -1,4 +1,7 @@
-use latexsnipper_ast::{Inline, TableBlock};
+use latexsnipper_ast::Inline;
+use latexsnipper_ast::TableBlock;
+#[cfg(test)]
+use latexsnipper_ast::{Block, ParagraphBlock, TableCell, TableRow};
 
 /// Exports a TableBlock to various output formats.
 pub struct TableExporter;
@@ -9,9 +12,11 @@ impl TableExporter {
         let mut lines = Vec::new();
         for row in &table.rows {
             let cells: Vec<String> = row
+                .cells
                 .iter()
                 .map(|cell| {
-                    let text = extract_cell_text(&cell.inlines);
+                    let inlines = cell.collect_inlines();
+                    let text = extract_cell_text(&inlines);
                     csv_escape(&text)
                 })
                 .collect();
@@ -25,8 +30,12 @@ impl TableExporter {
         let mut lines = Vec::new();
         for row in &table.rows {
             let cells: Vec<String> = row
+                .cells
                 .iter()
-                .map(|cell| extract_cell_text(&cell.inlines))
+                .map(|cell| {
+                    let inlines = cell.collect_inlines();
+                    extract_cell_text(&inlines)
+                })
                 .collect();
             lines.push(cells.join("\t"));
         }
@@ -56,8 +65,9 @@ xmlns="http://www.w3.org/TR/REC-html40">"#
 
         for (i, row) in table.rows.iter().enumerate() {
             parts.push("  <tr>".to_string());
-            for cell in row {
-                let content = render_cell_html(&cell.inlines);
+            for cell in &row.cells {
+                let cell_inlines = cell.collect_inlines();
+                let content = render_cell_html(&cell_inlines);
                 let tag = if i == 0 { "th" } else { "td" };
                 let mut attrs = String::new();
                 if cell.colspan > 1 {
@@ -164,62 +174,75 @@ mod tests {
     use super::*;
     use latexsnipper_ast::{Rect, SourceInfo, TableCell, TextRun};
 
+    fn make_cell(text: &str) -> TableCell {
+        TableCell {
+            content: vec![Block::Paragraph(ParagraphBlock {
+                inlines: vec![Inline::Text(TextRun::new(text.to_string()))],
+                geometry: None,
+                source: None,
+                style: None,
+            })],
+            colspan: 1,
+            rowspan: 1,
+            data_type: None,
+            formula: None,
+            style: None,
+            border_style: None,
+            border_width: None,
+            border_color: None,
+            background: None,
+            alignment: None,
+            geometry: None,
+            source: None,
+        }
+    }
+
     fn sample_table() -> TableBlock {
+        fn cell_with_geo(text: &str, geo: Rect, src: SourceInfo) -> TableCell {
+            let mut c = make_cell(text);
+            c.geometry = Some(geo);
+            c.source = Some(src);
+            c
+        }
+
         TableBlock {
             rows: vec![
-                vec![
-                    TableCell {
-                        inlines: vec![Inline::Text(TextRun::new("Name"))],
-                        colspan: 1,
-                        rowspan: 1,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: Some(Rect::new(0.0, 0.0, 100.0, 20.0)),
-                        source: Some(SourceInfo::new()),
-                    },
-                    TableCell {
-                        inlines: vec![Inline::Text(TextRun::new("Score"))],
-                        colspan: 1,
-                        rowspan: 1,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: Some(Rect::new(100.0, 0.0, 100.0, 20.0)),
-                        source: Some(SourceInfo::new()),
-                    },
-                ],
-                vec![
-                    TableCell {
-                        inlines: vec![Inline::Text(TextRun::new("Alice"))],
-                        colspan: 1,
-                        rowspan: 1,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: Some(Rect::new(0.0, 20.0, 100.0, 20.0)),
-                        source: Some(SourceInfo::new()),
-                    },
-                    TableCell {
-                        inlines: vec![Inline::Text(TextRun::new("95"))],
-                        colspan: 1,
-                        rowspan: 1,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: Some(Rect::new(100.0, 20.0, 100.0, 20.0)),
-                        source: Some(SourceInfo::new()),
-                    },
-                ],
+                TableRow {
+                    cells: vec![
+                        cell_with_geo(
+                            "Name",
+                            Rect::new(0.0, 0.0, 100.0, 20.0),
+                            SourceInfo::new(),
+                        ),
+                        cell_with_geo(
+                            "Score",
+                            Rect::new(100.0, 0.0, 100.0, 20.0),
+                            SourceInfo::new(),
+                        ),
+                    ],
+                    height: None,
+                    is_header: false,
+                },
+                TableRow {
+                    cells: vec![
+                        cell_with_geo(
+                            "Alice",
+                            Rect::new(0.0, 20.0, 100.0, 20.0),
+                            SourceInfo::new(),
+                        ),
+                        cell_with_geo(
+                            "95",
+                            Rect::new(100.0, 20.0, 100.0, 20.0),
+                            SourceInfo::new(),
+                        ),
+                    ],
+                    height: None,
+                    is_header: false,
+                },
             ],
+            columns: vec![],
+            caption: None,
+            style: None,
             geometry: Some(Rect::new(0.0, 0.0, 200.0, 40.0)),
             source: Some(SourceInfo::new()),
         }
@@ -254,18 +277,33 @@ mod tests {
     #[test]
     fn csv_with_commas() {
         let table = TableBlock {
-            rows: vec![vec![TableCell {
-                inlines: vec![Inline::Text(TextRun::new("hello, world"))],
-                colspan: 1,
-                rowspan: 1,
-                border_style: None,
-                border_width: None,
-                border_color: None,
-                background: None,
-                alignment: None,
-                geometry: None,
-                source: None,
-            }]],
+            rows: vec![TableRow {
+                cells: vec![TableCell {
+                    content: vec![Block::Paragraph(ParagraphBlock {
+                        inlines: vec![Inline::Text(TextRun::new("hello, world"))],
+                        geometry: None,
+                        source: None,
+                        style: None,
+                    })],
+                    colspan: 1,
+                    rowspan: 1,
+                    data_type: None,
+                    formula: None,
+                    style: None,
+                    border_style: None,
+                    border_width: None,
+                    border_color: None,
+                    background: None,
+                    alignment: None,
+                    geometry: None,
+                    source: None,
+                }],
+                height: None,
+                is_header: false,
+            }],
+            columns: vec![],
+            caption: None,
+            style: None,
             geometry: None,
             source: None,
         };

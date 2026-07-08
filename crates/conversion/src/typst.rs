@@ -249,13 +249,14 @@ fn render_table(t: &latexsnipper_ast::TableBlock, assets: &[MediaAsset]) -> Stri
     let mut lines = Vec::new();
 
     // Typst table with columns
-    let col_count = t.rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    let col_count = t.rows.iter().map(|r| r.cells.len()).max().unwrap_or(0);
     let align = "auto,".repeat(col_count);
     lines.push(format!("#table(columns: ({}),", align));
 
     for row in &t.rows {
-        for cell in row {
-            let content = render_inlines(&cell.inlines, assets);
+        for cell in &row.cells {
+            let cell_inlines = cell.collect_inlines();
+            let content = render_inlines(&cell_inlines, assets);
             let mut args = String::new();
             if cell.colspan > 1 {
                 args.push_str(&format!(" colspan: {}", cell.colspan));

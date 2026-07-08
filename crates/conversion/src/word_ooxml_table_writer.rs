@@ -4,6 +4,8 @@
 //! preserving colspan, rowspan, and cell content.
 
 use latexsnipper_ast::{Inline, TableBlock};
+#[cfg(test)]
+use latexsnipper_ast::{Block, ParagraphBlock, TableCell, TableRow};
 
 /// Write a TableBlock to Word OOXML table XML.
 ///
@@ -21,7 +23,7 @@ pub fn write_word_table_ooxml(table: &TableBlock) -> String {
     for row in &table.rows {
         parts.push("<w:tr>".to_string());
 
-        for cell in row {
+        for cell in &row.cells {
             parts.push("<w:tc>".to_string());
 
             // Cell properties
@@ -36,7 +38,8 @@ pub fn write_word_table_ooxml(table: &TableBlock) -> String {
 
             // Cell content
             parts.push("<w:p>".to_string());
-            for inline in &cell.inlines {
+            let cell_inlines = cell.collect_inlines();
+            for inline in &cell_inlines {
                 match inline {
                     Inline::Text(t) => {
                         parts.push(format!(
@@ -80,35 +83,40 @@ mod tests {
     use super::*;
     use latexsnipper_ast::{TableCell, TextRun};
 
+    fn make_cell(text: &str) -> TableCell {
+        TableCell {
+            content: vec![Block::Paragraph(ParagraphBlock {
+                inlines: vec![Inline::Text(TextRun::new(text.to_string()))],
+                geometry: None,
+                source: None,
+                style: None,
+            })],
+            colspan: 1,
+            rowspan: 1,
+            data_type: None,
+            formula: None,
+            style: None,
+            border_style: None,
+            border_width: None,
+            border_color: None,
+            background: None,
+            alignment: None,
+            geometry: None,
+            source: None,
+        }
+    }
+
     #[test]
     fn test_write_simple_table() {
         let table = TableBlock {
-            rows: vec![vec![
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("A"))],
-                    colspan: 1,
-                    rowspan: 1,
-                    border_style: None,
-                    border_width: None,
-                    border_color: None,
-                    background: None,
-                    alignment: None,
-                    geometry: None,
-                    source: None,
-                },
-                TableCell {
-                    inlines: vec![Inline::Text(TextRun::new("B"))],
-                    colspan: 1,
-                    rowspan: 1,
-                    border_style: None,
-                    border_width: None,
-                    border_color: None,
-                    background: None,
-                    alignment: None,
-                    geometry: None,
-                    source: None,
-                },
-            ]],
+            rows: vec![TableRow {
+                cells: vec![make_cell("A"), make_cell("B")],
+                height: None,
+                is_header: false,
+            }],
+            columns: vec![],
+            caption: None,
+            style: None,
             geometry: None,
             source: None,
         };
@@ -123,18 +131,33 @@ mod tests {
     #[test]
     fn test_write_with_colspan() {
         let table = TableBlock {
-            rows: vec![vec![TableCell {
-                inlines: vec![Inline::Text(TextRun::new("Span"))],
-                colspan: 2,
-                rowspan: 1,
-                border_style: None,
-                border_width: None,
-                border_color: None,
-                background: None,
-                alignment: None,
-                geometry: None,
-                source: None,
-            }]],
+            rows: vec![TableRow {
+                cells: vec![TableCell {
+                    content: vec![Block::Paragraph(ParagraphBlock {
+                        inlines: vec![Inline::Text(TextRun::new("Span"))],
+                        geometry: None,
+                        source: None,
+                        style: None,
+                    })],
+                    colspan: 2,
+                    rowspan: 1,
+                    data_type: None,
+                    formula: None,
+                    style: None,
+                    border_style: None,
+                    border_width: None,
+                    border_color: None,
+                    background: None,
+                    alignment: None,
+                    geometry: None,
+                    source: None,
+                }],
+                height: None,
+                is_header: false,
+            }],
+            columns: vec![],
+            caption: None,
+            style: None,
             geometry: None,
             source: None,
         };

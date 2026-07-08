@@ -338,8 +338,9 @@ impl SnipperEngine {
                             Block::Table(t) => {
                                 let mut buf = String::new();
                                 for row in &t.rows {
-                                    for cell in row {
-                                        for inline in &cell.inlines {
+                                    for cell in &row.cells {
+                                        let inlines = cell.collect_inlines();
+                                        for inline in &inlines {
                                             if let Inline::Text(txt) = inline {
                                                 buf.push_str(&txt.text);
                                                 buf.push(' ');

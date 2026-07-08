@@ -152,9 +152,10 @@ impl OfficeInsertService {
                     let mut rows = Vec::new();
                     for row in &t.rows {
                         let cells: Vec<String> = row
+                            .cells
                             .iter()
                             .map(|cell| {
-                                cell.inlines
+                                cell.collect_inlines()
                                     .iter()
                                     .map(|i| match i {
                                         latexsnipper_ast::Inline::Text(t) => t.text.clone(),

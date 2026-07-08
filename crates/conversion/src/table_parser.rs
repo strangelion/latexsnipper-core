@@ -6,7 +6,9 @@
 //! - HTML table tags
 //! - Typst table syntax
 
-use latexsnipper_ast::{Formula, Inline, TableBlock, TableCell, TextRun};
+use latexsnipper_ast::{
+    Block, Formula, Inline, ParagraphBlock, TableBlock, TableCell, TableRow, TextRun,
+};
 
 /// Parse a LaTeX tabular environment into a TableBlock.
 ///
@@ -44,13 +46,40 @@ pub fn parse_latex_table(latex: &str) -> Option<TableBlock> {
 
     Some(TableBlock {
         rows,
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     })
 }
 
+/// Helper to create a TableCell with inline text content wrapped in a ParagraphBlock.
+fn text_cell(inlines: Vec<Inline>, colspan: u32, rowspan: u32) -> TableCell {
+    TableCell {
+        content: vec![Block::Paragraph(ParagraphBlock {
+            inlines,
+            geometry: None,
+            source: None,
+            style: None,
+        })],
+        colspan,
+        rowspan,
+        data_type: None,
+        formula: None,
+        style: None,
+        border_style: None,
+        border_width: None,
+        border_color: None,
+        background: None,
+        alignment: None,
+        geometry: None,
+        source: None,
+    }
+}
+
 /// Parse LaTeX table rows from content between \begin and \end.
-fn parse_latex_table_rows(content: &str) -> Option<Vec<Vec<TableCell>>> {
+fn parse_latex_table_rows(content: &str) -> Option<Vec<TableRow>> {
     let mut rows = Vec::new();
 
     for line in content.lines() {
@@ -76,23 +105,16 @@ fn parse_latex_table_rows(content: &str) -> Option<Vec<Vec<TableCell>>> {
             .map(|cell_text| {
                 let cell_text = cell_text.trim();
                 let (colspan, rowspan, clean) = parse_latex_merge_commands(cell_text);
-                TableCell {
-                    inlines: parse_cell_content(&clean),
-                    colspan,
-                    rowspan,
-                    border_style: None,
-                    border_width: None,
-                    border_color: None,
-                    background: None,
-                    alignment: None,
-                    geometry: None,
-                    source: None,
-                }
+                text_cell(parse_cell_content(&clean), colspan, rowspan)
             })
             .collect();
 
         if !cells.is_empty() {
-            rows.push(cells);
+            rows.push(TableRow {
+                cells,
+                height: None,
+                is_header: false,
+            });
         }
     }
 
@@ -244,23 +266,16 @@ pub fn parse_tsv_table(tsv: &str) -> Option<TableBlock> {
             .split('\t')
             .map(|cell_text| {
                 let cell_text = cell_text.trim();
-                TableCell {
-                    inlines: parse_cell_content(cell_text),
-                    colspan: 1,
-                    rowspan: 1,
-                    border_style: None,
-                    border_width: None,
-                    border_color: None,
-                    background: None,
-                    alignment: None,
-                    geometry: None,
-                    source: None,
-                }
+                text_cell(parse_cell_content(cell_text), 1, 1)
             })
             .collect();
 
         if !cells.is_empty() {
-            table_rows.push(cells);
+            table_rows.push(TableRow {
+                cells,
+                height: None,
+                is_header: false,
+            });
         }
     }
 
@@ -270,6 +285,9 @@ pub fn parse_tsv_table(tsv: &str) -> Option<TableBlock> {
 
     Some(TableBlock {
         rows: table_rows,
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     })
@@ -318,23 +336,16 @@ pub fn parse_markdown_table(md: &str) -> Option<TableBlock> {
                 .split('|')
                 .map(|cell_text| {
                     let cell_text = cell_text.trim();
-                    TableCell {
-                        inlines: parse_cell_content(cell_text),
-                        colspan: 1,
-                        rowspan: 1,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: None,
-                        source: None,
-                    }
+                    text_cell(parse_cell_content(cell_text), 1, 1)
                 })
                 .collect();
 
             if !cells.is_empty() {
-                rows.push(cells);
+                rows.push(TableRow {
+                    cells,
+                    height: None,
+                    is_header: false,
+                });
             }
         }
     }
@@ -345,6 +356,9 @@ pub fn parse_markdown_table(md: &str) -> Option<TableBlock> {
 
     Some(TableBlock {
         rows,
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     })
@@ -384,7 +398,11 @@ pub fn parse_html_table(html: &str) -> Option<TableBlock> {
                     let row_content = remaining[tr_content_start..tr_content_start + tr_end].trim();
                     let current_row = parse_html_row(row_content);
                     if !current_row.is_empty() {
-                        rows.push(current_row);
+                        rows.push(TableRow {
+                            cells: current_row,
+                            height: None,
+                            is_header: false,
+                        });
                     }
                     remaining = &remaining[tr_content_start + tr_end + 5..];
                     continue;
@@ -400,6 +418,9 @@ pub fn parse_html_table(html: &str) -> Option<TableBlock> {
 
     Some(TableBlock {
         rows,
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     })
@@ -456,18 +477,11 @@ fn parse_html_row(row_content: &str) -> Vec<TableCell> {
                         rowspan_val = rs;
                     }
 
-                    cells.push(TableCell {
-                        inlines: parse_cell_content(cell_content),
-                        colspan: colspan_val,
-                        rowspan: rowspan_val,
-                        border_style: None,
-                        border_width: None,
-                        border_color: None,
-                        background: None,
-                        alignment: None,
-                        geometry: None,
-                        source: None,
-                    });
+                    cells.push(text_cell(
+                        parse_cell_content(cell_content),
+                        colspan_val,
+                        rowspan_val,
+                    ));
 
                     remaining = &remaining[tag_end + content_end + close_tag.len()..];
                     continue;
@@ -562,18 +576,11 @@ pub fn parse_typst_table(typst: &str) -> Option<TableBlock> {
                 // Extract content from [...] inside cell()
                 let (content_text, colspan, rowspan) = parse_typst_cell_body(cell_body);
 
-                cells.push(TableCell {
-                    inlines: parse_cell_content(&content_text),
+                cells.push(text_cell(
+                    parse_cell_content(&content_text),
                     colspan,
                     rowspan,
-                    border_style: None,
-                    border_width: None,
-                    border_color: None,
-                    background: None,
-                    alignment: None,
-                    geometry: None,
-                    source: None,
-                });
+                ));
                 remaining = &remaining[cell_body_start + cell_end + 1..];
                 continue;
             }
@@ -585,18 +592,7 @@ pub fn parse_typst_table(typst: &str) -> Option<TableBlock> {
             if let Some(bracket_end) = bracket_end {
                 let cell_content =
                     remaining[bracket_start + 1..bracket_start + 1 + bracket_end].trim();
-                cells.push(TableCell {
-                    inlines: parse_cell_content(cell_content),
-                    colspan: 1,
-                    rowspan: 1,
-                    border_style: None,
-                    border_width: None,
-                    border_color: None,
-                    background: None,
-                    alignment: None,
-                    geometry: None,
-                    source: None,
-                });
+                cells.push(text_cell(parse_cell_content(cell_content), 1, 1));
                 remaining = &remaining[bracket_start + 1 + bracket_end + 1..];
                 continue;
             }
@@ -613,11 +609,18 @@ pub fn parse_typst_table(typst: &str) -> Option<TableBlock> {
     let cols = _cols;
     let mut rows = Vec::new();
     for chunk in cells.chunks(cols) {
-        rows.push(chunk.to_vec());
+        rows.push(TableRow {
+            cells: chunk.to_vec(),
+            height: None,
+            is_header: false,
+        });
     }
 
     Some(TableBlock {
         rows,
+        columns: vec![],
+        caption: None,
+        style: None,
         geometry: None,
         source: None,
     })
@@ -672,8 +675,8 @@ C & D \\
 
         let table = parse_latex_table(latex).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0].len(), 2);
-        assert_eq!(table.rows[1].len(), 2);
+        assert_eq!(table.rows[0].cells.len(), 2);
+        assert_eq!(table.rows[1].cells.len(), 2);
     }
 
     #[test]
@@ -682,8 +685,8 @@ C & D \\
 
         let table = parse_markdown_table(md).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0].len(), 2);
-        assert_eq!(table.rows[1].len(), 2);
+        assert_eq!(table.rows[0].cells.len(), 2);
+        assert_eq!(table.rows[1].cells.len(), 2);
     }
 
     #[test]
@@ -692,8 +695,8 @@ C & D \\
 
         let table = parse_html_table(html).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0].len(), 2);
-        assert_eq!(table.rows[1].len(), 2);
+        assert_eq!(table.rows[0].cells.len(), 2);
+        assert_eq!(table.rows[1].cells.len(), 2);
     }
 
     #[test]
@@ -702,8 +705,8 @@ C & D \\
 
         let table = parse_typst_table(typst).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0].len(), 2);
-        assert_eq!(table.rows[1].len(), 2);
+        assert_eq!(table.rows[0].cells.len(), 2);
+        assert_eq!(table.rows[1].cells.len(), 2);
     }
 
     #[test]
@@ -712,8 +715,8 @@ C & D \\
 
         let table = parse_tsv_table(tsv).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0].len(), 2);
-        assert_eq!(table.rows[1].len(), 2);
+        assert_eq!(table.rows[0].cells.len(), 2);
+        assert_eq!(table.rows[1].cells.len(), 2);
     }
 
     #[test]
@@ -728,9 +731,9 @@ A & B & C \\
 
         let table = parse_latex_table(latex).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0][0].colspan, 2);
-        assert_eq!(table.rows[0][0].inlines.len(), 1); // "AB"
-        assert_eq!(table.rows[0].len(), 2); // multicolumn(2) consumes 2 cols -> 1 cell + C = 2 cells
+        assert_eq!(table.rows[0].cells[0].colspan, 2);
+        assert_eq!(table.rows[0].cells[0].collect_inlines().len(), 1); // "AB"
+        assert_eq!(table.rows[0].cells.len(), 2); // multicolumn(2) consumes 2 cols -> 1 cell + C = 2 cells
     }
 
     #[test]
@@ -745,7 +748,7 @@ A & B & C \\
 
         let table = parse_latex_table(latex).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0][0].rowspan, 2);
+        assert_eq!(table.rows[0].cells[0].rowspan, 2);
     }
 
     #[test]
@@ -754,7 +757,7 @@ A & B & C \\
 
         let table = parse_typst_table(typst).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0][0].colspan, 2);
+        assert_eq!(table.rows[0].cells[0].colspan, 2);
     }
 
     #[test]
@@ -763,6 +766,6 @@ A & B & C \\
 
         let table = parse_typst_table(typst).unwrap();
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0][0].rowspan, 2);
+        assert_eq!(table.rows[0].cells[0].rowspan, 2);
     }
 }
