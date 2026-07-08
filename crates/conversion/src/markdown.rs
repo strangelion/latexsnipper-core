@@ -215,8 +215,8 @@ fn render_list(
 ) -> String {
     let mut parts = Vec::new();
     for item in &l.items {
-        let text = render_inlines(&item.inlines, mode, assets);
-        let prefix = if l.ordered { "1." } else { "-" };
+        let text = render_blocks(&item.content, mode, assets);
+        let prefix = if l.is_ordered() { "1." } else { "-" };
         parts.push(format!("{} {}", prefix, text));
     }
     parts.join("\n")

@@ -1,6 +1,7 @@
 use latexsnipper_ast::{
-    Block, CodeBlock, Document, Formula, FormulaBlock, FormulaSource, Inline, ListBlock, ListItem,
-    Metadata, NodeIdGenerator, Page, ParagraphBlock, QuoteBlock, TextRun,
+    Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, FormulaSource, Inline,
+    ListBlock, ListItem, ListStyle, Metadata, NumberingStyle, NodeIdGenerator, Page, ParagraphBlock,
+    QuoteBlock, TextRun,
 };
 
 /// Parse a Markdown string into a Document AST.
@@ -126,7 +127,13 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
         if let Some((ordered, item_text)) = parse_list_item(line) {
             flush_paragraph(&mut blocks, &mut current_inlines);
             let mut items = vec![ListItem {
-                inlines: parse_inline_text(item_text),
+                marker: None,
+                content: vec![Block::Paragraph(ParagraphBlock {
+                    inlines: parse_inline_text(item_text),
+                    geometry: None,
+                    source: None,
+                    style: None,
+                })],
                 checked: None,
                 source: None,
             }];
@@ -136,7 +143,13 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
                 if let Some((o, t)) = parse_list_item(lines[i]) {
                     if o == ordered {
                         items.push(ListItem {
-                            inlines: parse_inline_text(t),
+                            marker: None,
+                            content: vec![Block::Paragraph(ParagraphBlock {
+                                inlines: parse_inline_text(t),
+                                geometry: None,
+                                source: None,
+                                style: None,
+                            })],
                             checked: None,
                             source: None,
                         });
@@ -147,7 +160,12 @@ pub fn parse_markdown_to_document(md: &str) -> Document {
                 break;
             }
             blocks.push(Block::List(ListBlock {
-                ordered,
+                style: Some(if ordered {
+                    ListStyle::Ordered(NumberingStyle::Decimal)
+                } else {
+                    ListStyle::Bullet(BulletStyle::Disc)
+                }),
+                start: None,
                 items,
                 geometry: None,
                 source: None,

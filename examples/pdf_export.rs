@@ -1,6 +1,7 @@
 use latexsnipper_ast::{
-    Block, CodeBlock, Document, Formula, FormulaBlock, FormulaSource, HeadingBlock, Inline,
-    ListBlock, ListItem, NodeIdGenerator, Page, ParagraphBlock, TableBlock, TableCell, TextRun,
+    Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, FormulaSource, HeadingBlock,
+    Inline, ListBlock, ListItem, ListStyle, NodeIdGenerator, Page, ParagraphBlock, TableBlock,
+    TableCell, TextRun,
 };
 use latexsnipper_export::generator::Generator;
 use latexsnipper_export::{PdfGenerator, RenderTree};
@@ -107,15 +108,28 @@ fn main() {
                         source: None,
                     }),
                     Block::List(ListBlock {
-                        ordered: false,
+                        style: Some(ListStyle::Bullet(BulletStyle::Disc)),
+                        start: None,
                         items: vec![
                             ListItem {
-                                inlines: vec![Inline::Text(TextRun::new("Item 1"))],
+                                marker: None,
+                                content: vec![Block::Paragraph(ParagraphBlock {
+                                    inlines: vec![Inline::Text(TextRun::new("Item 1"))],
+                                    geometry: None,
+                                    source: None,
+                                    style: None,
+                                })],
                                 checked: None,
                                 source: None,
                             },
                             ListItem {
-                                inlines: vec![Inline::Text(TextRun::new("Item 2"))],
+                                marker: None,
+                                content: vec![Block::Paragraph(ParagraphBlock {
+                                    inlines: vec![Inline::Text(TextRun::new("Item 2"))],
+                                    geometry: None,
+                                    source: None,
+                                    style: None,
+                                })],
                                 checked: None,
                                 source: None,
                             },

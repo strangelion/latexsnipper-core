@@ -182,8 +182,8 @@ fn render_paragraph(p: &latexsnipper_ast::ParagraphBlock, assets: &[MediaAsset])
 fn render_list(l: &latexsnipper_ast::ListBlock, assets: &[MediaAsset]) -> String {
     let mut items = Vec::new();
     for item in &l.items {
-        let text = render_inlines(&item.inlines, assets);
-        let prefix = if l.ordered { "+" } else { "-" };
+        let text = render_blocks(&item.content, assets);
+        let prefix = if l.is_ordered() { "+" } else { "-" };
         items.push(format!("{} {}", prefix, text));
     }
     items.join("\n")

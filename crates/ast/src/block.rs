@@ -4,7 +4,7 @@ use crate::media::MediaRole;
 use crate::span::BlockPolicy;
 use crate::style::{
     AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartType, EmbeddedObjectKind,
-    ShapeStyle, ShapeType,
+    ListStyle, ShapeStyle, ShapeType,
 };
 use crate::{Inline, NodeId, Rect, SourceInfo};
 
@@ -182,7 +182,8 @@ impl Block {
             Block::List(l) => l
                 .items
                 .iter()
-                .flat_map(|item| item.inlines.iter())
+                .flat_map(|item| item.content.iter())
+                .flat_map(|b| b.inlines())
                 .collect(),
             Block::Quote(q) => q.blocks.iter().flat_map(|b| b.inlines()).collect(),
             Block::Code(_) => vec![],
@@ -229,12 +230,7 @@ impl Block {
                     .collect(),
             ),
             Block::Figure(_) => None,
-            Block::List(l) => Some(
-                l.items
-                    .iter_mut()
-                    .flat_map(|item| item.inlines.iter_mut())
-                    .collect(),
-            ),
+            Block::List(_) => None,
             Block::Quote(_) => None,
             Block::Code(_) => None,
             Block::HorizontalRule(_) => None,
@@ -472,21 +468,36 @@ impl FigureBlock {
 /// Contains list items, each with inline content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListBlock {
-    /// True for ordered (numbered), false for unordered (bulleted).
-    pub ordered: bool,
+    /// List style (bullet/decimal/task/definition).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<ListStyle>,
     /// List items.
     pub items: Vec<ListItem>,
+    /// Starting number for ordered lists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
 }
 
+impl ListBlock {
+    /// Returns `true` if the list is ordered (numbered).
+    pub fn is_ordered(&self) -> bool {
+        matches!(self.style, Some(ListStyle::Ordered(_)))
+    }
+}
+
 /// A single list item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListItem {
-    /// Inline content of the item.
-    pub inlines: Vec<Inline>,
+    /// Optional marker override (e.g., custom bullet character).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marker: Option<String>,
+    /// Block content of the item (paragraphs, formulas, nested lists, etc.).
+    #[serde(default)]
+    pub content: Vec<Block>,
     /// For task lists: checked state.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checked: Option<bool>,

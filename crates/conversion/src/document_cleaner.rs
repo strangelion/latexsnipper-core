@@ -169,7 +169,7 @@ fn block_text(block: &Block) -> String {
         Block::List(l) => l
             .items
             .iter()
-            .map(|item| inlines_to_text(&item.inlines))
+            .flat_map(|item| item.content.iter().map(block_text))
             .collect::<Vec<_>>()
             .join(" "),
         Block::Handwriting(hw) => inlines_to_text(&hw.inlines),
@@ -257,7 +257,9 @@ fn normalize_block_whitespace(block: &mut Block) {
         Block::Paragraph(p) => normalize_inlines_whitespace(&mut p.inlines),
         Block::List(l) => {
             for item in &mut l.items {
-                normalize_inlines_whitespace(&mut item.inlines);
+                for block in &mut item.content {
+                    normalize_block_whitespace(block);
+                }
             }
         }
         Block::Handwriting(hw) => normalize_inlines_whitespace(&mut hw.inlines),

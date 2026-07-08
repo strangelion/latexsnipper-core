@@ -59,7 +59,7 @@ pub fn write_ooxml_fragment(blocks: &[Block], assets: &[latexsnipper_ast::MediaA
             }
             Block::List(l) => {
                 for item in &l.items {
-                    parts.push(write_paragraph(&item.inlines, assets));
+                    parts.push(write_ooxml_fragment(&item.content, assets));
                 }
             }
             Block::Figure(fig) => {

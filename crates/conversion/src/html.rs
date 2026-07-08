@@ -263,10 +263,10 @@ fn render_blocks(blocks: &[Block], assets: &[MediaAsset]) -> String {
 }
 
 fn render_list(l: &latexsnipper_ast::ListBlock, assets: &[MediaAsset]) -> String {
-    let tag = if l.ordered { "ol" } else { "ul" };
+    let tag = if l.is_ordered() { "ol" } else { "ul" };
     let mut items = Vec::new();
     for item in &l.items {
-        let text = render_inlines(&item.inlines, assets);
+        let text = render_blocks(&item.content, assets);
         items.push(format!("<li>{}</li>", text));
     }
     format!("<{}>{}</{}>", tag, items.join(""), tag)

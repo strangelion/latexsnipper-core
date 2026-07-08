@@ -60,10 +60,9 @@ impl DocumentVisitor<()> for TextCollector {
             }
             Block::List(l) => {
                 for item in &l.items {
-                    for inline in &item.inlines {
-                        self.visit_inline(inline);
+                    for block in &item.content {
+                        self.visit_block(block);
                     }
-                    self.text.push('\n');
                 }
             }
             Block::Quote(q) => {

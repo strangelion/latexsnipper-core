@@ -105,7 +105,9 @@ fn normalize_block_inlines(block: &mut latexsnipper_ast::Block) {
         }
         Block::List(ref mut list) => {
             for item in &mut list.items {
-                normalize_inlines(&mut item.inlines);
+                for block in &mut item.content {
+                    normalize_block_inlines(block);
+                }
             }
         }
         Block::Quote(ref mut q) => {

@@ -86,7 +86,7 @@ fn block_to_plain_text(block: &Block) -> String {
         Block::List(l) => l
             .items
             .iter()
-            .map(|item| inlines_to_plain_text(&item.inlines))
+            .flat_map(|item| item.content.iter().map(block_to_plain_text))
             .collect::<Vec<_>>()
             .join("\n"),
         Block::Quote(q) => q
@@ -273,13 +273,18 @@ fn block_to_clipboard_html(block: &Block) -> Option<String> {
             ))
         }
         Block::List(l) => {
-            let tag = if l.ordered { "ol" } else { "ul" };
+            let tag = if l.is_ordered() { "ol" } else { "ul" };
             let items: Vec<String> = l
                 .items
                 .iter()
                 .map(|item| {
-                    let text = inlines_to_clipboard_html(&item.inlines);
-                    format!("<li>{}</li>", text)
+                    let inner = item
+                        .content
+                        .iter()
+                        .filter_map(block_to_clipboard_html)
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    format!("<li>{}</li>", inner)
                 })
                 .collect();
             Some(format!("<{}>{}</{}>", tag, items.join(""), tag))

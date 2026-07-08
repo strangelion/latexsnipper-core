@@ -369,8 +369,9 @@ impl SnipperEngine {
                                 .iter()
                                 .filter_map(|item| {
                                     let t: String = item
-                                        .inlines
+                                        .content
                                         .iter()
+                                        .flat_map(|b| b.inlines())
                                         .filter_map(|i| {
                                             if let Inline::Text(txt) = i {
                                                 Some(txt.text.as_str())

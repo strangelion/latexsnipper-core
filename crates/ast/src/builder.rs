@@ -1,6 +1,6 @@
 use crate::{
-    Block, CodeBlock, Document, Formula, FormulaBlock, HeadingBlock, Inline, ListBlock, ListItem,
-    Metadata, Page, ParagraphBlock, QuoteBlock, TextRun,
+    Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, HeadingBlock, Inline, ListBlock,
+    ListItem, ListStyle, Metadata, NumberingStyle, Page, ParagraphBlock, QuoteBlock, TextRun,
 };
 
 /// Builder for constructing Documents fluently.
@@ -245,8 +245,15 @@ impl ListBuilder {
     {
         let mut builder = ParagraphBuilder::new();
         f(&mut builder);
+        let inlines = builder.build().inlines;
         self.items.push(ListItem {
-            inlines: builder.build().inlines,
+            marker: None,
+            content: vec![Block::Paragraph(ParagraphBlock {
+                inlines,
+                geometry: None,
+                source: None,
+                style: None,
+            })],
             checked: None,
             source: None,
         });
@@ -261,7 +268,12 @@ impl ListBuilder {
 
     fn build(self) -> ListBlock {
         ListBlock {
-            ordered: self.ordered,
+            style: Some(if self.ordered {
+                ListStyle::Ordered(NumberingStyle::Decimal)
+            } else {
+                ListStyle::Bullet(BulletStyle::Disc)
+            }),
+            start: None,
             items: self.items,
             geometry: None,
             source: None,

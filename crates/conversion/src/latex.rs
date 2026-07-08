@@ -291,10 +291,10 @@ fn render_inlines(inlines: &[Inline], assets: &[MediaAsset]) -> String {
 }
 
 fn render_list(l: &latexsnipper_ast::ListBlock, assets: &[MediaAsset]) -> String {
-    let env = if l.ordered { "enumerate" } else { "itemize" };
+    let env = if l.is_ordered() { "enumerate" } else { "itemize" };
     let mut items = Vec::new();
     for item in &l.items {
-        let text = render_inlines(&item.inlines, assets);
+        let text = render_blocks(&item.content, assets);
         items.push(format!("\\item {}", text));
     }
     format!("\\begin{{{}}}\n{}\n\\end{{{}}}", env, items.join("\n"), env)

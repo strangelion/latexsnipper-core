@@ -1,6 +1,6 @@
 use latexsnipper_ast::{
-    Block, CodeBlock, Document, Formula, FormulaBlock, Inline, ListBlock, ListItem, Metadata,
-    NodeIdGenerator, Page, ParagraphBlock, QuoteBlock, TextRun,
+    Block, BulletStyle, CodeBlock, Document, Formula, FormulaBlock, Inline, ListBlock, ListItem,
+    ListStyle, Metadata, NumberingStyle, NodeIdGenerator, Page, ParagraphBlock, QuoteBlock, TextRun,
 };
 
 /// Parsed HTML tag: (tag_name, attributes, self_closing, end_position)
@@ -173,7 +173,8 @@ pub fn parse_html_to_document(html: &str) -> Document {
                         let content = extract_tag_content(&chars, end, "ul");
                         let items = parse_list_items(&content, false);
                         blocks.push(Block::List(ListBlock {
-                            ordered: false,
+                            style: Some(ListStyle::Bullet(BulletStyle::Disc)),
+                            start: None,
                             items,
                             geometry: None,
                             source: None,
@@ -187,7 +188,8 @@ pub fn parse_html_to_document(html: &str) -> Document {
                         let content = extract_tag_content(&chars, end, "ol");
                         let items = parse_list_items(&content, true);
                         blocks.push(Block::List(ListBlock {
-                            ordered: true,
+                            style: Some(ListStyle::Ordered(NumberingStyle::Decimal)),
+                            start: None,
                             items,
                             geometry: None,
                             source: None,
@@ -603,7 +605,13 @@ fn parse_list_items(content: &str, _ordered: bool) -> Vec<ListItem> {
                 let item_content: String = chars[content_start..end].iter().collect();
                 let inlines = parse_inline_html(&item_content);
                 items.push(ListItem {
-                    inlines,
+                    marker: None,
+                    content: vec![Block::Paragraph(ParagraphBlock {
+                        inlines,
+                        geometry: None,
+                        source: None,
+                        style: None,
+                    })],
                     checked: None,
                     source: None,
                 });
@@ -664,7 +672,7 @@ mod tests {
         assert!(list.is_some());
         if let Block::List(l) = list.unwrap() {
             assert_eq!(l.items.len(), 2);
-            assert!(!l.ordered);
+            assert!(!l.is_ordered());
         }
     }
 

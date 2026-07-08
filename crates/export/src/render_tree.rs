@@ -149,10 +149,10 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             let items: Vec<Vec<RenderNode>> = l
                 .items
                 .iter()
-                .map(|item| convert_inlines(&item.inlines))
+                .map(|item| item.content.iter().filter_map(convert_block).collect())
                 .collect();
             Some(RenderNode::List {
-                ordered: l.ordered,
+                ordered: l.is_ordered(),
                 items,
             })
         }
