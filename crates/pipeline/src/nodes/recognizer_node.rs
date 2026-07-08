@@ -140,7 +140,12 @@ impl RecognizerNode {
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
                                     geometry: Some(det.rect),
-                                    source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                    source: Some(
+                                        SourceInfo::new()
+                                            .with_page(ctx.current_page)
+                                            .with_confidence(det.confidence)
+                                            .with_region(det.rect),
+                                    ),
                                 }));
                             }
                         }
@@ -253,7 +258,12 @@ impl RecognizerNode {
                                     geometry: Some(Rect::new(
                                         x as f32, y as f32, w as f32, h as f32,
                                     )),
-                                    source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                    source: Some(
+                                        SourceInfo::new()
+                                            .with_page(ctx.current_page)
+                                            .with_confidence(det.confidence)
+                                            .with_region(det.rect),
+                                    ),
                                 }));
                             }
                             Err(e) => log::warn!("Formula rec failed: {}", e),
@@ -402,7 +412,12 @@ impl RecognizerNode {
                                     geometry: Some(Rect::new(
                                         x as f32, y as f32, w as f32, h as f32,
                                     )),
-                                    source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                    source: Some(
+                                        SourceInfo::new()
+                                            .with_page(ctx.current_page)
+                                            .with_confidence(det.confidence)
+                                            .with_region(det.rect),
+                                    ),
                                 }));
                             }
                         }
