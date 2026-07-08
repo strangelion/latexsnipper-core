@@ -3,6 +3,7 @@ pub mod asset_resolver;
 pub mod clipboard;
 pub mod converter;
 pub mod document_cleaner;
+pub mod docx_reader;
 pub mod document_converter;
 pub mod export_format;
 pub mod exporter;
@@ -33,6 +34,7 @@ pub use asset_helper::{resolve_asset_ref, resolve_image_html, resolve_image_late
 pub use clipboard::ClipboardBundle;
 pub use converter::Converter;
 pub use document_cleaner::{clean_document, CleanResult, CleanerOptions};
+pub use docx_reader::read_docx;
 pub use office_insert::{OfficeInsertResult, OfficeInsertService};
 pub use pdf_native::extract_pdf_text;
 pub use svg_parser::parse_svg_to_shapes;
