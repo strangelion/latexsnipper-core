@@ -1,6 +1,6 @@
 use crate::{
     ConversionContext, Document, ExportArtifact, ExportOptions, ImportOptions,
-    InputSourceDescriptor, RenderOptions,
+    InputSourceDescriptor, RenderOptions, StageReport, StageSpec,
 };
 
 // ---------------------------------------------------------------------------
@@ -59,4 +59,18 @@ pub trait OfficeAdapter {
     fn read_selection(&self) -> Result<InputSourceDescriptor, String>;
     fn insert_document(&self, doc: &Document, kind: &str) -> Result<(), String>;
     fn insert_artifact(&self, artifact: &ExportArtifact, kind: &str) -> Result<(), String>;
+}
+
+// ---------------------------------------------------------------------------
+// StageRunner — executes a single processing stage
+// ---------------------------------------------------------------------------
+
+/// Executes a single stage (Decode, Recognize, Convert, Export, etc.)
+/// and produces a StageReport.
+pub trait StageRunner {
+    /// The kind of stage this runner handles.
+    fn kind(&self) -> crate::StageKind;
+
+    /// Execute the stage and produce a report.
+    fn run(&self, spec: &StageSpec) -> Result<StageReport, String>;
 }

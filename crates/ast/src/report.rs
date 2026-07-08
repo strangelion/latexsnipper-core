@@ -48,6 +48,28 @@ impl JobRoot {
             reports_dir: format!("{}/reports", root),
         }
     }
+
+    /// Create all job directories on the filesystem.
+    pub fn ensure_dirs(&self) -> std::result::Result<(), String> {
+        let dirs = [
+            &self.root_dir,
+            &self.source_dir,
+            &self.decoded_dir,
+            &self.regions_dir,
+            &self.ast_dir,
+            &self.converted_dir,
+            &self.exported_dir,
+            &self.artifacts_dir,
+            &self.logs_dir,
+            &self.specs_dir,
+            &self.reports_dir,
+        ];
+        for dir in dirs {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| format!("Failed to create job directory '{}': {}", dir, e))?;
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------

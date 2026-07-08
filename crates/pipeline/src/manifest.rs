@@ -42,6 +42,24 @@ impl PipelineManifest {
             .map_err(|e| SnipperError::Pipeline(format!("Invalid JSON manifest: {}", e)))
     }
 
+    /// Build a PipelineManifest from a list of StageSpecs.
+    pub fn from_stage_specs(name: &str, specs: &[latexsnipper_ast::StageSpec]) -> Self {
+        let nodes: Vec<NodeDef> = specs
+            .iter()
+            .map(|spec| NodeDef {
+                name: spec.stage_id.clone(),
+                node_type: format!("{:?}", spec.kind).to_lowercase(),
+                depends_on: Vec::new(),
+                config: spec.options.clone(),
+            })
+            .collect();
+        Self {
+            name: name.to_string(),
+            description: format!("Generated from {} stage specs", specs.len()),
+            nodes,
+        }
+    }
+
     /// Validate the manifest (check for missing dependencies).
     pub fn validate(&self) -> Result<()> {
         let names: std::collections::HashSet<&str> =
