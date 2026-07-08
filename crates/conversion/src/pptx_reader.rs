@@ -202,8 +202,8 @@ fn parse_slide_body(
                                 rels.get(&id).cloned()
                             });
                         if let Some(ref path) = img_id {
-                            let media_path = if path.starts_with("../") {
-                                format!("ppt/{}", &path[3..])
+                            let media_path = if let Some(stripped) = path.strip_prefix("../") {
+                                format!("ppt/{}", stripped)
                             } else {
                                 format!("ppt/{}", path)
                             };

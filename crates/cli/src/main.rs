@@ -924,7 +924,7 @@ fn handle_job_run(input: &str, format: &str, output: Option<&str>, mode: &str) {
             job.add_diagnostic(latexsnipper_ast::Diagnostic::new(
                 latexsnipper_ast::DiagnosticLevel::Error,
                 "E_EXPORT",
-                &format!("Export failed: {}", e),
+                format!("Export failed: {}", e),
             ));
             eprintln!("Export error: {}", e);
         }

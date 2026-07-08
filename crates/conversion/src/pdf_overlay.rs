@@ -85,6 +85,7 @@ pub fn overlay_pdf(
         let stream_obj = Object::Stream(Stream::new(dict, encoded));
 
         // Get the page object and set its Contents
+        #[allow(clippy::collapsible_match)]
         if let Ok(page_obj) = pdf.get_object_mut(object_id) {
             if let Object::Dictionary(ref mut page_dict) = page_obj {
                 page_dict.set("Contents", stream_obj);
@@ -113,11 +114,9 @@ fn get_page_height(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Option<
         _ => return None,
     };
     if let Ok(media_box) = dict.get(b"MediaBox") {
-        if let Ok((_, resolved)) = pdf.dereference(media_box) {
-            if let Object::Array(ref arr) = resolved {
-                if arr.len() >= 4 {
-                    return Some(arr[3].as_i64().unwrap_or(792) as f32);
-                }
+        if let Ok((_, Object::Array(ref arr))) = pdf.dereference(media_box) {
+            if arr.len() >= 4 {
+                return Some(arr[3].as_i64().unwrap_or(792) as f32);
             }
         }
     }

@@ -104,7 +104,7 @@ pub fn clean_document(doc: &Document, options: &CleanerOptions) -> CleanResult {
                         Diagnostic::new(
                             DiagnosticLevel::Warning,
                             "E_LOW_CONFIDENCE",
-                            &format!(
+                            format!(
                                 "Block has low confidence ({:.2} < {:.2})",
                                 conf, options.min_confidence
                             ),

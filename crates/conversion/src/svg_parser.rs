@@ -70,7 +70,7 @@ pub fn parse_svg_to_shapes(svg: &str) -> Vec<ShapeBlock> {
                 match tag.as_str() {
                     "g" => {
                         // Self-closing <g/> — just clear transform
-                        if attrs.get("transform").is_some() {
+                        if attrs.contains_key("transform") {
                             current_transform = None;
                         }
                     }
@@ -192,7 +192,7 @@ fn parse_poly(
 ) -> Option<ShapeBlock> {
     let points_str = attrs.get("points")?;
     let coords: Vec<f32> = points_str
-        .split(|c: char| c == ' ' || c == ',' || c == '\n' || c == '\t')
+        .split([' ', ',', '\n', '\t'])
         .filter_map(|s| s.trim().parse::<f32>().ok())
         .collect();
 

@@ -68,13 +68,11 @@ fn get_page_size(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Option<(f
         _ => return None,
     };
     if let Ok(media_box) = dict.get(b"MediaBox") {
-        if let Ok((_ref, resolved)) = pdf.dereference(media_box) {
-            if let lopdf::Object::Array(ref arr) = resolved {
-                if arr.len() >= 4 {
-                    let x2 = arr[2].as_i64().unwrap_or(612) as f32;
-                    let y2 = arr[3].as_i64().unwrap_or(792) as f32;
-                    return Some((x2, y2));
-                }
+        if let Ok((_ref, lopdf::Object::Array(ref arr))) = pdf.dereference(media_box) {
+            if arr.len() >= 4 {
+                let x2 = arr[2].as_i64().unwrap_or(612) as f32;
+                let y2 = arr[3].as_i64().unwrap_or(792) as f32;
+                return Some((x2, y2));
             }
         }
     }
@@ -107,7 +105,7 @@ fn extract_page_text(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Resul
             "cm" => {
                 if operands.len() >= 6 {
                     pos_x = operands[4].as_i64().unwrap_or(0) as f32;
-                    pos_y = (operands[5].as_i64().unwrap_or(0) * -1) as f32;
+                    pos_y = (-operands[5].as_i64().unwrap_or(0)) as f32;
                 }
             }
             "Tf" => {
@@ -125,14 +123,14 @@ fn extract_page_text(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Resul
                 pos_y -= font_size * 1.2;
             }
             "Tj" => {
-                if let Some(text) = operands.get(0).and_then(|o| extract_text_obj(o)) {
+                if let Some(text) = operands.first().and_then(extract_text_obj) {
                     let tw = estimate_text_width(&text, font_size);
                     fragments.push(TextFragment { text, x: pos_x, y: pos_y, width: tw, height: font_size * 1.2, font_size });
                 }
             }
             "'" => {
                 pos_y -= font_size * 1.2;
-                if let Some(text) = operands.get(0).and_then(|o| extract_text_obj(o)) {
+                if let Some(text) = operands.first().and_then(extract_text_obj) {
                     let tw = estimate_text_width(&text, font_size);
                     fragments.push(TextFragment { text, x: pos_x, y: pos_y, width: tw, height: font_size * 1.2, font_size });
                 }
@@ -142,7 +140,7 @@ fn extract_page_text(pdf: &lopdf::Document, object_id: lopdf::ObjectId) -> Resul
                     font_size = operands[2].as_i64().unwrap_or(12) as f32;
                 }
                 pos_y -= font_size * 1.2;
-                if let Some(text) = operands.get(2).and_then(|o| extract_text_obj(o)) {
+                if let Some(text) = operands.get(2).and_then(extract_text_obj) {
                     let tw = estimate_text_width(&text, font_size);
                     fragments.push(TextFragment { text, x: pos_x, y: pos_y, width: tw, height: font_size * 1.2, font_size });
                 }

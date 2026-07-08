@@ -158,7 +158,7 @@ fn block_to_plain_text(block: &Block) -> String {
         Block::Annotation(a) => a
             .content
             .iter()
-            .map(|i| inline_to_plain_text(i))
+            .map(inline_to_plain_text)
             .collect::<Vec<_>>()
             .join(" "),
     }
