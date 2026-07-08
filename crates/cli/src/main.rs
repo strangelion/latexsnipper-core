@@ -135,11 +135,21 @@ enum Commands {
         and known information loss during conversion.\n\n\
         EXAMPLES:\n    \
         snipper capabilities\n    \
-        snipper capabilities --format markdown")]
+        snipper capabilities --format markdown\n    \
+        snipper capabilities --input ast --output markdown\n    \
+        snipper capabilities --input ast")]
     Capabilities {
         /// Output format for the matrix: "table" (default) or "markdown"
         #[arg(short = 'f', long, default_value = "table")]
         format: String,
+
+        /// Filter by input format (e.g., "ast", "markdown", "latex")
+        #[arg(long)]
+        input: Option<String>,
+
+        /// Filter by output format (e.g., "markdown", "html", "svg")
+        #[arg(long)]
+        output: Option<String>,
     },
 
     /// Play the LaTeX Math Rendering Challenge (minigame)
@@ -467,11 +477,12 @@ fn main() {
             println!("Try 'snipper play' for a hidden mini-game!");
         }
 
-        Commands::Capabilities { format } => {
+        Commands::Capabilities { format, input, output } => {
             let matrix = build_capability_matrix();
+            let filtered = filter_capabilities(&matrix, input.as_deref(), output.as_deref());
             match format.as_str() {
-                "markdown" | "md" => print_capabilities_markdown(&matrix),
-                _ => print_capabilities_table(&matrix),
+                "markdown" | "md" => print_capabilities_markdown(&filtered),
+                _ => print_capabilities_table(&filtered),
             }
         }
 
@@ -1062,6 +1073,46 @@ fn build_capability_matrix() -> CapabilityMatrix {
                 notes: vec![],
             },
         ],
+    }
+}
+
+/// Filter capability entries by input/output format.
+fn filter_capabilities(
+    matrix: &CapabilityMatrix,
+    input_filter: Option<&str>,
+    output_filter: Option<&str>,
+) -> CapabilityMatrix {
+    let input_filter = input_filter.map(|s| s.to_ascii_lowercase());
+    let output_filter = output_filter.map(|s| s.to_ascii_lowercase());
+
+    let entries: Vec<FormatCapability> = matrix
+        .entries
+        .iter()
+        .filter(|e| {
+            let input_match = match &input_filter {
+                Some(ref f) => e
+                    .input
+                    .as_deref()
+                    .map(|i| i.to_ascii_lowercase().contains(f.as_str()))
+                    .unwrap_or(false),
+                None => true,
+            };
+            let output_match = match &output_filter {
+                Some(ref f) => e
+                    .output
+                    .as_deref()
+                    .map(|o| o.to_ascii_lowercase().contains(f.as_str()))
+                    .unwrap_or(false),
+                None => true,
+            };
+            input_match && output_match
+        })
+        .cloned()
+        .collect();
+
+    CapabilityMatrix {
+        schema_version: matrix.schema_version.clone(),
+        entries,
     }
 }
 
