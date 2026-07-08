@@ -55,8 +55,17 @@ impl VisualFormat {
 /// `RenderTree`, then dispatches to the appropriate generator.
 ///
 /// # Example
-/// ```ignore
-/// let artifact = ExportService::export(&doc, VisualFormat::Svg)?;
+/// ```
+/// use latexsnipper_export::{ExportService, VisualFormat};
+/// use latexsnipper_ast::DocumentBuilder;
+///
+/// let doc = DocumentBuilder::new()
+///     .page(400.0, 200.0, |page| {
+///         page.text_paragraph("Hello, world!");
+///     })
+///     .build();
+/// let artifact = ExportService::export(&doc, VisualFormat::PlainText).unwrap();
+/// assert!(artifact.text.unwrap().contains("Hello"));
 /// ```
 pub struct ExportService;
 

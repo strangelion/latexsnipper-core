@@ -278,3 +278,59 @@ fn base64_encode(bytes: &[u8]) -> String {
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn create_minimal_docx(text: &str, suffix: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("test_docx_{}_{}.docx", suffix, std::process::id()));
+        let file = std::fs::File::create(&path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+
+        let opts = || zip::write::FileOptions::default();
+
+        zip.add_directory("_rels/", opts()).unwrap();
+        zip.start_file("[Content_Types].xml", opts()).unwrap();
+        write!(zip, r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document"/>
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+</Types>"#).unwrap();
+
+        zip.add_directory("word/", opts()).unwrap();
+        zip.start_file("word/document.xml", opts()).unwrap();
+        write!(zip, r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:t>{}</w:t></w:r></w:p>
+</w:body>
+</w:document>"#, text).unwrap();
+
+        let _file = zip.finish().unwrap();
+        path
+    }
+
+    #[test]
+    fn test_read_docx_simple_paragraph() {
+        let path = create_minimal_docx("Hello from DOCX", "p");
+        let doc = read_docx(&path).unwrap();
+        assert_eq!(doc.pages.len(), 1);
+        assert!(doc.block_count() > 0);
+        let text = doc.all_blocks().iter()
+            .map(|b| match b { Block::Paragraph(p) => { p.inlines.iter().map(|i| match i { Inline::Text(t) => t.text.clone(), _ => String::new() }).collect::<Vec<_>>().join(" ") } _ => String::new() })
+            .collect::<Vec<_>>().join(" ");
+        assert!(text.contains("Hello from DOCX"), "text: {}", text);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_docx_empty() {
+        let path = create_minimal_docx("", "e");
+        let doc = read_docx(&path).unwrap();
+        assert!(doc.block_count() == 0 || doc.all_blocks().is_empty());
+        std::fs::remove_file(&path).ok();
+    }
+}
