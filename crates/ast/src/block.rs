@@ -234,12 +234,7 @@ impl Block {
             Block::Minipage(_) => None,
             Block::Float(_) => None,
             Block::TextBox(_) => None,
-            Block::Chart(c) => Some(
-                c.title
-                    .iter_mut()
-                    .flat_map(|t| t.iter_mut())
-                    .collect(),
-            ),
+            Block::Chart(c) => Some(c.title.iter_mut().flat_map(|t| t.iter_mut()).collect()),
             Block::Shape(s) => Some(s.text.iter_mut().collect()),
             Block::EmbeddedObject(_) => None,
             Block::Annotation(a) => Some(a.content.iter_mut().collect()),

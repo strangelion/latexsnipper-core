@@ -29,16 +29,22 @@ impl Default for SimpleAssetResolver {
 
 impl AssetStore for SimpleAssetResolver {
     fn get_bytes(&self, id: &AssetId) -> std::result::Result<Vec<u8>, String> {
-        self.assets.get(id).map(|asset| match &asset.storage {
-            latexsnipper_ast::AssetStorage::InlineBase64 { data } => {
-                // Return raw base64 bytes; caller may decode if needed.
-                Ok(data.as_bytes().to_vec())
-            }
-            latexsnipper_ast::AssetStorage::FilePath { path } => {
-                std::fs::read(path).map_err(|e| format!("file read error: {}", e))
-            }
-            _ => Err(format!("cannot get bytes from storage type for asset {}", id.0)),
-        }).unwrap_or(Err(format!("asset {} not found", id.0)))
+        self.assets
+            .get(id)
+            .map(|asset| match &asset.storage {
+                latexsnipper_ast::AssetStorage::InlineBase64 { data } => {
+                    // Return raw base64 bytes; caller may decode if needed.
+                    Ok(data.as_bytes().to_vec())
+                }
+                latexsnipper_ast::AssetStorage::FilePath { path } => {
+                    std::fs::read(path).map_err(|e| format!("file read error: {}", e))
+                }
+                _ => Err(format!(
+                    "cannot get bytes from storage type for asset {}",
+                    id.0
+                )),
+            })
+            .unwrap_or(Err(format!("asset {} not found", id.0)))
     }
 
     fn get_asset(&self, id: &AssetId) -> Option<&MediaAsset> {
@@ -48,16 +54,19 @@ impl AssetStore for SimpleAssetResolver {
 
 impl AssetReferenceResolver for SimpleAssetResolver {
     fn resolve_reference(&self, id: &AssetId) -> std::result::Result<String, String> {
-        self.assets.get(id).map(|asset| match &asset.storage {
-            latexsnipper_ast::AssetStorage::FilePath { path } => Ok(path.clone()),
-            latexsnipper_ast::AssetStorage::Uri { uri } => Ok(uri.clone()),
-            latexsnipper_ast::AssetStorage::InlineBase64 { data } => Ok(format!(
-                "data:{};base64,{}",
-                asset.mime_type.as_deref().unwrap_or("image/png"),
-                data
-            )),
-            _ => Ok(format!("asset:{}", id.0)),
-        }).unwrap_or(Err(format!("asset {} not found", id.0)))
+        self.assets
+            .get(id)
+            .map(|asset| match &asset.storage {
+                latexsnipper_ast::AssetStorage::FilePath { path } => Ok(path.clone()),
+                latexsnipper_ast::AssetStorage::Uri { uri } => Ok(uri.clone()),
+                latexsnipper_ast::AssetStorage::InlineBase64 { data } => Ok(format!(
+                    "data:{};base64,{}",
+                    asset.mime_type.as_deref().unwrap_or("image/png"),
+                    data
+                )),
+                _ => Ok(format!("asset:{}", id.0)),
+            })
+            .unwrap_or(Err(format!("asset {} not found", id.0)))
     }
 }
 
@@ -67,7 +76,10 @@ impl AssetExporter for SimpleAssetResolver {
         id: &AssetId,
         target_dir: &Path,
     ) -> std::result::Result<ExportedAsset, String> {
-        let asset = self.assets.get(id).ok_or_else(|| format!("asset {} not found", id.0))?;
+        let asset = self
+            .assets
+            .get(id)
+            .ok_or_else(|| format!("asset {} not found", id.0))?;
         let bytes = self.get_bytes(id)?;
         let ext = match &asset.format {
             latexsnipper_ast::AssetFormat::Png => "png",

@@ -83,7 +83,11 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
         Block::Table(t) => render_table(t, assets),
         Block::Figure(f) => {
             let caption = f.caption_plain_text();
-            let caption_str = if caption.is_empty() { "figure" } else { &caption };
+            let caption_str = if caption.is_empty() {
+                "figure"
+            } else {
+                &caption
+            };
             if let Some(data) = &f.image_data {
                 format!(
                     "<figure><img src=\"data:image/png;base64,{}\" alt=\"{}\"><figcaption>{}</figcaption></figure>",
@@ -139,10 +143,16 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
             format!("<div class=\"textbox\">{}</div>", content)
         }
         Block::Chart(c) => {
-            format!("<div class=\"chart\" title=\"{:?}\">[chart]</div>", c.chart_type)
+            format!(
+                "<div class=\"chart\" title=\"{:?}\">[chart]</div>",
+                c.chart_type
+            )
         }
         Block::Shape(s) => {
-            format!("<div class=\"shape\" title=\"{:?}\">[shape]</div>", s.shape_type)
+            format!(
+                "<div class=\"shape\" title=\"{:?}\">[shape]</div>",
+                s.shape_type
+            )
         }
         Block::EmbeddedObject(e) => {
             format!(

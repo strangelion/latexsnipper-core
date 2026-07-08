@@ -257,8 +257,7 @@ fn parse_slide_body(
                                 let mut img_bytes = Vec::new();
                                 if img_file.read_to_end(&mut img_bytes).is_ok() {
                                     let b64 = base64_encode(&img_bytes);
-                                    let asset_id =
-                                        AssetId(format!("pptx-img-{}", *next_asset_id));
+                                    let asset_id = AssetId(format!("pptx-img-{}", *next_asset_id));
                                     *next_asset_id += 1;
                                     let format = guess_image_format(&media_path);
                                     slide_assets.push(MediaAsset {

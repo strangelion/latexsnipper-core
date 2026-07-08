@@ -91,7 +91,10 @@ fn render_text(node: &RenderNode) -> String {
                 render_nodes_to_text(caption)
             }
         }
-        RenderNode::Unsupported { block_type, message } => {
+        RenderNode::Unsupported {
+            block_type,
+            message,
+        } => {
             format!("[unsupported {}: {}]", block_type, message)
         }
     }
