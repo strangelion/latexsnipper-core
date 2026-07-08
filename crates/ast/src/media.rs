@@ -126,6 +126,35 @@ pub enum DiagnosticLevel {
     Error,
 }
 
+// ---------------------------------------------------------------------------
+// Diagnostic code constants (Office/PDF/API conversion warnings)
+// ---------------------------------------------------------------------------
+
+/// SmartArt graphics are not fully convertible; preview only.
+pub const W_SMARTART_NOT_SUPPORTED: &str = "W_SMARTART_NOT_SUPPORTED";
+/// OLE embedded objects are not convertible; placeholder used.
+pub const W_OLE_NOT_SUPPORTED: &str = "W_OLE_NOT_SUPPORTED";
+/// Office chart data may be simplified in conversion.
+pub const W_CHART_DATA_SIMPLIFIED: &str = "W_CHART_DATA_SIMPLIFIED";
+/// Audio/video embedded content is not supported.
+pub const W_MEDIA_NOT_SUPPORTED: &str = "W_MEDIA_NOT_SUPPORTED";
+/// ActiveX controls are not supported.
+pub const W_ACTIVEX_NOT_SUPPORTED: &str = "W_ACTIVEX_NOT_SUPPORTED";
+/// Form fields are not fully convertible.
+pub const W_FORM_FIELD_NOT_SUPPORTED: &str = "W_FORM_FIELD_NOT_SUPPORTED";
+/// Tracked changes / revisions are not fully preserved.
+pub const W_REVISION_NOT_FULLY_PRESERVED: &str = "W_REVISION_NOT_FULLY_PRESERVED";
+/// A block type was silently dropped during conversion.
+pub const W_BLOCK_DOWNGRADED: &str = "W_BLOCK_DOWNGRADED";
+/// Legacy image_data was automatically migrated to MediaAsset.
+pub const I_LEGACY_IMAGE_MIGRATED: &str = "I_LEGACY_IMAGE_MIGRATED";
+/// Reference to an asset ID that does not exist in Document.assets.
+pub const W_MISSING_ASSET_REF: &str = "W_MISSING_ASSET_REF";
+/// An API call failed.
+pub const E_API_CALL_FAILED: &str = "E_API_CALL_FAILED";
+/// JSON schema validation failed.
+pub const E_SCHEMA_VALIDATION_FAILED: &str = "E_SCHEMA_VALIDATION_FAILED";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub level: DiagnosticLevel,

@@ -32,7 +32,8 @@ pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
     let rels = parse_rels(&rels_xml);
 
     // Parse document body
-    let blocks = parse_document_body(&document_xml, &mut archive, &rels);
+    // Parse document body with diagnostics
+    let (blocks, docx_diags) = parse_document_body(&document_xml, &mut archive, &rels);
 
     Ok(Document {
         metadata: Metadata {
@@ -49,7 +50,7 @@ pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
             page_number: Some(1),
         }],
         assets: Vec::new(),
-        diagnostics: Vec::new(),
+        diagnostics: docx_diags,
         id_gen: NodeIdGenerator::new(),
         schema_version: "1.0.0".to_string(),
     })
@@ -100,13 +101,14 @@ fn parse_rels(xml: &str) -> std::collections::HashMap<String, String> {
     rels
 }
 
-/// Parse the main document body XML and extract blocks.
+/// Parse the main document body XML and extract blocks with diagnostics.
 fn parse_document_body(
     xml: &str,
     archive: &mut zip::ZipArchive<std::fs::File>,
     rels: &std::collections::HashMap<String, String>,
-) -> Vec<Block> {
+) -> (Vec<Block>, Vec<Diagnostic>) {
     let mut blocks = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -175,6 +177,28 @@ fn parse_document_body(
                                 let id = String::from_utf8_lossy(&a.value).to_string();
                                 rels.get(&id).cloned()
                             });
+                    }
+                    // Detect SmartArt/OLE/Chart for diagnostic warnings
+                    b"mc:AlternateContent" | b"AlternateContent" => {
+                        diagnostics.push(Diagnostic::new(
+                            DiagnosticLevel::Warning,
+                            latexsnipper_ast::W_SMARTART_NOT_SUPPORTED,
+                            "SmartArt graphic detected; will be rendered as preview only",
+                        ).with_recoverable(true));
+                    }
+                    b"o:OLEObject" | b"OLEObject" | b"w:oleObject" => {
+                        diagnostics.push(Diagnostic::new(
+                            DiagnosticLevel::Warning,
+                            latexsnipper_ast::W_OLE_NOT_SUPPORTED,
+                            "OLE embedded object detected; placeholder used",
+                        ).with_recoverable(true));
+                    }
+                    b"c:chartSpace" | b"chartSpace" | b"c:chart" => {
+                        diagnostics.push(Diagnostic::new(
+                            DiagnosticLevel::Warning,
+                            latexsnipper_ast::W_CHART_DATA_SIMPLIFIED,
+                            "Embedded chart detected; data may be simplified",
+                        ).with_recoverable(true));
                     }
                     _ => {}
                 }
@@ -256,7 +280,7 @@ fn parse_document_body(
         buf.clear();
     }
 
-    blocks
+    (blocks, diagnostics)
 }
 
 fn base64_encode(bytes: &[u8]) -> String {

@@ -44,6 +44,10 @@ pub use media::{
     AssetBundle, AssetExportPolicy, AssetExporter, AssetFormat, AssetId, AssetManifest,
     AssetManifestEntry, AssetReferenceResolver, AssetResolver as MediaAssetResolver, AssetStore,
     AssetStorage, Diagnostic, DiagnosticLevel, ExportedAsset, MediaAsset, MediaRole,
+    E_API_CALL_FAILED, E_SCHEMA_VALIDATION_FAILED, I_LEGACY_IMAGE_MIGRATED, W_BLOCK_DOWNGRADED,
+    W_CHART_DATA_SIMPLIFIED, W_FORM_FIELD_NOT_SUPPORTED, W_MEDIA_NOT_SUPPORTED,
+    W_MISSING_ASSET_REF, W_OLE_NOT_SUPPORTED, W_REVISION_NOT_FULLY_PRESERVED,
+    W_SMARTART_NOT_SUPPORTED, W_ACTIVEX_NOT_SUPPORTED,
 };
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;
