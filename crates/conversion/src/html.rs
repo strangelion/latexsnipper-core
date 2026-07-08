@@ -166,6 +166,21 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
                 a.kind
             )
         }
+        Block::PageBreak(_) => {
+            "<div class=\"page-break\">[page break]</div>".to_string()
+        }
+        Block::SectionBreak(sb) => {
+            format!(
+                "<div class=\"section-break\" title=\"{:?}\">[section break]</div>",
+                sb.kind
+            )
+        }
+        Block::HeaderFooter(hf) => {
+            format!(
+                "<div class=\"header-footer\" title=\"{:?} {:?}\">[header/footer]</div>",
+                hf.kind, hf.applies_to
+            )
+        }
     }
 }
 

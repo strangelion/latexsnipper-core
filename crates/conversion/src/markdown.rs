@@ -130,6 +130,9 @@ fn render_block(block: &Block, mode: &MarkdownMode, assets: &[MediaAsset]) -> St
         Block::Shape(s) => format!("*[Shape: {:?}]*", s.shape_type),
         Block::EmbeddedObject(e) => format!("*[Embedded: {:?}]*", e.kind),
         Block::Annotation(a) => format!("*[Annotation: {:?}]*", a.kind),
+        Block::PageBreak(_) => format!("*[PageBreak]*"),
+        Block::SectionBreak(sb) => format!("*[SectionBreak: {:?}]*", sb.kind),
+        Block::HeaderFooter(hf) => format!("*[HeaderFooter: {:?} {:?}]*", hf.kind, hf.applies_to),
     }
 }
 

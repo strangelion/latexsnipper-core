@@ -245,6 +245,18 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             block_type: "annotation",
             message: format!("{:?}", a.kind),
         }),
+        Block::PageBreak(_) => Some(RenderNode::Unsupported {
+            block_type: "page_break",
+            message: String::new(),
+        }),
+        Block::SectionBreak(sb) => Some(RenderNode::Unsupported {
+            block_type: "section_break",
+            message: format!("{:?}", sb.kind),
+        }),
+        Block::HeaderFooter(hf) => Some(RenderNode::Unsupported {
+            block_type: "header_footer",
+            message: format!("{:?} {:?}", hf.kind, hf.applies_to),
+        }),
     }
 }
 

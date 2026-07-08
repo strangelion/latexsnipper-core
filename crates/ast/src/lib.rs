@@ -17,10 +17,12 @@ pub mod traits;
 pub mod visitor;
 
 pub use block::{
-    AnnotationBlock, Block, BorderStyle, CellAlignment, ChartBlock, CodeBlock, DescriptionItem,
-    DescriptionListBlock, EmbeddedObjectBlock, FigureBlock, FloatBlock, FormulaBlock,
-    HandwritingBlock, HeadingBlock, HorizontalRuleBlock, ListBlock, ListItem, MinipageBlock,
-    ParagraphBlock, ProofBlock, QuoteBlock, ShapeBlock, TableBlock, TableCell, TextBoxBlock,
+    AnnotationBlock, Block, BorderStyle, CellAlignment, ChartBlock, CodeBlock, ColumnLayout,
+    DescriptionItem, DescriptionListBlock, EmbeddedObjectBlock, FigureBlock, FloatBlock,
+    FormulaBlock, HandwritingBlock, HeaderFooterBlock, HeaderFooterKind, HeaderFooterScope,
+    HeadingBlock, HorizontalRuleBlock, ListBlock, ListItem, MinipageBlock, PageBreakBlock,
+    PageLayout, PageMargin, PageOrientation, ParagraphBlock, ProofBlock, QuoteBlock,
+    SectionBreakBlock, SectionBreakKind, ShapeBlock, TableBlock, TableCell, TextBoxBlock,
     TheoremBlock,
 };
 pub use builder::DocumentBuilder;
@@ -65,10 +67,10 @@ pub use span::{
     ProvenanceOperation, SourceInfo, Span,
 };
 pub use style::{
-    effective_text_style, AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartSeries,
-    ChartType, Color, EmbeddedObjectKind, FontWeight, LayerInfo, OfficeApp, OfficeSourceInfo,
-    ParagraphStyle, ShapeStyle, ShapeType, TextAlignment, TextDirection, TextStyle, Transform2D,
-    UnderlineStyle, VerticalAlign,
+    effective_text_style, AnnotationKind, BoxStyle, BulletStyle, ChartAxis, ChartData, ChartLegend,
+    ChartSeries, ChartType, Color, EmbeddedObjectKind, FontWeight, LayerInfo, ListStyle, NumberingStyle,
+    OfficeApp, OfficeSourceInfo, ParagraphStyle, ShapeStyle, ShapeType, TextAlignment, TextDirection,
+    TextStyle, Transform2D, UnderlineStyle, VerticalAlign,
 };
 pub use traits::{Exporter, Importer, OfficeAdapter, Renderer, SemanticConverter, StageRunner};
 pub use visitor::{DocumentVisitor, TextCollector};

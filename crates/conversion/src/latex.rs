@@ -170,6 +170,18 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
             format!("% [Embedded object: {:?}]\n\\textit{{[embedded]}}", e.kind)
         }
         Block::Annotation(a) => format!("% [Annotation: {:?}]\n\\textit{{[annotation]}}", a.kind),
+        Block::PageBreak(_) => {
+            "% [PageBreak]\n\\newpage".to_string()
+        }
+        Block::SectionBreak(sb) => {
+            format!("% [SectionBreak: {:?}]\n\\textit{{[section break]}}", sb.kind)
+        }
+        Block::HeaderFooter(hf) => {
+            format!(
+                "% [HeaderFooter: {:?} {:?}]\n\\textit{{[header/footer]}}",
+                hf.kind, hf.applies_to
+            )
+        }
     }
 }
 

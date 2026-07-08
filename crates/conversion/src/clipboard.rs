@@ -153,6 +153,9 @@ fn block_to_plain_text(block: &Block) -> String {
             .map(inline_to_plain_text)
             .collect::<Vec<_>>()
             .join(" "),
+        Block::PageBreak(_) => "[page break]".to_string(),
+        Block::SectionBreak(sb) => format!("[section break: {:?}]", sb.kind),
+        Block::HeaderFooter(hf) => format!("[header/footer: {:?}]", hf.kind),
     }
 }
 

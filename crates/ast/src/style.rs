@@ -307,3 +307,38 @@ pub struct LayerInfo {
     pub hidden: Option<bool>,
     pub group_id: Option<String>,
 }
+
+// ---------------------------------------------------------------------------
+// ListStyle / BulletStyle / NumberingStyle
+// ---------------------------------------------------------------------------
+
+/// Style of a bullet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BulletStyle {
+    Disc,
+    Circle,
+    Square,
+    Dash,
+    Custom(String),
+}
+
+/// Numbering style for ordered lists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NumberingStyle {
+    Decimal,
+    LowerAlpha,
+    UpperAlpha,
+    LowerRoman,
+    UpperRoman,
+    Chinese,
+    Custom(String),
+}
+
+/// Overall list styling.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ListStyle {
+    Bullet(BulletStyle),
+    Ordered(NumberingStyle),
+    Task,
+    Definition,
+}

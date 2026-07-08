@@ -4,7 +4,7 @@ use crate::media::MediaRole;
 use crate::span::BlockPolicy;
 use crate::style::{
     AnnotationKind, BoxStyle, ChartAxis, ChartData, ChartLegend, ChartType, EmbeddedObjectKind,
-    ShapeStyle, ShapeType,
+    ListStyle, ShapeStyle, ShapeType,
 };
 use crate::{Inline, NodeId, Rect, SourceInfo};
 
@@ -62,6 +62,12 @@ pub enum Block {
     EmbeddedObject(EmbeddedObjectBlock),
     /// An annotation/comment/highlight.
     Annotation(AnnotationBlock),
+    /// A page break (hard page boundary).
+    PageBreak(PageBreakBlock),
+    /// A section break with optional page layout change.
+    SectionBreak(SectionBreakBlock),
+    /// A header or footer block.
+    HeaderFooter(HeaderFooterBlock),
 }
 
 impl Block {
@@ -89,6 +95,9 @@ impl Block {
             Block::Shape(s) => s.source.as_ref(),
             Block::EmbeddedObject(e) => e.source.as_ref(),
             Block::Annotation(a) => a.source.as_ref(),
+            Block::PageBreak(pb) => pb.source.as_ref(),
+            Block::SectionBreak(sb) => sb.source.as_ref(),
+            Block::HeaderFooter(hf) => hf.source.as_ref(),
         }
     }
 
@@ -121,6 +130,9 @@ impl Block {
             Block::Shape(s) => s.source.as_mut(),
             Block::EmbeddedObject(e) => e.source.as_mut(),
             Block::Annotation(a) => a.source.as_mut(),
+            Block::PageBreak(pb) => pb.source.as_mut(),
+            Block::SectionBreak(sb) => sb.source.as_mut(),
+            Block::HeaderFooter(hf) => hf.source.as_mut(),
         }
     }
 
@@ -148,6 +160,9 @@ impl Block {
             Block::Shape(s) => s.geometry.as_ref(),
             Block::EmbeddedObject(e) => e.geometry.as_ref(),
             Block::Annotation(a) => a.geometry.as_ref(),
+            Block::PageBreak(_) => None,
+            Block::SectionBreak(_) => None,
+            Block::HeaderFooter(_) => None,
         }
     }
 
@@ -189,6 +204,9 @@ impl Block {
             Block::Shape(s) => s.text.iter().collect(),
             Block::EmbeddedObject(_) => vec![],
             Block::Annotation(a) => a.content.iter().collect(),
+            Block::PageBreak(_) => vec![],
+            Block::SectionBreak(_) => vec![],
+            Block::HeaderFooter(hf) => hf.content.iter().flat_map(|b| b.inlines()).collect(),
         }
     }
 
@@ -238,6 +256,9 @@ impl Block {
             Block::Shape(s) => Some(s.text.iter_mut().collect()),
             Block::EmbeddedObject(_) => None,
             Block::Annotation(a) => Some(a.content.iter_mut().collect()),
+            Block::PageBreak(_) => None,
+            Block::SectionBreak(_) => None,
+            Block::HeaderFooter(_) => None,
         }
     }
 
@@ -265,6 +286,9 @@ impl Block {
             Block::Shape(_) => "shape",
             Block::EmbeddedObject(_) => "embedded_object",
             Block::Annotation(_) => "annotation",
+            Block::PageBreak(_) => "page_break",
+            Block::SectionBreak(_) => "section_break",
+            Block::HeaderFooter(_) => "header_footer",
         }
     }
 }
@@ -706,4 +730,121 @@ pub struct AnnotationBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// PageBreakBlock — a hard page boundary
+// ---------------------------------------------------------------------------
+
+/// A hard page break.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageBreakBlock {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// SectionBreakBlock — a section break with optional page layout change
+// ---------------------------------------------------------------------------
+
+/// Kind of section break.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SectionBreakKind {
+    NextPage,
+    Continuous,
+    EvenPage,
+    OddPage,
+}
+
+/// A section break that may introduce a new page layout.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionBreakBlock {
+    pub kind: SectionBreakKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_layout: Option<PageLayout>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// HeaderFooterBlock — a header or footer section
+// ---------------------------------------------------------------------------
+
+/// Whether this is a header or footer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HeaderFooterKind {
+    Header,
+    Footer,
+}
+
+/// Which pages this header/footer applies to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HeaderFooterScope {
+    AllPages,
+    FirstPage,
+    OddPages,
+    EvenPages,
+}
+
+/// A header or footer block with content and scope.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeaderFooterBlock {
+    pub kind: HeaderFooterKind,
+    pub content: Vec<Block>,
+    pub applies_to: HeaderFooterScope,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// PageLayout / PageMargin / PageOrientation / ColumnLayout
+// ---------------------------------------------------------------------------
+
+/// Page orientation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PageOrientation {
+    Portrait,
+    Landscape,
+}
+
+/// Page margins.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageMargin {
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub left: f32,
+}
+
+impl Default for PageMargin {
+    fn default() -> Self {
+        Self {
+            top: 72.0,
+            right: 72.0,
+            bottom: 72.0,
+            left: 72.0,
+        }
+    }
+}
+
+/// Column layout configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColumnLayout {
+    pub count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap: Option<f32>,
+}
+
+/// Full page layout descriptor.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageLayout {
+    pub width: f32,
+    pub height: f32,
+    #[serde(default)]
+    pub margin: PageMargin,
+    pub orientation: PageOrientation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub columns: Option<ColumnLayout>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_asset_id: Option<crate::AssetId>,
 }
