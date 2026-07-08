@@ -12,6 +12,7 @@ categories.workspace = true
 [dependencies]
 latexsnipper-foundation.workspace = true
 latexsnipper-tensor.workspace = true
+latexsnipper-ast.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
@@ -20,6 +21,14 @@ ndarray = "0.16"
 toml = "0.8"
 sha2 = "0.10"
 hex = "0.4"
+
+# Remote API provider (optional)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+base64 = { version = "0.22", optional = true }
+
+[features]
+default = []
+remote-api = ["reqwest", "base64"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "download-binaries", "tls-native", "api-20"] }
