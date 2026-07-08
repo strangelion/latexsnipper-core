@@ -68,6 +68,18 @@ pub enum Block {
     SectionBreak(SectionBreakBlock),
     /// A header or footer block.
     HeaderFooter(HeaderFooterBlock),
+    /// A bibliography/references block.
+    Bibliography(BibliographyBlock),
+    /// A form field (Office/PDF forms).
+    FormField(FormFieldBlock),
+    /// A tracked revision (inserted/deleted text etc.).
+    Revision(Revision),
+    /// A chemical formula (Office ChemDraw etc.).
+    ChemicalFormula(ChemicalFormulaBlock),
+    /// A QR code / barcode block.
+    QrCode(QrCodeBlock),
+    /// A data graph/plot block.
+    Graph(GraphBlock),
 }
 
 impl Block {
@@ -98,6 +110,12 @@ impl Block {
             Block::PageBreak(pb) => pb.source.as_ref(),
             Block::SectionBreak(sb) => sb.source.as_ref(),
             Block::HeaderFooter(hf) => hf.source.as_ref(),
+            Block::Bibliography(bb) => bb.source.as_ref(),
+            Block::FormField(ff) => ff.source.as_ref(),
+            Block::Revision(_) => None,
+            Block::ChemicalFormula(cf) => cf.source.as_ref(),
+            Block::QrCode(qr) => qr.source.as_ref(),
+            Block::Graph(g) => g.source.as_ref(),
         }
     }
 
@@ -133,6 +151,12 @@ impl Block {
             Block::PageBreak(pb) => pb.source.as_mut(),
             Block::SectionBreak(sb) => sb.source.as_mut(),
             Block::HeaderFooter(hf) => hf.source.as_mut(),
+            Block::Bibliography(bb) => bb.source.as_mut(),
+            Block::FormField(ff) => ff.source.as_mut(),
+            Block::Revision(_) => None,
+            Block::ChemicalFormula(cf) => cf.source.as_mut(),
+            Block::QrCode(qr) => qr.source.as_mut(),
+            Block::Graph(g) => g.source.as_mut(),
         }
     }
 
@@ -163,6 +187,12 @@ impl Block {
             Block::PageBreak(_) => None,
             Block::SectionBreak(_) => None,
             Block::HeaderFooter(_) => None,
+            Block::Bibliography(bb) => bb.geometry.as_ref(),
+            Block::FormField(ff) => ff.geometry.as_ref(),
+            Block::Revision(_) => None,
+            Block::ChemicalFormula(cf) => cf.geometry.as_ref(),
+            Block::QrCode(qr) => qr.geometry.as_ref(),
+            Block::Graph(g) => g.geometry.as_ref(),
         }
     }
 
@@ -209,6 +239,12 @@ impl Block {
             Block::PageBreak(_) => vec![],
             Block::SectionBreak(_) => vec![],
             Block::HeaderFooter(hf) => hf.content.iter().flat_map(|b| b.inlines()).collect(),
+            Block::Bibliography(_) => vec![],
+            Block::FormField(_) => vec![],
+            Block::Revision(r) => r.content.iter().flat_map(|b| b.inlines()).collect(),
+            Block::ChemicalFormula(_) => vec![],
+            Block::QrCode(_) => vec![],
+            Block::Graph(_) => vec![],
         }
     }
 
@@ -250,6 +286,12 @@ impl Block {
             Block::PageBreak(_) => None,
             Block::SectionBreak(_) => None,
             Block::HeaderFooter(_) => None,
+            Block::Bibliography(_) => None,
+            Block::FormField(_) => None,
+            Block::Revision(_) => None,
+            Block::ChemicalFormula(_) => None,
+            Block::QrCode(_) => None,
+            Block::Graph(_) => None,
         }
     }
 
@@ -280,6 +322,12 @@ impl Block {
             Block::PageBreak(_) => "page_break",
             Block::SectionBreak(_) => "section_break",
             Block::HeaderFooter(_) => "header_footer",
+            Block::Bibliography(_) => "bibliography",
+            Block::FormField(_) => "form_field",
+            Block::Revision(_) => "revision",
+            Block::ChemicalFormula(_) => "chemical_formula",
+            Block::QrCode(_) => "qr_code",
+            Block::Graph(_) => "graph",
         }
     }
 }
@@ -871,6 +919,166 @@ pub struct HeaderFooterBlock {
     pub applies_to: HeaderFooterScope,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// BibliographyBlock — a bibliography/references section
+// ---------------------------------------------------------------------------
+
+/// A bibliography with entries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BibliographyBlock {
+    pub entries: Vec<BibliographyEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A single bibliography entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BibliographyEntry {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_type: Option<String>,
+    #[serde(default)]
+    pub fields: std::collections::BTreeMap<String, String>,
+}
+
+// ---------------------------------------------------------------------------
+// FormFieldBlock — an interactive form field
+// ---------------------------------------------------------------------------
+
+/// An interactive form field (Office/PDF).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormFieldBlock {
+    pub id: String,
+    pub kind: FormFieldKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<Vec<Inline>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(default)]
+    pub options: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// The kind of form field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FormFieldKind {
+    TextInput,
+    Checkbox,
+    Radio,
+    Dropdown,
+    Date,
+    Signature,
+    Button,
+    Unknown,
+}
+
+// ---------------------------------------------------------------------------
+// Revision — a tracked change in the document
+// ---------------------------------------------------------------------------
+
+/// A tracked revision (insertion, deletion, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Revision {
+    pub id: String,
+    pub kind: RevisionKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    #[serde(default)]
+    pub content: Vec<Block>,
+}
+
+/// The kind of revision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RevisionKind {
+    Inserted,
+    Deleted,
+    MovedFrom,
+    MovedTo,
+    FormatChanged,
+}
+
+// ---------------------------------------------------------------------------
+// ChemicalFormulaBlock — a chemical structure diagram
+// ---------------------------------------------------------------------------
+
+/// A chemical formula or structure diagram.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChemicalFormulaBlock {
+    pub formula: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// QrCodeBlock — a QR code or barcode
+// ---------------------------------------------------------------------------
+
+/// A QR code or barcode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QrCodeBlock {
+    pub data: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// GraphBlock — a data-driven graph/plot
+// ---------------------------------------------------------------------------
+
+/// A data graph or plot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphBlock {
+    #[serde(default)]
+    pub data_points: Vec<DataPoint>,
+    pub graph_type: GraphType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Rect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// A single data point in a graph.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataPoint {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub value: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+}
+
+/// The type of graph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GraphType {
+    Bar,
+    Line,
+    Pie,
+    Scatter,
+    Area,
+    Unknown,
 }
 
 // ---------------------------------------------------------------------------

@@ -89,6 +89,16 @@ impl DocumentVisitor<()> for TextCollector {
             Inline::Formula(f) => {
                 self.text.push_str(f.as_latex());
             }
+            Inline::Anchor(a) => {
+                self.text.push_str(&format!("[anchor: {}]", a.id));
+            }
+            Inline::CrossReference(x) => {
+                self.text.push_str(&format!("[xref: {}]", x.target_id));
+            }
+            Inline::CitationGroup(c) => {
+                let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();
+                self.text.push_str(&format!("[cite: {}]", keys.join(", ")));
+            }
             _ => {}
         }
     }

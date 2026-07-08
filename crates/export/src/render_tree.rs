@@ -261,6 +261,30 @@ fn convert_block(block: &Block) -> Option<RenderNode> {
             block_type: "header_footer",
             message: format!("{:?} {:?}", hf.kind, hf.applies_to),
         }),
+        Block::Bibliography(bb) => Some(RenderNode::Unsupported {
+            block_type: "bibliography",
+            message: format!("{} entries", bb.entries.len()),
+        }),
+        Block::FormField(ff) => Some(RenderNode::Unsupported {
+            block_type: "form_field",
+            message: format!("{:?}", ff.kind),
+        }),
+        Block::Revision(r) => Some(RenderNode::Unsupported {
+            block_type: "revision",
+            message: format!("{:?}", r.kind),
+        }),
+        Block::ChemicalFormula(cf) => Some(RenderNode::Unsupported {
+            block_type: "chemical_formula",
+            message: cf.formula.clone(),
+        }),
+        Block::QrCode(_) => Some(RenderNode::Unsupported {
+            block_type: "qr_code",
+            message: String::new(),
+        }),
+        Block::Graph(g) => Some(RenderNode::Unsupported {
+            block_type: "graph",
+            message: format!("{:?}", g.graph_type),
+        }),
     }
 }
 
@@ -326,6 +350,12 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<RenderNode> {
                 RenderNode::Text(format!("[{}]({})", text, l.target))
             }
             Inline::Code(c) => RenderNode::Text(c.code.clone()),
+            Inline::Anchor(a) => RenderNode::Text(format!("[anchor: {}]", a.id)),
+            Inline::CrossReference(x) => RenderNode::Text(format!("[xref: {}]", x.target_id)),
+            Inline::CitationGroup(c) => {
+                let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();
+                RenderNode::Text(format!("[cite: {}]", keys.join(",")))
+            }
             Inline::Superscript(inner) | Inline::Subscript(inner) => {
                 let nodes = convert_inlines(inner);
                 RenderNode::Text(

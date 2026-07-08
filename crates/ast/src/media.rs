@@ -307,3 +307,56 @@ pub struct AssetManifestEntry {
     #[serde(default)]
     pub dedup_group: Vec<AssetId>,
 }
+
+// ---------------------------------------------------------------------------
+// AudioAsset / AudioFormat
+// ---------------------------------------------------------------------------
+
+/// Format of an audio asset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AudioFormat {
+    Mp3,
+    Wav,
+    Ogg,
+    Aac,
+    Flac,
+    Unknown,
+}
+
+/// An audio asset embedded in or referenced by the document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioAsset {
+    pub id: AssetId,
+    pub format: AudioFormat,
+    pub duration_secs: Option<f32>,
+    pub storage: AssetStorage,
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+// ---------------------------------------------------------------------------
+// VideoAsset / VideoFormat
+// ---------------------------------------------------------------------------
+
+/// Format of a video asset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VideoFormat {
+    Mp4,
+    WebM,
+    Avi,
+    Mov,
+    Unknown,
+}
+
+/// A video asset embedded in or referenced by the document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoAsset {
+    pub id: AssetId,
+    pub format: VideoFormat,
+    pub duration_secs: Option<f32>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub storage: AssetStorage,
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
+}

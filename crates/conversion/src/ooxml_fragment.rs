@@ -243,6 +243,25 @@ fn write_paragraph(inlines: &[Inline], _assets: &[latexsnipper_ast::MediaAsset])
                     xml_escape(&inner_str)
                 ));
             }
+            Inline::Anchor(a) => {
+                runs.push(format!(
+                    r#"<w:r><w:rPr><w:i/><w:color w:val="808080"/></w:rPr><w:t xml:space="preserve">[anchor: {}]</w:t></w:r>"#,
+                    a.id
+                ));
+            }
+            Inline::CrossReference(x) => {
+                runs.push(format!(
+                    r#"<w:r><w:rPr><w:i/><w:color w:val="808080"/></w:rPr><w:t xml:space="preserve">[xref: {}]</w:t></w:r>"#,
+                    x.target_id
+                ));
+            }
+            Inline::CitationGroup(c) => {
+                let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();
+                runs.push(format!(
+                    r#"<w:r><w:rPr><w:i/><w:color w:val="808080"/></w:rPr><w:t xml:space="preserve">[cite: {}]</w:t></w:r>"#,
+                    keys.join(", ")
+                ));
+            }
             _ => {}
         }
     }

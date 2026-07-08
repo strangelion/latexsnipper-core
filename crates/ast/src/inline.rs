@@ -58,6 +58,12 @@ pub enum Inline {
     Link(LinkInline),
     /// An inline code span.
     Code(CodeInline),
+    /// An anchor/target for hyperlinks.
+    Anchor(AnchorInline),
+    /// A cross-reference to a labeled element.
+    CrossReference(CrossReferenceInline),
+    /// A group of citations.
+    CitationGroup(CitationGroupInline),
     /// Superscript content.
     Superscript(Vec<Inline>),
     /// Subscript content.
@@ -193,7 +199,67 @@ pub struct CodeInline {
     pub source: Option<SourceInfo>,
 }
 
+/// An anchor/target for hyperlinks (e.g., HTML `<a name="...">`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnchorInline {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceInfo>,
+}
+
+/// Kind of cross-reference.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CrossReferenceKind {
+    Figure,
+    Table,
+    Equation,
+    Section,
+    Page,
+    Bookmark,
+    Custom,
+}
+
+/// A cross-reference to a labeled element (e.g., "see Figure 3").
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossReferenceInline {
+    pub target_id: String,
+    pub kind: CrossReferenceKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_text: Option<String>,
+}
+
+/// A single citation key with optional prefix/suffix/locator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CitationItem {
+    pub key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suffix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locator: Option<String>,
+}
+
+/// A group of citations (e.g., `\cite{key1,key2}`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CitationGroupInline {
+    pub citations: Vec<CitationItem>,
+    pub style: CiteStyle,
+}
+
 use crate::Block;
+
+/// Target of a hyperlink.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LinkTarget {
+    Url(String),
+    InternalAnchor(String),
+    Email(String),
+    File(String),
+    Custom(String),
+}
 
 /// Kind of note (footnote or endnote).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -217,4 +283,25 @@ pub struct NoteDefinition {
     pub kind: NoteKind,
     pub content: Vec<Block>,
     pub source: Option<SourceInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// TocEntry / DocumentOutline
+// ---------------------------------------------------------------------------
+
+/// A single entry in a table of contents or document outline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TocEntry {
+    pub title: String,
+    pub level: u8,
+    pub page_number: Option<u32>,
+    pub anchor_id: Option<String>,
+    pub children: Vec<TocEntry>,
+}
+
+/// The full document outline (table of contents).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentOutline {
+    pub title: Option<String>,
+    pub entries: Vec<TocEntry>,
 }

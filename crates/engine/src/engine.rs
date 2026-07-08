@@ -506,7 +506,13 @@ impl SnipperEngine {
                             | Block::Annotation(_)
                             | Block::PageBreak(_)
                             | Block::SectionBreak(_)
-                            | Block::HeaderFooter(_) => String::new(),
+                            | Block::HeaderFooter(_)
+                            | Block::Bibliography(_)
+                            | Block::FormField(_)
+                            | Block::Revision(_)
+                            | Block::ChemicalFormula(_)
+                            | Block::QrCode(_)
+                            | Block::Graph(_) => String::new(),
                         };
 
                         let confidence = match block {

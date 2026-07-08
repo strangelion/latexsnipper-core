@@ -182,6 +182,30 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
                 hf.kind, hf.applies_to
             )
         }
+        Block::Bibliography(bb) => {
+            format!(
+                "% [Bibliography: {} entries]\n\\textit{{[bibliography]}}",
+                bb.entries.len()
+            )
+        }
+        Block::FormField(ff) => {
+            format!("% [FormField: {:?}]\n\\textit{{[form field]}}", ff.kind)
+        }
+        Block::Revision(r) => {
+            format!("% [Revision: {:?}]\n\\textit{{[revision]}}", r.kind)
+        }
+        Block::ChemicalFormula(cf) => {
+            format!(
+                "% [ChemicalFormula: {}]\n\\textit{{[chemical formula]}}",
+                cf.formula
+            )
+        }
+        Block::QrCode(_) => {
+            "% [QRCode]\n\\textit{[qr code]}".to_string()
+        }
+        Block::Graph(g) => {
+            format!("% [Graph: {:?}]\n\\textit{{[graph]}}", g.graph_type)
+        }
     }
 }
 
@@ -276,6 +300,21 @@ fn render_inlines(inlines: &[Inline], assets: &[MediaAsset]) -> String {
             }
             Inline::Code(c) => {
                 parts.push(format!("\\texttt{{{}}}", c.code));
+            }
+            Inline::Anchor(a) => {
+                parts.push(format!("\\label{{{}}}", a.id));
+            }
+            Inline::CrossReference(x) => {
+                parts.push(format!("\\ref{{{}}}", x.target_id));
+            }
+            Inline::CitationGroup(c) => {
+                let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();
+                let cmd = match c.style {
+                    CiteStyle::Author => "citet",
+                    CiteStyle::Parenthetical => "citep",
+                    CiteStyle::Plain => "cite",
+                };
+                parts.push(format!("\\{}{{{}}}", cmd, keys.join(",")));
             }
             Inline::Superscript(inner) => {
                 let text = render_inlines(inner, assets);

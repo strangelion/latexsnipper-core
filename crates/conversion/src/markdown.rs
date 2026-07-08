@@ -133,6 +133,12 @@ fn render_block(block: &Block, mode: &MarkdownMode, assets: &[MediaAsset]) -> St
         Block::PageBreak(_) => "*[PageBreak]*".to_string(),
         Block::SectionBreak(sb) => format!("*[SectionBreak: {:?}]*", sb.kind),
         Block::HeaderFooter(hf) => format!("*[HeaderFooter: {:?} {:?}]*", hf.kind, hf.applies_to),
+        Block::Bibliography(bb) => format!("*[Bibliography: {} entries]*", bb.entries.len()),
+        Block::FormField(ff) => format!("*[FormField: {:?}]*", ff.kind),
+        Block::Revision(r) => format!("*[Revision: {:?}]*", r.kind),
+        Block::ChemicalFormula(cf) => format!("*[ChemicalFormula: {}]*", cf.formula),
+        Block::QrCode(_) => "*[QRCode]*".to_string(),
+        Block::Graph(g) => format!("*[Graph: {:?}]*", g.graph_type),
     }
 }
 
@@ -185,6 +191,14 @@ fn render_inlines(inlines: &[Inline], _mode: &MarkdownMode, assets: &[MediaAsset
             }
             Inline::Code(c) => {
                 parts.push(format!("`{}`", c.code));
+            }
+            Inline::Anchor(_) => {}
+            Inline::CrossReference(x) => {
+                parts.push(format!("[@{}]", x.target_id));
+            }
+            Inline::CitationGroup(c) => {
+                let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();
+                parts.push(format!("[@{}]", keys.join("; ")));
             }
             Inline::Superscript(inner) => {
                 parts.push(render_inlines(inner, _mode, assets));

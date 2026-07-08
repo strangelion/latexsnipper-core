@@ -160,6 +160,12 @@ fn block_to_plain_text(block: &Block) -> String {
         Block::PageBreak(_) => "[page break]".to_string(),
         Block::SectionBreak(sb) => format!("[section break: {:?}]", sb.kind),
         Block::HeaderFooter(hf) => format!("[header/footer: {:?}]", hf.kind),
+        Block::Bibliography(bb) => format!("[bibliography: {} entries]", bb.entries.len()),
+        Block::FormField(ff) => format!("[form field: {:?}]", ff.kind),
+        Block::Revision(r) => format!("[revision: {:?}]", r.kind),
+        Block::ChemicalFormula(cf) => format!("[chemical formula: {}]", cf.formula),
+        Block::QrCode(_) => "[qr code]".to_string(),
+        Block::Graph(g) => format!("[graph: {:?}]", g.graph_type),
     }
 }
 
@@ -189,6 +195,12 @@ fn inline_to_plain_text(inline: &Inline) -> String {
             format!("{} ({})", text, l.target)
         }
         Inline::Code(c) => c.code.clone(),
+        Inline::Anchor(a) => format!("[anchor: {}]", a.id),
+        Inline::CrossReference(x) => format!("[xref: {}]", x.target_id),
+        Inline::CitationGroup(c) => {
+            let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();
+            format!("[cite: {}]", keys.join(", "))
+        }
         Inline::Superscript(inner) | Inline::Subscript(inner) => inlines_to_plain_text(inner),
     }
 }
@@ -347,6 +359,14 @@ fn inlines_to_clipboard_html(inlines: &[Inline]) -> String {
                 format!("<a href=\"{}\">{}</a>", html_escape(&l.target), text)
             }
             Inline::Code(c) => format!("<code>{}</code>", html_escape(&c.code)),
+            Inline::Anchor(a) => format!("<a name=\"{}\"/>", a.id),
+            Inline::CrossReference(x) => {
+                format!("<a href=\"#{}\">{}</a>", x.target_id, x.display_text.as_deref().unwrap_or(&x.target_id))
+            }
+            Inline::CitationGroup(c) => {
+                let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();
+                format!("<cite>{}</cite>", keys.join("; "))
+            }
             Inline::Superscript(inner) => {
                 format!("<sup>{}</sup>", inlines_to_clipboard_html(inner))
             }

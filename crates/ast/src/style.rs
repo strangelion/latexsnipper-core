@@ -309,6 +309,21 @@ pub struct LayerInfo {
 }
 
 // ---------------------------------------------------------------------------
+// AccessibilityInfo
+// ---------------------------------------------------------------------------
+
+/// Accessibility information for content elements.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AccessibilityInfo {
+    pub alt_text: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub decorative: Option<bool>,
+    pub reading_order: Option<u32>,
+    pub language: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
 // ListStyle / BulletStyle / NumberingStyle
 // ---------------------------------------------------------------------------
 
@@ -341,4 +356,34 @@ pub enum ListStyle {
     Ordered(NumberingStyle),
     Task,
     Definition,
+}
+
+// ---------------------------------------------------------------------------
+// VectorPath / PathCommand
+// ---------------------------------------------------------------------------
+
+/// A vector path composed of drawing commands.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VectorPath {
+    pub commands: Vec<PathCommand>,
+}
+
+/// A single path command in a vector path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PathCommand {
+    MoveTo { x: f32, y: f32 },
+    LineTo { x: f32, y: f32 },
+    CurveTo { x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32 },
+    ClosePath,
+}
+
+// ---------------------------------------------------------------------------
+// ShapeGroup
+// ---------------------------------------------------------------------------
+
+/// A group of shapes with an optional transform.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShapeGroup {
+    pub shapes: Vec<super::block::ShapeBlock>,
+    pub transform: Option<super::style::Transform2D>,
 }

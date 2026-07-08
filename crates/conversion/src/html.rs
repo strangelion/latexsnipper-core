@@ -181,6 +181,39 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
                 hf.kind, hf.applies_to
             )
         }
+        Block::Bibliography(bb) => {
+            format!(
+                "<div class=\"bibliography\" title=\"{} entries\">[bibliography]</div>",
+                bb.entries.len()
+            )
+        }
+        Block::FormField(ff) => {
+            format!(
+                "<div class=\"form-field\" title=\"{:?}\">[form field]</div>",
+                ff.kind
+            )
+        }
+        Block::Revision(r) => {
+            format!(
+                "<div class=\"revision\" title=\"{:?}\">[revision]</div>",
+                r.kind
+            )
+        }
+        Block::ChemicalFormula(cf) => {
+            format!(
+                "<div class=\"chemical-formula\" title=\"{}\">[chemical formula]</div>",
+                cf.formula
+            )
+        }
+        Block::QrCode(_) => {
+            "<div class=\"qr-code\">[QR code]</div>".to_string()
+        }
+        Block::Graph(g) => {
+            format!(
+                "<div class=\"graph\" title=\"{:?}\">[graph]</div>",
+                g.graph_type
+            )
+        }
     }
 }
 
@@ -240,6 +273,16 @@ fn render_inlines(inlines: &[Inline], assets: &[MediaAsset]) -> String {
             }
             Inline::Code(c) => {
                 parts.push(format!("<code>{}</code>", xml_escape(&c.code)));
+            }
+            Inline::Anchor(a) => {
+                parts.push(format!("<a id=\"{}\"></a>", a.id));
+            }
+            Inline::CrossReference(x) => {
+                parts.push(format!("<a href=\"#{}\">{}</a>", x.target_id, x.display_text.as_deref().unwrap_or(&x.target_id)));
+            }
+            Inline::CitationGroup(c) => {
+                let keys: Vec<&str> = c.citations.iter().map(|ci| ci.key.as_str()).collect();
+                parts.push(format!("<cite>{}</cite>", keys.join("; ")));
             }
             Inline::Superscript(inner) => {
                 let text = render_inlines(inner, assets);
