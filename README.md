@@ -411,6 +411,8 @@ LaTeXSnipper Core uses ONNX models for formula detection/recognition and text de
 | TrOCR-DeiT | ~104 MB | Formula recognition (encoder+decoder) | [Microsoft TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT |
 | PP-OCRv6 Det | ~10 MB | Text detection | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
 | PP-OCRv6 Rec | ~21 MB | Text recognition (18709 chars: CN/EN/math/greek) | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
+| OpenOCR Mobile Det | ~9 MB | Text detection (OpenOCR mobile DBNet) | [OpenOCR](https://github.com/Topdu/OpenOCR) | Apache-2.0 |
+| OpenOCR Mobile Rec | ~21 MB | Text recognition (OpenOCR mobile CTC) | [OpenOCR](https://github.com/Topdu/OpenOCR) | Apache-2.0 |
 | PP-DocLayout v3 | ~13 MB | Document layout analysis (10 categories) | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 |
 | TATR Detection | ~34 MB | Table region detection (DETR-based) | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
 | TATR Structure | ~34 MB | Table structure recognition (rows/cols/cells) | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
@@ -423,7 +425,9 @@ models/
 ├── formula-det/yolov8-mfd/     # Formula detection (YOLOv8) — Stable
 ├── formula-rec/trocr-deit/     # Formula recognition (TrOCR) — Stable
 ├── text-det/v6-small/          # Text detection (PP-OCRv6) — Stable
+├── text-det/openocr-mobile/    # Text detection (OpenOCR mobile) — Experimental
 ├── text-rec/v6-small/          # Text recognition (PP-OCRv6) — Stable
+├── text-rec/openocr-mobile/    # Text recognition (OpenOCR mobile) — Experimental
 ├── layout/
 │   └── pp-layout-cdla/         # Document layout analysis (CDLA) — Stable
 ├── table-det/
@@ -443,6 +447,8 @@ models/
 | TrOCR-DeiT | Stable | Yes | models-v2.0.0 |
 | PP-OCRv6 Det (v6-small) | Stable | Yes | models-v2.0.0 |
 | PP-OCRv6 Rec (v6-small) | Stable | Yes | models-v2.0.0 |
+| OpenOCR Mobile Det | Experimental | No | models-v2.0.0 |
+| OpenOCR Mobile Rec | Experimental | No | models-v2.0.0 |
 | PP-DocLayout v3 | Experimental | No | models-v2.0.0 |
 | TATR Detection | Experimental | No | models-v2.0.0 |
 | TATR Structure | Experimental | No | models-v2.0.0 |

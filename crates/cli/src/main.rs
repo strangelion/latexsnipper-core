@@ -69,7 +69,6 @@ enum Commands {
     },
 
     /// Shorthand for 'recognize'
-    #[command(visible_alias = "rec")]
     Rec {
         /// Input image path
         #[arg(short = 'i', long)]
@@ -364,7 +363,7 @@ fn main() {
                 }
             };
 
-            eprintln!("Detected {} formulas", snipper.document().block_count());
+            eprintln!("Detected {} blocks", snipper.document().block_count());
 
             let resolved_format = resolve_format(&format, output.as_deref());
 

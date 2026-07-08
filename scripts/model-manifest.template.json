@@ -66,9 +66,25 @@
                                                               "modelType":  "dbnet",
                                                               "files":  [
                                                                             "inference.onnx",
+                                                                            "inference.yml",
                                                                             "config.json"
                                                                         ],
                                                               "zipFile":  "latexsnipper-text-det.zip"
+                                                          },
+                                                          {
+                                                              "id":  "openocr-mobile",
+                                                              "label":  "OpenOCR Mobile Text Detection",
+                                                              "adapter":  "dbnet-detection-v1",
+                                                              "modelType":  "dbnet",
+                                                              "source":  "Topdu/OpenOCR",
+                                                              "license":  "Apache-2.0",
+                                                              "files":  [
+                                                                            "model.onnx",
+                                                                            "inference.yml",
+                                                                            "inference.json",
+                                                                            "config.json"
+                                                                        ],
+                                                              "zipFile":  "latexsnipper-openocr-text-det.zip"
                                                           }
                                                        ]
                                      },
@@ -84,9 +100,25 @@
                                                               "modelType":  "crnn_ctc",
                                                               "files":  [
                                                                             "inference.onnx",
+                                                                            "inference.yml",
                                                                             "config.json"
                                                                         ],
                                                               "zipFile":  "latexsnipper-text-rec.zip"
+                                                          },
+                                                          {
+                                                              "id":  "openocr-mobile",
+                                                              "label":  "OpenOCR Mobile Text Recognition",
+                                                              "adapter":  "ctc-recognition-v1",
+                                                              "modelType":  "crnn_ctc",
+                                                              "source":  "Topdu/OpenOCR",
+                                                              "license":  "Apache-2.0",
+                                                              "files":  [
+                                                                            "model.onnx",
+                                                                            "inference.yml",
+                                                                            "inference.json",
+                                                                            "config.json"
+                                                                        ],
+                                                              "zipFile":  "latexsnipper-openocr-text-rec.zip"
                                                           }
                                                        ]
                                      },
@@ -99,8 +131,8 @@
                                                            {
                                                                "id":  "tatr-detection",
                                                                "label":  "TATR Detection (Microsoft Table Transformer)",
-                                                               "adapter":  "picodet-layout-v1",
-                                                               "modelType":  "picodet_layout",
+                                                               "adapter":  "detr-detection-v1",
+                                                               "modelType":  "tatr",
                                                                "source":  "microsoft/table-transformer-detection",
                                                                "license":  "MIT",
                                                                "files":  [
@@ -132,7 +164,23 @@
                                                                                 "config.json"
                                                                             ],
                                                                   "zipFile":  "latexsnipper-table-struct.zip",
-                                                                  "notes":  "DETR-based. Outputs 7 classes: no_object, table, column, row, column_header, row_header, spanning_cell. Best for academic PDFs."
+                                                                  "notes":  "DETR-based. Outputs 7 classes: table, column, row, column_header, row_header, spanning_cell, no_object. Best for academic PDFs."
+                                                              },
+                                                              {
+                                                                  "id":  "slanet-plus",
+                                                                  "label":  "SLANet Plus Table Structure",
+                                                                  "adapter":  "slanet-structure-v1",
+                                                                  "modelType":  "slanet",
+                                                                  "source":  "RapidAI/RapidTable",
+                                                                  "license":  "Apache-2.0",
+                                                                  "files":  [
+                                                                                "model.onnx",
+                                                                                "inference.yml",
+                                                                                "paddle_config.json",
+                                                                                "config.json"
+                                                                            ],
+                                                                  "zipFile":  "latexsnipper-slanet-plus.zip",
+                                                                  "notes":  "PaddleOCR/PP-Structure table structure backend used by OpenOCR/OpenDoc-style parsing."
                                                               }
                                                           ]
                                          },

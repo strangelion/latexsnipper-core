@@ -361,11 +361,13 @@ impl RecognizerNode {
         let session = get_or_create_session(ctx, "text_rec", &backend, &handle)?;
 
         let params = TextRecParams::from_config(&rec_model.config);
-        let (keys, first_char_id) = if let Some(chars) = session.get_character_list() {
-            (chars, 0)
-        } else {
-            load_keys(&rec_model.keys_path).unwrap_or((Vec::new(), 1))
-        };
+        let (keys, first_char_id) = load_keys(&rec_model.keys_path).unwrap_or_else(|_| {
+            session
+                .get_character_list()
+                .filter(|chars| !chars.is_empty())
+                .map(|chars| (chars, 0))
+                .unwrap_or((Vec::new(), 1))
+        });
 
         let mut blocks = Vec::new();
 

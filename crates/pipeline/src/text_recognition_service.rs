@@ -89,12 +89,13 @@ impl TextRecognitionService {
 
         // Load character keys
         let keys_path = config.pipeline_tokenizer_path(&variant_dir)?;
-        let (first_char_id, keys) = if let Some(chars) = session.get_character_list() {
-            (0, chars)
-        } else {
-            let (keys, first_char_id) = load_keys(&keys_path).unwrap_or((Vec::new(), 1));
-            (first_char_id, keys)
-        };
+        let (keys, first_char_id) = load_keys(&keys_path).unwrap_or_else(|_| {
+            session
+                .get_character_list()
+                .filter(|chars| !chars.is_empty())
+                .map(|chars| (chars, 0))
+                .unwrap_or((Vec::new(), 1))
+        });
 
         Some(Self {
             session: Arc::new(session),
@@ -114,28 +115,23 @@ impl TextRecognitionService {
         rect: &Rect,
         quad: Option<&Quad>,
     ) -> Result<String> {
-        let cropped = if let Some(q) = quad {
+        if let Some(q) = quad {
             let (tw, th) = q.warp_target_size();
             let padding = (th as f32 * 0.1).max(2.0);
-            operations::warp_quad_to_rect(image, q, tw.max(4), th.max(4), padding)
-        } else {
-            let x = rect.x as u32;
-            let y = rect.y as u32;
-            let w = rect.width as u32;
-            let h = rect.height as u32;
-            if w < 4 || h < 4 {
-                return Ok(String::new());
+            let warped = operations::warp_quad_to_rect(image, q, tw.max(4), th.max(4), padding);
+            let result = recognize_text_with_keys(
+                &warped,
+                self.session.as_ref().as_ref(),
+                &self.keys,
+                self.first_char_id,
+                &self.params,
+            )?;
+            if !result.text.trim().is_empty() {
+                return Ok(result.text);
             }
-            let pad_y = (h as f32 * 0.2).max(4.0) as u32;
-            let crop_y = y.saturating_sub(pad_y);
-            let crop_h = h + pad_y * 2;
-            let crop_y_end = (crop_y + crop_h).min(image.height());
-            let final_h = crop_y_end - crop_y;
-            operations::crop(
-                image,
-                Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32),
-            )
-        };
+        }
+
+        let cropped = crop_rect_with_padding(image, rect);
 
         let result = recognize_text_with_keys(
             &cropped,
@@ -147,4 +143,24 @@ impl TextRecognitionService {
 
         Ok(result.text)
     }
+}
+
+fn crop_rect_with_padding(image: &SnipperImage, rect: &Rect) -> SnipperImage {
+    let x = rect.x as u32;
+    let y = rect.y as u32;
+    let w = rect.width as u32;
+    let h = rect.height as u32;
+    if w < 4 || h < 4 {
+        return operations::crop(image, Rect::new(0.0, 0.0, 1.0, 1.0));
+    }
+    let pad_x = (w as f32 * 0.02).max(2.0) as u32;
+    let pad_y = (h as f32 * 0.2).max(4.0) as u32;
+    let crop_x = x.saturating_sub(pad_x);
+    let crop_y = y.saturating_sub(pad_y);
+    let crop_w = (w + pad_x * 2).min(image.width().saturating_sub(crop_x));
+    let crop_h = (h + pad_y * 2).min(image.height().saturating_sub(crop_y));
+    operations::crop(
+        image,
+        Rect::new(crop_x as f32, crop_y as f32, crop_w as f32, crop_h as f32),
+    )
 }

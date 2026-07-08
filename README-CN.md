@@ -276,6 +276,8 @@ LaTeXSnipper Core 使用 ONNX 模型进行公式检测/识别和文本检测/识
 | TrOCR-DeiT | ~104 MB | 公式识别（编码器+解码器） | [Microsoft TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT |
 | PP-OCRv6 Det | ~10 MB | 文本检测 | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
 | PP-OCRv6 Rec | ~21 MB | 文本识别（18709 字符：中/英/数学/希腊） | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
+| OpenOCR Mobile Det | ~9 MB | 文本检测（OpenOCR mobile DBNet） | [OpenOCR](https://github.com/Topdu/OpenOCR) | Apache-2.0 |
+| OpenOCR Mobile Rec | ~21 MB | 文本识别（OpenOCR mobile CTC） | [OpenOCR](https://github.com/Topdu/OpenOCR) | Apache-2.0 |
 | PP-DocLayout v3 | ~13 MB | 文档版式分析（10 类） | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 |
 | TATR Detection | ~34 MB | 表格区域检测（DETR 架构） | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
 | TATR Structure | ~34 MB | 表格结构识别（行列单元格） | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
@@ -288,7 +290,9 @@ models/
 ├── formula-det/yolov8-mfd/     # 公式检测 — 稳定
 ├── formula-rec/trocr-deit/     # 公式识别 — 稳定
 ├── text-det/v6-small/          # 文本检测 — 稳定
+├── text-det/openocr-mobile/    # 文本检测（OpenOCR mobile）— 实验
 ├── text-rec/v6-small/          # 文本识别 — 稳定
+├── text-rec/openocr-mobile/    # 文本识别（OpenOCR mobile）— 实验
 ├── layout/
 │   └── pp-layout-cdla/         # 文档版式分析（CDLA）— 稳定
 ├── table-det/
@@ -299,6 +303,22 @@ models/
 │   └── slanet-plus/            # 表格结构（替代后端）— 实验
 └── doc-ori/                    # 文档方向分类 — 实验
 ```
+
+### 模型支持状态
+
+| 模型 | 状态 | 默认 | Release |
+|---|---|---|---|
+| YOLOv8-MFD | 稳定 | 是 | models-v2.0.0 |
+| TrOCR-DeiT | 稳定 | 是 | models-v2.0.0 |
+| PP-OCRv6 Det (v6-small) | 稳定 | 是 | models-v2.0.0 |
+| PP-OCRv6 Rec (v6-small) | 稳定 | 是 | models-v2.0.0 |
+| OpenOCR Mobile Det | 实验 | 否 | models-v2.0.0 |
+| OpenOCR Mobile Rec | 实验 | 否 | models-v2.0.0 |
+| PP-DocLayout v3 | 实验 | 否 | models-v2.0.0 |
+| TATR Detection | 实验 | 否 | models-v2.0.0 |
+| TATR Structure | 实验 | 否 | models-v2.0.0 |
+| SLANet Plus | 实验 | 否 | models-v2.0.0 |
+| PP-LCNet（doc/textline ori） | 实验 | 否 | 仅 test-models |
 
 > 注意：`test-models/` 目录包含正在测试的模型，请勿修改。
 

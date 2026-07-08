@@ -151,7 +151,12 @@ pub fn recognize_text_with_keys(
 
     let input = Tensor::float32(
         &params.input_name,
-        vec![1, 3, params.target_h as usize, params.max_w as usize],
+        vec![
+            1,
+            3,
+            processed.height() as usize,
+            processed.width() as usize,
+        ],
         latexsnipper_image::operations::normalize(&processed, &params.mean, &params.std),
     );
     let outputs = session.run(&[input])?;
@@ -179,7 +184,10 @@ fn preprocess(image: &SnipperImage, params: &TextRecParams) -> (SnipperImage, u3
     let img_wh_ratio = w as f32 / h as f32;
     let default_wh_ratio: f32 = 320.0 / 48.0;
     let max_wh_ratio = default_wh_ratio.max(img_wh_ratio);
-    let target_w = (params.target_h as f32 * max_wh_ratio).round() as u32;
+    let target_w = (params.target_h as f32 * max_wh_ratio)
+        .round()
+        .min(params.max_w as f32)
+        .max(params.target_h as f32) as u32;
 
     // Calculate resized width maintaining aspect ratio
     let ratio = w as f32 / h as f32;
