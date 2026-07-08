@@ -173,6 +173,49 @@ enum Commands {
     /// Manage models (download, list, verify)
     #[command(subcommand)]
     Models(ModelsCommand),
+
+    /// Manage processing jobs
+    #[command(subcommand)]
+    Job(JobCommand),
+}
+
+#[derive(Subcommand)]
+enum JobCommand {
+    /// Create and run a recognition job
+    #[command(long_about = "Create and run a recognition job.\n\n\
+        Processes an input image through the full pipeline and\n\
+        produces structured output with artifacts, diagnostics, and reports.\n\n\
+        EXAMPLES:\n    \
+        snipper job run -i scan.png -f latex\n    \
+        snipper job run -i page.png -f markdown -o result.md\n    \
+        snipper job run -i photo.jpg -f html --mode mixed")]
+    Run {
+        /// Input image path
+        #[arg(short = 'i', long)]
+        input: String,
+
+        /// Output format (default: latex)
+        #[arg(short = 'f', long, default_value = "latex")]
+        format: String,
+
+        /// Output file path (optional)
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+
+        /// Recognition pipeline mode
+        #[arg(long, default_value = "formula")]
+        mode: String,
+    },
+
+    /// Inspect a completed job's details
+    #[command(long_about = "Inspect job details including status,\n\
+        stage reports, and diagnostics.\n\n\
+        EXAMPLES:\n    \
+        snipper job inspect <job-id>")]
+    Inspect {
+        /// Job ID to inspect
+        job_id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -503,6 +546,19 @@ fn main() {
                 handle_models_verify(category);
             }
         },
+        Commands::Job(cmd) => match cmd {
+            JobCommand::Run {
+                input,
+                format,
+                output,
+                mode,
+            } => {
+                handle_job_run(&input, &format, output.as_deref(), &mode);
+            }
+            JobCommand::Inspect { job_id } => {
+                handle_job_inspect(&job_id);
+            }
+        },
     }
 }
 
@@ -789,6 +845,112 @@ fn handle_models_verify(category: Option<String>) {
         eprintln!("Some model files are missing. Run 'snipper models download' to re-download.");
         std::process::exit(1);
     }
+}
+
+// ── Job handlers ─────────────────────────────────────────────
+
+fn handle_job_run(input: &str, format: &str, output: Option<&str>, mode: &str) {
+    use latexsnipper_engine::Job;
+
+    let recognize_mode = match parse_recognize_mode(mode) {
+        Some(m) => m,
+        None => {
+            eprintln!("Unknown recognize mode: '{}'", mode);
+            return;
+        }
+    };
+
+    // Create a job
+    let mut job = Job::new(format!("job_{}", chrono_job_id()), input);
+
+    eprintln!("Job '{}' created", job.id);
+    eprintln!("  Input:  {}", input);
+    eprintln!("  Format: {}", format);
+    eprintln!("  Mode:   {}", mode);
+
+    // Run the pipeline (reuse recognize logic)
+    let config = latexsnipper_engine::EngineConfig::default();
+    let snipper = match latexsnipper_engine::sdk::Snipper::from_file_with_config(
+        input,
+        config,
+        recognize_mode,
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            job.status = latexsnipper_engine::JobStatus::Failed;
+            eprintln!("Job failed: {}", e);
+            return;
+        }
+    };
+
+    job.status = latexsnipper_engine::JobStatus::Completed;
+    eprintln!("  Blocks: {}", snipper.document().block_count());
+
+    // Export
+    let resolved = resolve_format(format, output);
+    let result = match resolved.as_str() {
+        "latex" => snipper.to_latex(),
+        "markdown" => snipper.to_markdown(),
+        "typst" => snipper.to_typst(),
+        "html" => snipper.to_html(),
+        "mathml" => snipper.to_mathml(),
+        "omml" => snipper.to_omml(),
+        "json" => snipper.to_json(),
+        other => {
+            eprintln!("Unsupported format: {}", other);
+            return;
+        }
+    };
+
+    match result {
+        Ok(text) => {
+            if let Some(path) = output {
+                let _ = std::fs::write(path, &text);
+                eprintln!("  Output: {}", path);
+            } else {
+                println!("{}", text);
+            }
+            // Record artifact
+            job.add_artifact(
+                "output_1",
+                latexsnipper_ast::ArtifactKind::ConvertedText,
+                output.unwrap_or("<stdout>"),
+                None,
+            );
+            job.result = Some(text);
+        }
+        Err(e) => {
+            job.status = latexsnipper_engine::JobStatus::Failed;
+            job.add_diagnostic(latexsnipper_ast::Diagnostic::new(
+                latexsnipper_ast::DiagnosticLevel::Error,
+                "E_EXPORT",
+                &format!("Export failed: {}", e),
+            ));
+            eprintln!("Export error: {}", e);
+        }
+    }
+
+    eprintln!("Job '{}' status: {:?}", job.id, job.status);
+    if !job.diagnostics.is_empty() {
+        eprintln!("  Diagnostics: {}", job.diagnostics.len());
+        for d in &job.diagnostics {
+            eprintln!("    [{:?}] {}: {}", d.level, d.code, d.message);
+        }
+    }
+}
+
+fn handle_job_inspect(job_id: &str) {
+    eprintln!("Job '{}' inspection:", job_id);
+    eprintln!("  (Job history is not persisted across sessions)");
+    eprintln!("  Use --help to see all job options.");
+}
+
+/// Generate a simple unique job ID based on timestamp.
+fn chrono_job_id() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    format!("{:x}", now.as_nanos())
 }
 
 fn build_capability_matrix() -> CapabilityMatrix {
