@@ -130,94 +130,33 @@ jobs:
           fi
           echo "Version consistent: $VERSION"
 
-      - name: Publish foundation
+      - name: Publish crates
         run: |
-          cargo publish -p latexsnipper-foundation
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          publish() {
+            local crate=$1
+            echo "=== Publishing $crate ==="
+            cargo publish -p "$crate" 2>&1 | tee /tmp/pub.log; exit_code=$?
+            if [ $exit_code -ne 0 ] && grep -q "already uploaded" /tmp/pub.log; then
+              echo "Skipping $crate — already published"
+            else
+              exit $exit_code
+            fi
+            sleep 15
+          }
 
-      - name: Publish ast
-        run: |
-          cargo publish -p latexsnipper-ast
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish tensor
-        run: |
-          cargo publish -p latexsnipper-tensor
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish model
-        run: |
-          cargo publish -p latexsnipper-model
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish image
-        run: |
-          cargo publish -p latexsnipper-image
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish runtime
-        run: |
-          cargo publish -p latexsnipper-runtime
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish syntax
-        run: |
-          cargo publish -p latexsnipper-syntax
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish export
-        run: |
-          cargo publish -p latexsnipper-export
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish conversion
-        run: |
-          cargo publish -p latexsnipper-conversion
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish inference
-        run: |
-          cargo publish -p latexsnipper-inference
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish api-types
-        run: |
-          cargo publish -p latexsnipper-api-types
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish pipeline
-        run: |
-          cargo publish -p latexsnipper-pipeline
-          sleep 15
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish engine
-        run: |
-          cargo publish -p latexsnipper-engine
-          sleep 15
+          publish latexsnipper-foundation
+          publish latexsnipper-ast
+          publish latexsnipper-tensor
+          publish latexsnipper-model
+          publish latexsnipper-image
+          publish latexsnipper-runtime
+          publish latexsnipper-syntax
+          publish latexsnipper-export
+          publish latexsnipper-conversion
+          publish latexsnipper-inference
+          publish latexsnipper-api-types
+          publish latexsnipper-pipeline
+          publish latexsnipper-engine
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
