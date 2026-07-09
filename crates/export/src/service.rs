@@ -90,12 +90,14 @@ impl ExportService {
             VisualFormat::PlainText => TextGenerator.generate(&tree)?.into_bytes(),
         };
 
+        let mut diagnostics = tree.diagnostics.clone();
+        diagnostics.extend(doc.diagnostics.clone());
         Ok(ExportArtifact {
             format: format.extension().to_string(),
             primary_path: None,
             text: String::from_utf8(content).ok(),
             assets: Vec::new(),
-            diagnostics: Vec::new(),
+            diagnostics,
         })
     }
 

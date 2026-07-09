@@ -100,7 +100,7 @@ impl AssetExporter for SimpleAssetResolver {
             relative_path: filename,
             format: asset.format,
             mime_type: asset.mime_type.clone(),
-            checksum_sha256: asset.checksum_sha256.clone(),
+            checksum_sha256: asset.checksum.clone(),
         })
     }
 }

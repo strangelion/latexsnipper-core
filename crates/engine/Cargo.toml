@@ -19,6 +19,7 @@ latexsnipper-pipeline.workspace = true
 latexsnipper-model.workspace = true
 latexsnipper-api-types.workspace = true
 latexsnipper-conversion.workspace = true
+latexsnipper-export.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true

@@ -12,6 +12,7 @@ categories.workspace = true
 [dependencies]
 latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
+latexsnipper-export.workspace = true
 log.workspace = true
 serde.workspace = true
 quick-xml = "0.37"

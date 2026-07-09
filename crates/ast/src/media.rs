@@ -108,7 +108,8 @@ pub struct MediaAsset {
     pub height: Option<f32>,
     pub dpi: Option<f32>,
     pub color_space: Option<String>,
-    pub checksum_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checksum: Option<String>,
     pub alt_text: Option<String>,
 
     #[serde(default)]

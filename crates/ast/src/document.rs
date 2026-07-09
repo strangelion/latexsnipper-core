@@ -226,105 +226,215 @@ impl Document {
     /// Returns diagnostics for missing asset references.
     pub fn validate_asset_refs(&self) -> Vec<Diagnostic> {
         let mut diags = Vec::new();
-        let asset_ids: Vec<&AssetId> = self.assets.iter().map(|a| &a.id).collect();
-        for page in &self.pages {
-            for block in &page.blocks {
-                Self::check_block_asset_refs(block, &asset_ids, &mut diags);
+        let asset_ids: std::collections::HashSet<&AssetId> =
+            self.assets.iter().map(|a| &a.id).collect();
+        self.visit_asset_refs(|id| {
+            if !asset_ids.contains(id) {
+                diags.push(
+                    Diagnostic::warning(
+                        "W_MISSING_ASSET_REF",
+                        format!("Asset '{}' referenced but not in Document.assets", id.0),
+                    )
+                    .with_recoverable(true),
+                );
             }
-        }
+        });
         diags
     }
 
     /// Rewrite all asset references in blocks and inlines using the given remapping.
     pub fn rewrite_asset_refs(&mut self, remap: &std::collections::HashMap<AssetId, AssetId>) {
-        for page in &mut self.pages {
-            for block in &mut page.blocks {
-                Self::rewrite_block_asset_refs(block, remap);
+        self.visit_asset_refs_mut(|id| {
+            if let Some(new_id) = remap.get(id).cloned() {
+                *id = new_id;
+            }
+        });
+    }
+
+    /// Visit every asset reference in the document (blocks, inlines, page, source info).
+    /// Useful for validation, collection, and reporting.
+    pub fn visit_asset_refs<F: FnMut(&AssetId)>(&self, mut f: F) {
+        for page in &self.pages {
+            if let Some(ref id) = page.background_asset_id {
+                f(id);
+            }
+            if let Some(ref layout) = page.layout {
+                if let Some(ref id) = layout.background_asset_id {
+                    f(id);
+                }
+            }
+            for block in &page.blocks {
+                Self::visit_block_asset_refs(block, &mut f);
             }
         }
     }
 
-    fn rewrite_block_asset_refs(
-        block: &mut Block,
-        remap: &std::collections::HashMap<AssetId, AssetId>,
-    ) {
-        // Match each block type that has asset refs and rewrite them
+    fn visit_block_asset_refs<F: FnMut(&AssetId)>(block: &Block, f: &mut F) {
         match block {
-            Block::Figure(f) => {
-                if let Some(ref id) = f.asset_id {
-                    if let Some(new_id) = remap.get(id) {
-                        f.asset_id = Some(new_id.clone());
-                    }
-                }
-            }
-            Block::TextBox(tb) => {
-                for child in &mut tb.content {
-                    Self::rewrite_block_asset_refs(child, remap);
-                }
-            }
-            Block::Quote(q) => {
-                for child in &mut q.blocks {
-                    Self::rewrite_block_asset_refs(child, remap);
-                }
-            }
-            Block::Minipage(m) => {
-                for child in &mut m.content {
-                    Self::rewrite_block_asset_refs(child, remap);
-                }
-            }
-            Block::Float(fb) => {
-                for child in &mut fb.content {
-                    Self::rewrite_block_asset_refs(child, remap);
-                }
-            }
-            Block::Theorem(t) => {
-                for child in &mut t.content {
-                    Self::rewrite_block_asset_refs(child, remap);
-                }
-            }
-            Block::Proof(p) => {
-                for child in &mut p.content {
-                    Self::rewrite_block_asset_refs(child, remap);
+            Block::Figure(fig) => {
+                if let Some(ref id) = fig.asset_id {
+                    f(id);
                 }
             }
             Block::Chart(c) => {
                 if let Some(ref id) = c.asset_id {
-                    if let Some(new_id) = remap.get(id) {
-                        c.asset_id = Some(new_id.clone());
-                    }
+                    f(id);
                 }
             }
             Block::EmbeddedObject(eo) => {
                 if let Some(ref id) = eo.asset_id {
-                    if let Some(new_id) = remap.get(id) {
-                        eo.asset_id = Some(new_id.clone());
-                    }
+                    f(id);
                 }
                 if let Some(ref id) = eo.preview_asset_id {
-                    if let Some(new_id) = remap.get(id) {
-                        eo.preview_asset_id = Some(new_id.clone());
-                    }
+                    f(id);
                 }
                 if let Some(ref id) = eo.storage_ref {
-                    if let Some(new_id) = remap.get(id) {
-                        eo.storage_ref = Some(new_id.clone());
-                    }
+                    f(id);
+                }
+            }
+            Block::TextBox(tb) => {
+                for child in &tb.content {
+                    Self::visit_block_asset_refs(child, f);
+                }
+            }
+            Block::Quote(q) => {
+                for child in &q.blocks {
+                    Self::visit_block_asset_refs(child, f);
+                }
+            }
+            Block::Minipage(m) => {
+                for child in &m.content {
+                    Self::visit_block_asset_refs(child, f);
+                }
+            }
+            Block::Float(fl) => {
+                for child in &fl.content {
+                    Self::visit_block_asset_refs(child, f);
+                }
+            }
+            Block::Theorem(t) => {
+                for child in &t.content {
+                    Self::visit_block_asset_refs(child, f);
+                }
+            }
+            Block::Proof(p) => {
+                for child in &p.content {
+                    Self::visit_block_asset_refs(child, f);
                 }
             }
             _ => {}
         }
-        // Also rewrite inlines
+        // Check inlines for ImageInline.asset_id
+        for inline in block.inlines() {
+            if let crate::Inline::Image(img) = inline {
+                if let Some(ref id) = img.asset_id {
+                    f(id);
+                }
+            }
+        }
+        // Check source info
+        if let Some(source) = block.source() {
+            if let Some(ref id) = source.asset_id {
+                f(id);
+            }
+        }
+    }
+
+    /// Mutable version — visit every &mut AssetId for rewriting.
+    pub fn visit_asset_refs_mut<F: FnMut(&mut AssetId)>(&mut self, mut f: F) {
+        for page in &mut self.pages {
+            if let Some(ref mut id) = page.background_asset_id {
+                f(id);
+            }
+            if let Some(ref mut layout) = page.layout {
+                if let Some(ref mut id) = layout.background_asset_id {
+                    f(id);
+                }
+            }
+            for block in &mut page.blocks {
+                Self::visit_block_asset_refs_mut(block, &mut f);
+            }
+        }
+    }
+
+    fn visit_block_asset_refs_mut<F: FnMut(&mut AssetId)>(block: &mut Block, f: &mut F) {
+        match block {
+            Block::Figure(fig) => {
+                if let Some(ref mut id) = fig.asset_id {
+                    f(id);
+                }
+            }
+            Block::Chart(c) => {
+                if let Some(ref mut id) = c.asset_id {
+                    f(id);
+                }
+            }
+            Block::EmbeddedObject(eo) => {
+                if let Some(ref mut id) = eo.asset_id {
+                    f(id);
+                }
+                if let Some(ref mut id) = eo.preview_asset_id {
+                    f(id);
+                }
+                if let Some(ref mut id) = eo.storage_ref {
+                    f(id);
+                }
+            }
+            Block::TextBox(tb) => {
+                for child in &mut tb.content {
+                    Self::visit_block_asset_refs_mut(child, f);
+                }
+            }
+            Block::Quote(q) => {
+                for child in &mut q.blocks {
+                    Self::visit_block_asset_refs_mut(child, f);
+                }
+            }
+            Block::Minipage(m) => {
+                for child in &mut m.content {
+                    Self::visit_block_asset_refs_mut(child, f);
+                }
+            }
+            Block::Float(fl) => {
+                for child in &mut fl.content {
+                    Self::visit_block_asset_refs_mut(child, f);
+                }
+            }
+            Block::Theorem(t) => {
+                for child in &mut t.content {
+                    Self::visit_block_asset_refs_mut(child, f);
+                }
+            }
+            Block::Proof(p) => {
+                for child in &mut p.content {
+                    Self::visit_block_asset_refs_mut(child, f);
+                }
+            }
+            _ => {}
+        }
+        // Check inlines for ImageInline.asset_id
         if let Some(mut inlines) = block.inlines_mut() {
             for inline in inlines.iter_mut() {
                 if let crate::Inline::Image(img) = inline {
-                    if let Some(ref id) = img.asset_id {
-                        if let Some(new_id) = remap.get(id) {
-                            img.asset_id = Some(new_id.clone());
-                        }
+                    if let Some(ref mut id) = img.asset_id {
+                        f(id);
                     }
                 }
             }
         }
+        // Check source info
+        if let Some(source) = block.source_mut() {
+            if let Some(ref mut id) = source.asset_id {
+                f(id);
+            }
+        }
+    }
+
+    /// Collect all asset IDs referenced by blocks, pages, and inlines.
+    pub fn collect_asset_refs(&self) -> Vec<AssetId> {
+        let mut ids = Vec::new();
+        self.visit_asset_refs(|id| ids.push(id.clone()));
+        ids
     }
 
     /// Walk all inlines, migrate old Inline::Footnote to Inline::NoteRef + Document.notes.
@@ -438,73 +548,6 @@ impl Document {
         }
     }
 
-    /// Walk all FigureBlock and ImageInline asset references in the document
-    /// checking they exist in the assets list.
-    fn check_block_asset_refs(block: &Block, asset_ids: &[&AssetId], diags: &mut Vec<Diagnostic>) {
-        match block {
-            Block::Figure(f) => {
-                if let Some(ref aid) = f.asset_id {
-                    if !asset_ids.contains(&aid) {
-                        diags.push(
-                            Diagnostic::warning(
-                                "W_MISSING_ASSET_REF",
-                                format!("FigureBlock references missing asset {}", aid.0),
-                            )
-                            .with_recoverable(true),
-                        );
-                    }
-                }
-            }
-            Block::TextBox(tb) => {
-                for child in &tb.content {
-                    Self::check_block_asset_refs(child, asset_ids, diags);
-                }
-            }
-            Block::Quote(q) => {
-                for child in &q.blocks {
-                    Self::check_block_asset_refs(child, asset_ids, diags);
-                }
-            }
-            Block::Minipage(m) => {
-                for child in &m.content {
-                    Self::check_block_asset_refs(child, asset_ids, diags);
-                }
-            }
-            Block::Float(f) => {
-                for child in &f.content {
-                    Self::check_block_asset_refs(child, asset_ids, diags);
-                }
-            }
-            Block::Theorem(t) => {
-                for child in &t.content {
-                    Self::check_block_asset_refs(child, asset_ids, diags);
-                }
-            }
-            Block::Proof(p) => {
-                for child in &p.content {
-                    Self::check_block_asset_refs(child, asset_ids, diags);
-                }
-            }
-            _ => {}
-        }
-        // Also check inlines within this block
-        for inline in block.inlines() {
-            if let Inline::Image(img) = inline {
-                if let Some(ref aid) = img.asset_id {
-                    if !asset_ids.contains(&aid) {
-                        diags.push(
-                            Diagnostic::warning(
-                                "W_MISSING_ASSET_REF",
-                                format!("ImageInline references missing asset {}", aid.0),
-                            )
-                            .with_recoverable(true),
-                        );
-                    }
-                }
-            }
-        }
-    }
-
     /// Migrate legacy `image_data` base64 strings to proper `MediaAsset` entries.
     ///
     /// Walks all blocks and inlines, and for every `FigureBlock` or `ImageInline` that
@@ -547,7 +590,7 @@ impl Document {
                             height: None,
                             dpi: None,
                             color_space: None,
-                            checksum_sha256: None,
+                            checksum: None,
                             alt_text: f.caption.clone(),
                             metadata: Default::default(),
                         });
@@ -613,7 +656,7 @@ impl Document {
                                 height: None,
                                 dpi: None,
                                 color_space: None,
-                                checksum_sha256: None,
+                                checksum: None,
                                 alt_text: img.alt_text.clone(),
                                 metadata: Default::default(),
                             });
@@ -658,9 +701,9 @@ impl Document {
         // 3. Compute content hashes (for dedup — not cryptographic)
         if options.compute_checksum {
             for asset in &mut self.assets {
-                if asset.checksum_sha256.is_none() {
+                if asset.checksum.is_none() {
                     if let Ok(bytes) = resolve_asset_bytes(asset) {
-                        asset.checksum_sha256 = Some(compute_content_hash(&bytes));
+                        asset.checksum = Some(compute_content_hash(&bytes));
                     }
                 }
             }
@@ -674,10 +717,7 @@ impl Document {
             let mut dedup_map: std::collections::HashMap<String, AssetId> =
                 std::collections::HashMap::new();
             for asset in self.assets.drain(..) {
-                let key = asset
-                    .checksum_sha256
-                    .clone()
-                    .unwrap_or_else(|| asset.id.0.clone());
+                let key = asset.checksum.clone().unwrap_or_else(|| asset.id.0.clone());
                 if let Some(existing) = dedup_map.get(&key) {
                     remap.insert(asset.id.clone(), existing.clone());
                     diags.push(
@@ -721,6 +761,11 @@ fn asset_format_to_mime(format: &crate::AssetFormat) -> Option<String> {
     }
 }
 
+/// Resolve asset bytes for checksum computation.
+///
+/// For `InlineBase64`, this returns the raw base64 text bytes (not decoded).
+/// Callers who need a checksum over the actual image content must first
+/// base64-decode the string before hashing.
 fn resolve_asset_bytes(asset: &crate::MediaAsset) -> Result<Vec<u8>, String> {
     match &asset.storage {
         crate::AssetStorage::InlineBase64 { data } => Ok(data.as_bytes().to_vec()),

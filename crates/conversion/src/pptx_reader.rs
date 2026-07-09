@@ -274,7 +274,7 @@ fn parse_slide_body(
                                         height: None,
                                         dpi: None,
                                         color_space: None,
-                                        checksum_sha256: None,
+                                        checksum: None,
                                         alt_text: None,
                                         metadata: Default::default(),
                                     });

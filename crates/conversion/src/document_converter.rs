@@ -1,8 +1,10 @@
 use latexsnipper_ast::{
     Block, Document, ExportArtifact, Formula, FormulaBlock, FormulaSource, NodeIdGenerator, Page,
 };
+use latexsnipper_export::render_tree::RenderTree;
 use latexsnipper_foundation::Result;
 
+use crate::converter::collect_converter_diagnostics;
 use crate::converter::Converter;
 use crate::export_format::ExportFormat;
 use crate::{
@@ -118,13 +120,23 @@ impl DocumentConverter {
     pub fn convert_artifact(&self, doc: &Document) -> std::result::Result<ExportArtifact, String> {
         let text = self.convert(doc).map_err(|e| e.to_string())?;
         let format_str = self.format.name().to_string();
+
+        // Collect diagnostics from all sources
+        let mut diagnostics = doc.diagnostics.clone();
+
+        // 1. RenderTree warns about unsupported blocks in visual export
+        let tree = RenderTree::from_document(doc);
+        diagnostics.extend(tree.diagnostics);
+
+        // 2. Converter-level diagnostics for placeholder-rendered blocks
+        diagnostics.extend(collect_converter_diagnostics(doc));
+
         Ok(ExportArtifact {
             format: format_str,
             primary_path: None,
             text: Some(text),
             assets: Vec::new(),
-            // semantic converters don't produce non-exported assets yet
-            diagnostics: doc.diagnostics.clone(),
+            diagnostics,
         })
     }
 

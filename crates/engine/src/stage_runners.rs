@@ -4,8 +4,8 @@
 //! and produces a `StageReport` that can be attached to a `Job`.
 
 use latexsnipper_ast::{
-    ArtifactEntry, ArtifactKind, ArtifactManifest, Diagnostic, DiagnosticLevel, EventRecord,
-    JobRoot, StageKind, StageReport, StageRunner, StageSpec, StageStatus,
+    ArtifactEntry, ArtifactKind, ArtifactManifest, Diagnostic, DiagnosticLevel, Document,
+    EventRecord, JobRoot, StageKind, StageReport, StageRunner, StageSpec, StageStatus,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -83,23 +83,88 @@ impl StageRunner for ConvertStage {
         let now = Some(minimal_timestamp());
         let start = std::time::Instant::now();
         let mut diags = Vec::new();
+        let mut output_artifacts = Vec::new();
 
-        // Check if input source exists and report its metadata
+        // Try to read Document AST from input artifacts
+        let format = spec
+            .options
+            .get("target_format")
+            .and_then(|v| v.as_str())
+            .unwrap_or("latex");
+
         if let Some(src) = &spec.input.source {
-            match std::fs::metadata(src) {
-                Ok(meta) => {
-                    diags.push(Diagnostic::new(
-                        DiagnosticLevel::Info,
-                        "I_INPUT_FOUND",
-                        format!("Input source '{}' ({} bytes)", src, meta.len()),
-                    ));
+            match std::fs::read_to_string(src) {
+                Ok(content) => {
+                    // Try to read as Document JSON
+                    match serde_json::from_str::<Document>(&content) {
+                        Ok(doc) => {
+                            let format_label = match format {
+                                "md" | "markdown" => "markdown",
+                                "tex" | "latex" => "latex",
+                                "html" => "html",
+                                "typ" | "typst" => "typst",
+                                _ => format,
+                            };
+                            let out_path = format!(
+                                "{}/{}.{}",
+                                spec.output.subdir, spec.stage_id, format_label
+                            );
+                            let mut text = String::new();
+                            let mut conv_diags = diags.clone();
+
+                            // Try DocumentConverter
+                            use latexsnipper_conversion::document_converter::{
+                                DocumentConverter, OutputFormat,
+                            };
+                            let out_fmt = match format_label {
+                                "latex" => OutputFormat::Latex,
+                                "typst" => OutputFormat::Typst,
+                                "markdown" => OutputFormat::MarkdownBlock,
+                                "html" => OutputFormat::Html,
+                                _ => OutputFormat::Latex,
+                            };
+                            match DocumentConverter::new(out_fmt).convert_artifact(&doc) {
+                                Ok(artifact) => {
+                                    if let Some(t) = &artifact.text {
+                                        text = t.clone();
+                                    }
+                                    conv_diags.extend(artifact.diagnostics);
+                                }
+                                Err(e) => {
+                                    diags.push(
+                                        Diagnostic::new(
+                                            DiagnosticLevel::Warning,
+                                            "W_CONVERT_FAILED",
+                                            format!("Converter error: {}", e),
+                                        )
+                                        .with_recoverable(true),
+                                    );
+                                }
+                            }
+
+                            if !text.is_empty() {
+                                let _ = std::fs::write(&out_path, &text);
+                                output_artifacts.push(out_path);
+                            }
+                            diags.extend(conv_diags);
+                        }
+                        Err(e) => {
+                            diags.push(Diagnostic::new(
+                                DiagnosticLevel::Info,
+                                "I_SOURCE_NOT_AST",
+                                format!("Input is not Document JSON: {}", e),
+                            ));
+                            // Fall back to treating source as direct text
+                            output_artifacts.push(src.clone());
+                        }
+                    }
                 }
                 Err(e) => {
                     diags.push(
                         Diagnostic::new(
                             DiagnosticLevel::Warning,
                             "W_INPUT_MISSING",
-                            format!("Input source '{}' not accessible: {}", src, e),
+                            format!("Cannot read input source '{}': {}", src, e),
                         )
                         .with_recoverable(true),
                     );
@@ -111,12 +176,16 @@ impl StageRunner for ConvertStage {
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Convert,
-            status: StageStatus::Succeeded,
+            status: if !output_artifacts.is_empty() || !diags.iter().any(|d| !d.recoverable) {
+                StageStatus::Succeeded
+            } else {
+                StageStatus::Failed
+            },
             started_at: now.clone(),
             finished_at: now,
             elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
-            output_artifacts: vec![format!("{}/converted", spec.stage_id)],
+            output_artifacts,
             diagnostics: diags,
         })
     }
@@ -138,23 +207,63 @@ impl StageRunner for ExportStage {
         let now = Some(minimal_timestamp());
         let start = std::time::Instant::now();
         let mut diags = Vec::new();
+        let mut output_artifacts = Vec::new();
 
-        // Check if input source exists and report its metadata
+        let format = spec
+            .options
+            .get("visual_format")
+            .and_then(|v| v.as_str())
+            .unwrap_or("svg");
+
         if let Some(src) = &spec.input.source {
-            match std::fs::metadata(src) {
-                Ok(meta) => {
-                    diags.push(Diagnostic::new(
-                        DiagnosticLevel::Info,
-                        "I_INPUT_FOUND",
-                        format!("Export input source '{}' ({} bytes)", src, meta.len()),
-                    ));
-                }
+            match std::fs::read_to_string(src) {
+                Ok(content) => match serde_json::from_str::<Document>(&content) {
+                    Ok(doc) => {
+                        let out_path =
+                            format!("{}/{}.{}", spec.output.subdir, spec.stage_id, format);
+                        let visual_fmt = match format {
+                            "svg" => latexsnipper_export::VisualFormat::Svg,
+                            "pdf" => latexsnipper_export::VisualFormat::Pdf,
+                            "txt" | "text" => latexsnipper_export::VisualFormat::PlainText,
+                            _ => latexsnipper_export::VisualFormat::Svg,
+                        };
+                        match latexsnipper_export::ExportService::export(&doc, visual_fmt) {
+                            Ok(artifact) => {
+                                if let Some(t) = &artifact.text {
+                                    let _ = std::fs::write(&out_path, t);
+                                    output_artifacts.push(out_path);
+                                }
+                                diags.extend(artifact.diagnostics);
+                            }
+                            Err(e) => {
+                                diags.push(
+                                    Diagnostic::new(
+                                        DiagnosticLevel::Warning,
+                                        "W_EXPORT_FAILED",
+                                        format!("Export error: {}", e),
+                                    )
+                                    .with_recoverable(true),
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        diags.push(
+                            Diagnostic::new(
+                                DiagnosticLevel::Warning,
+                                "W_SOURCE_NOT_AST",
+                                format!("Cannot parse Document JSON: {}", e),
+                            )
+                            .with_recoverable(true),
+                        );
+                    }
+                },
                 Err(e) => {
                     diags.push(
                         Diagnostic::new(
                             DiagnosticLevel::Warning,
                             "W_INPUT_MISSING",
-                            format!("Export input source '{}' not accessible: {}", src, e),
+                            format!("Cannot read input source '{}': {}", src, e),
                         )
                         .with_recoverable(true),
                     );
@@ -166,12 +275,16 @@ impl StageRunner for ExportStage {
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Export,
-            status: StageStatus::Succeeded,
+            status: if !output_artifacts.is_empty() {
+                StageStatus::Succeeded
+            } else {
+                StageStatus::Failed
+            },
             started_at: now.clone(),
             finished_at: now,
             elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
-            output_artifacts: vec![format!("{}/exported", spec.stage_id)],
+            output_artifacts,
             diagnostics: diags,
         })
     }

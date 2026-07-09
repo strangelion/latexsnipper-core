@@ -344,7 +344,7 @@ fn parse_inline_text(text: &str, assets: &mut Vec<MediaAsset>) -> Vec<Inline> {
                         height: None,
                         dpi: None,
                         color_space: None,
-                        checksum_sha256: None,
+                        checksum: None,
                         alt_text: Some(alt.clone()),
                         metadata: Default::default(),
                     });

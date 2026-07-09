@@ -131,7 +131,7 @@ pub fn parse_html_to_document(html: &str) -> Document {
                                 height: None,
                                 dpi: None,
                                 color_space: None,
-                                checksum_sha256: None,
+                                checksum: None,
                                 alt_text: Some(alt.clone()),
                                 metadata: Default::default(),
                             });
@@ -614,7 +614,7 @@ fn parse_inline_html(html: &str, assets: &mut Vec<MediaAsset>) -> Vec<Inline> {
                                 height: None,
                                 dpi: None,
                                 color_space: None,
-                                checksum_sha256: None,
+                                checksum: None,
                                 alt_text: Some(alt.clone()),
                                 metadata: Default::default(),
                             });
