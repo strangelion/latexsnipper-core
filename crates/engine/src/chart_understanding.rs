@@ -2,9 +2,7 @@ use latexsnipper_ast::{
     ChartAxis, ChartBlock, ChartData, ChartLegend, ChartSeries, ChartType, Diagnostic,
     DiagnosticLevel, ProviderReport,
 };
-use latexsnipper_runtime::api_provider::{
-    ApiProviderConfig, PromptPreset, PromptProfile,
-};
+use latexsnipper_runtime::api_provider::{ApiProviderConfig, PromptPreset, PromptProfile};
 use latexsnipper_runtime::RemoteApiProvider;
 
 /// Result of chart understanding.
