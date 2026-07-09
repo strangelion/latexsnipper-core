@@ -61,7 +61,10 @@ fn test_fixture_markdown() {
     let md = std::fs::read_to_string(path).expect("Markdown fixture should be readable");
     let doc = parse_markdown_to_document(&md);
     assert!(doc.block_count() > 0, "Markdown should parse to blocks");
-    assert!(!doc.assets.is_empty(), "Markdown fixture with image should produce MediaAssets");
+    assert!(
+        !doc.assets.is_empty(),
+        "Markdown fixture with image should produce MediaAssets"
+    );
 }
 
 #[test]
@@ -70,7 +73,10 @@ fn test_fixture_html() {
     let html = std::fs::read_to_string(path).expect("HTML fixture should be readable");
     let doc = parse_html_to_document(&html);
     assert!(doc.block_count() > 0, "HTML should parse to blocks");
-    assert!(!doc.assets.is_empty(), "HTML fixture with image should produce MediaAssets");
+    assert!(
+        !doc.assets.is_empty(),
+        "HTML fixture with image should produce MediaAssets"
+    );
 }
 
 #[test]
