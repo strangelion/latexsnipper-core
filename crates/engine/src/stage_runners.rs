@@ -221,6 +221,9 @@ impl StageRunner for ConvertStage {
         let mut output_artifacts = Vec::new();
         let mut produced_artifacts = Vec::new();
 
+        std::fs::create_dir_all(&job_root.converted_dir)
+            .map_err(|e| format!("Create converted dir: {}", e))?;
+
         // Try to read Document AST from input artifacts
         let format = spec
             .options
@@ -371,6 +374,9 @@ impl StageRunner for ExportStage {
         let mut diags = Vec::new();
         let mut output_artifacts = Vec::new();
         let mut produced_artifacts = Vec::new();
+
+        std::fs::create_dir_all(&job_root.exported_dir)
+            .map_err(|e| format!("Create exported dir: {}", e))?;
 
         let format = spec
             .options

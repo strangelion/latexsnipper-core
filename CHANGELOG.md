@@ -189,7 +189,7 @@ For full details, see the per-crate documentation and docs/ast.md.
 
 - **v8 Asset Visitor & Runtime Closure (PR 1–6)**
   - **PR1**: `Document::visit_asset_refs()`/`visit_asset_refs_mut()`/`collect_asset_refs()` — unified asset reference visitor covering Page/Chart/EmbeddedObject/SourceInfo; `validate_asset_refs()` and `rewrite_asset_refs()` refactored to use visitor (eliminates duplicate block-walk code)
-  - **PR2**: `MediaAsset.checksum_sha256` renamed to `checksum` — field name matches std-only FNV content hash; updated 5 reader/parser files (docx/pptx/html/markdown/asset_resolver)
+  - **PR2**: `MediaAsset.checksum_sha256` renamed to `checksum` — now computed via SHA-256 with base64 decode; updated 5 reader/parser files (docx/pptx/html/markdown/asset_resolver)
   - **PR3**: `ExportService::export()` now returns `tree.diagnostics` + `doc.diagnostics` instead of `Vec::new()` — `W_BLOCK_DOWNGRADED` warnings reach final `ExportArtifact`
   - **PR4**: `ConvertStage` real execution — reads Document AST JSON from `spec.input.source`, calls `DocumentConverter::convert_artifact()` with target format from `spec.options`, writes converted output file
   - **PR5**: `ExportStage` real execution — reads Document AST JSON, calls `ExportService::export()` with visual format from `spec.options`, writes exported output file

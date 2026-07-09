@@ -94,12 +94,12 @@ jobs:
             latexsnipper-foundation \
             latexsnipper-ast \
             latexsnipper-tensor \
-            latexsnipper-image \
-            latexsnipper-syntax \
-            latexsnipper-conversion \
-            latexsnipper-export \
             latexsnipper-model \
+            latexsnipper-image \
             latexsnipper-runtime \
+            latexsnipper-syntax \
+            latexsnipper-export \
+            latexsnipper-conversion \
             latexsnipper-inference \
             latexsnipper-api-types \
             latexsnipper-pipeline \
@@ -146,8 +146,18 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
+      - name: Publish model
+        run: cargo publish -p latexsnipper-model
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
       - name: Publish image
         run: cargo publish -p latexsnipper-image
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish runtime
+        run: cargo publish -p latexsnipper-runtime
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
@@ -156,23 +166,13 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      - name: Publish conversion
-        run: cargo publish -p latexsnipper-conversion
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
       - name: Publish export
         run: cargo publish -p latexsnipper-export
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      - name: Publish model
-        run: cargo publish -p latexsnipper-model
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Publish runtime
-        run: cargo publish -p latexsnipper-runtime
+      - name: Publish conversion
+        run: cargo publish -p latexsnipper-conversion
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
@@ -227,12 +227,6 @@ jobs:
           body: |
             ## Install
 
-            ### From crates.io
-
-            ```bash
-            cargo install latexsnipper-cli
-            ```
-
             ### From Binary
 
             Download the archive for your platform and extract it.
@@ -241,7 +235,7 @@ jobs:
 
             ```toml
             [dependencies]
-            latexsnipper-pipeline = "${{ steps.version.outputs.version }}"
+            latexsnipper-pipeline = "2.0.0"
             ```
 
             ## Usage
