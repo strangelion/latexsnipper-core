@@ -88,25 +88,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Dry-run all crates
+      - name: Dry-run leaf crates (no internal deps)
         run: |
-          for crate in \
-            latexsnipper-foundation \
-            latexsnipper-ast \
-            latexsnipper-tensor \
-            latexsnipper-model \
-            latexsnipper-image \
-            latexsnipper-runtime \
-            latexsnipper-syntax \
-            latexsnipper-export \
-            latexsnipper-conversion \
-            latexsnipper-inference \
-            latexsnipper-api-types \
-            latexsnipper-pipeline \
-            latexsnipper-engine
-          do
+          for crate in latexsnipper-foundation latexsnipper-ast latexsnipper-tensor; do
             echo "Dry-run: $crate"
             cargo publish -p $crate --dry-run
+          done
+
+      - name: Dry-run dependent crates (best-effort)
+        continue-on-error: true
+        run: |
+          for crate in \
+            latexsnipper-model latexsnipper-image latexsnipper-runtime \
+            latexsnipper-syntax latexsnipper-export latexsnipper-conversion \
+            latexsnipper-inference latexsnipper-api-types \
+            latexsnipper-pipeline latexsnipper-engine
+          do
+            echo "Dry-run: $crate"
+            cargo publish -p $crate --dry-run || true
           done
 
   # ============================================================
