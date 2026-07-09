@@ -227,7 +227,7 @@ jobs:
   # ============================================================
   release-cli:
     name: Release CLI
-    needs: [build-cli, test-sdk]
+    needs: [build-cli, publish-crates]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

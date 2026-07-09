@@ -342,14 +342,14 @@ crates/
 
 ### Install CLI
 
-```bash
-# From git (recommended)
-cargo install --git https://github.com/strangelion/latexsnipper-core snipper
+CLI is not published to crates.io for 2.0.0. Recommended installation from pre-built binaries or source:
 
-# Or build from source
+```bash
+# Build from source
 git clone https://github.com/strangelion/latexsnipper-core
 cd latexsnipper-core
 cargo build --release -p latexsnipper-cli
+# Binary at: target/release/snipper.exe (Windows) or target/release/snipper (Linux/macOS)
 ```
 
 ### PDF Support

@@ -119,7 +119,9 @@ pub enum PromptTask {
 /// Named presets for well-known prompt profiles.
 ///
 /// Each preset comes with built-in system prompts, instructions,
-/// output schemas, and sensible defaults. Use `PromptProfile::from_preset()`
+/// and sensible defaults. Presets that require structured output
+/// (e.g., chart extraction, diagram description) also include
+/// a JSON Schema. Use `PromptProfile::from_preset()`
 /// to create a profile, then override fields with builder methods.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PromptPreset {
