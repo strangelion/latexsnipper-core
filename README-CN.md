@@ -241,7 +241,9 @@ crates/
 
 ```bash
 # 从 crates.io 安装
-cargo install latexsnipper-cli
+# 从源码构建
+cargo build --release -p latexsnipper-cli
+# 或从 GitHub Release 下载预编译二进制
 
 # 或从源码构建
 cargo build --release -p latexsnipper-cli

@@ -149,37 +149,47 @@ impl PromptProfile {
     pub fn from_preset(preset: PromptPreset) -> Self {
         match preset {
             PromptPreset::ChartExtraction => Self {
-                id: "chart-extraction-v1".to_string(),
+                id: "chart-extraction-v2".to_string(),
                 task: PromptTask::ChartExtraction,
-                label: "Chart Data Extraction".to_string(),
+                label: "Structured Chart Data Extraction".to_string(),
                 system: Some(
-                    "You are a chart analysis assistant. Extract the chart data \
-                     precisely from the provided chart image. Return ONLY valid JSON."
+                    "You are an expert data extraction system specialized in chart analysis. \
+                     Given a chart image, you must extract the underlying data with \
+                     perfect numerical accuracy. Follow these rules:\n\
+                     1. Identify the chart type first (bar, line, pie, scatter, area).\n\
+                     2. Read axis labels, tick marks, and gridlines to determine scales.\n\
+                     3. Extract every visible data point as precise numeric values.\n\
+                     4. For bar/line charts: identify series names from the legend.\n\
+                     5. For pie charts: extract each slice's label, value, and percentage.\n\
+                     6. If axis values are ambiguous, use your best estimate and mark with ~.\n\
+                     7. Return ONLY valid JSON — no preamble, no explanation."
                         .to_string(),
                 ),
                 instruction: [
-                    "Analyze this chart image and extract its data as JSON with this exact structure:",
+                    "Analyze the chart image and respond with JSON following this exact schema:",
                     "{",
-                    r#"  "chart_type": "bar|line|pie|scatter|area|unknown","#,
-                    r#"  "title": "chart title or empty string","#,
-                    r#"  "x_axis": { "label": "...", "min": null, "max": null },"#,
-                    r#"  "y_axis": { "label": "...", "min": null, "max": null },"#,
-                    "  \"series\": [",
-                    r#"    { "name": "Series1", "values": [1.0, 2.0, 3.0] }"#,
-                    "  ],",
-                    r#"  "labels": ["Cat1", "Cat2", "Cat3"],"#,
-                    r#"  "legend": { "visible": true, "position": "top" }"#,
+                    r#"  "chart_type": "bar" | "line" | "pie" | "scatter" | "area" | "unknown","#,
+                    r#"  "title": "The chart title, or empty string if none","#,
+                    r#"  "x_axis": { "label": "X-axis label", "min": 0.0, "max": 100.0 },"#,
+                    r#"  "y_axis": { "label": "Y-axis label", "min": 0.0, "max": 50.0 },"#,
+                    r#"  "series": [{ "name": "Series A", "values": [10.5, 20.3, 30.1] }], "#,
+                    r#"  "labels": ["Q1", "Q2", "Q3"],"#,
+                    r#"  "legend": { "visible": true, "position": "top" | "bottom" | "right" | "none" }"#,
                     "}",
                     "",
-                    "Use numeric values (not strings) for data points.",
-                    "If a field is not visible in the image, use null or empty array.",
+                    "Requirements:",
+                    "- All numeric values must be f64 numbers, not strings.",
+                    "- Use null for any unknown/unreadable field.",
+                    "- If the chart has no legend, set legend.visible = false.",
+                    "- Round decimal values to at most 2 decimal places.",
+                    "- If the image is not a chart, set chart_type = \"unknown\" and leave other fields empty/null.",
                 ]
                 .join("\n"),
                 output_schema: Some(serde_json::json!({
                     "type": "object",
-                    "required": ["chart_type", "title", "series", "labels"],
+                    "required": ["chart_type", "title", "series"],
                     "properties": {
-                        "chart_type": { "type": "string" },
+                        "chart_type": { "type": "string", "enum": ["bar", "line", "pie", "scatter", "area", "unknown"] },
                         "title": { "type": "string" },
                         "x_axis": {
                             "type": "object",
@@ -201,6 +211,7 @@ impl PromptProfile {
                             "type": "array",
                             "items": {
                                 "type": "object",
+                                "required": ["name", "values"],
                                 "properties": {
                                     "name": { "type": "string" },
                                     "values": { "type": "array", "items": { "type": "number" } }
@@ -218,67 +229,123 @@ impl PromptProfile {
                     }
                 })),
                 examples: Vec::new(),
-                temperature: Some(0.1),
+                temperature: Some(0.05),
                 max_tokens: Some(2048),
             },
 
             PromptPreset::DiagramDescription => Self {
-                id: "diagram-extraction-v1".to_string(),
+                id: "diagram-extraction-v2".to_string(),
                 task: PromptTask::DiagramDescription,
-                label: "Diagram Description".to_string(),
+                label: "Structured Diagram Description".to_string(),
                 system: Some(
-                    "You are a diagram analysis assistant. Extract shapes, text, \
-                     and connections from the provided diagram image. Return ONLY valid JSON."
+                    "You are an expert diagram analysis system. Given a diagram or flowchart image, \
+                     you must extract every visual element: shapes, text labels, connections, \
+                     and their spatial relationships. Follow these rules:\n\
+                     1. Identify each distinct shape: rectangle (process), diamond (decision), \
+                        ellipse (start/end), parallelogram (I/O), arrow, line, text.\n\
+                     2. Assign a unique ID to each shape.\n\
+                     3. Extract visible text labels verbatim.\n\
+                     4. Identify connections (arrows/lines) between shapes, including arrow direction.\n\
+                     5. Use normalized coordinates (0-1000) if exact pixels are unclear.\n\
+                     6. Return ONLY valid JSON — no preamble or explanation."
                         .to_string(),
                 ),
                 instruction: [
-                    "Analyze this diagram image and extract its structure as JSON:",
+                    "Analyze this diagram image and respond with JSON following this exact schema:",
                     "{",
                     r#"  "shapes": ["#,
                     "    {",
-                    r#"      "shape_type": "rectangle|ellipse|diamond|arrow|line|text|custom","#,
                     r#"      "id": "shape-1","#,
-                    r#"      "text": "label text","#,
-                    r#"      "x": 100, "y": 200, "width": 80, "height": 40"#,
+                    r#"      "type": "rectangle" | "ellipse" | "diamond" | "parallelogram" | "arrow" | "line" | "text" | "custom","#,
+                    r#"      "x": 100, "y": 200,"#,
+                    r#"      "width": 80, "height": 40,"#,
+                    r#"      "label": "Process Name","#,
+                    r#"      "style": { "fill": "4CAF50", "stroke": "333333", "stroke_width": 2 }"#,
                     "    }",
                     "  ],",
-                    "  \"connections\": [",
+                    r#"  "connections": ["#,
                     "    {",
                     r#"      "from_id": "shape-1", "to_id": "shape-2","#,
-                    r#"      "label": "connects to","#,
-                    r#"      "type": "arrow|line""#,
+                    r#"      "label": "transition condition","#,
+                    r#"      "type": "arrow" | "line""#,
                     "    }",
                     "  ]",
                     "}",
                     "",
-                    "Assign unique IDs. Use null for optional fields.",
+                    "Rules:",
+                    "- Every shape must have a unique id.",
+                    "- Coordinates x, y refer to the top-left corner.",
+                    "- Use null for any unknown attribute.",
+                    "- If a shape type is ambiguous, use your best judgment.",
+                    "- For connection type: \"arrow\" indicates direction, \"line\" indicates no direction.",
                 ]
                 .join("\n"),
                 output_schema: Some(serde_json::json!({
                     "type": "object",
                     "required": ["shapes"],
                     "properties": {
-                        "shapes": { "type": "array", "items": { "type": "object" } },
-                        "connections": { "type": "array", "items": { "type": "object" } }
+                        "shapes": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "type"],
+                                "properties": {
+                                    "id": { "type": "string" },
+                                    "type": { "type": "string" },
+                                    "x": { "type": "number" },
+                                    "y": { "type": "number" },
+                                    "width": { "type": "number" },
+                                    "height": { "type": "number" },
+                                    "label": { "type": "string" },
+                                    "style": { "type": "object" }
+                                }
+                            }
+                        },
+                        "connections": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["from_id", "to_id"],
+                                "properties": {
+                                    "from_id": { "type": "string" },
+                                    "to_id": { "type": "string" },
+                                    "label": { "type": "string" },
+                                    "type": { "type": "string" }
+                                }
+                            }
+                        }
                     }
                 })),
                 examples: Vec::new(),
-                temperature: Some(0.2),
+                temperature: Some(0.1),
                 max_tokens: Some(4096),
             },
 
             PromptPreset::FormulaCorrection => Self {
-                id: "formula-correction-v1".to_string(),
+                id: "formula-correction-v2".to_string(),
                 task: PromptTask::FormulaCorrection,
-                label: "Formula Correction".to_string(),
+                label: "LaTeX Formula OCR Correction".to_string(),
                 system: Some(
-                    "You are a LaTeX formula correction assistant. Fix OCR errors \
-                     and malformed LaTeX while preserving the mathematical meaning."
+                    "You are an expert LaTeX formula correction system. Your task is to \
+                     fix OCR errors in LaTeX mathematical expressions.\n\n\
+                     Common OCR errors you MUST correct:\n\
+                     - '0' (zero) ↔ 'O' (letter)\n\
+                     - '1' (one) ↔ 'l' (lowercase L) ↔ '|' (pipe)\n\
+                     - '5' ↔ 'S', '8' ↔ 'B', '6' ↔ 'G'\n\
+                     - Missing braces {} and brackets []\n\
+                     - Wrong delimiters: ( vs [ vs \\{\n\
+                     - Missing backslashes for commands: alpha → \\alpha\n\
+                     - Space insertion/deletion: \\fraca b → \\frac{a}{b}\n\n\
+                     Rules:\n\
+                     1. Preserve the mathematical meaning exactly.\n\
+                     2. Ensure all braces are balanced and correctly nested.\n\
+                     3. Fix command names: e.g., \\sqrt, \\frac, \\sum, \\int.\n\
+                     4. Return ONLY the corrected LaTeX code — no explanation, no wrapping."
                         .to_string(),
                 ),
-                instruction: "Correct the following LaTeX formula. Fix common OCR errors \
-                              (e.g., '0' vs 'O', '1' vs 'l', missing braces). \
-                              Return the corrected LaTeX only, no explanation."
+                instruction: "Correct the following LaTeX formula for OCR errors.\n\
+                              Input: {input}\n\n\
+                              Return the corrected LaTeX expression only."
                     .to_string(),
                 output_schema: None,
                 examples: Vec::new(),
@@ -287,17 +354,24 @@ impl PromptProfile {
             },
 
             PromptPreset::TableToMarkdown => Self {
-                id: "table-to-markdown-v1".to_string(),
+                id: "table-to-markdown-v2".to_string(),
                 task: PromptTask::TableToMarkdown,
-                label: "Table to Markdown".to_string(),
+                label: "Table Image to Markdown Conversion".to_string(),
                 system: Some(
-                    "You are a table extraction assistant. Convert table images \
-                     to Markdown format accurately."
+                    "You are an expert table extraction system. Convert table images to \
+                     well-formed Markdown table format. Follow these rules:\n\
+                     1. Reproduce every cell value exactly as it appears.\n\
+                     2. Preserve numeric values, text, dates, and symbols.\n\
+                     3. Determine column alignment from visual cues (left/center/right).\n\
+                     4. Handle multi-line cells by using <br> within the cell.\n\
+                     5. If the table has a header row, mark it distinctly.\n\
+                     6. If a cell is empty, leave it blank.\n\
+                     7. Return ONLY the Markdown table — no surrounding text."
                         .to_string(),
                 ),
-                instruction: "Convert this table image to Markdown table format. \
-                              Use proper alignment markers. Preserve all text, numbers, \
-                              and formatting as much as possible."
+                instruction: "Convert this table image to a well-formed Markdown table.\n\
+                              Use '|' for column separators and '---' for header separation.\n\
+                              Preserve all text, numbers, and alignment exactly."
                     .to_string(),
                 output_schema: None,
                 examples: Vec::new(),
@@ -306,17 +380,23 @@ impl PromptProfile {
             },
 
             PromptPreset::TableToLatex => Self {
-                id: "table-to-latex-v1".to_string(),
+                id: "table-to-latex-v2".to_string(),
                 task: PromptTask::TableToLatex,
-                label: "Table to LaTeX".to_string(),
+                label: "Table Image to LaTeX Conversion".to_string(),
                 system: Some(
-                    "You are a table extraction assistant. Convert table images \
-                     to LaTeX tabular environment accurately."
+                    "You are an expert table-to-LaTeX conversion system. Convert table images \
+                     into properly formatted LaTeX tabular environments. Follow these rules:\n\
+                     1. Determine the number of columns and their alignment (l/c/r).\n\
+                     2. Use \\hline for horizontal rules where appropriate.\n\
+                     3. Escape special LaTeX characters: _, ^, %, $, #, &, {, }, ~, \\\n\
+                     4. Preserve all text, numbers, and formatting.\n\
+                     5. Wrap long cell content or use p{} columns as needed.\n\
+                     6. Return ONLY the LaTeX tabular environment — no document wrapper."
                         .to_string(),
                 ),
-                instruction: "Convert this table image to LaTeX tabular format. \
-                              Use proper column alignment, horizontal lines, and escaping. \
-                              Preserve all data."
+                instruction: "Convert this table image to LaTeX tabular format.\n\
+                              Determine column count and alignment from the visual layout.\n\
+                              Use \\hline for header separation. Preserve all data exactly."
                     .to_string(),
                 output_schema: None,
                 examples: Vec::new(),
@@ -325,17 +405,29 @@ impl PromptProfile {
             },
 
             PromptPreset::DocumentCleanup => Self {
-                id: "document-cleanup-v1".to_string(),
+                id: "document-cleanup-v2".to_string(),
                 task: PromptTask::DocumentCleanup,
-                label: "Document Cleanup".to_string(),
+                label: "OCR Document Text Cleanup".to_string(),
                 system: Some(
-                    "You are a document cleanup assistant. Normalize and fix \
-                     recognized document text."
+                    "You are an expert document cleanup system. Given OCR-recognized text, \
+                     you must fix errors while preserving the original meaning and structure.\n\n\
+                     Fix these common issues:\n\
+                     1. Spacing: remove extra spaces, fix missing spaces between words.\n\
+                     2. Punctuation: normalize quotes, dashes, ellipses.\n\
+                     3. Capitalization: fix sentence-start capitalization if clearly wrong.\n\
+                     4. Line breaks: preserve paragraph structure.\n\
+                     5. Common OCR confusions: rn→m, cl→d, etc.\n\
+                     6. Numbers: preserve digits, decimal points, and separators.\n\n\
+                     Rules:\n\
+                     - Do NOT rewrite content or change meaning.\n\
+                     - Do NOT add or remove substantive text.\n\
+                     - Preserve special formatting, indentation, and list markers.\n\
+                     - Return the cleaned text only."
                         .to_string(),
                 ),
-                instruction: "Clean up this recognized text: fix spacing, correct \
-                              common OCR mistakes, normalize punctuation, and preserve \
-                              formatting. Return the cleaned text."
+                instruction: "Clean up this OCR-recognized text, fixing spacing, \
+                              punctuation, and common OCR errors while preserving \
+                              the original structure and meaning:\n\n{input}"
                     .to_string(),
                 output_schema: None,
                 examples: Vec::new(),
@@ -344,24 +436,42 @@ impl PromptProfile {
             },
 
             PromptPreset::ExamPaperGeneration => Self {
-                id: "exam-paper-v1".to_string(),
+                id: "exam-paper-v2".to_string(),
                 task: PromptTask::ExamPaperGeneration,
-                label: "Exam Paper Generation".to_string(),
+                label: "LaTeX Exam Paper Generation".to_string(),
                 system: Some(
-                    "You are an exam paper generation assistant. Create well-structured \
-                     exam papers in LaTeX format with appropriate question types, \
-                     difficulty levels, and clear instructions."
+                    "You are an expert exam paper generation assistant. Create professional, \
+                     well-structured exam papers in LaTeX using the exam document class.\n\n\
+                     Guidelines:\n\
+                     1. Use the 'exam' document class for proper formatting.\n\
+                     2. Structure with \\begin{questions}...\\end{questions}.\n\
+                     3. Each question: \\question[points] text.\n\
+                     4. Multiple choice: \\choice, \\CorrectChoice.\n\
+                     5. Multi-part questions: \\begin{parts}...\\end{parts}.\n\
+                     6. Include \\pointname, \\pointformat, \\bonuspointname as needed.\n\
+                     7. Add \\gradetable at the end.\n\
+                     8. Use appropriate math formatting: $...$ and $$...$$.\n\
+                     9. Ensure the total marks are clearly stated.\n\
+                     10. Vary difficulty: easy (30%), medium (50%), hard (20%)."
                         .to_string(),
                 ),
-                instruction: "Generate an exam paper based on the following specification. \
-                              Include a mix of question types (multiple choice, short answer, \
-                              problem solving). Use proper LaTeX formatting with \\begin{questions}, \
-                              \\question, \\choice, etc. Add point values and total marks."
+                instruction: "Generate a LaTeX exam paper based on this specification:\n\
+                              Subject: {subject}\n\
+                              Grade Level: {grade}\n\
+                              Total Marks: {marks}\n\
+                              Duration: {duration}\n\
+                              Topics: {topics}\n\n\
+                              Include:\n\
+                              - Section A: Multiple choice / fill-in-blank (30% of marks)\n\
+                              - Section B: Short answer / problem solving (50% of marks)\n\
+                              - Section C: Extended response / proof (20% of marks)\n\
+                              - Answer key or marking scheme after \\end{questions}\n\n\
+                              Return ONLY the complete LaTeX source code."
                     .to_string(),
                 output_schema: None,
                 examples: Vec::new(),
                 temperature: Some(0.7),
-                max_tokens: Some(8192),
+                max_tokens: Some(16384),
             },
 
             PromptPreset::Custom => Self {

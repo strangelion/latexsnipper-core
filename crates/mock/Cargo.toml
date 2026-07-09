@@ -3,8 +3,7 @@ name = "latexsnipper-mock"
 description = "Mock implementations for testing — FakeDetector, FakeRecognizer, FakePipeline"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
-repository.workspace = true
+publish = false
 
 [dependencies]
 latexsnipper-foundation.workspace = true
