@@ -131,6 +131,8 @@ jobs:
           echo "Version consistent: $VERSION"
         
       - name: Publish crates
+        env:
+            CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           publish() {
               local crate=$1
@@ -165,7 +167,6 @@ jobs:
             publish latexsnipper-api-types
             publish latexsnipper-pipeline
             publish latexsnipper-engine
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   # ============================================================
   # Job 4: Create CLI Release
