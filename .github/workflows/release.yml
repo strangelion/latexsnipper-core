@@ -136,7 +136,7 @@ jobs:
             local crate=$1
             echo "=== Publishing $crate ==="
             cargo publish -p "$crate" 2>&1 | tee /tmp/pub.log; exit_code=$?
-            if [ $exit_code -ne 0 ] && grep -q "already uploaded" /tmp/pub.log; then
+            if [ $exit_code -ne 0 ] && grep -q "already exists" /tmp/pub.log; then
               echo "Skipping $crate — already published"
             else
               exit $exit_code
