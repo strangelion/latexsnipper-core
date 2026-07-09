@@ -4,12 +4,7 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Custom version tag (optional, overrides git tag)'
-        required: false
-        type: string
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -111,7 +106,7 @@ jobs:
             latexsnipper-engine
           do
             echo "Dry-run: $crate"
-            cargo publish -p $crate --dry-run 2>&1 || true
+            cargo publish -p $crate --dry-run
           done
 
   # ============================================================
@@ -126,14 +121,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Update workspace version
+      - name: Check version consistency
         run: |
-          VERSION="${{ inputs.version }}"
-          if [ -z "$VERSION" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="$(grep '^version =' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: Cargo.toml version ($VERSION) does not match tag version (v$TAG_VERSION)"
+            exit 1
           fi
-          echo "Publishing version: $VERSION"
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          echo "Version consistent: $VERSION"
 
       - name: Publish foundation
         run: cargo publish -p latexsnipper-foundation
@@ -190,11 +186,6 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      - name: Publish tract
-        run: cargo publish -p latexsnipper-tract
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
       - name: Publish pipeline
         run: cargo publish -p latexsnipper-pipeline
         env:
@@ -218,11 +209,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION="${{ github.ref_name }}"
-          fi
+          VERSION="${{ github.ref_name }}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Release version: $VERSION"
 

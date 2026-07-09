@@ -25,7 +25,7 @@ members = [
 ]
 
 [workspace.package]
-version = "2.0.0-rc.1"
+version = "2.0.0"
 edition = "2021"
 license = "AGPL-3.0"
 repository = "https://github.com/strangelion/latexsnipper-core"
@@ -42,26 +42,26 @@ thiserror = "2"
 log = "0.4"
 
 # Internal crates
-latexsnipper-foundation = { path = "crates/foundation", version = "2.0.0-rc.1" }
-latexsnipper-ast = { path = "crates/ast", version = "2.0.0-rc.1" }
-latexsnipper-tensor = { path = "crates/tensor", version = "2.0.0-rc.1" }
-latexsnipper-image = { path = "crates/image", version = "2.0.0-rc.1" }
-latexsnipper-runtime = { path = "crates/runtime", version = "2.0.0-rc.1" }
-latexsnipper-inference = { path = "crates/inference", version = "2.0.0-rc.1" }
-latexsnipper-pipeline = { path = "crates/pipeline", version = "2.0.0-rc.1" }
-latexsnipper-syntax = { path = "crates/syntax", version = "2.0.0-rc.1" }
-latexsnipper-conversion = { path = "crates/conversion", version = "2.0.0-rc.1" }
-latexsnipper-export = { path = "crates/export", version = "2.0.0-rc.1" }
-latexsnipper-model = { path = "crates/model", version = "2.0.0-rc.1" }
-latexsnipper-engine = { path = "crates/engine", version = "2.0.0-rc.1" }
-latexsnipper-api-types = { path = "crates/api-types", version = "2.0.0-rc.1" }
-latexsnipper-mock = { path = "crates/mock", version = "2.0.0-rc.1" }
-latexsnipper-plugin = { path = "crates/plugin", version = "2.0.0-rc.1" }
-latexsnipper-tract = { path = "crates/tract", version = "2.0.0-rc.1" }
-latexsnipper-ffi = { path = "crates/ffi", version = "2.0.0-rc.1" }
-latexsnipper-wasm = { path = "crates/wasm", version = "2.0.0-rc.1" }
-latexsnipper-cli = { path = "crates/cli", version = "2.0.0-rc.1" }
-latexsnipper-tests = { path = "crates/tests", version = "2.0.0-rc.1" }
+latexsnipper-foundation = { path = "crates/foundation", version = "2.0.0" }
+latexsnipper-ast = { path = "crates/ast", version = "2.0.0" }
+latexsnipper-tensor = { path = "crates/tensor", version = "2.0.0" }
+latexsnipper-image = { path = "crates/image", version = "2.0.0" }
+latexsnipper-runtime = { path = "crates/runtime", version = "2.0.0" }
+latexsnipper-inference = { path = "crates/inference", version = "2.0.0" }
+latexsnipper-pipeline = { path = "crates/pipeline", version = "2.0.0" }
+latexsnipper-syntax = { path = "crates/syntax", version = "2.0.0" }
+latexsnipper-conversion = { path = "crates/conversion", version = "2.0.0" }
+latexsnipper-export = { path = "crates/export", version = "2.0.0" }
+latexsnipper-model = { path = "crates/model", version = "2.0.0" }
+latexsnipper-engine = { path = "crates/engine", version = "2.0.0" }
+latexsnipper-api-types = { path = "crates/api-types", version = "2.0.0" }
+latexsnipper-mock = { path = "crates/mock", version = "2.0.0" }
+latexsnipper-plugin = { path = "crates/plugin", version = "2.0.0" }
+latexsnipper-tract = { path = "crates/tract", version = "2.0.0" }
+latexsnipper-ffi = { path = "crates/ffi", version = "2.0.0" }
+latexsnipper-wasm = { path = "crates/wasm", version = "2.0.0" }
+latexsnipper-cli = { path = "crates/cli", version = "2.0.0" }
+latexsnipper-tests = { path = "crates/tests", version = "2.0.0" }
 sha2 = "0.10"
 
 # Root package for examples and tests
