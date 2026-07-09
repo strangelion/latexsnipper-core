@@ -17,6 +17,8 @@ use quick_xml::Reader;
 use std::io::Read;
 use std::path::Path;
 
+use crate::parse_word_table_ooxml;
+
 /// Parse a .docx file and produce a Document AST.
 pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
     let file = std::fs::File::open(path.as_ref())
@@ -104,16 +106,72 @@ fn parse_rels(xml: &str) -> std::collections::HashMap<String, String> {
     rels
 }
 
+/// Pre-process XML to extract `<w:tbl>` tables, parse them, and replace them
+/// with lightweight sentinel markers for the event-driven parser.
+fn extract_tables_from_xml(xml: &str) -> (Vec<TableBlock>, String) {
+    let mut tables: Vec<TableBlock> = Vec::new();
+    let mut out = String::with_capacity(xml.len());
+    let mut pos = 0;
+
+    loop {
+        match xml[pos..].find("<w:tbl") {
+            Some(rel_start) => {
+                let abs_start = pos + rel_start;
+                // Copy text before this table
+                out.push_str(&xml[pos..abs_start]);
+
+                // Find matching </w:tbl> with depth counting (handles nested tables)
+                let mut depth = 1u32;
+                let mut scan = abs_start + 6; // past "<w:tbl"
+                while scan < xml.len() && depth > 0 {
+                    if xml[scan..].starts_with("</w:tbl>") {
+                        depth -= 1;
+                        scan += 8;
+                    } else if xml[scan..].starts_with("<w:tbl") {
+                        depth += 1;
+                        scan += 6;
+                    } else {
+                        scan += 1;
+                    }
+                }
+
+                if depth == 0 {
+                    let raw_tbl = &xml[abs_start..scan];
+                    if let Some(table) = parse_word_table_ooxml(raw_tbl) {
+                        let idx = tables.len();
+                        tables.push(table);
+                        out.push_str(&format!("<docx_tbl_marker id=\"{}\"/>", idx));
+                    }
+                    pos = scan;
+                } else {
+                    // No matching close — copy rest as-is
+                    out.push_str(&xml[pos..]);
+                    break;
+                }
+            }
+            None => {
+                out.push_str(&xml[pos..]);
+                break;
+            }
+        }
+    }
+
+    (tables, out)
+}
+
 /// Parse the main document body XML and extract blocks with diagnostics and assets.
 fn parse_document_body(
     xml: &str,
     archive: &mut zip::ZipArchive<std::fs::File>,
     rels: &std::collections::HashMap<String, String>,
 ) -> (Vec<Block>, Vec<MediaAsset>, Vec<Diagnostic>) {
+    // Extract tables before event processing
+    let (table_blocks, processed_xml) = extract_tables_from_xml(xml);
+
     let mut blocks = Vec::new();
     let mut assets = Vec::new();
     let mut diagnostics = Vec::new();
-    let mut reader = Reader::from_str(xml);
+    let mut reader = Reader::from_str(&processed_xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut in_body = false;
@@ -174,6 +232,33 @@ fn parse_document_body(
                             })
                             .unwrap_or_default();
                     }
+                    b"w:footnoteReference" | b"footnoteReference" if in_paragraph => {
+                        let note_id = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"w:id" || a.key.as_ref() == b"id")
+                            .map(|a| String::from_utf8_lossy(&a.value).to_string())
+                            .unwrap_or_else(|| format!("fn-{}", current_paragraph_inlines.len()));
+                        current_paragraph_inlines.push(Inline::NoteRef(NoteRefInline {
+                            note_id,
+                            kind: NoteKind::Footnote,
+                            source: Some(SourceInfo::new().with_producer("docx")),
+                        }));
+                    }
+                    b"w:bookmarkStart" | b"bookmarkStart" if in_paragraph => {
+                        let name = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"w:name" || a.key.as_ref() == b"name")
+                            .map(|a| String::from_utf8_lossy(&a.value).to_string());
+                        if let Some(n) = name {
+                            current_paragraph_inlines.push(Inline::Anchor(AnchorInline {
+                                id: n,
+                                title: None,
+                                source: Some(SourceInfo::new().with_producer("docx")),
+                            }));
+                        }
+                    }
                     b"w:drawing" | b"drawing" if in_paragraph => {
                         drawing_id = None;
                     }
@@ -218,6 +303,62 @@ fn parse_document_body(
                             )
                             .with_recoverable(true),
                         );
+                    }
+                    b"w:txbxContent" | b"txbxContent" => {
+                        diagnostics.push(
+                            Diagnostic::new(
+                                DiagnosticLevel::Info,
+                                "I_TEXTBOX_DETECTED",
+                                "TextBox content detected in DOCX",
+                            )
+                            .with_recoverable(true),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                let tag = e.name().as_ref().to_vec();
+                match tag.as_slice() {
+                    b"docx_tbl_marker" => {
+                        if let Some(id_str) = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"id")
+                            .and_then(|a| String::from_utf8_lossy(&a.value).parse::<usize>().ok())
+                        {
+                            if let Some(table) = table_blocks.get(id_str) {
+                                flush_list(&mut blocks, &mut pending_list_items);
+                                blocks.push(Block::Table(table.clone()));
+                            }
+                        }
+                    }
+                    b"w:footnoteReference" | b"footnoteReference" if in_paragraph => {
+                        let note_id = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"w:id" || a.key.as_ref() == b"id")
+                            .map(|a| String::from_utf8_lossy(&a.value).to_string())
+                            .unwrap_or_else(|| format!("fn-{}", current_paragraph_inlines.len()));
+                        current_paragraph_inlines.push(Inline::NoteRef(NoteRefInline {
+                            note_id,
+                            kind: NoteKind::Footnote,
+                            source: Some(SourceInfo::new().with_producer("docx")),
+                        }));
+                    }
+                    b"w:bookmarkStart" | b"bookmarkStart" if in_paragraph => {
+                        let name = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"w:name" || a.key.as_ref() == b"name")
+                            .map(|a| String::from_utf8_lossy(&a.value).to_string());
+                        if let Some(n) = name {
+                            current_paragraph_inlines.push(Inline::Anchor(AnchorInline {
+                                id: n,
+                                title: None,
+                                source: Some(SourceInfo::new().with_producer("docx")),
+                            }));
+                        }
                     }
                     _ => {}
                 }
@@ -489,6 +630,120 @@ mod tests {
         let path = create_minimal_docx("", "e");
         let doc = read_docx(&path).unwrap();
         assert!(doc.block_count() == 0 || doc.all_blocks().is_empty());
+        std::fs::remove_file(&path).ok();
+    }
+
+    fn create_docx_with_body(body_xml: &str, suffix: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("test_docx_{}_{}.docx", suffix, std::process::id()));
+        let file = std::fs::File::create(&path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+
+        let opts = || zip::write::FileOptions::default();
+
+        zip.add_directory("_rels/", opts()).unwrap();
+        zip.start_file("[Content_Types].xml", opts()).unwrap();
+        write!(zip, r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document"/>
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+</Types>"#).unwrap();
+
+        zip.add_directory("word/", opts()).unwrap();
+        zip.start_file("word/document.xml", opts()).unwrap();
+        write!(
+            zip,
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+{body_xml}
+</w:body>
+</w:document>"#,
+        )
+        .unwrap();
+
+        let _file = zip.finish().unwrap();
+        path
+    }
+
+    #[test]
+    fn test_read_docx_table() {
+        let body = r#"<w:p><w:r><w:t>Before table</w:t></w:r></w:p>
+<w:tbl>
+<w:tr><w:tc><w:p><w:r><w:t>A1</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>B1</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:tc><w:p><w:r><w:t>A2</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>B2</w:t></w:r></w:p></w:tc></w:tr>
+</w:tbl>
+<w:p><w:r><w:t>After table</w:t></w:r></w:p>"#;
+        let path = create_docx_with_body(body, "tbl");
+        let doc = read_docx(&path).unwrap();
+        let blocks = doc.all_blocks();
+        let table_blocks: Vec<_> = blocks
+            .iter()
+            .filter(|b| matches!(b, Block::Table(_)))
+            .collect();
+        assert_eq!(table_blocks.len(), 1, "should find one table block");
+        if let Block::Table(t) = &table_blocks[0] {
+            assert_eq!(t.rows.len(), 2);
+            assert_eq!(t.rows[0].cells.len(), 2);
+            let has_a1 = t.rows[0].cells[0].content.iter().any(|b| {
+                if let Block::Paragraph(p) = b {
+                    p.inlines
+                        .iter()
+                        .any(|i| matches!(i, Inline::Text(t) if t.text.contains("A1")))
+                } else {
+                    false
+                }
+            });
+            assert!(has_a1, "cell should contain 'A1'");
+        }
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_docx_footnote_reference() {
+        let body = r#"<w:p><w:r><w:t>Text with</w:t></w:r><w:r><w:footnoteReference w:id="1"/><w:t> footnote</w:t></w:r></w:p>"#;
+        let path = create_docx_with_body(body, "fn");
+        let doc = read_docx(&path).unwrap();
+        let blocks = doc.all_blocks();
+        let has_footnote = blocks.iter().any(|b| {
+            if let Block::Paragraph(p) = b {
+                p.inlines.iter().any(|i| matches!(i, Inline::NoteRef(_)))
+            } else {
+                false
+            }
+        });
+        assert!(has_footnote, "should contain a footnote reference");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_docx_bookmark() {
+        let body = r#"<w:p><w:bookmarkStart w:id="0" w:name="myBookmark"/><w:r><w:t>Bookmarked text</w:t></w:r></w:p>"#;
+        let path = create_docx_with_body(body, "bm");
+        let doc = read_docx(&path).unwrap();
+        let blocks = doc.all_blocks();
+        let has_anchor = blocks.iter().any(|b| {
+            if let Block::Paragraph(p) = b {
+                p.inlines.iter().any(|i| matches!(i, Inline::Anchor(_)))
+            } else {
+                false
+            }
+        });
+        assert!(has_anchor, "should contain an anchor inline");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_docx_textbox_diagnostic() {
+        let body = r#"<w:p><w:r><w:t>Text</w:t></w:r></w:p>
+<w:p><w:r><w:txbxContent><w:r><w:t>TextBox text</w:t></w:r></w:txbxContent></w:r></w:p>"#;
+        let path = create_docx_with_body(body, "tb");
+        let doc = read_docx(&path).unwrap();
+        let has_diag = doc
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "I_TEXTBOX_DETECTED");
+        assert!(has_diag, "should emit textbox diagnostic");
         std::fs::remove_file(&path).ok();
     }
 }

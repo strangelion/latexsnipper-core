@@ -23,31 +23,46 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
 
     // Read workbook for sheet names
     let wb_xml = read_entry(&mut archive, "xl/workbook.xml").unwrap_or_default();
-    let sheet_names = parse_sheet_names(&wb_xml);
 
     // Read relationships
     let rels_xml = read_entry(&mut archive, "xl/_rels/workbook.xml.rels").unwrap_or_default();
-    let _rels = parse_rels(&rels_xml);
+    let rels = parse_rels(&rels_xml);
+
+    // Map sheet entries to actual file paths via relationships
+    let mut sheet_entries = parse_workbook_sheets(&wb_xml, &rels);
+
+    // Fallback: try sequential sheet files
+    if sheet_entries.is_empty() {
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..50 {
+            let file = format!("sheet{}.xml", i + 1);
+            if !seen.insert(file.clone()) { continue; }
+            let path = format!("xl/worksheets/{}", file);
+            if read_entry(&mut archive, &path).is_ok() {
+                sheet_entries.push((format!("Sheet {}", i + 1), file));
+            } else {
+                // stop at first missing file
+                break;
+            }
+        }
+    }
 
     let mut pages = Vec::new();
 
-    // Find all sheet XML files
-    for sheet_idx in 1..=50 {
-        let sheet_file = format!("xl/worksheets/sheet{}.xml", sheet_idx);
-        let sheet_xml = match read_entry(&mut archive, &sheet_file) {
-            Ok(x) => x,
-            Err(_) => {
-                if sheet_idx > 1 {
-                    break;
-                }
-                continue;
-            }
+    // Read each sheet and create a page per sheet
+    for (idx, (sheet_name, sheet_file)) in sheet_entries.into_iter().enumerate() {
+        // sheet_file from rels might be "worksheets/sheet1.xml" (relative to xl/)
+        // or "sheet1.xml" (fallback). Handle both.
+        let sheet_path = if sheet_file.starts_with("worksheets/") || sheet_file.starts_with("xl/") {
+            if sheet_file.starts_with("xl/") { sheet_file.clone() }
+            else { format!("xl/{}", sheet_file) }
+        } else {
+            format!("xl/worksheets/{}", sheet_file)
         };
-
-        let sheet_name = sheet_names
-            .get(&sheet_idx)
-            .cloned()
-            .unwrap_or_else(|| format!("Sheet{}", sheet_idx));
+        let sheet_xml = match read_entry(&mut archive, &sheet_path) {
+            Ok(x) => x,
+            Err(_) => continue,
+        };
 
         let table = parse_sheet_table(&sheet_xml, &shared_strings);
 
@@ -70,7 +85,7 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
             width: 800.0,
             height: 600.0,
             blocks,
-            page_number: Some(sheet_idx as u32),
+            page_number: Some(idx as u32 + 1),
             layout: None,
             background_asset_id: None,
         });
@@ -156,44 +171,93 @@ fn read_shared_strings(archive: &mut zip::ZipArchive<std::fs::File>) -> Vec<Stri
     strings
 }
 
-fn parse_sheet_names(xml: &str) -> HashMap<usize, String> {
-    let mut names = HashMap::new();
-    let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
-    let mut buf = Vec::new();
-    let mut sheet_idx = 0usize;
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
-                if e.name().as_ref() == b"sheet" {
-                    sheet_idx += 1;
-                    let mut name = String::new();
-                    for attr in e.attributes().flatten() {
-                        let k = attr.key.as_ref().to_vec();
-                        if k == b"name" {
-                            name = String::from_utf8_lossy(&attr.value).to_string();
-                        }
-                    }
-                    if !name.is_empty() {
-                        // sheetId attribute is the 1-based index
-                        let id = e
-                            .attributes()
-                            .flatten()
-                            .find(|a| a.key.as_ref() == b"sheetId")
-                            .and_then(|a| String::from_utf8_lossy(&a.value).parse::<usize>().ok())
-                            .unwrap_or(sheet_idx);
-                        names.insert(id, name);
-                    }
+fn parse_workbook_sheets(xml: &str, rels: &HashMap<String, String>) -> Vec<(String, String)> {
+    let mut sheets = Vec::new();
+    // Simple string-based parsing — find each <sheet> tag
+    let mut pos = 0;
+    while let Some(start) = xml[pos..].find("<sheet") {
+        let tag_start = pos + start;
+        if let Some(end) = xml[tag_start..].find("/>") {
+            let tag = &xml[tag_start..tag_start + end + 2];
+            let mut name = String::new();
+            let mut rid = String::new();
+            // Extract name="..."
+            if let Some(ns) = tag.find("name=\"") {
+                let val_start = ns + 6;
+                if let Some(ve) = tag[val_start..].find('\"') {
+                    name = tag[val_start..val_start + ve].to_string();
                 }
             }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
+            // Extract r:id="..." or id="..."
+            if let Some(rs) = tag.find("r:id=\"") {
+                let val_start = rs + 6;
+                if let Some(ve) = tag[val_start..].find('\"') {
+                    rid = tag[val_start..val_start + ve].to_string();
+                }
+            } else if let Some(is) = tag.find("id=\"") {
+                let val_start = is + 4;
+                if let Some(ve) = tag[val_start..].find('\"') {
+                    rid = tag[val_start..val_start + ve].to_string();
+                }
+            }
+            if !name.is_empty() {
+                let target = rels.get(&rid).cloned()
+                    .unwrap_or_else(|| format!("sheet{}.xml", sheets.len() + 1));
+                sheets.push((name, target));
+            }
+            pos = tag_start + end + 2;
+        } else {
+            break;
         }
-        buf.clear();
     }
-    names
+    sheets
+}
+
+fn parse_cell_ref(ref_str: &str) -> Option<(u32, u32)> {
+    let chars: Vec<char> = ref_str.chars().collect();
+    let col_str: String = chars
+        .iter()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect();
+    let row_str: String = chars
+        .iter()
+        .skip_while(|c| c.is_ascii_alphabetic())
+        .collect();
+    if col_str.is_empty() || row_str.is_empty() {
+        return None;
+    }
+    let col = col_str
+        .chars()
+        .fold(0u32, |acc, c| acc * 26 + (c as u32 - 'A' as u32 + 1))
+        - 1;
+    let row = row_str.parse::<u32>().ok()? - 1;
+    Some((col, row))
+}
+
+fn cell_ref_from_coords(col: u32, row: u32) -> String {
+    let mut s = String::new();
+    let mut c = col;
+    loop {
+        let rem = (c % 26) as u8;
+        s.insert(0, (b'A' + rem) as char);
+        c /= 26;
+        if c == 0 {
+            break;
+        }
+        c -= 1;
+    }
+    s.push_str(&(row + 1).to_string());
+    s
+}
+
+fn parse_merge_range(range: &str) -> Option<(u32, u32, u32, u32)> {
+    let parts: Vec<&str> = range.split(':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let (c1, r1) = parse_cell_ref(parts[0])?;
+    let (c2, r2) = parse_cell_ref(parts[1])?;
+    Some((c1.min(c2), r1.min(r2), c1.max(c2), r1.max(r2)))
 }
 
 fn parse_rels(xml: &str) -> HashMap<String, String> {
@@ -249,6 +313,9 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
     let mut current_cell_formula = String::new();
     let mut current_row_cells: Vec<(String, String, String, String)> = Vec::new(); // (ref, value, type, formula)
     let mut columns: Vec<TableColumn> = Vec::new();
+    let mut in_merge_cells = false;
+    let mut merges: Vec<(u32, u32, u32, u32)> = Vec::new();
+    let mut cell_positions: HashMap<String, (usize, usize)> = HashMap::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -295,6 +362,19 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                             width,
                             is_header: false,
                         });
+                    }
+                    b"mergeCells" => in_merge_cells = true,
+                    b"mergeCell" if in_merge_cells => {
+                        if let Some(ref_attr) = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"ref")
+                            .map(|a| String::from_utf8_lossy(&a.value).to_string())
+                        {
+                            if let Some((sc, sr, ec, er)) = parse_merge_range(&ref_attr) {
+                                merges.push((sc, sr, ec, er));
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -345,9 +425,14 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                     b"row" => {
                         in_row = false;
                         // Build row of cells
+                        let row_idx = rows.len();
                         let table_row: Vec<TableCell> = current_row_cells
                             .iter()
-                            .map(|(_, val, typ, formula)| {
+                            .enumerate()
+                            .map(|(cell_idx, (ref_str, val, typ, formula))| {
+                                if !ref_str.is_empty() {
+                                    cell_positions.insert(ref_str.clone(), (row_idx, cell_idx));
+                                }
                                 let resolved = resolve_cell_value(val, typ, shared_strings);
                                 let cell_type_enum = match typ.as_str() {
                                     "b" => Some(CellDataType::Boolean),
@@ -398,6 +483,7 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                         }
                     }
                     b"sheetData" => in_sheet_data = false,
+                    b"mergeCells" => in_merge_cells = false,
                     _ => {}
                 }
             }
@@ -406,6 +492,42 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
             _ => {}
         }
         buf.clear();
+    }
+
+    // Apply merge info: set colspan/rowspan on primary cells,
+    // then remove consumed cells from their rows.
+    let mut consumed: Vec<(usize, usize)> = Vec::new();
+    for &(start_col, start_row, end_col, end_row) in &merges {
+        let colspan = end_col - start_col + 1;
+        let rowspan = end_row - start_row + 1;
+
+        for r in start_row..=end_row {
+            if r as usize >= rows.len() {
+                continue;
+            }
+            for c in start_col..=end_col {
+                let ref_str = cell_ref_from_coords(c, r);
+                if let Some(&(ri, ci)) = cell_positions.get(&ref_str) {
+                    if ri < rows.len() && ci < rows[ri].cells.len() {
+                        if r == start_row && c == start_col {
+                            rows[ri].cells[ci].colspan = colspan;
+                            rows[ri].cells[ci].rowspan = rowspan;
+                        } else {
+                            consumed.push((ri, ci));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Remove consumed cells in reverse order to preserve indices
+    consumed.sort_unstable_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+    consumed.dedup();
+    for (ri, ci) in consumed {
+        if ri < rows.len() && ci < rows[ri].cells.len() {
+            rows[ri].cells.remove(ci);
+        }
     }
 
     TableBlock {
