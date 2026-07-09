@@ -191,6 +191,33 @@ pub struct LinkInline {
     pub link_target: Option<LinkTarget>,
 }
 
+impl LinkInline {
+    pub fn effective_target(&self) -> LinkTarget {
+        self.link_target.clone().unwrap_or_else(|| {
+            if self.target.starts_with("#") {
+                LinkTarget::InternalAnchor(self.target[1..].to_string())
+            } else if self.target.starts_with("mailto:") {
+                LinkTarget::Email(self.target[7..].to_string())
+            } else {
+                LinkTarget::Url(self.target.clone())
+            }
+        })
+    }
+
+    pub fn target_string(&self) -> String {
+        self.link_target
+            .as_ref()
+            .map(|lt| match lt {
+                LinkTarget::Url(u) => u.clone(),
+                LinkTarget::InternalAnchor(a) => format!("#{}", a),
+                LinkTarget::Email(e) => format!("mailto:{}", e),
+                LinkTarget::File(f) => f.clone(),
+                LinkTarget::Custom(c) => c.clone(),
+            })
+            .unwrap_or_else(|| self.target.clone())
+    }
+}
+
 /// An inline code span.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeInline {

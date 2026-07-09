@@ -57,6 +57,9 @@ pub fn parse_svg_to_shapes(svg: &str) -> Vec<ShapeBlock> {
                                 geometry: parse_geometry(&attrs, &current_transform),
                                 style: parse_style(&attrs),
                                 source: None,
+                                transform: None,
+                                layer: None,
+                                accessibility: None,
                             });
                         }
                     }
@@ -140,6 +143,9 @@ fn parse_rect(
         geometry: Some(apply_transform(Rect::new(x, y, w, h), transform)),
         style: parse_style(attrs),
         source: None,
+        transform: None,
+        layer: None,
+        accessibility: None,
     })
 }
 
@@ -180,6 +186,9 @@ fn parse_circle_ellipse(
         )),
         style: parse_style(attrs),
         source: None,
+        transform: None,
+        layer: None,
+        accessibility: None,
     })
 }
 
@@ -213,6 +222,9 @@ fn parse_line(
         )),
         style: parse_style(attrs),
         source: None,
+        transform: None,
+        layer: None,
+        accessibility: None,
     })
 }
 
@@ -254,6 +266,9 @@ fn parse_poly(
         )),
         style: parse_style(attrs),
         source: None,
+        transform: None,
+        layer: None,
+        accessibility: None,
     })
 }
 

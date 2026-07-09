@@ -28,7 +28,7 @@ pub use block::{
     TableCellStyle, TableColumn, TableRow, TableStyle, TextBoxBlock, TheoremBlock,
 };
 pub use builder::DocumentBuilder;
-pub use document::{Document, Page};
+pub use document::{Document, NormalizeAssetOptions, Page};
 pub use format::{
     CapabilityMatrix, ConversionContext, ExportArtifact, ExportFormat, ExportOptions,
     FidelityLevel, FormatCapability, ImportOptions, LossKind, ModelCapability, ModelProviderKind,

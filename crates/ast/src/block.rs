@@ -493,6 +493,62 @@ impl TableCell {
             .flat_map(|b| b.inlines().into_iter().cloned())
             .collect()
     }
+
+    /// Build a TableCellStyle from legacy fields + style field.
+    /// style field takes priority over legacy fields.
+    pub fn effective_style(&self) -> crate::TableCellStyle {
+        let mut s = self.legacy_style_as_table_cell_style();
+        if let Some(ref style) = self.style {
+            if style.background.is_some() {
+                s.background = style.background.clone();
+            }
+            if style.vertical_align.is_some() {
+                s.vertical_align = style.vertical_align;
+            }
+            if style.horizontal_align.is_some() {
+                s.horizontal_align = style.horizontal_align;
+            }
+        }
+        s
+    }
+
+    /// Convert legacy border/background/alignment fields to TableCellStyle.
+    pub fn legacy_style_as_table_cell_style(&self) -> crate::TableCellStyle {
+        let border = if self.border_style.is_some()
+            || self.border_width.is_some()
+            || self.border_color.is_some()
+        {
+            Some(crate::TableBorder {
+                top: Some(crate::BorderSide {
+                    style: self.border_style.unwrap_or(crate::BorderStyle::Solid),
+                    width: self.border_width.map(|w| w as f32),
+                    color: self.border_color.as_ref().map(|c| crate::Color {
+                        value: c.clone(),
+                        alpha: None,
+                    }),
+                }),
+                right: None,
+                bottom: None,
+                left: None,
+            })
+        } else {
+            None
+        };
+        crate::TableCellStyle {
+            background: self.background.as_ref().map(|c| crate::Color {
+                value: c.clone(),
+                alpha: None,
+            }),
+            vertical_align: None,
+            horizontal_align: self.alignment.map(|a| match a {
+                crate::CellAlignment::Left => crate::TextAlignment::Left,
+                crate::CellAlignment::Center => crate::TextAlignment::Center,
+                crate::CellAlignment::Right => crate::TextAlignment::Right,
+                crate::CellAlignment::Justify => crate::TextAlignment::Justify,
+            }),
+            border,
+        }
+    }
 }
 
 /// A table row with optional height and header flag.
@@ -893,6 +949,12 @@ pub struct ShapeBlock {
     pub style: Option<ShapeStyle>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 /// An embedded object block (OLE, Office Chart, SmartArt, etc.).
@@ -921,6 +983,8 @@ pub struct EmbeddedObjectBlock {
     pub transform: Option<crate::Transform2D>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 /// An annotation block (comment, highlight, ink, etc.).
@@ -937,6 +1001,10 @@ pub struct AnnotationBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1056,6 +1124,8 @@ pub struct FormFieldBlock {
     pub transform: Option<crate::Transform2D>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 /// The kind of form field.
@@ -1112,6 +1182,10 @@ pub struct ChemicalFormulaBlock {
     pub geometry: Option<Rect>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<crate::Transform2D>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<crate::LayerInfo>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1152,6 +1226,8 @@ pub struct GraphBlock {
     pub transform: Option<crate::Transform2D>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 /// A single data point in a graph.

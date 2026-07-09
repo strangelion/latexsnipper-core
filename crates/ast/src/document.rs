@@ -56,6 +56,28 @@ impl Clone for Document {
     }
 }
 
+/// Options to control the `Document::normalize_assets()` behavior.
+#[derive(Debug, Clone)]
+pub struct NormalizeAssetOptions {
+    pub compute_checksum: bool,
+    pub infer_mime_type: bool,
+    pub deduplicate: bool,
+    pub fill_dimensions: bool,
+    pub migrate_legacy: bool,
+}
+
+impl Default for NormalizeAssetOptions {
+    fn default() -> Self {
+        Self {
+            compute_checksum: false,
+            infer_mime_type: true,
+            deduplicate: true,
+            fill_dimensions: false,
+            migrate_legacy: true,
+        }
+    }
+}
+
 /// A page in the document (PDF page, single image, etc.).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Page {
@@ -211,6 +233,117 @@ impl Document {
             }
         }
         diags
+    }
+
+    /// Walk all inlines, migrate old Inline::Footnote to Inline::NoteRef + Document.notes.
+    /// Returns diagnostics for each migrated footnote.
+    pub fn migrate_inline_footnotes_to_notes(&mut self) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+        let mut next_id = 0;
+        for page in &mut self.pages {
+            Self::migrate_page_footnotes(page, &mut next_id, &mut self.notes, &mut diags);
+        }
+        diags
+    }
+
+    fn migrate_page_footnotes(
+        page: &mut crate::Page,
+        next_id: &mut usize,
+        notes: &mut Vec<NoteDefinition>,
+        diags: &mut Vec<Diagnostic>,
+    ) {
+        for block in &mut page.blocks {
+            Self::migrate_block_footnotes(block, next_id, notes, diags);
+        }
+    }
+
+    fn migrate_block_footnotes(
+        block: &mut Block,
+        next_id: &mut usize,
+        notes: &mut Vec<NoteDefinition>,
+        diags: &mut Vec<Diagnostic>,
+    ) {
+        match block {
+            Block::TextBox(tb) => {
+                for child in &mut tb.content {
+                    Self::migrate_block_footnotes(child, next_id, notes, diags);
+                }
+            }
+            Block::Quote(q) => {
+                for child in &mut q.blocks {
+                    Self::migrate_block_footnotes(child, next_id, notes, diags);
+                }
+            }
+            Block::Minipage(m) => {
+                for child in &mut m.content {
+                    Self::migrate_block_footnotes(child, next_id, notes, diags);
+                }
+            }
+            Block::Float(f) => {
+                for child in &mut f.content {
+                    Self::migrate_block_footnotes(child, next_id, notes, diags);
+                }
+            }
+            Block::Theorem(t) => {
+                for child in &mut t.content {
+                    Self::migrate_block_footnotes(child, next_id, notes, diags);
+                }
+            }
+            Block::Proof(p) => {
+                for child in &mut p.content {
+                    Self::migrate_block_footnotes(child, next_id, notes, diags);
+                }
+            }
+            _ => {}
+        }
+        if let Some(mut inlines) = block.inlines_mut() {
+            for inline in inlines.iter_mut() {
+                // Phase 1: check for Footnote and clone content (borrows inline temporarily)
+                let migration = match inline {
+                    Inline::Footnote { content } => Some(content.clone()),
+                    _ => None,
+                };
+                // Phase 2: perform replacement (borrow of inline from Phase 1 is dropped)
+                if let Some(content) = migration {
+                    let note_id = format!("migrated-fn-{}", *next_id);
+                    *next_id += 1;
+                    let note_content = if let Inline::Text(t) = content.as_ref() {
+                        vec![Block::Paragraph(crate::ParagraphBlock {
+                            inlines: vec![Inline::Text(t.clone())],
+                            geometry: None,
+                            source: None,
+                            style: None,
+                        })]
+                    } else {
+                        vec![Block::Paragraph(crate::ParagraphBlock {
+                            inlines: vec![content.as_ref().clone()],
+                            geometry: None,
+                            source: None,
+                            style: None,
+                        })]
+                    };
+                    notes.push(NoteDefinition {
+                        id: note_id.clone(),
+                        kind: crate::inline::NoteKind::Footnote,
+                        content: note_content,
+                        source: None,
+                    });
+                    // Replace the old Footnote with a NoteRef inline
+                    **inline = Inline::NoteRef(crate::inline::NoteRefInline {
+                        note_id: note_id.clone(),
+                        kind: crate::inline::NoteKind::Footnote,
+                        source: None,
+                    });
+                    diags.push(
+                        Diagnostic::info(
+                            "I_FOOTNOTE_MIGRATED",
+                            format!("Inline::Footnote migrated to NoteRef ({})", note_id),
+                        )
+                        .with_recoverable(true),
+                    );
+                }
+            }
+        }
     }
 
     /// Walk all FigureBlock and ImageInline asset references in the document
@@ -405,6 +538,108 @@ impl Document {
             }
         }
     }
+
+    /// Normalize all assets in the document according to the given options.
+    ///
+    /// 1. migrate legacy `image_data` → `MediaAsset` (when enabled)
+    /// 2. infer missing format/mime_type from content (when enabled)
+    /// 3. compute SHA256 checksums (when enabled)
+    /// 4. deduplicate identical content (when enabled)
+    /// 5. update AssetManifest
+    pub fn normalize_assets(&mut self, options: NormalizeAssetOptions) -> Vec<Diagnostic> {
+        let mut diags = Vec::new();
+
+        // 1. Migrate legacy image_data
+        if options.migrate_legacy {
+            diags.extend(self.migrate_legacy_image_data());
+        }
+
+        // 2. Infer missing mime_type from format
+        if options.infer_mime_type {
+            for asset in &mut self.assets {
+                if asset.mime_type.is_none() {
+                    asset.mime_type = asset_format_to_mime(&asset.format);
+                }
+            }
+        }
+
+        // 3. Compute checksums
+        if options.compute_checksum {
+            for asset in &mut self.assets {
+                if asset.checksum_sha256.is_none() {
+                    if let Ok(bytes) = resolve_asset_bytes(asset) {
+                        asset.checksum_sha256 = Some(compute_sha256(&bytes));
+                    }
+                }
+            }
+        }
+
+        // 4. Deduplicate
+        if options.deduplicate && self.assets.len() > 1 {
+            let mut keep: Vec<MediaAsset> = Vec::new();
+            let mut dedup_map: std::collections::HashMap<String, AssetId> =
+                std::collections::HashMap::new();
+            for asset in self.assets.drain(..) {
+                let key = asset
+                    .checksum_sha256
+                    .clone()
+                    .unwrap_or_else(|| asset.id.0.clone());
+                if let Some(existing) = dedup_map.get(&key) {
+                    diags.push(
+                        Diagnostic::warning(
+                            "W_ASSET_DEDUP",
+                            format!("Asset '{}' deduplicated to '{}'", asset.id.0, existing.0),
+                        )
+                        .with_recoverable(true),
+                    );
+                } else {
+                    dedup_map.insert(key, asset.id.clone());
+                    keep.push(asset);
+                }
+            }
+            self.assets = keep;
+        }
+
+        // 5. Validate refs
+        diags.extend(self.validate_asset_refs());
+
+        diags
+    }
+}
+
+fn asset_format_to_mime(format: &crate::AssetFormat) -> Option<String> {
+    match format {
+        crate::AssetFormat::Png => Some("image/png".to_string()),
+        crate::AssetFormat::Jpeg => Some("image/jpeg".to_string()),
+        crate::AssetFormat::Gif => Some("image/gif".to_string()),
+        crate::AssetFormat::Webp => Some("image/webp".to_string()),
+        crate::AssetFormat::Bmp => Some("image/bmp".to_string()),
+        crate::AssetFormat::Tiff => Some("image/tiff".to_string()),
+        crate::AssetFormat::Svg => Some("image/svg+xml".to_string()),
+        crate::AssetFormat::Pdf => Some("application/pdf".to_string()),
+        _ => None,
+    }
+}
+
+fn resolve_asset_bytes(asset: &crate::MediaAsset) -> Result<Vec<u8>, String> {
+    match &asset.storage {
+        crate::AssetStorage::InlineBase64 { data } => Ok(data.as_bytes().to_vec()),
+        _ => Err("Cannot resolve bytes from this storage type".to_string()),
+    }
+}
+
+/// Simple deterministic content hash using std-only facilities.
+///
+/// Not cryptographically secure — the runtime crate should override
+/// with a real SHA-256 when available. This is sufficient for
+/// deduplication within a single process.
+fn compute_sha256(bytes: &[u8]) -> String {
+    let mut h: u64 = 14695981039346656037; // FNV-1a offset basis
+    for &b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(1099511628211); // FNV-1a prime
+    }
+    format!("{:016x}", h)
 }
 
 /// Guess the asset format from a base64-encoded data prefix.

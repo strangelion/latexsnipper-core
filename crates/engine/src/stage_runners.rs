@@ -3,7 +3,12 @@
 //! Each runner implements the `StageRunner` trait from `latexsnipper-ast`
 //! and produces a `StageReport` that can be attached to a `Job`.
 
-use latexsnipper_ast::{StageKind, StageReport, StageRunner, StageSpec, StageStatus};
+use latexsnipper_ast::{
+    ArtifactEntry, ArtifactKind, ArtifactManifest, EventRecord, JobRoot, StageKind, StageReport,
+    StageRunner, StageSpec, StageStatus,
+};
+use std::collections::HashMap;
+use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // DecodeStage — decodes raw input into page images
@@ -169,4 +174,134 @@ fn minimal_timestamp() -> String {
         seconds,
         ms
     )
+}
+
+// ---------------------------------------------------------------------------
+// StageOrchestrator — runs stages in sequence, managing manifests, events
+// ---------------------------------------------------------------------------
+
+/// Orchestrator that runs stages in sequence, managing artifact manifests,
+/// event logs, and stage reports.
+pub struct StageOrchestrator {
+    pub job_root: JobRoot,
+    pub artifact_manifest: ArtifactManifest,
+    pub runners: HashMap<String, Box<dyn StageRunner>>,
+}
+
+impl StageOrchestrator {
+    pub fn new(job_root: JobRoot) -> Self {
+        Self {
+            artifact_manifest: ArtifactManifest {
+                schema_version: "1.0.0".to_string(),
+                job_id: job_root.job_id.clone(),
+                artifacts: Vec::new(),
+            },
+            job_root,
+            runners: HashMap::new(),
+        }
+    }
+
+    pub fn register_runner(&mut self, runner: Box<dyn StageRunner>) {
+        self.runners.insert(format!("{:?}", runner.kind()), runner);
+    }
+
+    /// Run a single stage spec and produce a report.
+    /// Writes the report, an event log entry, and updates the artifact manifest.
+    pub fn run_stage(&mut self, spec: &StageSpec) -> Result<StageReport, String> {
+        let kind_str = format!("{:?}", spec.kind);
+        let runner = self
+            .runners
+            .get(&kind_str)
+            .ok_or_else(|| format!("No runner registered for stage kind: {}", kind_str))?;
+
+        // Execute the stage
+        let report = runner.run(spec)?;
+
+        // Write stage report JSON
+        let report_path = format!(
+            "{}/{}.report.json",
+            self.job_root.reports_dir, spec.stage_id
+        );
+        if let Ok(json) = serde_json::to_string_pretty(&report) {
+            let _ = std::fs::write(&report_path, json);
+        }
+
+        // Append event record to events.jsonl (JSON Lines format)
+        let event = EventRecord {
+            timestamp: minimal_timestamp(),
+            level: if report.status == StageStatus::Failed {
+                "error".to_string()
+            } else {
+                "info".to_string()
+            },
+            job_id: Some(self.job_root.job_id.clone()),
+            stage_id: Some(spec.stage_id.clone()),
+            event: format!("stage.{:?}", report.status).to_lowercase(),
+            code: if report.status == StageStatus::Failed {
+                Some("STAGE_FAILED".to_string())
+            } else {
+                None
+            },
+            message: format!("Stage '{}' {:?}", spec.stage_id, report.status),
+            data: serde_json::Value::Null,
+        };
+        let event_path = format!("{}/events.jsonl", self.job_root.logs_dir);
+        if let Ok(line) = serde_json::to_string(&event) {
+            // Append to JSONL — create if absent
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&event_path)
+            {
+                use std::io::Write;
+                let _ = writeln!(f, "{}", line);
+            }
+        }
+
+        // Register each output artifact in the manifest
+        for art_id in &report.output_artifacts {
+            self.artifact_manifest.artifacts.push(ArtifactEntry {
+                id: art_id.clone(),
+                kind: ArtifactKind::ConvertedText,
+                path: format!("{}/{}", self.job_root.artifacts_dir, art_id),
+                mime_type: None,
+                format: None,
+                checksum_sha256: None,
+                size_bytes: None,
+                producer_stage_id: Some(spec.stage_id.clone()),
+                source_artifact_ids: spec.input.artifacts.clone(),
+            });
+        }
+
+        // Write updated artifact manifest
+        let manifest_path = format!("{}/artifacts.json", self.job_root.artifacts_dir);
+        if let Ok(json) = serde_json::to_string_pretty(&self.artifact_manifest) {
+            let _ = std::fs::write(&manifest_path, json);
+        }
+
+        Ok(report)
+    }
+
+    /// Read a StageSpec from a JSON file, run it, and return the report.
+    /// This is a lighter-weight entry point when specs are stored as files.
+    pub fn run_spec_file(&mut self, path: &Path) -> Result<StageReport, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read spec file: {}", e))?;
+        let spec: StageSpec =
+            serde_json::from_str(&content).map_err(|e| format!("Failed to parse spec: {}", e))?;
+        let report = self
+            .runners
+            .get(&format!("{:?}", spec.kind))
+            .ok_or_else(|| format!("No runner for {:?}", spec.kind))?
+            .run(&spec)?;
+        Ok(report)
+    }
+}
+
+/// Register the four standard stage runners (Decode, Recognize, Convert, Export).
+pub fn register_default_runners(orchestrator: &mut StageOrchestrator) {
+    orchestrator.register_runner(Box::new(DecodeStage));
+    orchestrator.register_runner(Box::new(RecognizeStage));
+    orchestrator.register_runner(Box::new(ConvertStage));
+    orchestrator.register_runner(Box::new(ExportStage));
 }

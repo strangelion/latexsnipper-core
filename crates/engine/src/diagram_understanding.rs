@@ -239,6 +239,9 @@ impl DiagramUnderstandingService {
                                 .with_confidence(0.9)
                                 .with_region(Rect::new(x, y, w, h)),
                         ),
+                        transform: None,
+                        layer: None,
+                        accessibility: None,
                     },
                     shape_id: id,
                     connections: shape_connections,

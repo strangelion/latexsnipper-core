@@ -1,5 +1,5 @@
 use latexsnipper_ast::{
-    Block, Document, Formula, FormulaBlock, FormulaSource, NodeIdGenerator, Page,
+    Block, Document, ExportArtifact, Formula, FormulaBlock, FormulaSource, NodeIdGenerator, Page,
 };
 use latexsnipper_foundation::Result;
 
@@ -111,6 +111,21 @@ impl DocumentConverter {
     pub fn convert_pages(&self, doc: &Document, pages: &[usize]) -> Result<String> {
         let filtered = doc.filter_pages(pages);
         self.convert(&filtered)
+    }
+
+    /// Convert a Document to the target format, returning an ExportArtifact
+    /// with diagnostics, assets, and the converted text.
+    pub fn convert_artifact(&self, doc: &Document) -> std::result::Result<ExportArtifact, String> {
+        let text = self.convert(doc).map_err(|e| e.to_string())?;
+        let format_str = self.format.name().to_string();
+        Ok(ExportArtifact {
+            format: format_str,
+            primary_path: None,
+            text: Some(text),
+            assets: Vec::new(),
+            // semantic converters don't produce non-exported assets yet
+            diagnostics: doc.diagnostics.clone(),
+        })
     }
 
     pub fn convert_all(doc: &Document) -> Result<Vec<(OutputFormat, String)>> {
