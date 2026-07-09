@@ -120,6 +120,9 @@ fn parse_document_body(
     let mut in_paragraph = false;
     let mut current_paragraph_inlines: Vec<Inline> = Vec::new();
     let mut paragraph_style = String::new();
+    let mut in_pstyle = false;
+    let mut has_list_formatting = false;
+    let mut pending_list_items: Vec<ListItem> = Vec::new();
     let mut in_run = false;
     let mut run_bold = false;
     let mut run_italic = false;
@@ -143,7 +146,10 @@ fn parse_document_body(
                         paragraph_style.clear();
                     }
                     b"w:pStyle" | b"pStyle" => {
-                        // Read paragraph style
+                        in_pstyle = true;
+                    }
+                    b"w:numPr" | b"numPr" if in_paragraph => {
+                        has_list_formatting = true;
                     }
                     b"w:r" | b"r" if in_paragraph => {
                         in_run = true;
@@ -232,11 +238,17 @@ fn parse_document_body(
                         }
                     }
                 }
+                if in_pstyle {
+                    if let Ok(text) = e.unescape() {
+                        paragraph_style = text.to_string();
+                    }
+                }
             }
             Ok(Event::End(ref e)) => {
                 let tag = e.name().as_ref().to_vec();
                 match tag.as_slice() {
                     b"w:t" | b"t" => in_text = false,
+                    b"w:pStyle" | b"pStyle" => in_pstyle = false,
                     b"w:r" | b"r" => in_run = false,
                     b"w:hyperlink" | b"hyperlink" => {
                         if !hyperlink_target.is_empty() && !hyperlink_inlines.is_empty() {
@@ -289,14 +301,47 @@ fn parse_document_body(
                     }
                     b"w:p" | b"p" => {
                         in_paragraph = false;
-                        if !current_paragraph_inlines.is_empty() {
-                            blocks.push(Block::Paragraph(ParagraphBlock {
-                                inlines: std::mem::take(&mut current_paragraph_inlines),
-                                geometry: None,
-                                source: Some(SourceInfo::new().with_producer("docx")),
-                                style: None,
-                            }));
+                        if has_list_formatting && !current_paragraph_inlines.is_empty() {
+                            let inlines = std::mem::take(&mut current_paragraph_inlines);
+                            pending_list_items.push(ListItem {
+                                marker: None,
+                                content: vec![Block::Paragraph(ParagraphBlock {
+                                    inlines,
+                                    geometry: None,
+                                    source: Some(SourceInfo::new().with_producer("docx")),
+                                    style: None,
+                                })],
+                                checked: None,
+                                source: None,
+                            });
+                        } else if !current_paragraph_inlines.is_empty() {
+                            flush_list(&mut blocks, &mut pending_list_items);
+                            let inlines = std::mem::take(&mut current_paragraph_inlines);
+                            let source = Some(SourceInfo::new().with_producer("docx"));
+                            if paragraph_style.to_lowercase().starts_with("heading") {
+                                let level = paragraph_style
+                                    .trim_start_matches("Heading")
+                                    .trim()
+                                    .parse::<u8>()
+                                    .unwrap_or(1);
+                                blocks.push(Block::Heading(HeadingBlock {
+                                    level: level.clamp(1, 6),
+                                    inlines,
+                                    id: None,
+                                    geometry: None,
+                                    source,
+                                }));
+                            } else {
+                                blocks.push(Block::Paragraph(ParagraphBlock {
+                                    inlines,
+                                    geometry: None,
+                                    source,
+                                    style: None,
+                                }));
+                            }
                         }
+                        paragraph_style.clear();
+                        has_list_formatting = false;
                     }
                     b"w:body" | b"body" => in_body = false,
                     _ => {}
@@ -309,7 +354,23 @@ fn parse_document_body(
         buf.clear();
     }
 
+    // Flush any remaining list items
+    flush_list(&mut blocks, &mut pending_list_items);
+
     (blocks, assets, diagnostics)
+}
+
+/// Flush accumulated list items as a ListBlock.
+fn flush_list(blocks: &mut Vec<Block>, items: &mut Vec<ListItem>) {
+    if !items.is_empty() {
+        blocks.push(Block::List(ListBlock {
+            style: Some(ListStyle::Bullet(BulletStyle::Disc)),
+            items: std::mem::take(items),
+            start: None,
+            geometry: None,
+            source: None,
+        }));
+    }
 }
 
 /// Guess the image format from the media file path extension.

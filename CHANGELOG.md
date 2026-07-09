@@ -145,6 +145,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **PR5**: `ExportStage` real execution — reads Document AST JSON, calls `ExportService::export()` with visual format from `spec.options`, writes exported output file
   - **PR6**: `collect_converter_diagnostics()` — recursively walks Document identifying 10 placeholder-rendered block types (Chart/Shape/EmbeddedObject/Annotation/FormField/ChemicalFormula/Graph/QrCode/Bibliography/HeaderFooter), emits `W_BLOCK_DOWNGRADED`; `convert_artifact()` now merges 3 diagnostic sources (doc + RenderTree + converter)
 
+- **Office/PDF Import Deepening**
+  - `docx_reader` — heading detection via `w:pStyle` → `Block::Heading` with parsed level; list detection via `w:numPr` → `Block::List` with accumulated `ListItem`s
+  - `pptx_reader` — table parsing via `a:tbl`/`a:tr`/`a:tc` → `TableBlock` with cell text extraction
+  - `xlsx_reader` — `CellDataType` population (Boolean/Date/Text/Formula), formula extraction via `<f>` tag, column width parsing via `<col>` tags
+
 ### Changed
 - `FigureBlock.caption` deprecated in favor of `caption_inlines: Option<Vec<Inline>>`
 - `RecognizeInput::Image(String)` → `RecognizeInput::Image(SnipperImageDescriptor)`

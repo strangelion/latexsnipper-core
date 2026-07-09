@@ -245,11 +245,14 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
     let mut current_cell_type = String::new();
     let mut current_cell_value = String::new();
     let mut current_is_text = String::new();
-    let mut current_row_cells: Vec<(String, String, String)> = Vec::new(); // (ref, value, type)
+    let mut in_f = false;
+    let mut current_cell_formula = String::new();
+    let mut current_row_cells: Vec<(String, String, String, String)> = Vec::new(); // (ref, value, type, formula)
+    let mut columns: Vec<TableColumn> = Vec::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 let tag = e.name().as_ref().to_vec();
                 match tag.as_slice() {
                     b"sheetData" => in_sheet_data = true,
@@ -262,6 +265,7 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                         current_cell_ref.clear();
                         current_cell_type.clear();
                         current_cell_value.clear();
+                        current_cell_formula.clear();
                         for attr in e.attributes().flatten() {
                             let k = attr.key.as_ref().to_vec();
                             let v = String::from_utf8_lossy(&attr.value).to_string();
@@ -271,14 +275,27 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                             if k == b"t" {
                                 current_cell_type = v.clone();
                             }
-                            if k == b"s" {
-                                current_cell_type = v;
-                            }
                         }
                     }
                     b"v" if in_c => in_v = true,
                     b"is" if in_c => in_is = true,
                     b"t" if in_is => in_is_t = true,
+                    b"f" if in_c => {
+                        in_f = true;
+                        current_cell_formula.clear();
+                    }
+                    b"cols" => {}
+                    b"col" => {
+                        let width = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"width")
+                            .and_then(|a| String::from_utf8_lossy(&a.value).parse::<f32>().ok());
+                        columns.push(TableColumn {
+                            width,
+                            is_header: false,
+                        });
+                    }
                     _ => {}
                 }
             }
@@ -286,6 +303,11 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                 if in_v {
                     if let Ok(t) = e.unescape() {
                         current_cell_value.push_str(&t);
+                    }
+                }
+                if in_f {
+                    if let Ok(t) = e.unescape() {
+                        current_cell_formula.push_str(&t);
                     }
                 }
                 if in_is_t {
@@ -308,6 +330,7 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                         current_is_text.clear();
                     }
                     b"v" => in_v = false,
+                    b"f" => in_f = false,
                     b"c" => {
                         in_c = false;
                         if !current_cell_ref.is_empty() {
@@ -315,6 +338,7 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                                 current_cell_ref.clone(),
                                 current_cell_value.clone(),
                                 current_cell_type.clone(),
+                                current_cell_formula.clone(),
                             ));
                         }
                     }
@@ -323,8 +347,24 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                         // Build row of cells
                         let table_row: Vec<TableCell> = current_row_cells
                             .iter()
-                            .map(|(_, val, typ)| {
+                            .map(|(_, val, typ, formula)| {
                                 let resolved = resolve_cell_value(val, typ, shared_strings);
+                                let cell_type_enum = match typ.as_str() {
+                                    "b" => Some(CellDataType::Boolean),
+                                    "e" => Some(CellDataType::Date),
+                                    "str" | "inline" => Some(CellDataType::Text),
+                                    _ => None,
+                                };
+                                let data_type = if !formula.is_empty() {
+                                    Some(CellDataType::Formula)
+                                } else {
+                                    cell_type_enum
+                                };
+                                let formula_opt = if formula.is_empty() {
+                                    None
+                                } else {
+                                    Some(formula.clone())
+                                };
                                 TableCell {
                                     content: vec![Block::Paragraph(ParagraphBlock {
                                         inlines: vec![Inline::Text(TextRun::new(resolved))],
@@ -334,8 +374,8 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                                     })],
                                     colspan: 1,
                                     rowspan: 1,
-                                    data_type: None,
-                                    formula: None,
+                                    data_type,
+                                    formula: formula_opt,
                                     style: None,
                                     border_style: None,
                                     border_width: None,
@@ -370,7 +410,7 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
 
     TableBlock {
         rows,
-        columns: vec![],
+        columns,
         caption: None,
         style: None,
         geometry: None,

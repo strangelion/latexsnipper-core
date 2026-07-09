@@ -134,6 +134,9 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **Real ConvertStage** | ✅ | Reads Document JSON, calls `DocumentConverter`, writes output file |
 | **Real ExportStage** | ✅ | Reads Document JSON, calls `ExportService`, writes output file |
 | **Converter placeholder diagnostics** | ✅ | `collect_converter_diagnostics()` flags 10 downgraded block types |
+| **DOCX heading/list detection** | ✅ | `w:pStyle` → Heading levels 1–6, `w:numPr` → ListBlock items |
+| **PPTX table import** | ✅ | `a:tbl` → TableBlock with cell text extraction |
+| **XLSX data type/formula/columns** | ✅ | CellDataType (Boolean/Date/Text/Formula), formula extraction, column width |
 
 ---
 

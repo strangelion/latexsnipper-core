@@ -168,6 +168,9 @@ Engine
 | **真实 ConvertStage** | ✅ | 读 Document JSON → 调 converter → 写文件 |
 | **真实 ExportStage** | ✅ | 读 Document JSON → 调 ExportService → 写文件 |
 | **Converter 降级诊断** | ✅ | 10 种高级块自动发射 W_BLOCK_DOWNGRADED |
+| **DOCX 标题/列表解析** | ✅ | w:pStyle → Heading 1-6, w:numPr → ListBlock |
+| **PPTX 表格导入** | ✅ | a:tbl → TableBlock 单元格文本提取 |
+| **XLSX 数据类型/公式/列宽** | ✅ | CellDataType(Boolean/Date/Text/Formula), 公式提取, 列宽解析 |
 
 ### 实验版
 

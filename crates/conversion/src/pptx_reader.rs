@@ -204,6 +204,11 @@ fn parse_slide_body(
     let mut run_italic = false;
     let mut in_t = false;
     let mut shape_type = String::new();
+    let mut in_table = false;
+    let mut in_table_row = false;
+    let mut in_table_cell = false;
+    let mut table_rows: Vec<Vec<Inline>> = Vec::new();
+    let mut current_cell_inlines: Vec<Inline> = Vec::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -241,6 +246,18 @@ fn parse_slide_body(
                         }
                     }
                     b"a:t" | b"t" if in_run => in_t = true,
+                    b"a:tbl" | b"tbl" => {
+                        in_table = true;
+                        table_rows.clear();
+                    }
+                    b"a:tr" | b"tr" if in_table => {
+                        in_table_row = true;
+                        table_rows.push(Vec::new());
+                    }
+                    b"a:tc" | b"tc" if in_table_row => {
+                        in_table_cell = true;
+                        current_cell_inlines.clear();
+                    }
                     b"p:pic" | b"pic" => {
                         // Extract image from blipFill
                         let img_id = e
@@ -313,16 +330,69 @@ fn parse_slide_body(
                     b"a:p" | b"p" if in_paragraph => {
                         in_paragraph = false;
                         if !current_text.trim().is_empty() {
-                            if let Some(Block::Paragraph(ref mut p)) = blocks.last_mut() {
-                                let text = current_text.trim().to_string();
-                                let tr = TextRun::new(text)
-                                    .with_bold(run_bold)
-                                    .with_italic(run_italic);
+                            let text = current_text.trim().to_string();
+                            let tr = TextRun::new(text)
+                                .with_bold(run_bold)
+                                .with_italic(run_italic);
+                            if in_table_cell {
+                                current_cell_inlines.push(Inline::Text(tr));
+                            } else if let Some(Block::Paragraph(ref mut p)) = blocks.last_mut() {
                                 p.inlines.push(Inline::Text(tr));
                             }
                         }
                     }
                     b"p:txBody" | b"txBody" => in_text_body = false,
+                    b"a:tc" | b"tc" if in_table_cell => {
+                        in_table_cell = false;
+                        if let Some(row) = table_rows.last_mut() {
+                            row.append(&mut current_cell_inlines);
+                        }
+                    }
+                    b"a:tr" | b"tr" if in_table_row => {
+                        in_table_row = false;
+                    }
+                    b"a:tbl" | b"tbl" if in_table => {
+                        in_table = false;
+                        if !table_rows.is_empty() {
+                            let mut rows: Vec<TableRow> = Vec::new();
+                            for row_inlines in &table_rows {
+                                let cell = TableCell {
+                                    content: vec![Block::Paragraph(ParagraphBlock {
+                                        inlines: row_inlines.clone(),
+                                        geometry: None,
+                                        source: None,
+                                        style: None,
+                                    })],
+                                    colspan: 1,
+                                    rowspan: 1,
+                                    border_style: None,
+                                    border_width: None,
+                                    border_color: None,
+                                    background: None,
+                                    alignment: None,
+                                    data_type: None,
+                                    formula: None,
+                                    style: None,
+                                    geometry: None,
+                                    source: None,
+                                };
+                                rows.push(TableRow {
+                                    cells: vec![cell],
+                                    height: None,
+                                    is_header: false,
+                                });
+                            }
+                            blocks.push(Block::Table(TableBlock {
+                                rows,
+                                columns: Vec::new(),
+                                caption: None,
+                                style: None,
+                                geometry: None,
+                                source: None,
+                            }));
+                        }
+                        table_rows.clear();
+                    }
                     _ => {}
                 }
             }
