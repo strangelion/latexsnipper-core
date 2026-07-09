@@ -122,45 +122,49 @@ jobs:
 
       - name: Check version consistency
         run: |
+          VERSION="$(grep '^version =' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: Cargo.toml version ($VERSION) does not match tag version (v$TAG_VERSION)"
+            exit 1
+          fi
+          echo "Version consistent: $VERSION"
+        
+      - name: Publish crates
+        run: |
           publish() {
-            local crate=$1
-            echo "=== Publishing $crate ==="
-
-            set +e
-            cargo publish -p "$crate" 2>&1 | tee /tmp/pub.log
-            exit_code=${PIPESTATUS[0]}
-            set -e
-
-            if [ $exit_code -eq 0 ]; then
-              echo "Published $crate"
-              sleep 30
-              return 0
-            fi
-
-            if grep -Ei "already uploaded|already exists|is already uploaded|crate version.*already" /tmp/pub.log; then
-              echo "Skipping $crate — this version is already published"
-              sleep 5
-              return 0
-            fi
-
-            echo "ERROR: failed to publish $crate"
-            exit $exit_code
-          }
-
-          publish latexsnipper-foundation
-          publish latexsnipper-ast
-          publish latexsnipper-tensor
-          publish latexsnipper-model
-          publish latexsnipper-image
-          publish latexsnipper-runtime
-          publish latexsnipper-syntax
-          publish latexsnipper-export
-          publish latexsnipper-conversion
-          publish latexsnipper-inference
-          publish latexsnipper-api-types
-          publish latexsnipper-pipeline
-          publish latexsnipper-engine
-        env:
+              local crate=$1
+              echo "=== Publishing $crate ==="
+              set +e
+              cargo publish -p "$crate" 2>&1 | tee /tmp/pub.log
+              exit_code=${PIPESTATUS[0]}
+              set -e
+              if [ $exit_code -eq 0 ]; then
+                echo "Published $crate"
+                sleep 30
+                return 0
+              fi
+              if grep -Ei "already uploaded|already exists|is already uploaded|crate version.*already" /tmp/pub.log; then
+                echo "Skipping $crate — this version is already published"
+                sleep 5
+                return 0
+              fi
+              echo "ERROR: failed to publish $crate"
+              exit $exit_code
+            }
+            publish latexsnipper-foundation
+            publish latexsnipper-ast
+            publish latexsnipper-tensor
+            publish latexsnipper-model
+            publish latexsnipper-image
+            publish latexsnipper-runtime
+            publish latexsnipper-syntax
+            publish latexsnipper-export
+            publish latexsnipper-conversion
+            publish latexsnipper-inference
+            publish latexsnipper-api-types
+            publish latexsnipper-pipeline
+            publish latexsnipper-engine
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   # ============================================================
