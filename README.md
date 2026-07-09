@@ -9,6 +9,9 @@
 [![Status](https://img.shields.io/badge/Status-Core%20Pipeline%20Working-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)]()
 [![Clippy](https://img.shields.io/badge/Clippy-0%20warnings-brightgreen)]()
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue)]()
+
+**Version 2.0.0 — Platform AST release with StageSpec pipeline, MediaAsset model, ArtifactManifest, and Office/PDF object types.**
 
 **One line of code, images to LaTeX/Markdown/Typst**
 

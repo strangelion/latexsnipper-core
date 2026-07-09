@@ -8,6 +8,7 @@
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
 [![Status](https://img.shields.io/badge/Status-架构稳定-yellow)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20WASM-lightgrey)]()
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue)]()
 [![Clippy](https://img.shields.io/badge/Clippy-0%20warnings-brightgreen)]()
 
 **一次构建，处处运行。**
