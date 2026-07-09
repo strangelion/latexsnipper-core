@@ -136,8 +136,8 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **ExportService diagnostics** | ✅ | `tree.diagnostics` + `doc.diagnostics` in all SVG/PDF/Text exports |
 | **Real ConvertStage** | ✅ | Reads Document JSON, calls `DocumentConverter`, writes output file |
 | **Real ExportStage** | ✅ | Reads Document JSON, calls `ExportService`, writes output file |
-| **Real DecodeStage** | ⚡ MVP | Reads source → writes decoded artifact; image recognition via pipeline not yet integrated |
-| **Real RecognizeStage** | ⚡ MVP | Document JSON passthrough to AST artifact; image recognition coming in next release |
+| **Real DecodeStage** | ✅ | Reads source → writes decoded artifact to JobRoot directory |
+| **Real RecognizeStage** | ✅ | Image → Snipper SDK → Document AST; falls back to JSON passthrough |
 | **Converter placeholder diagnostics** | ✅ | `collect_converter_diagnostics()` flags 10 downgraded block types |
 | **DOCX heading/list detection** | ✅ | `w:pStyle` → Heading levels 1–6, `w:numPr` → ListBlock items |
 | **PPTX table import** | ✅ | `a:tbl` → TableBlock with cell text extraction |

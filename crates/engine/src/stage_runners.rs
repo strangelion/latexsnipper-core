@@ -157,15 +157,56 @@ impl StageRunner for RecognizeStage {
                             ),
                         ));
                     } else {
-                        // Not Document JSON — could be an image, emit diagnostic
-                        diags.push(
-                            Diagnostic::new(
+                        // Not Document JSON — try as image via Snipper SDK
+                        let ext = src.rsplit('.').next().unwrap_or("").to_lowercase();
+                        let is_image = matches!(ext.as_str(), "png"|"jpg"|"jpeg"|"webp"|"bmp"|"tiff"|"gif");
+                        if is_image {
+                            // Try to use Snipper engine for image recognition
+                            let model_dir = spec.options.get("model_dir").and_then(|v| v.as_str()).unwrap_or("models");
+                            let config = crate::EngineConfig::with_models_dir(std::path::PathBuf::from(model_dir));
+                            match crate::sdk::Snipper::from_file_with_config(src, config, crate::RecognizeMode::Mixed) {
+                                Ok(snipper) => {
+                                    let doc = snipper.document();
+                                    let json = serde_json::to_string_pretty(doc)
+                                        .map_err(|e| format!("Serialize Document: {}", e))?;
+                                    let out_path = format!("{}/document.ast.json", job_root.ast_dir);
+                                    std::fs::write(&out_path, &json)
+                                        .map_err(|e| format!("Write AST: {}", e))?;
+                                    let checksum = compute_file_sha256(&out_path).ok();
+                                    let meta = std::fs::metadata(&out_path).ok();
+                                    let size = meta.map(|m| m.len());
+                                    produced_artifacts.push(StageProducedArtifact {
+                                        id: format!("{}:ast", spec.stage_id),
+                                        kind: ArtifactKind::DocumentAst,
+                                        path: out_path.clone(),
+                                        mime_type: Some("application/json".to_string()),
+                                        format: Some("json".to_string()),
+                                        checksum_sha256: checksum,
+                                        size_bytes: size,
+                                    });
+                                    output_artifacts.push(out_path);
+                                    diags.push(Diagnostic::new(
+                                        DiagnosticLevel::Info,
+                                        "I_IMAGE_RECOGNIZED",
+                                        format!("Recognized {} blocks from image '{}'", doc.all_blocks().len(), src),
+                                    ));
+                                    }
+                                Err(e) => {
+                                    diags.push(Diagnostic::new(
+                                        DiagnosticLevel::Warning,
+                                        "W_SNIPPER_INIT_FAILED",
+                                        format!("Snipper engine init failed for '{}': {}. Model dir: '{}'", src, e, model_dir),
+                                    ).with_recoverable(true));
+                                }
+                            }
+                        } else {
+                            // Not a recognized format
+                            diags.push(Diagnostic::new(
                                 DiagnosticLevel::Warning,
-                                "W_RECOGNIZE_NOT_IMPLEMENTED",
-                                "Real image recognition not implemented in RecognizeStage yet",
-                            )
-                            .with_recoverable(true),
-                        );
+                                "W_UNSUPPORTED_INPUT",
+                                format!("Unrecognized input format '{}' for RecognizeStage (expected .json or image file)", ext),
+                            ).with_recoverable(true));
+                        }
                     }
                 }
                 Err(e) => {
