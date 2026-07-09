@@ -64,7 +64,7 @@ Document
 | `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType, TextDirection, UnderlineStyle, Transform2D, LayerInfo, ListStyle, BulletStyle, NumberingStyle, VectorPath, PathCommand, ShapeGroup, AccessibilityInfo, Length, LengthUnit, TableBorder, BorderSide |
 | `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits, 12 diagnostic code constants, AudioAsset/VideoAsset, AudioFormat, VideoFormat |
 | `format` | format.rs | ExportArtifact, CapabilityMatrix, LossKind, FidelityLevel, SemanticFormat, ExportFormat, TargetFormat, PdfExportMode |
-| `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest, ProviderReport, EventRecord, ArtifactKind (14 variants), ConversionOutput |
+| `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest (with kind mapping), ProviderReport, EventRecord, ArtifactKind (14 variants), ConversionOutput |
 | `input` | input.rs | InputFormat (19 variants), InputSourceDescriptor, RecognizeInput, SnipperImageDescriptor |
 | `traits` | traits.rs | Importer, SemanticConverter, Exporter, Renderer, OfficeAdapter, StageRunner |
 | `geometry` | geometry.rs | Rect, Point, Size |
@@ -91,7 +91,8 @@ pub struct Document {
 // methods: new(), block_count(), all_blocks(), add_asset(), get_asset(),
 //          validate_asset_refs(), migrate_legacy_image_data(),
 //          normalize_assets(), migrate_inline_footnotes_to_notes(),
-//          rewrite_asset_refs()
+//          rewrite_asset_refs(), visit_asset_refs(), visit_asset_refs_mut(),
+//          collect_asset_refs()
 ```
 
 #### 页面过滤方法

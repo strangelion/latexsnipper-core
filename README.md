@@ -129,6 +129,11 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **AnnotationBlock accessibility** | ✅ | Field consistency across all visual blocks |
 | **StageRunner diagnostics** | ✅ | `ConvertStage`/`ExportStage` record real elapsed + source diagnostics |
 | **ArtifactKind mapping** | ✅ | `from_stage_kind()` — Decode→DecodedImage, Export→ExportedFile |
+| **Asset ref visitor** | ✅ | `visit_asset_refs()`/`visit_asset_refs_mut()` unified walk for validate/rewrite/collect |
+| **ExportService diagnostics** | ✅ | `tree.diagnostics` + `doc.diagnostics` in all SVG/PDF/Text exports |
+| **Real ConvertStage** | ✅ | Reads Document JSON, calls `DocumentConverter`, writes output file |
+| **Real ExportStage** | ✅ | Reads Document JSON, calls `ExportService`, writes output file |
+| **Converter placeholder diagnostics** | ✅ | `collect_converter_diagnostics()` flags 10 downgraded block types |
 
 ---
 

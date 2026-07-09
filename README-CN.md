@@ -163,6 +163,11 @@ Engine
 | **Visual 字段统一** | ✅ | 8 种 Block 统一 transform/layer/accessibility |
 | **TextBoxBlock accessor** | ✅ | `effective_transform()`/`effective_layer()` |
 | **StageOrchestrator** | ✅ | `run_stage()` 写入 reports/events/manifest |
+| **Asset ref visitor** | ✅ | 统一 visitor 覆盖 validate/rewrite/collect |
+| **ExportService 诊断** | ✅ | SVG/PDF/Text 导出携带所有降级诊断 |
+| **真实 ConvertStage** | ✅ | 读 Document JSON → 调 converter → 写文件 |
+| **真实 ExportStage** | ✅ | 读 Document JSON → 调 ExportService → 写文件 |
+| **Converter 降级诊断** | ✅ | 10 种高级块自动发射 W_BLOCK_DOWNGRADED |
 
 ### 实验版
 

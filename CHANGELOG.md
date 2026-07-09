@@ -137,6 +137,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `AnnotationBlock` + `accessibility: Option<AccessibilityInfo>` — field consistency
   - `ConvertStage`/`ExportStage` — now record real elapsed time and input source diagnostics
 
+- **v8 Asset Visitor & Runtime Closure (PR 1–6)**
+  - **PR1**: `Document::visit_asset_refs()`/`visit_asset_refs_mut()`/`collect_asset_refs()` — unified asset reference visitor covering Page/Chart/EmbeddedObject/SourceInfo; `validate_asset_refs()` and `rewrite_asset_refs()` refactored to use visitor (eliminates duplicate block-walk code)
+  - **PR2**: `MediaAsset.checksum_sha256` renamed to `checksum` — field name matches std-only FNV content hash; updated 5 reader/parser files (docx/pptx/html/markdown/asset_resolver)
+  - **PR3**: `ExportService::export()` now returns `tree.diagnostics` + `doc.diagnostics` instead of `Vec::new()` — `W_BLOCK_DOWNGRADED` warnings reach final `ExportArtifact`
+  - **PR4**: `ConvertStage` real execution — reads Document AST JSON from `spec.input.source`, calls `DocumentConverter::convert_artifact()` with target format from `spec.options`, writes converted output file
+  - **PR5**: `ExportStage` real execution — reads Document AST JSON, calls `ExportService::export()` with visual format from `spec.options`, writes exported output file
+  - **PR6**: `collect_converter_diagnostics()` — recursively walks Document identifying 10 placeholder-rendered block types (Chart/Shape/EmbeddedObject/Annotation/FormField/ChemicalFormula/Graph/QrCode/Bibliography/HeaderFooter), emits `W_BLOCK_DOWNGRADED`; `convert_artifact()` now merges 3 diagnostic sources (doc + RenderTree + converter)
+
 ### Changed
 - `FigureBlock.caption` deprecated in favor of `caption_inlines: Option<Vec<Inline>>`
 - `RecognizeInput::Image(String)` → `RecognizeInput::Image(SnipperImageDescriptor)`
