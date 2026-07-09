@@ -703,7 +703,7 @@ impl Document {
             for asset in &mut self.assets {
                 if asset.checksum.is_none() {
                     if let Ok(bytes) = resolve_asset_bytes(asset) {
-                        asset.checksum = Some(compute_content_hash(&bytes));
+                        asset.checksum = Some(compute_sha256(&bytes));
                     }
                 }
             }
@@ -773,22 +773,11 @@ fn resolve_asset_bytes(asset: &crate::MediaAsset) -> Result<Vec<u8>, String> {
     }
 }
 
-/// Simple deterministic content hash using std-only facilities.
-///
-/// Not cryptographically secure — the runtime crate should override
-/// with a real SHA-256 when available. This is sufficient for
-/// deduplication within a single process.
-///
-/// The hash input comes from `resolve_asset_bytes`, which returns
-/// raw bytes as-is (no base64 decoding) — this keeps the hash
-/// cheap and avoids a base64 crate dependency for the ast crate.
-fn compute_content_hash(bytes: &[u8]) -> String {
-    let mut h: u64 = 14695981039346656037; // FNV-1a offset basis
-    for &b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(1099511628211); // FNV-1a prime
-    }
-    format!("{:016x}", h)
+/// Compute SHA-256 hex digest using the `sha2` crate.
+/// Provides cryptographically secure checksums for asset dedup and manifest integrity.
+fn compute_sha256(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 /// Guess the asset format from a base64-encoded data prefix.
