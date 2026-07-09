@@ -377,7 +377,7 @@ choco install mupdf
 
 ```toml
 [dependencies]
-latexsnipper-engine = "1.0"
+latexsnipper-engine = "2"
 ```
 
 ```rust

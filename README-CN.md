@@ -239,13 +239,11 @@ crates/
 
 ### 安装 CLI
 
-```bash
-# 从 crates.io 安装
-# 从源码构建
-cargo build --release -p latexsnipper-cli
-# 或从 GitHub Release 下载预编译二进制
+CLI 暂不发布到 crates.io。推荐从 [GitHub Releases](https://github.com/strangelion/latexsnipper-core/releases) 下载预编译二进制，或从源码构建：
 
-# 或从源码构建
+```bash
+git clone https://github.com/strangelion/latexsnipper-core
+cd latexsnipper-core
 cargo build --release -p latexsnipper-cli
 ```
 
@@ -253,7 +251,7 @@ cargo build --release -p latexsnipper-cli
 
 ```toml
 [dependencies]
-latexsnipper-engine = "1.0"
+latexsnipper-engine = "2"
 ```
 
 ```rust

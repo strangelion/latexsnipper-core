@@ -112,6 +112,8 @@ pub enum PromptTask {
     ChartExtraction,
     DocumentCleanup,
     ExamPaperGeneration,
+    /// Custom task — used with `PromptPreset::Custom` and `with_task()`.
+    Custom,
 }
 
 /// Named presets for well-known prompt profiles.
@@ -476,7 +478,7 @@ impl PromptProfile {
 
             PromptPreset::Custom => Self {
                 id: "custom".to_string(),
-                task: PromptTask::DocumentCleanup,
+                task: PromptTask::Custom,
                 label: "Custom Profile".to_string(),
                 system: None,
                 instruction: String::new(),
@@ -509,6 +511,12 @@ impl PromptProfile {
     /// Override the sampling temperature.
     pub fn with_temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
+        self
+    }
+
+    /// Override the task type (useful with `PromptPreset::Custom`).
+    pub fn with_task(mut self, task: PromptTask) -> Self {
+        self.task = task;
         self
     }
 
