@@ -16,6 +16,13 @@ fn test_fixture_docx() {
         _ => false,
     });
     assert!(has_text, "DOCX should contain a paragraph with text");
+    // User's fixture has an embedded image — verify it's extracted
+    if !doc.assets.is_empty() {
+        assert!(
+            matches!(doc.assets[0].format, latexsnipper_ast::AssetFormat::Png),
+            "DOCX image should be PNG"
+        );
+    }
 }
 
 #[test]
@@ -54,6 +61,7 @@ fn test_fixture_markdown() {
     let md = std::fs::read_to_string(path).expect("Markdown fixture should be readable");
     let doc = parse_markdown_to_document(&md);
     assert!(doc.block_count() > 0, "Markdown should parse to blocks");
+    assert!(!doc.assets.is_empty(), "Markdown fixture with image should produce MediaAssets");
 }
 
 #[test]
@@ -62,6 +70,7 @@ fn test_fixture_html() {
     let html = std::fs::read_to_string(path).expect("HTML fixture should be readable");
     let doc = parse_html_to_document(&html);
     assert!(doc.block_count() > 0, "HTML should parse to blocks");
+    assert!(!doc.assets.is_empty(), "HTML fixture with image should produce MediaAssets");
 }
 
 #[test]

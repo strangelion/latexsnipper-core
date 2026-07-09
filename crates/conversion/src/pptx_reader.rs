@@ -212,7 +212,7 @@ fn parse_slide_body(
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
+            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) => {
                 let tag = e.name().as_ref().to_vec();
                 match tag.as_slice() {
                     b"p:sp" | b"sp" => {

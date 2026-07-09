@@ -10,3 +10,5 @@ $$E=mc^2$$
 | A | B |
 |---|---|
 | 1 | 2 |
+
+![Test Image](https://example.com/image.png)

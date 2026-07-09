@@ -360,6 +360,16 @@ fn parse_document_body(
                             }));
                         }
                     }
+                    b"a:blip" | b"blip" if in_paragraph => {
+                        drawing_id = e
+                            .attributes()
+                            .flatten()
+                            .find(|a| a.key.as_ref() == b"r:embed" || a.key.as_ref() == b"embed")
+                            .and_then(|a| {
+                                let id = String::from_utf8_lossy(&a.value).to_string();
+                                rels.get(&id).cloned()
+                            });
+                    }
                     _ => {}
                 }
             }
