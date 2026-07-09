@@ -55,7 +55,7 @@ latexsnipper-export = { path = "crates/export", version = "2.0.0" }
 latexsnipper-model = { path = "crates/model", version = "2.0.0" }
 latexsnipper-engine = { path = "crates/engine", version = "2.0.0" }
 latexsnipper-api-types = { path = "crates/api-types", version = "2.0.0" }
-latexsnipper-mock = { path = "crates/mock", version = "2.0.0" }
+latexsnipper-mock = { path = "crates/mock" }
 latexsnipper-plugin = { path = "crates/plugin", version = "2.0.0" }
 latexsnipper-tract = { path = "crates/tract", version = "2.0.0" }
 latexsnipper-ffi = { path = "crates/ffi", version = "2.0.0" }
