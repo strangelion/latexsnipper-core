@@ -519,12 +519,17 @@ fn test_produced_artifact_metadata() {
 
     let mut doc = Document::new();
     doc.pages.push(Page {
-        width: 800.0, height: 600.0,
+        width: 800.0,
+        height: 600.0,
         blocks: vec![Block::Paragraph(ParagraphBlock {
             inlines: vec![Inline::Text(TextRun::new("Artifact test"))],
-            geometry: None, source: None, style: None,
+            geometry: None,
+            source: None,
+            style: None,
         })],
-        page_number: Some(1), layout: None, background_asset_id: None,
+        page_number: Some(1),
+        layout: None,
+        background_asset_id: None,
     });
     let json = serde_json::to_string_pretty(&doc).unwrap();
     std::fs::create_dir_all(&job_root.source_dir).unwrap();
@@ -536,10 +541,17 @@ fn test_produced_artifact_metadata() {
         job_id: "artifact-test".to_string(),
         stage_id: "convert-art".to_string(),
         kind: StageKind::Convert,
-        input: StageInput { artifacts: vec![], source: Some(src) },
-        output: StageOutput { artifact_kind: "converted_text".to_string(), subdir: "converted".to_string() },
+        input: StageInput {
+            artifacts: vec![],
+            source: Some(src),
+        },
+        output: StageOutput {
+            artifact_kind: "converted_text".to_string(),
+            subdir: "converted".to_string(),
+        },
         options: serde_json::json!({"target_format": "latex"}),
-        provider: None, credentials: Vec::new(),
+        provider: None,
+        credentials: Vec::new(),
         retry: RetryPolicy::default(),
     };
 
@@ -549,9 +561,18 @@ fn test_produced_artifact_metadata() {
     let art = &report.produced_artifacts[0];
     assert!(std::path::Path::new(&art.path).exists(), "path must exist");
     assert!(art.size_bytes.unwrap_or(0) > 0, "size_bytes must be > 0");
-    assert!(art.checksum_sha256.as_ref().map_or(false, |c| c.len() == 64), "checksum must be 64-char SHA-256 hex");
+    assert!(
+        art.checksum_sha256
+            .as_ref()
+            .map_or(false, |c| c.len() == 64),
+        "checksum must be 64-char SHA-256 hex"
+    );
     assert!(art.mime_type.is_some(), "mime_type should be set");
-    assert_eq!(art.kind, ArtifactKind::ConvertedText, "ArtifactKind should match");
+    assert_eq!(
+        art.kind,
+        ArtifactKind::ConvertedText,
+        "ArtifactKind should match"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp);
 }

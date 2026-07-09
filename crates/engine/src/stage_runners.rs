@@ -159,17 +159,31 @@ impl StageRunner for RecognizeStage {
                     } else {
                         // Not Document JSON — try as image via Snipper SDK
                         let ext = src.rsplit('.').next().unwrap_or("").to_lowercase();
-                        let is_image = matches!(ext.as_str(), "png"|"jpg"|"jpeg"|"webp"|"bmp"|"tiff"|"gif");
+                        let is_image = matches!(
+                            ext.as_str(),
+                            "png" | "jpg" | "jpeg" | "webp" | "bmp" | "tiff" | "gif"
+                        );
                         if is_image {
                             // Try to use Snipper engine for image recognition
-                            let model_dir = spec.options.get("model_dir").and_then(|v| v.as_str()).unwrap_or("models");
-                            let config = crate::EngineConfig::with_models_dir(std::path::PathBuf::from(model_dir));
-                            match crate::sdk::Snipper::from_file_with_config(src, config, crate::RecognizeMode::Mixed) {
+                            let model_dir = spec
+                                .options
+                                .get("model_dir")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("models");
+                            let config = crate::EngineConfig::with_models_dir(
+                                std::path::PathBuf::from(model_dir),
+                            );
+                            match crate::sdk::Snipper::from_file_with_config(
+                                src,
+                                config,
+                                crate::RecognizeMode::Mixed,
+                            ) {
                                 Ok(snipper) => {
                                     let doc = snipper.document();
                                     let json = serde_json::to_string_pretty(doc)
                                         .map_err(|e| format!("Serialize Document: {}", e))?;
-                                    let out_path = format!("{}/document.ast.json", job_root.ast_dir);
+                                    let out_path =
+                                        format!("{}/document.ast.json", job_root.ast_dir);
                                     std::fs::write(&out_path, &json)
                                         .map_err(|e| format!("Write AST: {}", e))?;
                                     let checksum = compute_file_sha256(&out_path).ok();
@@ -188,9 +202,13 @@ impl StageRunner for RecognizeStage {
                                     diags.push(Diagnostic::new(
                                         DiagnosticLevel::Info,
                                         "I_IMAGE_RECOGNIZED",
-                                        format!("Recognized {} blocks from image '{}'", doc.all_blocks().len(), src),
+                                        format!(
+                                            "Recognized {} blocks from image '{}'",
+                                            doc.all_blocks().len(),
+                                            src
+                                        ),
                                     ));
-                                    }
+                                }
                                 Err(e) => {
                                     diags.push(Diagnostic::new(
                                         DiagnosticLevel::Warning,

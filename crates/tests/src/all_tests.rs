@@ -1145,21 +1145,40 @@ mod asset_tests {
             format: AssetFormat::Png,
             mime_type: Some("image/png".to_string()),
             role: MediaRole::Photo,
-            storage: AssetStorage::InlineBase64 { data: b64.to_string() },
-            width: None, height: None, dpi: None, color_space: None,
-            checksum: None, alt_text: None, metadata: Default::default(),
+            storage: AssetStorage::InlineBase64 {
+                data: b64.to_string(),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: None,
+            metadata: Default::default(),
         };
 
         // Use normalize_assets to trigger base64 decode + checksum
         let mut doc = Document::new();
         doc.assets.push(asset);
-        doc.normalize_assets(NormalizeAssetOptions { compute_checksum: true, infer_mime_type: false, deduplicate: false, fill_dimensions: false, migrate_legacy: false });
+        doc.normalize_assets(NormalizeAssetOptions {
+            compute_checksum: true,
+            infer_mime_type: false,
+            deduplicate: false,
+            fill_dimensions: false,
+            migrate_legacy: false,
+        });
 
         // Checksum should be deterministic (SHA-256 of decoded PNG bytes)
-        let checksum = doc.assets[0].checksum.as_ref().expect("Checksum should be computed");
+        let checksum = doc.assets[0]
+            .checksum
+            .as_ref()
+            .expect("Checksum should be computed");
         assert_eq!(checksum.len(), 64, "SHA-256 hex must be 64 chars");
         // Known SHA-256 of this specific 1x1 red dot PNG
-        assert_eq!(checksum, "6b7fa434f92a8b80aab02d9bf1a12e49ffcae424e4013a1c4f68b67e3d2bbcd0", "SHA-256 of 1x1 PNG should match");
+        assert_eq!(
+            checksum, "6b7fa434f92a8b80aab02d9bf1a12e49ffcae424e4013a1c4f68b67e3d2bbcd0",
+            "SHA-256 of 1x1 PNG should match"
+        );
     }
 
     #[test]
@@ -1170,16 +1189,33 @@ mod asset_tests {
             format: AssetFormat::Png,
             mime_type: None,
             role: MediaRole::Photo,
-            storage: AssetStorage::InlineBase64 { data: data_uri.to_string() },
-            width: None, height: None, dpi: None, color_space: None,
-            checksum: None, alt_text: None, metadata: Default::default(),
+            storage: AssetStorage::InlineBase64 {
+                data: data_uri.to_string(),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: None,
+            metadata: Default::default(),
         };
         let mut doc = Document::new();
         doc.assets.push(asset);
-        doc.normalize_assets(NormalizeAssetOptions { compute_checksum: true, ..Default::default() });
+        doc.normalize_assets(NormalizeAssetOptions {
+            compute_checksum: true,
+            ..Default::default()
+        });
 
-        let checksum = doc.assets[0].checksum.as_ref().expect("Checksum should be computed from decoded bytes");
-        assert_eq!(checksum.len(), 64, "SHA-256 from data URI should also be 64 chars");
+        let checksum = doc.assets[0]
+            .checksum
+            .as_ref()
+            .expect("Checksum should be computed from decoded bytes");
+        assert_eq!(
+            checksum.len(),
+            64,
+            "SHA-256 from data URI should also be 64 chars"
+        );
         // The base64 content after stripping data:image/png;base64, is identical to the bare b64 above
         // So the checksum should match test_base64_png_magic_bytes
     }
@@ -1190,17 +1226,34 @@ mod asset_tests {
         let asset = MediaAsset {
             id: AssetId("ws-test".to_string()),
             format: AssetFormat::Png,
-            mime_type: None, role: MediaRole::Photo,
-            storage: AssetStorage::InlineBase64 { data: b64.to_string() },
-            width: None, height: None, dpi: None, color_space: None,
-            checksum: None, alt_text: None, metadata: Default::default(),
+            mime_type: None,
+            role: MediaRole::Photo,
+            storage: AssetStorage::InlineBase64 {
+                data: b64.to_string(),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: None,
+            metadata: Default::default(),
         };
         let mut doc = Document::new();
         doc.assets.push(asset);
-        doc.normalize_assets(NormalizeAssetOptions { compute_checksum: true, ..Default::default() });
+        doc.normalize_assets(NormalizeAssetOptions {
+            compute_checksum: true,
+            ..Default::default()
+        });
 
-        let checksum = doc.assets[0].checksum.as_ref().expect("Checksum with whitespace should still work");
-        assert_eq!(checksum, "6b7fa434f92a8b80aab02d9bf1a12e49ffcae424e4013a1c4f68b67e3d2bbcd0", "Whitespace should not affect decoded content");
+        let checksum = doc.assets[0]
+            .checksum
+            .as_ref()
+            .expect("Checksum with whitespace should still work");
+        assert_eq!(
+            checksum, "6b7fa434f92a8b80aab02d9bf1a12e49ffcae424e4013a1c4f68b67e3d2bbcd0",
+            "Whitespace should not affect decoded content"
+        );
     }
 
     #[test]
@@ -1209,18 +1262,32 @@ mod asset_tests {
         let asset = MediaAsset {
             id: AssetId("invalid-test".to_string()),
             format: AssetFormat::Png,
-            mime_type: None, role: MediaRole::Photo,
-            storage: AssetStorage::InlineBase64 { data: invalid.to_string() },
-            width: None, height: None, dpi: None, color_space: None,
-            checksum: None, alt_text: None, metadata: Default::default(),
+            mime_type: None,
+            role: MediaRole::Photo,
+            storage: AssetStorage::InlineBase64 {
+                data: invalid.to_string(),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: None,
+            metadata: Default::default(),
         };
         let mut doc = Document::new();
         doc.assets.push(asset);
-        let _diags = doc.normalize_assets(NormalizeAssetOptions { compute_checksum: true, ..Default::default() });
+        let _diags = doc.normalize_assets(NormalizeAssetOptions {
+            compute_checksum: true,
+            ..Default::default()
+        });
 
         // Should NOT panic; invalid base64 simply prevents checksum computation
         // The asset's checksum should remain None
-        assert!(doc.assets[0].checksum.is_none(), "Checksum should remain None for invalid base64");
+        assert!(
+            doc.assets[0].checksum.is_none(),
+            "Checksum should remain None for invalid base64"
+        );
         // normalize_assets still runs validate_asset_refs, which may produce diagnostics
         // but the key assertion is no panic occurs
     }
@@ -1233,49 +1300,68 @@ mod asset_tests {
         let mut doc = Document::new();
         doc.assets.push(MediaAsset {
             id: nested_img_id.clone(),
-            format: AssetFormat::Png, mime_type: None, role: MediaRole::Photo,
-            storage: AssetStorage::FilePath { path: "/fake/path.png".to_string() },
-            width: None, height: None, dpi: None, color_space: None,
-            checksum: None, alt_text: None, metadata: Default::default(),
+            format: AssetFormat::Png,
+            mime_type: None,
+            role: MediaRole::Photo,
+            storage: AssetStorage::FilePath {
+                path: "/fake/path.png".to_string(),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: None,
+            metadata: Default::default(),
         });
 
         doc.pages.push(Page {
-            width: 800.0, height: 600.0,
-            blocks: vec![
-                Block::Paragraph(ParagraphBlock {
-                    inlines: vec![
-                        Inline::Text(TextRun::new("Before ")),
-                        Inline::Span(SpanInline {
-                            content: vec![
-                                Inline::Link(LinkInline {
-                                    content: vec![
-                                        Inline::Image(ImageInline {
-                                            asset_id: Some(nested_img_id.clone()),
-                                            image_data: None, width: None, height: None,
-                                            alt_text: None, source: None,
-                                        }),
-                                    ],
-                                    target: String::new(), title: None, source: None,
-                                    link_target: None,
-                                }),
-                            ],
-                            style: None,
+            width: 800.0,
+            height: 600.0,
+            blocks: vec![Block::Paragraph(ParagraphBlock {
+                inlines: vec![
+                    Inline::Text(TextRun::new("Before ")),
+                    Inline::Span(SpanInline {
+                        content: vec![Inline::Link(LinkInline {
+                            content: vec![Inline::Image(ImageInline {
+                                asset_id: Some(nested_img_id.clone()),
+                                image_data: None,
+                                width: None,
+                                height: None,
+                                alt_text: None,
+                                source: None,
+                            })],
+                            target: String::new(),
+                            title: None,
                             source: None,
-                        }),
-                    ],
-                    geometry: None, source: None, style: None,
-                }),
-            ],
-            page_number: Some(1), layout: None, background_asset_id: None,
+                            link_target: None,
+                        })],
+                        style: None,
+                        source: None,
+                    }),
+                ],
+                geometry: None,
+                source: None,
+                style: None,
+            })],
+            page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
         });
 
         // Collect asset refs via visitor
         let refs = doc.collect_asset_refs();
-        assert!(refs.contains(&nested_img_id), "Visitor should find asset_id nested in Span>Link>Image");
+        assert!(
+            refs.contains(&nested_img_id),
+            "Visitor should find asset_id nested in Span>Link>Image"
+        );
 
         // validate_asset_refs should succeed since the asset exists
         let diags = doc.validate_asset_refs();
-        let missing: Vec<_> = diags.iter().filter(|d| d.code.contains("MISSING")).collect();
+        let missing: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code.contains("MISSING"))
+            .collect();
         assert!(missing.is_empty(), "No missing refs should be found");
     }
 }
