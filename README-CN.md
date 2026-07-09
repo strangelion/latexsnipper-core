@@ -148,6 +148,16 @@ Engine
 | **流水线** | ✅ | 异步节点流水线，支持取消 |
 | **区域图** | ✅ | 冲突消解、ArtifactRef 路由、layout→识别器路由 |
 | **CJK/Latin 归一化** | ✅ | 跨所有块类型的递归文本规范化 |
+| **PageLayout/PageBreak/SectionBreak** | ✅ | 页面版式、分页符/分节符、页眉页脚 Block |
+| **ListStyle/ListItem.content** | ✅ | 结构化列表样式 + 多段落列表项 |
+| **TableRow/TableColumn/CellDataType** | ✅ | 行/列表结构 + 单元格数据类型支持 |
+| **TableCell.content: Vec\<Block\>** | ✅ | 单元格支持块级内容（公式/列表/图片） |
+| **TextRun.style** | ✅ | 结构化文本样式与 legacy 字段共存 |
+| **TextDirection/UnderlineStyle** | ✅ | 文本方向、下划线样式枚举 |
+| **Transform2D/LayerInfo** | ✅ | 2D 变换和 Z 层级，8 种 Block 统一支持 |
+| **Anchor/CrossReference/CitationGroup** | ✅ | Office/LaTeX 交叉引用和分组引用 |
+| **FormFieldBlock/BibliographyBlock** | ✅ | 表单字段和结构化参考文献 |
+| **NoteDefinition/Document.notes** | ✅ | 结构化脚注/尾注系统 |
 
 ### 实验版
 
@@ -164,6 +174,8 @@ Engine
 | **WASM** | ✅ | parse/render/convert/recognize 绑定 |
 | **CLI** | ✅ | recognize/parse/render/version，文件导出 (`-o output.tex`)，格式提示，隐藏小游戏 (`snipper play`) |
 | **导出** | ✅ | SVG/Text/PDF（printpdf），标题/表格/列表/代码/公式/页面选择 |
+| **资产归一化** | ✅ | `normalize_assets()` 5 阶段：迁移/推断/dedup/校验/验证 |
+| **StageOrchestrator** | ✅ | `run_stage()` 写入 reports/events/manifest 文件 |
 | **表格识别** | ✅ | SLANet+ / TATR 表格结构 + PP-DocLayout v3 版式检测 |
 | **手写识别** | ✅ | 手写检测 + TrOCR 识别 + 后处理（数字/字母混淆修复 + 标点归一化） |
 | **公式布局** | ✅ | LaTeX AST 解析 + 符号级检测 |
