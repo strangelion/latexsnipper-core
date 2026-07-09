@@ -36,7 +36,9 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
         let mut seen = std::collections::HashSet::new();
         for i in 0..50 {
             let file = format!("sheet{}.xml", i + 1);
-            if !seen.insert(file.clone()) { continue; }
+            if !seen.insert(file.clone()) {
+                continue;
+            }
             let path = format!("xl/worksheets/{}", file);
             if read_entry(&mut archive, &path).is_ok() {
                 sheet_entries.push((format!("Sheet {}", i + 1), file));
@@ -54,8 +56,11 @@ pub fn read_xlsx(path: impl AsRef<Path>) -> Result<Document> {
         // sheet_file from rels might be "worksheets/sheet1.xml" (relative to xl/)
         // or "sheet1.xml" (fallback). Handle both.
         let sheet_path = if sheet_file.starts_with("worksheets/") || sheet_file.starts_with("xl/") {
-            if sheet_file.starts_with("xl/") { sheet_file.clone() }
-            else { format!("xl/{}", sheet_file) }
+            if sheet_file.starts_with("xl/") {
+                sheet_file.clone()
+            } else {
+                format!("xl/{}", sheet_file)
+            }
         } else {
             format!("xl/worksheets/{}", sheet_file)
         };
@@ -201,7 +206,9 @@ fn parse_workbook_sheets(xml: &str, rels: &HashMap<String, String>) -> Vec<(Stri
                 }
             }
             if !name.is_empty() {
-                let target = rels.get(&rid).cloned()
+                let target = rels
+                    .get(&rid)
+                    .cloned()
                     .unwrap_or_else(|| format!("sheet{}.xml", sheets.len() + 1));
                 sheets.push((name, target));
             }

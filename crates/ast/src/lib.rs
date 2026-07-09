@@ -63,7 +63,7 @@ pub use report::{
     ArtifactEntry, ArtifactKind, ArtifactManifest, BlockSummary, ConfidenceSummary,
     ConversionOutput, CredentialRef, CredentialSource, DocumentReport, EventRecord, InputSummary,
     JobRoot, ProviderCallReport, ProviderReport, RetryPolicy, StageInput, StageKind, StageOutput,
-    StageReport, StageSpec, StageStatus, UnsupportedFeature,
+    StageProducedArtifact, StageReport, StageSpec, StageStatus, UnsupportedFeature,
 };
 pub use span::{
     BlockPolicy, CoordinateSpace, NodeId, NodeIdGenerator, PdfSourceInfo, Position, Provenance,

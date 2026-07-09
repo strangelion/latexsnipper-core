@@ -261,6 +261,26 @@ pub struct EventRecord {
 }
 
 // ---------------------------------------------------------------------------
+// StageProducedArtifact — artifact produced by a stage
+// ---------------------------------------------------------------------------
+
+/// An artifact produced by a single processing stage.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StageProducedArtifact {
+    pub id: String,
+    pub kind: ArtifactKind,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checksum_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+}
+
+// ---------------------------------------------------------------------------
 // StageReport
 // ---------------------------------------------------------------------------
 
@@ -289,6 +309,8 @@ pub struct StageReport {
     pub output_artifacts: Vec<String>,
     #[serde(default)]
     pub diagnostics: Vec<Diagnostic>,
+    #[serde(default)]
+    pub produced_artifacts: Vec<StageProducedArtifact>,
 }
 
 // ---------------------------------------------------------------------------

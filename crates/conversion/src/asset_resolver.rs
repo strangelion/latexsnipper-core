@@ -4,6 +4,27 @@ use latexsnipper_ast::{
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Minimal base64 decode — handles standard base64 without padding.
+fn simple_base64_decode(data: &str) -> Vec<u8> {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let data = data.trim_end_matches('=');
+    let mut result = Vec::new();
+    let mut buf = 0u32;
+    let mut bits = 0;
+    for &b in data.as_bytes() {
+        if let Some(pos) = CHARS.iter().position(|&c| c == b) {
+            buf = (buf << 6) | pos as u32;
+            bits += 6;
+            if bits >= 8 {
+                bits -= 8;
+                result.push((buf >> bits) as u8);
+                buf &= (1u32 << bits) - 1;
+            }
+        }
+    }
+    result
+}
+
 /// A simple asset resolver that uses a hash map.
 pub struct SimpleAssetResolver {
     assets: HashMap<AssetId, MediaAsset>,
@@ -33,8 +54,7 @@ impl AssetStore for SimpleAssetResolver {
             .get(id)
             .map(|asset| match &asset.storage {
                 latexsnipper_ast::AssetStorage::InlineBase64 { data } => {
-                    // Return raw base64 bytes; caller may decode if needed.
-                    Ok(data.as_bytes().to_vec())
+                    Ok(simple_base64_decode(data))
                 }
                 latexsnipper_ast::AssetStorage::FilePath { path } => {
                     std::fs::read(path).map_err(|e| format!("file read error: {}", e))

@@ -23,18 +23,62 @@ impl StageRunner for DecodeStage {
         StageKind::Decode
     }
 
-    fn run(&self, spec: &StageSpec) -> Result<StageReport, String> {
-        let now = Some(minimal_timestamp());
+    fn run(&self, spec: &StageSpec, job_root: &JobRoot) -> Result<StageReport, String> {
+        let start = std::time::Instant::now();
+        let mut diags = Vec::new();
+        let mut output_artifacts = Vec::new();
+
+        // Ensure decoded dir exists
+        std::fs::create_dir_all(&job_root.decoded_dir)
+            .map_err(|e| format!("Create decoded dir: {}", e))?;
+
+        if let Some(src) = &spec.input.source {
+            match std::fs::read(src) {
+                Ok(bytes) => {
+                    let ext = src.rsplit('.').next().unwrap_or("bin");
+                    let out_path = format!("{}/source.{}", job_root.decoded_dir, ext);
+                    std::fs::write(&out_path, &bytes)
+                        .map_err(|e| format!("Write decoded: {}", e))?;
+                    output_artifacts.push(out_path);
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::new(
+                            DiagnosticLevel::Warning,
+                            "W_DECODE_FAILED",
+                            format!("Cannot read source '{}': {}", src, e),
+                        )
+                        .with_recoverable(true),
+                    );
+                }
+            }
+        } else {
+            diags.push(
+                Diagnostic::new(
+                    DiagnosticLevel::Warning,
+                    "W_NO_SOURCE",
+                    "No input source specified for DecodeStage",
+                )
+                .with_recoverable(true),
+            );
+        }
+
+        let elapsed = start.elapsed().as_millis() as u64;
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Decode,
-            status: StageStatus::Succeeded,
-            started_at: now.clone(),
-            finished_at: now,
-            elapsed_ms: Some(0),
+            status: if !output_artifacts.is_empty() {
+                StageStatus::Succeeded
+            } else {
+                StageStatus::Failed
+            },
+            started_at: Some(minimal_timestamp()),
+            finished_at: Some(minimal_timestamp()),
+            elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
-            output_artifacts: vec![format!("{}/decoded", spec.stage_id)],
-            diagnostics: Vec::new(),
+            output_artifacts,
+            diagnostics: diags,
+            produced_artifacts: Vec::new(),
         })
     }
 }
@@ -51,18 +95,70 @@ impl StageRunner for RecognizeStage {
         StageKind::Recognize
     }
 
-    fn run(&self, spec: &StageSpec) -> Result<StageReport, String> {
-        let now = Some(minimal_timestamp());
+    fn run(&self, spec: &StageSpec, job_root: &JobRoot) -> Result<StageReport, String> {
+        let start = std::time::Instant::now();
+        let mut diags = Vec::new();
+        let mut output_artifacts = Vec::new();
+
+        // Ensure ast dir exists
+        std::fs::create_dir_all(&job_root.ast_dir).map_err(|e| format!("Create ast dir: {}", e))?;
+
+        if let Some(src) = &spec.input.source {
+            match std::fs::read_to_string(src) {
+                Ok(content) => {
+                    // Check if it's a Document JSON by trying to parse it
+                    if let Ok(doc) = serde_json::from_str::<Document>(&content) {
+                        // Passthrough — write to ast directory
+                        let out_path = format!("{}/document.ast.json", job_root.ast_dir);
+                        std::fs::write(&out_path, &content)
+                            .map_err(|e| format!("Write AST: {}", e))?;
+                        output_artifacts.push(out_path);
+                        diags.push(Diagnostic::new(
+                            DiagnosticLevel::Info,
+                            "I_AST_PASSTHROUGH",
+                            format!(
+                                "Recognized {} blocks across {} pages",
+                                doc.all_blocks().len(),
+                                doc.pages.len()
+                            ),
+                        ));
+                    } else {
+                        // Not Document JSON — could be an image, emit diagnostic
+                        diags.push(
+                            Diagnostic::new(
+                                DiagnosticLevel::Warning,
+                                "W_RECOGNIZE_NOT_IMPLEMENTED",
+                                "Real image recognition not implemented in RecognizeStage yet",
+                            )
+                            .with_recoverable(true),
+                        );
+                    }
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::new(
+                            DiagnosticLevel::Warning,
+                            "W_READ_FAILED",
+                            format!("Cannot read '{}': {}", src, e),
+                        )
+                        .with_recoverable(true),
+                    );
+                }
+            }
+        }
+
+        let elapsed = start.elapsed().as_millis() as u64;
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Recognize,
             status: StageStatus::Succeeded,
-            started_at: now.clone(),
-            finished_at: now,
-            elapsed_ms: Some(0),
+            started_at: Some(minimal_timestamp()),
+            finished_at: Some(minimal_timestamp()),
+            elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
-            output_artifacts: vec![format!("{}/ast", spec.stage_id)],
-            diagnostics: Vec::new(),
+            output_artifacts,
+            diagnostics: diags,
+            produced_artifacts: Vec::new(),
         })
     }
 }
@@ -79,7 +175,7 @@ impl StageRunner for ConvertStage {
         StageKind::Convert
     }
 
-    fn run(&self, spec: &StageSpec) -> Result<StageReport, String> {
+    fn run(&self, spec: &StageSpec, job_root: &JobRoot) -> Result<StageReport, String> {
         let now = Some(minimal_timestamp());
         let start = std::time::Instant::now();
         let mut diags = Vec::new();
@@ -105,10 +201,9 @@ impl StageRunner for ConvertStage {
                                 "typ" | "typst" => "typst",
                                 _ => format,
                             };
-                            let out_path = format!(
-                                "{}/{}.{}",
-                                spec.output.subdir, spec.stage_id, format_label
-                            );
+                            let out_dir = &job_root.converted_dir;
+                            let out_path =
+                                format!("{}/{}.{}", out_dir, spec.stage_id, format_label);
                             let mut text = String::new();
                             let mut conv_diags = diags.clone();
 
@@ -143,7 +238,8 @@ impl StageRunner for ConvertStage {
                             }
 
                             if !text.is_empty() {
-                                let _ = std::fs::write(&out_path, &text);
+                                std::fs::write(&out_path, &text)
+                                    .map_err(|e| format!("Write output '{}': {}", out_path, e))?;
                                 output_artifacts.push(out_path);
                             }
                             diags.extend(conv_diags);
@@ -186,6 +282,7 @@ impl StageRunner for ConvertStage {
             elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
             output_artifacts,
+            produced_artifacts: Vec::new(),
             diagnostics: diags,
         })
     }
@@ -203,7 +300,7 @@ impl StageRunner for ExportStage {
         StageKind::Export
     }
 
-    fn run(&self, spec: &StageSpec) -> Result<StageReport, String> {
+    fn run(&self, spec: &StageSpec, job_root: &JobRoot) -> Result<StageReport, String> {
         let now = Some(minimal_timestamp());
         let start = std::time::Instant::now();
         let mut diags = Vec::new();
@@ -219,8 +316,8 @@ impl StageRunner for ExportStage {
             match std::fs::read_to_string(src) {
                 Ok(content) => match serde_json::from_str::<Document>(&content) {
                     Ok(doc) => {
-                        let out_path =
-                            format!("{}/{}.{}", spec.output.subdir, spec.stage_id, format);
+                        let out_dir = &job_root.exported_dir;
+                        let out_path = format!("{}/{}.{}", out_dir, spec.stage_id, format);
                         let visual_fmt = match format {
                             "svg" => latexsnipper_export::VisualFormat::Svg,
                             "pdf" => latexsnipper_export::VisualFormat::Pdf,
@@ -230,7 +327,9 @@ impl StageRunner for ExportStage {
                         match latexsnipper_export::ExportService::export(&doc, visual_fmt) {
                             Ok(artifact) => {
                                 if let Some(t) = &artifact.text {
-                                    let _ = std::fs::write(&out_path, t);
+                                    std::fs::write(&out_path, t).map_err(|e| {
+                                        format!("Write output '{}': {}", out_path, e)
+                                    })?;
                                     output_artifacts.push(out_path);
                                 }
                                 diags.extend(artifact.diagnostics);
@@ -285,6 +384,7 @@ impl StageRunner for ExportStage {
             elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
             output_artifacts,
+            produced_artifacts: Vec::new(),
             diagnostics: diags,
         })
     }
@@ -385,7 +485,7 @@ impl StageOrchestrator {
         self.job_root.ensure_dirs()?;
 
         // Execute the stage
-        let report = runner.run(spec)?;
+        let report = runner.run(spec, &self.job_root)?;
 
         // Write stage report JSON
         let report_path = format!(
@@ -426,18 +526,36 @@ impl StageOrchestrator {
         writeln!(f, "{}", line).map_err(|e| format!("Write event: {}", e))?;
 
         // Register each output artifact in the manifest
-        for art_id in &report.output_artifacts {
-            self.artifact_manifest.artifacts.push(ArtifactEntry {
-                id: art_id.clone(),
-                kind: ArtifactKind::from_stage_kind(&spec.kind),
-                path: format!("{}/{}", self.job_root.artifacts_dir, art_id),
-                mime_type: None,
-                format: None,
-                checksum_sha256: None,
-                size_bytes: None,
-                producer_stage_id: Some(spec.stage_id.clone()),
-                source_artifact_ids: spec.input.artifacts.clone(),
-            });
+        // Use produced_artifacts from report if available
+        if !report.produced_artifacts.is_empty() {
+            for art in &report.produced_artifacts {
+                self.artifact_manifest.artifacts.push(ArtifactEntry {
+                    id: art.id.clone(),
+                    kind: art.kind.clone(),
+                    path: art.path.clone(),
+                    mime_type: art.mime_type.clone(),
+                    format: art.format.clone(),
+                    checksum_sha256: art.checksum_sha256.clone(),
+                    size_bytes: art.size_bytes,
+                    producer_stage_id: Some(spec.stage_id.clone()),
+                    source_artifact_ids: spec.input.artifacts.clone(),
+                });
+            }
+        } else {
+            // Legacy fallback using output_artifacts strings
+            for art_id in &report.output_artifacts {
+                self.artifact_manifest.artifacts.push(ArtifactEntry {
+                    id: art_id.clone(),
+                    kind: ArtifactKind::from_stage_kind(&spec.kind),
+                    path: art_id.clone(),
+                    mime_type: None,
+                    format: None,
+                    checksum_sha256: None,
+                    size_bytes: None,
+                    producer_stage_id: Some(spec.stage_id.clone()),
+                    source_artifact_ids: spec.input.artifacts.clone(),
+                });
+            }
         }
 
         // Write updated artifact manifest

@@ -275,10 +275,28 @@ impl Document {
                 if let Some(ref id) = fig.asset_id {
                     f(id);
                 }
+                if let Some(ref cap) = fig.caption_inlines {
+                    for inline in cap {
+                        if let crate::Inline::Image(img) = inline {
+                            if let Some(ref id) = img.asset_id {
+                                f(id);
+                            }
+                        }
+                    }
+                }
             }
             Block::Chart(c) => {
                 if let Some(ref id) = c.asset_id {
                     f(id);
+                }
+                if let Some(ref title) = c.title {
+                    for inline in title {
+                        if let crate::Inline::Image(img) = inline {
+                            if let Some(ref id) = img.asset_id {
+                                f(id);
+                            }
+                        }
+                    }
                 }
             }
             Block::EmbeddedObject(eo) => {
@@ -322,6 +340,56 @@ impl Document {
                     Self::visit_block_asset_refs(child, f);
                 }
             }
+            Block::Table(t) => {
+                for row in &t.rows {
+                    for cell in &row.cells {
+                        for child in &cell.content {
+                            Self::visit_block_asset_refs(child, f);
+                        }
+                    }
+                }
+            }
+            Block::List(l) => {
+                for item in &l.items {
+                    for child in &item.content {
+                        Self::visit_block_asset_refs(child, f);
+                    }
+                }
+            }
+            Block::HeaderFooter(hf) => {
+                for child in &hf.content {
+                    Self::visit_block_asset_refs(child, f);
+                }
+            }
+            Block::Shape(s) => {
+                for inline in &s.text {
+                    if let crate::Inline::Image(img) = inline {
+                        if let Some(ref id) = img.asset_id {
+                            f(id);
+                        }
+                    }
+                }
+            }
+            Block::Annotation(a) => {
+                for inline in &a.content {
+                    if let crate::Inline::Image(img) = inline {
+                        if let Some(ref id) = img.asset_id {
+                            f(id);
+                        }
+                    }
+                }
+            }
+            Block::FormField(ff) => {
+                if let Some(ref label) = ff.label {
+                    for inline in label {
+                        if let crate::Inline::Image(img) = inline {
+                            if let Some(ref id) = img.asset_id {
+                                f(id);
+                            }
+                        }
+                    }
+                }
+            }
             _ => {}
         }
         // Check inlines for ImageInline.asset_id
@@ -363,10 +431,28 @@ impl Document {
                 if let Some(ref mut id) = fig.asset_id {
                     f(id);
                 }
+                if let Some(ref mut cap) = fig.caption_inlines {
+                    for inline in cap.iter_mut() {
+                        if let crate::Inline::Image(img) = inline {
+                            if let Some(ref mut id) = img.asset_id {
+                                f(id);
+                            }
+                        }
+                    }
+                }
             }
             Block::Chart(c) => {
                 if let Some(ref mut id) = c.asset_id {
                     f(id);
+                }
+                if let Some(ref mut title) = c.title {
+                    for inline in title.iter_mut() {
+                        if let crate::Inline::Image(img) = inline {
+                            if let Some(ref mut id) = img.asset_id {
+                                f(id);
+                            }
+                        }
+                    }
                 }
             }
             Block::EmbeddedObject(eo) => {
@@ -408,6 +494,56 @@ impl Document {
             Block::Proof(p) => {
                 for child in &mut p.content {
                     Self::visit_block_asset_refs_mut(child, f);
+                }
+            }
+            Block::Table(t) => {
+                for row in &mut t.rows {
+                    for cell in &mut row.cells {
+                        for child in &mut cell.content {
+                            Self::visit_block_asset_refs_mut(child, f);
+                        }
+                    }
+                }
+            }
+            Block::List(l) => {
+                for item in &mut l.items {
+                    for child in &mut item.content {
+                        Self::visit_block_asset_refs_mut(child, f);
+                    }
+                }
+            }
+            Block::HeaderFooter(hf) => {
+                for child in &mut hf.content {
+                    Self::visit_block_asset_refs_mut(child, f);
+                }
+            }
+            Block::Shape(s) => {
+                for inline in &mut s.text {
+                    if let crate::Inline::Image(img) = inline {
+                        if let Some(ref mut id) = img.asset_id {
+                            f(id);
+                        }
+                    }
+                }
+            }
+            Block::Annotation(a) => {
+                for inline in &mut a.content {
+                    if let crate::Inline::Image(img) = inline {
+                        if let Some(ref mut id) = img.asset_id {
+                            f(id);
+                        }
+                    }
+                }
+            }
+            Block::FormField(ff) => {
+                if let Some(ref mut label) = ff.label {
+                    for inline in label.iter_mut() {
+                        if let crate::Inline::Image(img) = inline {
+                            if let Some(ref mut id) = img.asset_id {
+                                f(id);
+                            }
+                        }
+                    }
                 }
             }
             _ => {}
@@ -761,14 +897,34 @@ fn asset_format_to_mime(format: &crate::AssetFormat) -> Option<String> {
     }
 }
 
+/// Minimal base64 decode — handles standard base64 without padding.
+/// Used to decode InlineBase64 asset data for checksum computation.
+fn simple_base64_decode(data: &str) -> Vec<u8> {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let data = data.trim_end_matches('=');
+    let mut result = Vec::new();
+    let mut buf = 0u32;
+    let mut bits = 0;
+    for &b in data.as_bytes() {
+        if let Some(pos) = CHARS.iter().position(|&c| c == b) {
+            buf = (buf << 6) | pos as u32;
+            bits += 6;
+            if bits >= 8 {
+                bits -= 8;
+                result.push((buf >> bits) as u8);
+                buf &= (1u32 << bits) - 1;
+            }
+        }
+    }
+    result
+}
+
 /// Resolve asset bytes for checksum computation.
 ///
-/// For `InlineBase64`, this returns the raw base64 text bytes (not decoded).
-/// Callers who need a checksum over the actual image content must first
-/// base64-decode the string before hashing.
+/// For `InlineBase64`, this decodes the base64 string to get the actual image bytes.
 fn resolve_asset_bytes(asset: &crate::MediaAsset) -> Result<Vec<u8>, String> {
     match &asset.storage {
-        crate::AssetStorage::InlineBase64 { data } => Ok(data.as_bytes().to_vec()),
+        crate::AssetStorage::InlineBase64 { data } => Ok(simple_base64_decode(data)),
         _ => Err("Cannot resolve bytes from this storage type".to_string()),
     }
 }

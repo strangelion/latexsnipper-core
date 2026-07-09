@@ -72,5 +72,5 @@ pub trait StageRunner {
     fn kind(&self) -> crate::StageKind;
 
     /// Execute the stage and produce a report.
-    fn run(&self, spec: &StageSpec) -> Result<StageReport, String>;
+    fn run(&self, spec: &StageSpec, job_root: &crate::JobRoot) -> Result<StageReport, String>;
 }
