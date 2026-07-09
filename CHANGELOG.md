@@ -145,6 +145,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **PR5**: `ExportStage` real execution — reads Document AST JSON, calls `ExportService::export()` with visual format from `spec.options`, writes exported output file
   - **PR6**: `collect_converter_diagnostics()` — recursively walks Document identifying 10 placeholder-rendered block types (Chart/Shape/EmbeddedObject/Annotation/FormField/ChemicalFormula/Graph/QrCode/Bibliography/HeaderFooter), emits `W_BLOCK_DOWNGRADED`; `convert_artifact()` now merges 3 diagnostic sources (doc + RenderTree + converter)
 
+- **v9 Stage Runtime & Asset Final Mile (PR 1–5)**
+  - **PR1**: `StageRunner::run(spec, job_root)` — added `JobRoot` parameter; ConvertStage/ExportStage write to `job_root.converted_dir`/`job_root.exported_dir`; write failures propagate errors; manifest path uses real file path
+  - **PR2**: `StageProducedArtifact` struct (kind/path/mime/format/checksum/size); `StageReport.produced_artifacts` field; Orchestrator writes manifest from produced artifacts
+  - **PR3**: `simple_base64_decode()` — std-only base64 decoder; `resolve_asset_bytes()` now decodes InlineBase64 before hashing; `SimpleAssetResolver::get_bytes()` returns decoded bytes (fixes .png/.jpg export corruption)
+  - **PR4**: AssetRef visitor full coverage — added `Table.rows[].cells[].content[]`, `List.items[].content[]`, `HeaderFooter.content[]`, `Shape.text`, `Chart.title`, `Figure.caption_inlines`, `Annotation.content`, `FormField.label` to both immutable and mutable visitors
+  - **PR5**: `DecodeStage` MVP — reads source → writes `job_root.decoded_dir/source.ext`; `RecognizeStage` MVP — reads Document JSON → writes `job_root.ast_dir/document.ast.json`
+
 - **Office/PDF Import Deepening**
   - `docx_reader` — heading detection via `w:pStyle` → `Block::Heading` with parsed level; list detection via `w:numPr` → `Block::List` with accumulated `ListItem`s
   - `pptx_reader` — table parsing via `a:tbl`/`a:tr`/`a:tc` → `TableBlock` with cell text extraction

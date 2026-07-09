@@ -171,6 +171,10 @@ Engine
 | **DOCX 标题/列表解析** | ✅ | w:pStyle → Heading 1-6, w:numPr → ListBlock |
 | **PPTX 表格导入** | ✅ | a:tbl → TableBlock 单元格文本提取 |
 | **XLSX 数据类型/公式/列宽** | ✅ | CellDataType(Boolean/Date/Text/Formula), 公式提取, 列宽解析 |
+| **真实 DecodeStage/RecognizeStage** | ✅ | 读 source → 写 decoded/AST 产物到 JobRoot 目录 |
+| **StageProducedArtifact** | ✅ | 结构化产物元数据 (kind/path/mime/format/checksum/size) |
+| **AssetRef visitor 全覆盖** | ✅ | Table/List/HeaderFooter/Shape/Chart/Annotation/FormField 全覆盖 |
+| **InlineBase64 内容 hash** | ✅ | 先 base64 decode 再 SHA-256, ast 和 SimpleAssetResolver 同步修复 |
 
 ### 实验版
 

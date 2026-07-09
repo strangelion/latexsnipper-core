@@ -137,6 +137,10 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **DOCX heading/list detection** | ✅ | `w:pStyle` → Heading levels 1–6, `w:numPr` → ListBlock items |
 | **PPTX table import** | ✅ | `a:tbl` → TableBlock with cell text extraction |
 | **XLSX data type/formula/columns** | ✅ | CellDataType (Boolean/Date/Text/Formula), formula extraction, column width |
+| **Real DecodeStage/RecognizeStage** | ✅ | Reads source → writes decoded/AST artifacts to JobRoot directories |
+| **StageProducedArtifact** | ✅ | Structured artifact metadata (kind/path/mime/format/checksum/size) |
+| **AssetRef visitor full coverage** | ✅ | Table/List/HeaderFooter/Shape/Chart/Annotation/FormField all covered |
+| **InlineBase64 content hash** | ✅ | Decoded before SHA-256, fixed in both ast and SimpleAssetResolver |
 
 ---
 
