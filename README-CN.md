@@ -158,6 +158,11 @@ Engine
 | **Anchor/CrossReference/CitationGroup** | ✅ | Office/LaTeX 交叉引用和分组引用 |
 | **FormFieldBlock/BibliographyBlock** | ✅ | 表单字段和结构化参考文献 |
 | **NoteDefinition/Document.notes** | ✅ | 结构化脚注/尾注系统 |
+| **ConversionOutput** | ✅ | 结构化转换结果（text + diagnostics + assets） |
+| **资产引用重写** | ✅ | dedup 后 `rewrite_asset_refs()` 无悬挂引用 |
+| **Visual 字段统一** | ✅ | 8 种 Block 统一 transform/layer/accessibility |
+| **TextBoxBlock accessor** | ✅ | `effective_transform()`/`effective_layer()` |
+| **StageOrchestrator** | ✅ | `run_stage()` 写入 reports/events/manifest |
 
 ### 实验版
 

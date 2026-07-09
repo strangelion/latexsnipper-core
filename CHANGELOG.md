@@ -125,6 +125,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **PR4**: `NormalizeAssetOptions` + `Document::normalize_assets()` — 5-stage asset normalization (migrate/infer/dedup/checksum/validate)
   - **PR5**: `StageOrchestrator` — registers runners, writes `reports/<id>.report.json`, appends `logs/events.jsonl`, updates `artifacts/artifacts.json`
 
+- **v7 StageRuntime & Asset Ref Closure**
+  - `ArtifactKind` expanded to 14 variants with `from_stage_kind()` helper (Decode→DecodedImage, Export→ExportedFile, etc.)
+  - `StageOrchestrator::run_stage()` now calls `job_root.ensure_dirs()`, propagates write errors, sets dynamic artifact kind
+  - `run_spec_file()` delegates to `run_stage()` — consistent manifest/event/report writing
+  - `normalize_assets()` dedup now tracks `old_id→kept_id` remap and calls `rewrite_asset_refs()`
+  - `Document::rewrite_asset_refs()` — recursive walk of 9 Block types + Inlines to rewrite dangling asset references
+  - `ConversionOutput` struct (`text`/`diagnostics`/`exported_assets`) — structured converter return type
+  - `FigureBlock` converter output: `asset_id` priority over legacy `image_data` (Markdown/HTML/LaTeX/Typst)
+  - `TextBoxBlock::effective_transform()`/`effective_layer()` — legacy-to-new field accessors
+  - `AnnotationBlock` + `accessibility: Option<AccessibilityInfo>` — field consistency
+  - `ConvertStage`/`ExportStage` — now record real elapsed time and input source diagnostics
+
 ### Changed
 - `FigureBlock.caption` deprecated in favor of `caption_inlines: Option<Vec<Inline>>`
 - `RecognizeInput::Image(String)` → `RecognizeInput::Image(SnipperImageDescriptor)`

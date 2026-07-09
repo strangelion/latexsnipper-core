@@ -55,16 +55,16 @@ Document
 
 | 模块 | 文件 | 说明 |
 |---|---|---|
-| `document` | document.rs | Document, Page |
-| `block` | block.rs | Block enum (30 variants), all block structs |
-| `inline` | inline.rs | Inline enum (20+ variants), TextRun, SpanInline, LinkInline, ImageInline, NoteRefInline, AnchorInline, CrossReferenceInline, CitationGroupInline, NoteKind |
+| `document` | document.rs | Document, Page, NormalizeAssetOptions |
+| `block` | block.rs | Block enum (30 variants), all block structs, FormulaEnvironment |
+| `inline` | inline.rs | Inline enum (20+ variants), TextRun, SpanInline, LinkInline, ImageInline, NoteRefInline, AnchorInline, CrossReferenceInline, CitationGroupInline, NoteKind, LinkTarget |
 | `formula` | formula.rs | Formula, FormulaSource (Latex/Omml/Typst/MathML) |
 | `formula_layout` | formula_layout.rs | FormulaLayout, FormulaNode, SymbolInfo |
 | `span` | span.rs | SourceInfo, Provenance, BlockPolicy, CoordinateSpace, NodeId |
 | `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType, TextDirection, UnderlineStyle, Transform2D, LayerInfo, ListStyle, BulletStyle, NumberingStyle, VectorPath, PathCommand, ShapeGroup, AccessibilityInfo, Length, LengthUnit, TableBorder, BorderSide |
 | `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits, 12 diagnostic code constants, AudioAsset/VideoAsset, AudioFormat, VideoFormat |
 | `format` | format.rs | ExportArtifact, CapabilityMatrix, LossKind, FidelityLevel, SemanticFormat, ExportFormat, TargetFormat, PdfExportMode |
-| `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest, ProviderReport, EventRecord |
+| `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest, ProviderReport, EventRecord, ArtifactKind (14 variants), ConversionOutput |
 | `input` | input.rs | InputFormat (19 variants), InputSourceDescriptor, RecognizeInput, SnipperImageDescriptor |
 | `traits` | traits.rs | Importer, SemanticConverter, Exporter, Renderer, OfficeAdapter, StageRunner |
 | `geometry` | geometry.rs | Rect, Point, Size |
@@ -90,7 +90,8 @@ pub struct Document {
 }
 // methods: new(), block_count(), all_blocks(), add_asset(), get_asset(),
 //          validate_asset_refs(), migrate_legacy_image_data(),
-//          normalize_assets(), migrate_inline_footnotes_to_notes()
+//          normalize_assets(), migrate_inline_footnotes_to_notes(),
+//          rewrite_asset_refs()
 ```
 
 #### 页面过滤方法

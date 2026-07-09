@@ -122,6 +122,13 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **Asset normalization** | ✅ | `normalize_assets()` 5-stage: migrate/infer/dedup/checksum/validate |
 | **StageOrchestrator** | ✅ | `run_stage()` writes reports/events/manifest files |
 | **DocumentConverter artifacts** | ✅ | `convert_artifact()` returns `ExportArtifact` |
+| **Visual object fields** | ✅ | `transform`/`layer`/`accessibility` on 8+ block types |
+| **Asset ref rewriting** | ✅ | `rewrite_asset_refs()` after dedup — no dangling asset IDs |
+| **ConversionOutput** | ✅ | Structured converter result with text + diagnostics + assets |
+| **TextBoxBlock accessors** | ✅ | `effective_transform()`/`effective_layer()` legacy-to-new bridge |
+| **AnnotationBlock accessibility** | ✅ | Field consistency across all visual blocks |
+| **StageRunner diagnostics** | ✅ | `ConvertStage`/`ExportStage` record real elapsed + source diagnostics |
+| **ArtifactKind mapping** | ✅ | `from_stage_kind()` — Decode→DecodedImage, Export→ExportedFile |
 
 ---
 
