@@ -62,6 +62,7 @@ latexsnipper-ffi = { path = "crates/ffi", version = "1.0.0" }
 latexsnipper-wasm = { path = "crates/wasm", version = "1.0.0" }
 latexsnipper-cli = { path = "crates/cli", version = "1.0.0" }
 latexsnipper-tests = { path = "crates/tests", version = "1.0.0" }
+sha2 = "0.10"
 
 # Root package for examples and tests
 [package]

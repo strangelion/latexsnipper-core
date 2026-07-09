@@ -5,7 +5,8 @@
 
 use latexsnipper_ast::{
     ArtifactEntry, ArtifactKind, ArtifactManifest, Diagnostic, DiagnosticLevel, Document,
-    EventRecord, JobRoot, StageKind, StageReport, StageRunner, StageSpec, StageStatus,
+    EventRecord, JobRoot, StageKind, StageProducedArtifact, StageReport, StageRunner, StageSpec,
+    StageStatus,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -27,6 +28,7 @@ impl StageRunner for DecodeStage {
         let start = std::time::Instant::now();
         let mut diags = Vec::new();
         let mut output_artifacts = Vec::new();
+        let mut produced_artifacts = Vec::new();
 
         // Ensure decoded dir exists
         std::fs::create_dir_all(&job_root.decoded_dir)
@@ -39,6 +41,24 @@ impl StageRunner for DecodeStage {
                     let out_path = format!("{}/source.{}", job_root.decoded_dir, ext);
                     std::fs::write(&out_path, &bytes)
                         .map_err(|e| format!("Write decoded: {}", e))?;
+                    let mime = match ext {
+                        "png" => "image/png",
+                        "jpg" | "jpeg" => "image/jpeg",
+                        "pdf" => "application/pdf",
+                        _ => "application/octet-stream",
+                    };
+                    let meta = std::fs::metadata(&out_path).ok();
+                    let checksum = compute_file_sha256(&out_path).ok();
+                    let size = meta.map(|m| m.len());
+                    produced_artifacts.push(StageProducedArtifact {
+                        id: format!("{}:decoded", spec.stage_id),
+                        kind: ArtifactKind::from_output_or_stage(&spec.output, spec.kind),
+                        path: out_path.clone(),
+                        mime_type: Some(mime.to_string()),
+                        format: Some(ext.to_string()),
+                        checksum_sha256: checksum,
+                        size_bytes: size,
+                    });
                     output_artifacts.push(out_path);
                 }
                 Err(e) => {
@@ -63,11 +83,12 @@ impl StageRunner for DecodeStage {
             );
         }
 
+        let has_output = !output_artifacts.is_empty();
         let elapsed = start.elapsed().as_millis() as u64;
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Decode,
-            status: if !output_artifacts.is_empty() {
+            status: if has_output {
                 StageStatus::Succeeded
             } else {
                 StageStatus::Failed
@@ -78,7 +99,7 @@ impl StageRunner for DecodeStage {
             input_artifacts: spec.input.artifacts.clone(),
             output_artifacts,
             diagnostics: diags,
-            produced_artifacts: Vec::new(),
+            produced_artifacts,
         })
     }
 }
@@ -99,6 +120,7 @@ impl StageRunner for RecognizeStage {
         let start = std::time::Instant::now();
         let mut diags = Vec::new();
         let mut output_artifacts = Vec::new();
+        let mut produced_artifacts = Vec::new();
 
         // Ensure ast dir exists
         std::fs::create_dir_all(&job_root.ast_dir).map_err(|e| format!("Create ast dir: {}", e))?;
@@ -112,6 +134,18 @@ impl StageRunner for RecognizeStage {
                         let out_path = format!("{}/document.ast.json", job_root.ast_dir);
                         std::fs::write(&out_path, &content)
                             .map_err(|e| format!("Write AST: {}", e))?;
+                        let checksum = compute_file_sha256(&out_path).ok();
+                        let meta = std::fs::metadata(&out_path).ok();
+                        let size = meta.map(|m| m.len());
+                        produced_artifacts.push(StageProducedArtifact {
+                            id: format!("{}:ast", spec.stage_id),
+                            kind: ArtifactKind::DocumentAst,
+                            path: out_path.clone(),
+                            mime_type: Some("application/json".to_string()),
+                            format: Some("json".to_string()),
+                            checksum_sha256: checksum,
+                            size_bytes: size,
+                        });
                         output_artifacts.push(out_path);
                         diags.push(Diagnostic::new(
                             DiagnosticLevel::Info,
@@ -147,18 +181,23 @@ impl StageRunner for RecognizeStage {
             }
         }
 
+        let has_output = !output_artifacts.is_empty();
         let elapsed = start.elapsed().as_millis() as u64;
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Recognize,
-            status: StageStatus::Succeeded,
+            status: if has_output {
+                StageStatus::Succeeded
+            } else {
+                StageStatus::Failed
+            },
             started_at: Some(minimal_timestamp()),
             finished_at: Some(minimal_timestamp()),
             elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
             output_artifacts,
             diagnostics: diags,
-            produced_artifacts: Vec::new(),
+            produced_artifacts,
         })
     }
 }
@@ -180,6 +219,7 @@ impl StageRunner for ConvertStage {
         let start = std::time::Instant::now();
         let mut diags = Vec::new();
         let mut output_artifacts = Vec::new();
+        let mut produced_artifacts = Vec::new();
 
         // Try to read Document AST from input artifacts
         let format = spec
@@ -240,6 +280,25 @@ impl StageRunner for ConvertStage {
                             if !text.is_empty() {
                                 std::fs::write(&out_path, &text)
                                     .map_err(|e| format!("Write output '{}': {}", out_path, e))?;
+                                let checksum = compute_file_sha256(&out_path).ok();
+                                let meta = std::fs::metadata(&out_path).ok();
+                                let size = meta.map(|m| m.len());
+                                let mime = match format_label {
+                                    "latex" => "text/x-latex",
+                                    "markdown" => "text/markdown",
+                                    "html" => "text/html",
+                                    "typst" => "text/x-typst",
+                                    _ => "text/plain",
+                                };
+                                produced_artifacts.push(StageProducedArtifact {
+                                    id: format!("{}:converted", spec.stage_id),
+                                    kind: ArtifactKind::ConvertedText,
+                                    path: out_path.clone(),
+                                    mime_type: Some(mime.to_string()),
+                                    format: Some(format_label.to_string()),
+                                    checksum_sha256: checksum,
+                                    size_bytes: size,
+                                });
                                 output_artifacts.push(out_path);
                             }
                             diags.extend(conv_diags);
@@ -268,11 +327,12 @@ impl StageRunner for ConvertStage {
             }
         }
 
+        let has_output = !output_artifacts.is_empty();
         let elapsed = start.elapsed().as_millis() as u64;
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Convert,
-            status: if !output_artifacts.is_empty() || !diags.iter().any(|d| !d.recoverable) {
+            status: if has_output {
                 StageStatus::Succeeded
             } else {
                 StageStatus::Failed
@@ -282,7 +342,7 @@ impl StageRunner for ConvertStage {
             elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
             output_artifacts,
-            produced_artifacts: Vec::new(),
+            produced_artifacts,
             diagnostics: diags,
         })
     }
@@ -305,6 +365,7 @@ impl StageRunner for ExportStage {
         let start = std::time::Instant::now();
         let mut diags = Vec::new();
         let mut output_artifacts = Vec::new();
+        let mut produced_artifacts = Vec::new();
 
         let format = spec
             .options
@@ -330,6 +391,24 @@ impl StageRunner for ExportStage {
                                     std::fs::write(&out_path, t).map_err(|e| {
                                         format!("Write output '{}': {}", out_path, e)
                                     })?;
+                                    let checksum = compute_file_sha256(&out_path).ok();
+                                    let meta = std::fs::metadata(&out_path).ok();
+                                    let size = meta.map(|m| m.len());
+                                    let mime = match format {
+                                        "svg" => "image/svg+xml",
+                                        "pdf" => "application/pdf",
+                                        "txt" | "text" => "text/plain",
+                                        _ => "application/octet-stream",
+                                    };
+                                    produced_artifacts.push(StageProducedArtifact {
+                                        id: format!("{}:exported", spec.stage_id),
+                                        kind: ArtifactKind::ExportedFile,
+                                        path: out_path.clone(),
+                                        mime_type: Some(mime.to_string()),
+                                        format: Some(format.to_string()),
+                                        checksum_sha256: checksum,
+                                        size_bytes: size,
+                                    });
                                     output_artifacts.push(out_path);
                                 }
                                 diags.extend(artifact.diagnostics);
@@ -370,11 +449,12 @@ impl StageRunner for ExportStage {
             }
         }
 
+        let has_output = !output_artifacts.is_empty();
         let elapsed = start.elapsed().as_millis() as u64;
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Export,
-            status: if !output_artifacts.is_empty() {
+            status: if has_output {
                 StageStatus::Succeeded
             } else {
                 StageStatus::Failed
@@ -384,10 +464,17 @@ impl StageRunner for ExportStage {
             elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
             output_artifacts,
-            produced_artifacts: Vec::new(),
+            produced_artifacts,
             diagnostics: diags,
         })
     }
+}
+
+/// Compute SHA-256 checksum of a file.
+fn compute_file_sha256(path: &str) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("Read for checksum: {}", e))?;
+    use sha2::{Digest, Sha256};
+    Ok(format!("{:x}", Sha256::digest(&bytes)))
 }
 
 /// Minimal ISO 8601 timestamp (no external chrono dependency).

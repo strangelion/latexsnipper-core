@@ -241,6 +241,23 @@ impl ArtifactKind {
             _ => ArtifactKind::Other,
         }
     }
+
+    pub fn from_output_or_stage(output: &crate::StageOutput, kind: crate::StageKind) -> Self {
+        match output.artifact_kind.as_str() {
+            "source_document" => ArtifactKind::SourceDocument,
+            "source_image" => ArtifactKind::SourceImage,
+            "decoded_image" => ArtifactKind::DecodedImage,
+            "extracted_asset" => ArtifactKind::ExtractedAsset,
+            "document_ast" => ArtifactKind::DocumentAst,
+            "converted_text" => ArtifactKind::ConvertedText,
+            "exported_file" => ArtifactKind::ExportedFile,
+            "clipboard_bundle" => ArtifactKind::ClipboardBundle,
+            "report" => ArtifactKind::Report,
+            "log" => ArtifactKind::Log,
+            "provider_raw" => ArtifactKind::ProviderRaw,
+            _ => ArtifactKind::from_stage_kind(&kind),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
