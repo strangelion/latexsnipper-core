@@ -88,24 +88,22 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
             } else {
                 &caption
             };
-            if let Some(data) = &f.image_data {
+            let src = resolve_asset_ref(assets, &f.asset_id);
+            if !src.is_empty() {
+                format!(
+                    "<figure><img src=\"{}\" alt=\"{}\"><figcaption>{}</figcaption></figure>",
+                    src, caption_str, caption_str
+                )
+            } else if let Some(data) = &f.image_data {
                 format!(
                     "<figure><img src=\"data:image/png;base64,{}\" alt=\"{}\"><figcaption>{}</figcaption></figure>",
                     data, caption_str, caption_str
                 )
             } else {
-                let src = resolve_asset_ref(assets, &f.asset_id);
-                if src.is_empty() {
-                    format!(
-                        "<figure><img src=\"image.png\" alt=\"{}\"><figcaption>{}</figcaption></figure>",
-                        caption, caption
-                    )
-                } else {
-                    format!(
-                        "<figure><img src=\"{}\" alt=\"{}\"><figcaption>{}</figcaption></figure>",
-                        src, caption, caption
-                    )
-                }
+                format!(
+                    "<figure><img src=\"image.png\" alt=\"{}\"><figcaption>{}</figcaption></figure>",
+                    caption_str, caption_str
+                )
             }
         }
         Block::List(l) => render_list(l, assets),

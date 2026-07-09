@@ -128,25 +128,21 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
         Block::Table(t) => render_table(t, assets),
         Block::Figure(f) => {
             let caption = f.caption_plain_text();
-            if let Some(data) = &f.image_data {
+            let src = resolve_asset_ref(assets, &f.asset_id);
+            if !src.is_empty() {
+                format!(
+                    "\\includegraphics[width=0.8\\textwidth]{{{}}}\n\\caption{{{}}}",
+                    src, caption
+                )
+            } else if let Some(data) = &f.image_data {
                 format!(
                     "\\includegraphics[width=0.8\\textwidth]{{{}}}\n\\caption{{{}}}",
                     data, caption
                 )
+            } else if caption.is_empty() {
+                String::new()
             } else {
-                let src = resolve_asset_ref(assets, &f.asset_id);
-                if src.is_empty() {
-                    if caption.is_empty() {
-                        String::new()
-                    } else {
-                        format!("\\caption{{{}}}", caption)
-                    }
-                } else {
-                    format!(
-                        "\\includegraphics[width=0.8\\textwidth]{{{}}}\n\\caption{{{}}}",
-                        src, caption
-                    )
-                }
+                format!("\\caption{{{}}}", caption)
             }
         }
         Block::List(l) => render_list(l, assets),

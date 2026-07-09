@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::Diagnostic;
+use crate::ExportedAsset;
 
 // ---------------------------------------------------------------------------
 // JobRoot — standard job directory layout
@@ -70,6 +71,19 @@ impl JobRoot {
         }
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------------
+// ConversionOutput — output of a document conversion
+// ---------------------------------------------------------------------------
+
+/// The output of a document conversion, containing the converted text,
+/// diagnostics, and any exported assets.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversionOutput {
+    pub text: String,
+    pub diagnostics: Vec<Diagnostic>,
+    pub exported_assets: Vec<ExportedAsset>,
 }
 
 // ---------------------------------------------------------------------------
@@ -199,9 +213,10 @@ pub struct ArtifactEntry {
 /// The kind/type of an artifact.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ArtifactKind {
-    Source,
-    DecodedPageImage,
-    NativeAsset,
+    SourceDocument,
+    SourceImage,
+    DecodedImage,
+    ExtractedAsset,
     RegionGraph,
     ModelRawOutput,
     DocumentAst,
@@ -211,6 +226,21 @@ pub enum ArtifactKind {
     ClipboardBundle,
     Report,
     Log,
+    ProviderRaw,
+    Other,
+}
+
+impl ArtifactKind {
+    pub fn from_stage_kind(kind: &crate::StageKind) -> Self {
+        match kind {
+            crate::StageKind::Decode => ArtifactKind::DecodedImage,
+            crate::StageKind::Extract => ArtifactKind::ExtractedAsset,
+            crate::StageKind::Recognize => ArtifactKind::DocumentAst,
+            crate::StageKind::Convert => ArtifactKind::ConvertedText,
+            crate::StageKind::Export => ArtifactKind::ExportedFile,
+            _ => ArtifactKind::Other,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -911,6 +911,37 @@ pub struct TextBoxBlock {
     pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
+impl TextBoxBlock {
+    /// Returns the effective transform: prefers the explicit `transform` field,
+    /// falls back to a basic rotation-only transform from `rotation_deg`.
+    pub fn effective_transform(&self) -> Option<crate::Transform2D> {
+        self.transform.clone().or_else(|| {
+            self.rotation_deg.map(|deg| crate::Transform2D {
+                rotation_deg: Some(deg),
+                scale_x: None,
+                scale_y: None,
+                translate_x: None,
+                translate_y: None,
+                skew_x: None,
+                skew_y: None,
+            })
+        })
+    }
+
+    /// Returns the effective layer info: prefers the explicit `layer` field,
+    /// falls back to a basic layer from `z_index`.
+    pub fn effective_layer(&self) -> Option<crate::LayerInfo> {
+        self.layer.clone().or_else(|| {
+            self.z_index.map(|z| crate::LayerInfo {
+                z_index: Some(z),
+                locked: None,
+                hidden: None,
+                group_id: None,
+            })
+        })
+    }
+}
+
 /// A chart block (Excel/PPT/paper figures).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChartBlock {
@@ -1005,6 +1036,8 @@ pub struct AnnotationBlock {
     pub transform: Option<crate::Transform2D>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<crate::LayerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility: Option<crate::AccessibilityInfo>,
 }
 
 // ---------------------------------------------------------------------------

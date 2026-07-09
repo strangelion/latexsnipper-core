@@ -91,16 +91,13 @@ fn render_block(block: &Block, mode: &MarkdownMode, assets: &[MediaAsset]) -> St
             } else {
                 &caption
             };
-            if let Some(data) = &f.image_data {
-                // Legacy path: inline base64 data
+            let src = resolve_asset_ref(assets, &f.asset_id);
+            if !src.is_empty() {
+                format!("![{}]({})", caption_str, src)
+            } else if let Some(data) = &f.image_data {
                 format!("![{}](data:image/png;base64,{})", caption_str, data)
             } else {
-                let src = resolve_asset_ref(assets, &f.asset_id);
-                if src.is_empty() {
-                    format!("![{}](image.png)", caption_str)
-                } else {
-                    format!("![{}]({})", caption_str, src)
-                }
+                format!("![{}](image.png)", caption_str)
             }
         }
         Block::List(l) => render_list(l, mode, assets),

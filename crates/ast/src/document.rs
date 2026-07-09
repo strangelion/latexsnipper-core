@@ -235,6 +235,98 @@ impl Document {
         diags
     }
 
+    /// Rewrite all asset references in blocks and inlines using the given remapping.
+    pub fn rewrite_asset_refs(&mut self, remap: &std::collections::HashMap<AssetId, AssetId>) {
+        for page in &mut self.pages {
+            for block in &mut page.blocks {
+                Self::rewrite_block_asset_refs(block, remap);
+            }
+        }
+    }
+
+    fn rewrite_block_asset_refs(
+        block: &mut Block,
+        remap: &std::collections::HashMap<AssetId, AssetId>,
+    ) {
+        // Match each block type that has asset refs and rewrite them
+        match block {
+            Block::Figure(f) => {
+                if let Some(ref id) = f.asset_id {
+                    if let Some(new_id) = remap.get(id) {
+                        f.asset_id = Some(new_id.clone());
+                    }
+                }
+            }
+            Block::TextBox(tb) => {
+                for child in &mut tb.content {
+                    Self::rewrite_block_asset_refs(child, remap);
+                }
+            }
+            Block::Quote(q) => {
+                for child in &mut q.blocks {
+                    Self::rewrite_block_asset_refs(child, remap);
+                }
+            }
+            Block::Minipage(m) => {
+                for child in &mut m.content {
+                    Self::rewrite_block_asset_refs(child, remap);
+                }
+            }
+            Block::Float(fb) => {
+                for child in &mut fb.content {
+                    Self::rewrite_block_asset_refs(child, remap);
+                }
+            }
+            Block::Theorem(t) => {
+                for child in &mut t.content {
+                    Self::rewrite_block_asset_refs(child, remap);
+                }
+            }
+            Block::Proof(p) => {
+                for child in &mut p.content {
+                    Self::rewrite_block_asset_refs(child, remap);
+                }
+            }
+            Block::Chart(c) => {
+                if let Some(ref id) = c.asset_id {
+                    if let Some(new_id) = remap.get(id) {
+                        c.asset_id = Some(new_id.clone());
+                    }
+                }
+            }
+            Block::EmbeddedObject(eo) => {
+                if let Some(ref id) = eo.asset_id {
+                    if let Some(new_id) = remap.get(id) {
+                        eo.asset_id = Some(new_id.clone());
+                    }
+                }
+                if let Some(ref id) = eo.preview_asset_id {
+                    if let Some(new_id) = remap.get(id) {
+                        eo.preview_asset_id = Some(new_id.clone());
+                    }
+                }
+                if let Some(ref id) = eo.storage_ref {
+                    if let Some(new_id) = remap.get(id) {
+                        eo.storage_ref = Some(new_id.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+        // Also rewrite inlines
+        if let Some(mut inlines) = block.inlines_mut() {
+            for inline in inlines.iter_mut() {
+                if let crate::Inline::Image(img) = inline {
+                    if let Some(ref id) = img.asset_id {
+                        if let Some(new_id) = remap.get(id) {
+                            img.asset_id = Some(new_id.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Walk all inlines, migrate old Inline::Footnote to Inline::NoteRef + Document.notes.
     /// Returns diagnostics for each migrated footnote.
     pub fn migrate_inline_footnotes_to_notes(&mut self) -> Vec<Diagnostic> {
@@ -563,18 +655,20 @@ impl Document {
             }
         }
 
-        // 3. Compute checksums
+        // 3. Compute content hashes (for dedup — not cryptographic)
         if options.compute_checksum {
             for asset in &mut self.assets {
                 if asset.checksum_sha256.is_none() {
                     if let Ok(bytes) = resolve_asset_bytes(asset) {
-                        asset.checksum_sha256 = Some(compute_sha256(&bytes));
+                        asset.checksum_sha256 = Some(compute_content_hash(&bytes));
                     }
                 }
             }
         }
 
-        // 4. Deduplicate
+        // 4. Deduplicate with reference rewriting
+        let mut remap: std::collections::HashMap<AssetId, AssetId> =
+            std::collections::HashMap::new();
         if options.deduplicate && self.assets.len() > 1 {
             let mut keep: Vec<MediaAsset> = Vec::new();
             let mut dedup_map: std::collections::HashMap<String, AssetId> =
@@ -585,6 +679,7 @@ impl Document {
                     .clone()
                     .unwrap_or_else(|| asset.id.0.clone());
                 if let Some(existing) = dedup_map.get(&key) {
+                    remap.insert(asset.id.clone(), existing.clone());
                     diags.push(
                         Diagnostic::warning(
                             "W_ASSET_DEDUP",
@@ -598,6 +693,11 @@ impl Document {
                 }
             }
             self.assets = keep;
+        }
+
+        // 4b. Rewrite references after dedup
+        if !remap.is_empty() {
+            self.rewrite_asset_refs(&remap);
         }
 
         // 5. Validate refs
@@ -633,7 +733,11 @@ fn resolve_asset_bytes(asset: &crate::MediaAsset) -> Result<Vec<u8>, String> {
 /// Not cryptographically secure — the runtime crate should override
 /// with a real SHA-256 when available. This is sufficient for
 /// deduplication within a single process.
-fn compute_sha256(bytes: &[u8]) -> String {
+///
+/// The hash input comes from `resolve_asset_bytes`, which returns
+/// raw bytes as-is (no base64 decoding) — this keeps the hash
+/// cheap and avoids a base64 crate dependency for the ast crate.
+fn compute_content_hash(bytes: &[u8]) -> String {
     let mut h: u64 = 14695981039346656037; // FNV-1a offset basis
     for &b in bytes {
         h ^= b as u64;

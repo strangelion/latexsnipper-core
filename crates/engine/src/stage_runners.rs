@@ -4,8 +4,8 @@
 //! and produces a `StageReport` that can be attached to a `Job`.
 
 use latexsnipper_ast::{
-    ArtifactEntry, ArtifactKind, ArtifactManifest, EventRecord, JobRoot, StageKind, StageReport,
-    StageRunner, StageSpec, StageStatus,
+    ArtifactEntry, ArtifactKind, ArtifactManifest, Diagnostic, DiagnosticLevel, EventRecord,
+    JobRoot, StageKind, StageReport, StageRunner, StageSpec, StageStatus,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -81,16 +81,43 @@ impl StageRunner for ConvertStage {
 
     fn run(&self, spec: &StageSpec) -> Result<StageReport, String> {
         let now = Some(minimal_timestamp());
+        let start = std::time::Instant::now();
+        let mut diags = Vec::new();
+
+        // Check if input source exists and report its metadata
+        if let Some(src) = &spec.input.source {
+            match std::fs::metadata(src) {
+                Ok(meta) => {
+                    diags.push(Diagnostic::new(
+                        DiagnosticLevel::Info,
+                        "I_INPUT_FOUND",
+                        format!("Input source '{}' ({} bytes)", src, meta.len()),
+                    ));
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::new(
+                            DiagnosticLevel::Warning,
+                            "W_INPUT_MISSING",
+                            format!("Input source '{}' not accessible: {}", src, e),
+                        )
+                        .with_recoverable(true),
+                    );
+                }
+            }
+        }
+
+        let elapsed = start.elapsed().as_millis() as u64;
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Convert,
             status: StageStatus::Succeeded,
             started_at: now.clone(),
             finished_at: now,
-            elapsed_ms: Some(0),
+            elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
             output_artifacts: vec![format!("{}/converted", spec.stage_id)],
-            diagnostics: Vec::new(),
+            diagnostics: diags,
         })
     }
 }
@@ -109,16 +136,43 @@ impl StageRunner for ExportStage {
 
     fn run(&self, spec: &StageSpec) -> Result<StageReport, String> {
         let now = Some(minimal_timestamp());
+        let start = std::time::Instant::now();
+        let mut diags = Vec::new();
+
+        // Check if input source exists and report its metadata
+        if let Some(src) = &spec.input.source {
+            match std::fs::metadata(src) {
+                Ok(meta) => {
+                    diags.push(Diagnostic::new(
+                        DiagnosticLevel::Info,
+                        "I_INPUT_FOUND",
+                        format!("Export input source '{}' ({} bytes)", src, meta.len()),
+                    ));
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::new(
+                            DiagnosticLevel::Warning,
+                            "W_INPUT_MISSING",
+                            format!("Export input source '{}' not accessible: {}", src, e),
+                        )
+                        .with_recoverable(true),
+                    );
+                }
+            }
+        }
+
+        let elapsed = start.elapsed().as_millis() as u64;
         Ok(StageReport {
             stage_id: spec.stage_id.clone(),
             kind: StageKind::Export,
             status: StageStatus::Succeeded,
             started_at: now.clone(),
             finished_at: now,
-            elapsed_ms: Some(0),
+            elapsed_ms: Some(elapsed),
             input_artifacts: spec.input.artifacts.clone(),
             output_artifacts: vec![format!("{}/exported", spec.stage_id)],
-            diagnostics: Vec::new(),
+            diagnostics: diags,
         })
     }
 }
@@ -214,6 +268,9 @@ impl StageOrchestrator {
             .get(&kind_str)
             .ok_or_else(|| format!("No runner registered for stage kind: {}", kind_str))?;
 
+        // Ensure job directories exist
+        self.job_root.ensure_dirs()?;
+
         // Execute the stage
         let report = runner.run(spec)?;
 
@@ -222,9 +279,9 @@ impl StageOrchestrator {
             "{}/{}.report.json",
             self.job_root.reports_dir, spec.stage_id
         );
-        if let Ok(json) = serde_json::to_string_pretty(&report) {
-            let _ = std::fs::write(&report_path, json);
-        }
+        let json = serde_json::to_string_pretty(&report)
+            .map_err(|e| format!("Serialize report: {}", e))?;
+        std::fs::write(&report_path, &json).map_err(|e| format!("Write report: {}", e))?;
 
         // Append event record to events.jsonl (JSON Lines format)
         let event = EventRecord {
@@ -246,23 +303,20 @@ impl StageOrchestrator {
             data: serde_json::Value::Null,
         };
         let event_path = format!("{}/events.jsonl", self.job_root.logs_dir);
-        if let Ok(line) = serde_json::to_string(&event) {
-            // Append to JSONL — create if absent
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&event_path)
-            {
-                use std::io::Write;
-                let _ = writeln!(f, "{}", line);
-            }
-        }
+        let line = serde_json::to_string(&event).map_err(|e| format!("Serialize event: {}", e))?;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&event_path)
+            .map_err(|e| format!("Open events file: {}", e))?;
+        use std::io::Write;
+        writeln!(f, "{}", line).map_err(|e| format!("Write event: {}", e))?;
 
         // Register each output artifact in the manifest
         for art_id in &report.output_artifacts {
             self.artifact_manifest.artifacts.push(ArtifactEntry {
                 id: art_id.clone(),
-                kind: ArtifactKind::ConvertedText,
+                kind: ArtifactKind::from_stage_kind(&spec.kind),
                 path: format!("{}/{}", self.job_root.artifacts_dir, art_id),
                 mime_type: None,
                 format: None,
@@ -275,9 +329,9 @@ impl StageOrchestrator {
 
         // Write updated artifact manifest
         let manifest_path = format!("{}/artifacts.json", self.job_root.artifacts_dir);
-        if let Ok(json) = serde_json::to_string_pretty(&self.artifact_manifest) {
-            let _ = std::fs::write(&manifest_path, json);
-        }
+        let json = serde_json::to_string_pretty(&self.artifact_manifest)
+            .map_err(|e| format!("Serialize manifest: {}", e))?;
+        std::fs::write(&manifest_path, &json).map_err(|e| format!("Write manifest: {}", e))?;
 
         Ok(report)
     }
@@ -289,12 +343,7 @@ impl StageOrchestrator {
             .map_err(|e| format!("Failed to read spec file: {}", e))?;
         let spec: StageSpec =
             serde_json::from_str(&content).map_err(|e| format!("Failed to parse spec: {}", e))?;
-        let report = self
-            .runners
-            .get(&format!("{:?}", spec.kind))
-            .ok_or_else(|| format!("No runner for {:?}", spec.kind))?
-            .run(&spec)?;
-        Ok(report)
+        self.run_stage(&spec)
     }
 }
 

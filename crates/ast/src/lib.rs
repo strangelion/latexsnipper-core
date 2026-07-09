@@ -60,10 +60,10 @@ pub use media::{
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;
 pub use report::{
-    ArtifactEntry, ArtifactKind, ArtifactManifest, BlockSummary, ConfidenceSummary, CredentialRef,
-    CredentialSource, DocumentReport, EventRecord, InputSummary, JobRoot, ProviderCallReport,
-    ProviderReport, RetryPolicy, StageInput, StageKind, StageOutput, StageReport, StageSpec,
-    StageStatus, UnsupportedFeature,
+    ArtifactEntry, ArtifactKind, ArtifactManifest, BlockSummary, ConfidenceSummary,
+    ConversionOutput, CredentialRef, CredentialSource, DocumentReport, EventRecord, InputSummary,
+    JobRoot, ProviderCallReport, ProviderReport, RetryPolicy, StageInput, StageKind, StageOutput,
+    StageReport, StageSpec, StageStatus, UnsupportedFeature,
 };
 pub use span::{
     BlockPolicy, CoordinateSpace, NodeId, NodeIdGenerator, PdfSourceInfo, Position, Provenance,

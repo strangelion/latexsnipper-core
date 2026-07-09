@@ -56,14 +56,14 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
         Block::Figure(f) => {
             let caption = f.caption_plain_text();
             let src = resolve_asset_ref(assets, &f.asset_id);
-            if src.is_empty() {
-                if caption.is_empty() {
-                    String::new()
-                } else {
-                    format!("// {}", caption)
-                }
-            } else {
+            if !src.is_empty() {
                 format!("#image(\"{}\")\n// {}", src, caption)
+            } else if let Some(data) = &f.image_data {
+                format!("#image(\"{}\")\n// {}", data, caption)
+            } else if caption.is_empty() {
+                String::new()
+            } else {
+                format!("// {}", caption)
             }
         }
         Block::List(l) => render_list(l, assets),
