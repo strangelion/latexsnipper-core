@@ -88,8 +88,8 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **PDF native → AST** | ✅ | Native text extraction via lopdf |
 | **PDF overlay** | ✅ | Overlay AST text onto source PDF |
 | **SVG → ShapeBlock** | ✅ | Parse SVG primitives to AST shapes |
-| **Chart → ChartBlock** | ✅ | VLM-powered chart data extraction |
-| **Diagram → Shape/Graph** | ✅ | VLM-powered diagram understanding |
+| **Chart → ChartBlock** | ⚡ | Experimental VLM-backed chart data extraction (requires remote-api feature) |
+| **Diagram → Shape/Graph** | ⚡ | Experimental VLM-backed diagram understanding (requires remote-api feature) |
 | **Document→Report** | ✅ | `DocumentReport::from_document()` with block/confidence/asset summaries |
 | **Capability query** | ✅ | `CapabilityMatrix::query()` / `explain_loss()` |
 | **Asset normalization** | ✅ | `migrate_legacy_image_data()` promotes legacy data, `validate_asset_refs()` |
@@ -137,12 +137,11 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **Real ConvertStage** | ✅ | Reads Document JSON, calls `DocumentConverter`, writes output file |
 | **Real ExportStage** | ✅ | Reads Document JSON, calls `ExportService`, writes output file |
 | **Real DecodeStage** | ✅ | Reads source → writes decoded artifact to JobRoot directory |
-| **Real RecognizeStage** | ✅ | Image → Snipper SDK → Document AST; falls back to JSON passthrough |
+| **Real RecognizeStage** | ⚡ | MVP runner: Document JSON passthrough is stable; image recognition requires configured local models via `spec.options.model_dir` |
 | **Converter placeholder diagnostics** | ✅ | `collect_converter_diagnostics()` flags 10 downgraded block types |
 | **DOCX heading/list detection** | ✅ | `w:pStyle` → Heading levels 1–6, `w:numPr` → ListBlock items |
 | **PPTX table import** | ✅ | `a:tbl` → TableBlock with cell text extraction |
 | **XLSX data type/formula/columns** | ✅ | CellDataType (Boolean/Date/Text/Formula), formula extraction, column width |
-| **Real DecodeStage/RecognizeStage** | ✅ | Reads source → writes decoded/AST artifacts to JobRoot directories |
 | **StageProducedArtifact** | ✅ | Structured artifact metadata (kind/path/mime/format/checksum/size) |
 | **AssetRef visitor full coverage** | ✅ | Table/List/HeaderFooter/Shape/Chart/Annotation/FormField all covered |
 | **InlineBase64 content hash** | ✅ | Decoded before SHA-256, fixed in both ast and SimpleAssetResolver |
