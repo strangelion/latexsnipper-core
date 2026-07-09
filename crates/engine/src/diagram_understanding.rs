@@ -2,7 +2,7 @@ use latexsnipper_ast::{
     Diagnostic, DiagnosticLevel, Inline, ProviderReport, Rect, ShapeBlock, ShapeStyle, ShapeType,
     SourceInfo, TextRun,
 };
-use latexsnipper_runtime::api_provider::{ApiProviderConfig, PromptProfile, PromptTask};
+use latexsnipper_runtime::api_provider::{ApiProviderConfig, PromptPreset, PromptProfile};
 use latexsnipper_runtime::RemoteApiProvider;
 
 /// A recognized shape in a diagram.
@@ -63,7 +63,7 @@ impl DiagramUnderstandingService {
 
     /// Analyze a diagram image and extract shapes with connections.
     pub async fn understand_diagram(&self, image_base64: &str) -> DiagramUnderstandingResult {
-        let profile = Self::diagram_extraction_profile();
+        let profile = PromptProfile::from_preset(PromptPreset::DiagramDescription);
 
         let (result, mut diagnostics, report) =
             self.provider.execute(&profile, Some(image_base64)).await;
@@ -97,90 +97,6 @@ impl DiagramUnderstandingService {
             diagnostics,
             provider_report: report,
             raw_response: result.text,
-        }
-    }
-
-    fn diagram_extraction_profile() -> PromptProfile {
-        PromptProfile {
-            id: "diagram-extraction-v1".to_string(),
-            task: PromptTask::DiagramDescription,
-            label: "Diagram Shape Extraction".to_string(),
-            system: Some(
-                "You are a diagram analysis assistant. Extract every shape and \
-                 connection from the diagram image precisely. Return ONLY valid JSON."
-                    .to_string(),
-            ),
-            instruction: [
-                "Analyze this diagram image and extract all shapes and connections as JSON:",
-                "{",
-                "  \"shapes\": [",
-                "    {",
-                "      \"id\": \"shape1\",",
-                "      \"type\": \"rectangle|ellipse|diamond|parallelogram|arrow|line|text\",",
-                "      \"x\": 100, \"y\": 50, \"width\": 120, \"height\": 60,",
-                "      \"label\": \"Process\",",
-                "      \"style\": { \"fill\": \"#4CAF50\", \"stroke\": \"#333\", \"stroke_width\": 2 }",
-                "    }",
-                "  ],",
-                "  \"connections\": [",
-                "    {",
-                "      \"from_id\": \"shape1\", \"to_id\": \"shape2\",",
-                "      \"label\": \"Yes\"",
-                "    }",
-                "  ]",
-                "}",
-                "",
-                "Shape types: rectangle (process), ellipse (start/end),",
-                "diamond (decision), parallelogram (input/output),",
-                "arrow/line (connection), text (annotation).",
-                "Use normalized coordinates (0-1000 range) if exact pixels unknown.",
-            ]
-            .join("\n"),
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "required": ["shapes", "connections"],
-                "properties": {
-                    "shapes": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "required": ["id", "type", "x", "y", "width", "height"],
-                            "properties": {
-                                "id": { "type": "string" },
-                                "type": { "type": "string" },
-                                "x": { "type": "number" },
-                                "y": { "type": "number" },
-                                "width": { "type": "number" },
-                                "height": { "type": "number" },
-                                "label": { "type": "string" },
-                                "style": {
-                                    "type": "object",
-                                    "properties": {
-                                        "fill": { "type": "string" },
-                                        "stroke": { "type": "string" },
-                                        "stroke_width": { "type": "number" }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "connections": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "required": ["from_id", "to_id"],
-                            "properties": {
-                                "from_id": { "type": "string" },
-                                "to_id": { "type": "string" },
-                                "label": { "type": "string" }
-                            }
-                        }
-                    }
-                }
-            })),
-            examples: Vec::new(),
-            temperature: Some(0.1),
-            max_tokens: Some(4096),
         }
     }
 

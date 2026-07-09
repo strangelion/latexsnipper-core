@@ -13,8 +13,8 @@ pub mod session;
 
 pub use acceleration::AccelerationMode;
 pub use api_provider::{
-    ApiKeyResolver, ApiProviderConfig, ModelProviderKind, PromptExample, PromptProfile, PromptTask,
-    UploadPolicy, UploadScope,
+    ApiKeyResolver, ApiProviderConfig, ModelProviderKind, PromptExample, PromptPreset,
+    PromptProfile, PromptTask, UploadPolicy, UploadScope,
 };
 pub use backend::RuntimeBackend;
 pub use model_handle::ModelHandle;
