@@ -141,6 +141,10 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **StageProducedArtifact** | ✅ | Structured artifact metadata (kind/path/mime/format/checksum/size) |
 | **AssetRef visitor full coverage** | ✅ | Table/List/HeaderFooter/Shape/Chart/Annotation/FormField all covered |
 | **InlineBase64 content hash** | ✅ | Decoded before SHA-256, fixed in both ast and SimpleAssetResolver |
+| **ProducedArtifact real fill** | ✅ | All 4 StageRunners return structured kind/path/mime/checksum/size |
+| **Stage status semantics** | ✅ | No output = Failed, spec.output.artifact_kind takes priority |
+| **Inline visitor recursive** | ✅ | Span/Link/Footnote/Sup/Sub recursively visited for asset refs |
+| **Base64 decoder stabilized** | ✅ | Data URI strip, URL-safe, whitespace, invalid char → Err |
 
 ---
 

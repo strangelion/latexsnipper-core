@@ -175,6 +175,10 @@ Engine
 | **StageProducedArtifact** | ✅ | 结构化产物元数据 (kind/path/mime/format/checksum/size) |
 | **AssetRef visitor 全覆盖** | ✅ | Table/List/HeaderFooter/Shape/Chart/Annotation/FormField 全覆盖 |
 | **InlineBase64 内容 hash** | ✅ | 先 base64 decode 再 SHA-256, ast 和 SimpleAssetResolver 同步修复 |
+| **ProducedArtifact 真填充** | ✅ | 4 个 StageRunner 返回结构化 kind/path/mime/checksum/size |
+| **Stage 状态语义** | ✅ | 无输出=Failed, spec.output.artifact_kind 优先 |
+| **Inline visitor 递归** | ✅ | Span/Link/Footnote/Sup/Sub 递归访问资产引用 |
+| **Base64 解码器稳定化** | ✅ | Data URI 剥离, URL-safe, 空白符, 非法字符→Err |
 
 ### 实验版
 

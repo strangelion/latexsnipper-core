@@ -152,6 +152,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **PR4**: AssetRef visitor full coverage — added `Table.rows[].cells[].content[]`, `List.items[].content[]`, `HeaderFooter.content[]`, `Shape.text`, `Chart.title`, `Figure.caption_inlines`, `Annotation.content`, `FormField.label` to both immutable and mutable visitors
   - **PR5**: `DecodeStage` MVP — reads source → writes `job_root.decoded_dir/source.ext`; `RecognizeStage` MVP — reads Document JSON → writes `job_root.ast_dir/document.ast.json`
 
+- **v10 Stage Data Plane Final Mile (PR 6–10)**
+  - **PR6**: All 4 StageRunners now fill `produced_artifacts` with real kind/path/mime/format/checksum/size — Orchestrator manifest no longer relies on legacy fallback
+  - **PR7**: Stage status semantics — no output = `Failed`, passthrough unsupported = `Failed` with diagnostic
+  - **PR8**: `ArtifactKind::from_output_or_stage()` — `spec.output.artifact_kind` string takes priority over `from_stage_kind()` mapping
+  - **PR9**: `visit_inline_asset_refs()`/`_mut()` — recursive Spans/Links/Footnotes/Superscripts/Subscripts; block visitors delegate to inline visitor for all inline collections
+  - **PR10**: `simple_base64_decode()` — data URI prefix stripping, whitespace filtering, URL-safe base64 (`-`/`_`→`+`/`/`), invalid char → `Err`; applied to both `ast` and `SimpleAssetResolver`
+
 - **Office/PDF Import Deepening**
   - `docx_reader` — heading detection via `w:pStyle` → `Block::Heading` with parsed level; list detection via `w:numPr` → `Block::List` with accumulated `ListItem`s
   - `pptx_reader` — table parsing via `a:tbl`/`a:tr`/`a:tc` → `TableBlock` with cell text extraction
