@@ -92,6 +92,24 @@ pub struct Page {
 }
 
 impl Page {
+    /// Create a new page with the given dimensions and page number.
+    pub fn new(width: f32, height: f32, page_number: u32) -> Self {
+        Self {
+            width,
+            height,
+            blocks: Vec::new(),
+            page_number: Some(page_number),
+            layout: None,
+            background_asset_id: None,
+        }
+    }
+
+    /// Add a block to this page.
+    pub fn add_block(&mut self, block: Block) -> &mut Self {
+        self.blocks.push(block);
+        self
+    }
+
     /// Iterate over all blocks in this page.
     pub fn blocks(&self) -> &[Block] {
         &self.blocks
@@ -125,6 +143,12 @@ impl Document {
     /// Generate the next unique NodeId.
     pub fn next_node_id(&mut self) -> crate::NodeId {
         self.id_gen.generate()
+    }
+
+    /// Add a page to this document. Returns self for chaining.
+    pub fn add_page(&mut self, page: Page) -> &mut Self {
+        self.pages.push(page);
+        self
     }
 
     /// Total number of blocks across all pages.

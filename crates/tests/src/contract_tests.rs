@@ -1,10 +1,12 @@
 use latexsnipper_ast::{
-    ArtifactManifest, Block, Document, DocumentVisitor, Formula, FormulaBlock, Inline, JobRoot,
-    Page, ParagraphBlock, Rect, RetryPolicy, StageInput, StageKind, StageOutput, StageSpec,
-    StageStatus, TextCollector, TextRun,
+    ArtifactKind, ArtifactManifest, Block, Document, DocumentVisitor, Formula, FormulaBlock,
+    Inline, JobRoot, Page, ParagraphBlock, Rect, RetryPolicy, StageInput, StageKind, StageOutput,
+    StageRunner, StageSpec, StageStatus, TextCollector, TextRun,
 };
 use latexsnipper_conversion::{Converter, MathmlConverter, TypstConverter};
-use latexsnipper_engine::stage_runners::{register_default_runners, StageOrchestrator};
+use latexsnipper_engine::stage_runners::{
+    register_default_runners, ConvertStage, ExportStage, RecognizeStage, StageOrchestrator,
+};
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_pipeline::{PipelineContext, PipelineGraph, TransformNode};
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend, StubRuntime};
@@ -359,6 +361,197 @@ fn stage_orchestrator_runs_convert_stage_with_document_json() {
         entry.checksum_sha256.is_some(),
         "Artifact should have a checksum"
     );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn test_full_stage_pipeline_e2e() {
+    // Create a temporary job root
+    let tmp = std::env::temp_dir().join(format!("stage_e2e_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    let job_root = JobRoot::new("e2e-test", tmp.to_string_lossy().to_string());
+
+    // Create a minimal Document and write as input AST
+    std::fs::create_dir_all(&job_root.source_dir).unwrap();
+    let mut doc = Document::new();
+    doc.pages.push(Page {
+        width: 800.0,
+        height: 600.0,
+        blocks: vec![
+            Block::Paragraph(ParagraphBlock {
+                inlines: vec![Inline::Text(TextRun::new("Hello from E2E test"))],
+                geometry: None,
+                source: None,
+                style: None,
+            }),
+            Block::Formula(FormulaBlock {
+                formula: Formula::latex("E=mc^2"),
+                label: None,
+                number: None,
+                environment: None,
+                geometry: None,
+                source: None,
+            }),
+        ],
+        page_number: Some(1),
+        layout: None,
+        background_asset_id: None,
+    });
+    let doc_json = serde_json::to_string_pretty(&doc).unwrap();
+    let source_path = format!("{}/document.ast.json", job_root.source_dir);
+    std::fs::write(&source_path, &doc_json).unwrap();
+
+    // ── RecognizeStage: passthrough ──
+    let recognize_spec = StageSpec {
+        schema_version: "2.0.0".to_string(),
+        job_id: "e2e-test".to_string(),
+        stage_id: "recognize-1".to_string(),
+        kind: StageKind::Recognize,
+        input: StageInput {
+            artifacts: vec![],
+            source: Some(source_path.clone()),
+        },
+        output: StageOutput {
+            artifact_kind: "document_ast".to_string(),
+            subdir: "ast".to_string(),
+        },
+        options: serde_json::json!({}),
+        provider: None,
+        credentials: Vec::new(),
+        retry: RetryPolicy::default(),
+    };
+    let report1 = RecognizeStage
+        .run(&recognize_spec, &job_root)
+        .expect("RecognizeStage should succeed");
+    assert_eq!(report1.status, StageStatus::Succeeded);
+    assert!(
+        !report1.produced_artifacts.is_empty(),
+        "RecognizeStage should produce artifacts"
+    );
+    assert!(report1.produced_artifacts[0]
+        .path
+        .contains("document.ast.json"));
+    assert!(
+        std::path::Path::new(&report1.produced_artifacts[0].path).exists(),
+        "Path should exist"
+    );
+
+    let ast_path = report1.produced_artifacts[0].path.clone();
+
+    // ── ConvertStage: AST → Markdown ──
+    let convert_spec = StageSpec {
+        schema_version: "2.0.0".to_string(),
+        job_id: "e2e-test".to_string(),
+        stage_id: "convert-1".to_string(),
+        kind: StageKind::Convert,
+        input: StageInput {
+            artifacts: vec!["e2e-test:ast".to_string()],
+            source: Some(ast_path.clone()),
+        },
+        output: StageOutput {
+            artifact_kind: "converted_text".to_string(),
+            subdir: "converted".to_string(),
+        },
+        options: serde_json::json!({"target_format": "markdown"}),
+        provider: None,
+        credentials: Vec::new(),
+        retry: RetryPolicy::default(),
+    };
+    let report2 = ConvertStage
+        .run(&convert_spec, &job_root)
+        .expect("ConvertStage should succeed");
+    assert_eq!(report2.status, StageStatus::Succeeded);
+    assert!(
+        !report2.produced_artifacts.is_empty(),
+        "ConvertStage should produce artifacts"
+    );
+    let converted_path = &report2.produced_artifacts[0].path;
+    assert!(std::path::Path::new(converted_path).exists());
+
+    // ── ExportStage: AST → PlainText ──
+    let export_spec = StageSpec {
+        schema_version: "2.0.0".to_string(),
+        job_id: "e2e-test".to_string(),
+        stage_id: "export-1".to_string(),
+        kind: StageKind::Export,
+        input: StageInput {
+            artifacts: vec!["e2e-test:ast".to_string()],
+            source: Some(ast_path),
+        },
+        output: StageOutput {
+            artifact_kind: "exported_file".to_string(),
+            subdir: "exported".to_string(),
+        },
+        options: serde_json::json!({"visual_format": "txt"}),
+        provider: None,
+        credentials: Vec::new(),
+        retry: RetryPolicy::default(),
+    };
+    let report3 = ExportStage
+        .run(&export_spec, &job_root)
+        .expect("ExportStage should succeed");
+    assert_eq!(report3.status, StageStatus::Succeeded);
+    assert!(
+        !report3.produced_artifacts.is_empty(),
+        "ExportStage should produce artifacts"
+    );
+    let export_path = &report3.produced_artifacts[0].path;
+    assert!(std::path::Path::new(export_path).exists());
+
+    // ── Verify content ──
+    let converted_text = std::fs::read_to_string(converted_path).unwrap_or_default();
+    assert!(
+        converted_text.contains("Hello from E2E test"),
+        "Converted text should contain original content"
+    );
+
+    // ── Cleanup ──
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn test_produced_artifact_metadata() {
+    // Run a ConvertStage and verify produced_artifact metadata
+    let tmp = std::env::temp_dir().join(format!("artifact_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    let job_root = JobRoot::new("artifact-test", tmp.to_string_lossy().to_string());
+
+    let mut doc = Document::new();
+    doc.pages.push(Page {
+        width: 800.0, height: 600.0,
+        blocks: vec![Block::Paragraph(ParagraphBlock {
+            inlines: vec![Inline::Text(TextRun::new("Artifact test"))],
+            geometry: None, source: None, style: None,
+        })],
+        page_number: Some(1), layout: None, background_asset_id: None,
+    });
+    let json = serde_json::to_string_pretty(&doc).unwrap();
+    std::fs::create_dir_all(&job_root.source_dir).unwrap();
+    let src = format!("{}/doc.json", job_root.source_dir);
+    std::fs::write(&src, &json).unwrap();
+
+    let spec = StageSpec {
+        schema_version: "2.0.0".to_string(),
+        job_id: "artifact-test".to_string(),
+        stage_id: "convert-art".to_string(),
+        kind: StageKind::Convert,
+        input: StageInput { artifacts: vec![], source: Some(src) },
+        output: StageOutput { artifact_kind: "converted_text".to_string(), subdir: "converted".to_string() },
+        options: serde_json::json!({"target_format": "latex"}),
+        provider: None, credentials: Vec::new(),
+        retry: RetryPolicy::default(),
+    };
+
+    let report = ConvertStage.run(&spec, &job_root).expect("ConvertStage");
+    assert!(!report.produced_artifacts.is_empty());
+
+    let art = &report.produced_artifacts[0];
+    assert!(std::path::Path::new(&art.path).exists(), "path must exist");
+    assert!(art.size_bytes.unwrap_or(0) > 0, "size_bytes must be > 0");
+    assert!(art.checksum_sha256.as_ref().map_or(false, |c| c.len() == 64), "checksum must be 64-char SHA-256 hex");
+    assert!(art.mime_type.is_some(), "mime_type should be set");
+    assert_eq!(art.kind, ArtifactKind::ConvertedText, "ArtifactKind should match");
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
