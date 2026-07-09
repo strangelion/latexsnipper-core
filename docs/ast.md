@@ -56,13 +56,13 @@ Document
 | 模块 | 文件 | 说明 |
 |---|---|---|
 | `document` | document.rs | Document, Page |
-| `block` | block.rs | Block enum (37 variants), all block structs |
-| `inline` | inline.rs | Inline enum (18+ variants), TextRun, SpanInline, LinkInline, ImageInline, NoteRefInline, AnchorInline, CrossReferenceInline, CitationGroupInline |
+| `block` | block.rs | Block enum (30 variants), all block structs |
+| `inline` | inline.rs | Inline enum (20+ variants), TextRun, SpanInline, LinkInline, ImageInline, NoteRefInline, AnchorInline, CrossReferenceInline, CitationGroupInline, NoteKind |
 | `formula` | formula.rs | Formula, FormulaSource (Latex/Omml/Typst/MathML) |
 | `formula_layout` | formula_layout.rs | FormulaLayout, FormulaNode, SymbolInfo |
 | `span` | span.rs | SourceInfo, Provenance, BlockPolicy, CoordinateSpace, NodeId |
-| `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType, TextDirection, UnderlineStyle, Transform2D, LayerInfo, ListStyle, BulletStyle, NumberingStyle, VectorPath, PathCommand, ShapeGroup, AccessibilityInfo |
-| `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits, 12 diagnostic code constants, AudioAsset/VideoAsset |
+| `style` | style.rs | TextStyle, ParagraphStyle, ShapeStyle, BoxStyle, Color, ChartType, TextDirection, UnderlineStyle, Transform2D, LayerInfo, ListStyle, BulletStyle, NumberingStyle, VectorPath, PathCommand, ShapeGroup, AccessibilityInfo, Length, LengthUnit, TableBorder, BorderSide |
+| `media` | media.rs | MediaAsset, AssetId, Diagnostic, AssetStore/ReferenceResolver/Exporter traits, 12 diagnostic code constants, AudioAsset/VideoAsset, AudioFormat, VideoFormat |
 | `format` | format.rs | ExportArtifact, CapabilityMatrix, LossKind, FidelityLevel, SemanticFormat, ExportFormat, TargetFormat, PdfExportMode |
 | `report` | report.rs | DocumentReport, StageReport, StageSpec, JobRoot, ArtifactManifest, ProviderReport, EventRecord |
 | `input` | input.rs | InputFormat (19 variants), InputSourceDescriptor, RecognizeInput, SnipperImageDescriptor |
@@ -83,11 +83,14 @@ pub struct Document {
     pub pages: Vec<Page>,
     pub assets: Vec<MediaAsset>,
     pub diagnostics: Vec<Diagnostic>,
+    pub notes: Vec<NoteDefinition>,
+    pub outline: Option<DocumentOutline>,
     pub id_gen: NodeIdGenerator,
     pub schema_version: String,
 }
 // methods: new(), block_count(), all_blocks(), add_asset(), get_asset(),
-//          validate_asset_refs(), migrate_legacy_image_data()
+//          validate_asset_refs(), migrate_legacy_image_data(),
+//          normalize_assets(), migrate_inline_footnotes_to_notes()
 ```
 
 #### 页面过滤方法
@@ -113,6 +116,8 @@ pub struct Page {
     pub height: f32,
     pub blocks: Vec<Block>,
     pub page_number: Option<u32>,
+    pub layout: Option<PageLayout>,
+    pub background_asset_id: Option<AssetId>,
 }
 ```
 

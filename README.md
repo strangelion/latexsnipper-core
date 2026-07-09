@@ -117,6 +117,11 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **Revision/TrackedChange** | ✅ | Revision tracking support |
 | **ChemicalFormula/QrCode/Graph Block** | ✅ | Domain-specific block types |
 | **DocumentOutline** | ✅ | Table-of-contents hierarchy |
+| **Length/LengthUnit** | ✅ | Typed measurement (Pt/Px/Emu/Mm/Cm/Inch/Percent) |
+| **TableStyle/TableCellStyle** | ✅ | Border/alignment/banding/background table styling |
+| **Asset normalization** | ✅ | `normalize_assets()` 5-stage: migrate/infer/dedup/checksum/validate |
+| **StageOrchestrator** | ✅ | `run_stage()` writes reports/events/manifest files |
+| **DocumentConverter artifacts** | ✅ | `convert_artifact()` returns `ExportArtifact` |
 
 ---
 

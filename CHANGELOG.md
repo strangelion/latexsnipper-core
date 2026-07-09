@@ -101,6 +101,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `AudioAsset`/`AudioFormat` — embedded audio support
   - `VideoAsset`/`VideoFormat` — embedded video support
 
+- **v5 Field & Type Completion**
+  - `Length`/`LengthUnit` — typed measurement with Pt/Px/Emu/Mm/Cm/Inch/Percent/Em/Ex units
+  - `TextStyle` expanded: `underline_style: Option<UnderlineStyle>`, `language`, `direction`, `letter_spacing`
+  - `TableStyle`/`TableCellStyle` filled with border/alignment/banding/background fields
+  - `TableBorder`/`BorderSide` — per-side border configuration
+  - `Page.layout: Option<PageLayout>` + `Page.background_asset_id` — page layout linked to Page
+  - `FormulaBlock` — `label`/`number`/`environment` fields + `FormulaEnvironment` enum
+  - `EmbeddedObjectBlock` — `prog_id`/`class_id`/`storage_ref`/`display_as_icon` Office fields
+  - `Transform2D`/`LayerInfo`/`AccessibilityInfo` applied to 8+ visual Block types
+  - `RegionKind` expanded from 13 to 42 variants (Photo/Diagram/Chart/CodeBlock/FormField/QrCode etc.)
+  - `Inline::NoteRef(NoteRefInline)` — new inline variant for footnote/endnote references
+  - `LinkInline.link_target: Option<LinkTarget>` — typed link target alongside legacy `target`
+  - `Document.outline: Option<DocumentOutline>` — document outline/toc hierarchy on Document
+  - `SemanticFormat`/`ExportFormat`/`TargetFormat` — contract deduplicated via ast re-export
+  - Markdown parser (`![alt](src)`) and HTML parser (`<img>`) now create `MediaAsset` entries
+  - `RenderTree.diagnostics: Vec<Diagnostic>` — unsupported blocks emit `W_BLOCK_DOWNGRADED`
+
+- **v6 Accessor & Orchestration (PR 1–5)**
+  - **PR1**: `ShapeBlock`/`AnnotationBlock`/`ChemicalFormulaBlock` — unified transform/layer/accessibility fields
+  - **PR2**: `TableCell::effective_style()` + `legacy_style_as_table_cell_style()`, `LinkInline::target_string()` + `effective_target()`, `Document::migrate_inline_footnotes_to_notes()` — old/new field accessor methods
+  - **PR3**: `DocumentConverter::convert_artifact()` — semantic converters return `ExportArtifact` (with text + diagnostics + assets)
+  - **PR4**: `NormalizeAssetOptions` + `Document::normalize_assets()` — 5-stage asset normalization (migrate/infer/dedup/checksum/validate)
+  - **PR5**: `StageOrchestrator` — registers runners, writes `reports/<id>.report.json`, appends `logs/events.jsonl`, updates `artifacts/artifacts.json`
+
 ### Changed
 - `FigureBlock.caption` deprecated in favor of `caption_inlines: Option<Vec<Inline>>`
 - `RecognizeInput::Image(String)` → `RecognizeInput::Image(SnipperImageDescriptor)`
