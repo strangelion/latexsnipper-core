@@ -1,8 +1,10 @@
 use latexsnipper_ast::{
-    Block, Document, DocumentVisitor, Formula, FormulaBlock, Inline, Page, ParagraphBlock, Rect,
-    TextCollector, TextRun,
+    ArtifactManifest, Block, Document, DocumentVisitor, Formula, FormulaBlock, Inline, JobRoot,
+    Page, ParagraphBlock, Rect, RetryPolicy, StageInput, StageKind, StageOutput, StageSpec,
+    StageStatus, TextCollector, TextRun,
 };
 use latexsnipper_conversion::{Converter, MathmlConverter, TypstConverter};
+use latexsnipper_engine::stage_runners::{register_default_runners, StageOrchestrator};
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_pipeline::{PipelineContext, PipelineGraph, TransformNode};
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend, StubRuntime};
@@ -184,4 +186,179 @@ fn runtime_stub_preserves_input_shape_for_mock_output() {
     assert_eq!(outputs.len(), 1);
     assert_eq!(outputs[0].name(), "x_output");
     assert_eq!(outputs[0].shape(), &[1, 3, 48, 320]);
+}
+
+#[test]
+fn stage_orchestrator_produces_manifest_and_report() {
+    let tmp = std::env::temp_dir().join(format!("test-stage-manifest-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+
+    let job_root = JobRoot::new("manifest-test", tmp.to_string_lossy().to_string());
+    let mut orchestrator = StageOrchestrator::new(job_root.clone());
+    register_default_runners(&mut orchestrator);
+
+    // Decode stage with no source — will fail but produce a valid report & manifest
+    let spec = StageSpec {
+        schema_version: "1.0.0".to_string(),
+        job_id: "manifest-test".to_string(),
+        stage_id: "decode-1".to_string(),
+        kind: StageKind::Decode,
+        input: StageInput {
+            artifacts: vec![],
+            source: None,
+        },
+        output: StageOutput {
+            artifact_kind: "decoded_image".to_string(),
+            subdir: "decoded".to_string(),
+        },
+        options: serde_json::json!({}),
+        provider: None,
+        credentials: Vec::new(),
+        retry: RetryPolicy::default(),
+    };
+
+    let report = orchestrator
+        .run_stage(&spec)
+        .expect("run_stage should not error even when stage fails");
+    assert_eq!(report.stage_id, "decode-1");
+    assert_eq!(report.kind, StageKind::Decode);
+    assert_eq!(
+        report.status,
+        StageStatus::Failed,
+        "Decode with no source should fail"
+    );
+
+    // Manifest JSON file should have been written
+    let manifest_path = std::path::Path::new(&job_root.artifacts_dir).join("artifacts.json");
+    assert!(
+        manifest_path.exists(),
+        "Artifact manifest should be written to disk"
+    );
+
+    let content = std::fs::read_to_string(&manifest_path).unwrap();
+    let manifest: ArtifactManifest = serde_json::from_str(&content).unwrap();
+    assert_eq!(manifest.job_id, "manifest-test");
+    assert_eq!(manifest.schema_version, "1.0.0");
+
+    // Event log should have been written
+    let event_path = std::path::Path::new(&job_root.logs_dir).join("events.jsonl");
+    assert!(event_path.exists(), "Event log should be written to disk");
+
+    // Stage report JSON should have been written
+    let report_path = std::path::Path::new(&job_root.reports_dir).join("decode-1.report.json");
+    assert!(
+        report_path.exists(),
+        "Stage report JSON should be written to disk"
+    );
+
+    // Cleanup
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn stage_orchestrator_runs_convert_stage_with_document_json() {
+    let tmp = std::env::temp_dir().join(format!("test-stage-convert-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+
+    let job_root = JobRoot::new("convert-test", tmp.to_string_lossy().to_string());
+    job_root.ensure_dirs().unwrap();
+
+    // Write a minimal Document JSON as the input source
+    let doc = Document {
+        metadata: Default::default(),
+        pages: vec![Page {
+            width: 800.0,
+            height: 600.0,
+            blocks: vec![Block::Formula(latexsnipper_ast::FormulaBlock {
+                formula: latexsnipper_ast::Formula::latex("E=mc^2"),
+                label: None,
+                number: None,
+                environment: None,
+                geometry: None,
+                source: None,
+            })],
+            page_number: Some(1),
+            layout: None,
+            background_asset_id: None,
+        }],
+        assets: Vec::new(),
+        diagnostics: Vec::new(),
+        id_gen: latexsnipper_ast::NodeIdGenerator::new(),
+        schema_version: "1.0.0".to_string(),
+        notes: Vec::new(),
+        outline: None,
+    };
+    let source_path = format!("{}/doc.json", job_root.source_dir);
+    let json = serde_json::to_string(&doc).unwrap();
+    std::fs::write(&source_path, &json).unwrap();
+
+    let mut orchestrator = StageOrchestrator::new(job_root.clone());
+    register_default_runners(&mut orchestrator);
+
+    let spec = StageSpec {
+        schema_version: "1.0.0".to_string(),
+        job_id: "convert-test".to_string(),
+        stage_id: "convert-1".to_string(),
+        kind: StageKind::Convert,
+        input: StageInput {
+            artifacts: vec!["convert:input".to_string()],
+            source: Some(source_path.clone()),
+        },
+        output: StageOutput {
+            artifact_kind: "converted_text".to_string(),
+            subdir: "converted".to_string(),
+        },
+        options: serde_json::json!({"target_format": "latex"}),
+        provider: None,
+        credentials: Vec::new(),
+        retry: RetryPolicy::default(),
+    };
+
+    let report = orchestrator
+        .run_stage(&spec)
+        .expect("ConvertStage should succeed");
+    assert_eq!(report.stage_id, "convert-1");
+    assert_eq!(report.kind, StageKind::Convert);
+    assert_eq!(
+        report.status,
+        StageStatus::Succeeded,
+        "Convert stage should succeed with valid Document JSON"
+    );
+
+    // Verify the converted output was written
+    assert!(
+        !report.output_artifacts.is_empty(),
+        "Should have at least one output artifact"
+    );
+    let output_path = &report.output_artifacts[0];
+    assert!(
+        std::path::Path::new(output_path).exists(),
+        "Converted output file should exist"
+    );
+    let content = std::fs::read_to_string(output_path).unwrap();
+    assert!(
+        content.contains("E=mc^2"),
+        "Converted output should contain the formula"
+    );
+
+    // Verify the artifact manifest was updated
+    let manifest_path = std::path::Path::new(&job_root.artifacts_dir).join("artifacts.json");
+    let manifest_content = std::fs::read_to_string(&manifest_path).unwrap();
+    let manifest: ArtifactManifest = serde_json::from_str(&manifest_content).unwrap();
+    assert!(
+        !manifest.artifacts.is_empty(),
+        "Manifest should contain the produced artifact"
+    );
+    let entry = &manifest.artifacts[0];
+    assert_eq!(
+        entry.producer_stage_id.as_deref(),
+        Some("convert-1"),
+        "Artifact should record its producer stage"
+    );
+    assert!(
+        entry.checksum_sha256.is_some(),
+        "Artifact should have a checksum"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
 }

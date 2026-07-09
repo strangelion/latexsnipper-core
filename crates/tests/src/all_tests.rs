@@ -947,3 +947,192 @@ mod engine_tests {
         assert!(latex.contains("x^2"));
     }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Category 14: Assets (media, checksum, image roundtrip)
+// ═══════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod asset_tests {
+    use latexsnipper_ast::*;
+    use latexsnipper_conversion::markdown_parser::parse_markdown_to_document;
+
+    /// A 1x1 red PNG, base64-encoded.
+    const RED_DOT_PNG_B64: &str =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    #[test]
+    fn test_normalize_assets_computes_checksum() {
+        let mut doc = Document::new();
+        doc.assets.push(MediaAsset {
+            id: AssetId("test-img".to_string()),
+            format: AssetFormat::Png,
+            mime_type: Some("image/png".to_string()),
+            role: MediaRole::Photo,
+            storage: AssetStorage::InlineBase64 {
+                data: RED_DOT_PNG_B64.to_string(),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: None,
+            metadata: Default::default(),
+        });
+
+        let _diags = doc.normalize_assets(NormalizeAssetOptions {
+            compute_checksum: true,
+            ..Default::default()
+        });
+
+        assert!(
+            doc.assets[0].checksum.is_some(),
+            "Checksum should be computed"
+        );
+        let checksum = doc.assets[0].checksum.as_ref().unwrap();
+        assert_eq!(checksum.len(), 64, "SHA-256 hex should be 64 chars");
+
+        // Verify deterministic: re-run should produce identical checksum
+        let checksum2 = doc.assets[0].checksum.as_ref().unwrap();
+        assert_eq!(checksum, checksum2, "Checksum must be deterministic");
+    }
+
+    #[test]
+    fn test_normalize_assets_skips_checksum_when_disabled() {
+        let mut doc = Document::new();
+        doc.assets.push(MediaAsset {
+            id: AssetId("no-checksum".to_string()),
+            format: AssetFormat::Png,
+            mime_type: Some("image/png".to_string()),
+            role: MediaRole::Photo,
+            storage: AssetStorage::InlineBase64 {
+                data: RED_DOT_PNG_B64.to_string(),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: None,
+            metadata: Default::default(),
+        });
+
+        let _diags = doc.normalize_assets(NormalizeAssetOptions {
+            compute_checksum: false,
+            ..Default::default()
+        });
+
+        assert!(
+            doc.assets[0].checksum.is_none(),
+            "Checksum should not be computed when disabled"
+        );
+    }
+
+    #[test]
+    fn test_normalize_assets_infers_mime_type() {
+        let mut doc = Document::new();
+        doc.assets.push(MediaAsset {
+            id: AssetId("mime-test".to_string()),
+            format: AssetFormat::Png,
+            mime_type: None,
+            role: MediaRole::Photo,
+            storage: AssetStorage::InlineBase64 {
+                data: RED_DOT_PNG_B64.to_string(),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: None,
+            metadata: Default::default(),
+        });
+
+        let _diags = doc.normalize_assets(NormalizeAssetOptions {
+            infer_mime_type: true,
+            compute_checksum: false,
+            deduplicate: false,
+            fill_dimensions: false,
+            migrate_legacy: false,
+        });
+
+        assert_eq!(
+            doc.assets[0].mime_type.as_deref(),
+            Some("image/png"),
+            "MIME type should be inferred from format"
+        );
+    }
+
+    #[test]
+    fn test_markdown_image_roundtrip() {
+        let md = "![Alt text](https://example.com/img.png)";
+        let doc = parse_markdown_to_document(md);
+
+        assert!(
+            !doc.assets.is_empty(),
+            "Markdown image should create MediaAsset"
+        );
+
+        let has_image = doc.all_blocks().iter().any(|b| {
+            b.inlines()
+                .iter()
+                .any(|i| matches!(i, Inline::Image(img) if img.asset_id.is_some()))
+        });
+        assert!(has_image, "ImageInline should have asset_id set");
+
+        assert!(
+            matches!(doc.assets[0].storage, AssetStorage::Uri { .. }),
+            "Markdown image should be Uri storage"
+        );
+
+        // Verify alt text is captured
+        assert_eq!(
+            doc.assets[0].alt_text.as_deref(),
+            Some("Alt text"),
+            "Alt text should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_markdown_image_in_paragraph() {
+        let md = "A sentence with ![icon](https://example.com/icon.svg) inline.";
+        let doc = parse_markdown_to_document(md);
+
+        assert!(!doc.assets.is_empty(), "Should create asset for SVG image");
+
+        // The paragraph should have both text and an Image inline
+        let block = &doc.pages[0].blocks[0];
+        let inlines = block.inlines();
+        assert!(inlines.len() >= 2, "Paragraph should have text + image");
+
+        let has_image = inlines.iter().any(|i| matches!(i, Inline::Image(_)));
+        assert!(has_image, "Paragraph should contain Image inline");
+    }
+
+    #[test]
+    fn test_asset_storage_serialization_roundtrip() {
+        let asset = MediaAsset {
+            id: AssetId("rt".to_string()),
+            format: AssetFormat::Jpeg,
+            mime_type: Some("image/jpeg".to_string()),
+            role: MediaRole::Screenshot,
+            storage: AssetStorage::InlineBase64 {
+                data: "/9j/4AAQSkZJRg==".to_string(),
+            },
+            width: Some(1920.0),
+            height: Some(1080.0),
+            dpi: Some(72.0),
+            color_space: Some("sRGB".to_string()),
+            checksum: Some("abc123".to_string()),
+            alt_text: Some("A screenshot".to_string()),
+            metadata: Default::default(),
+        };
+
+        let json = serde_json::to_string(&asset).unwrap();
+        let restored: MediaAsset = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.id.0, "rt");
+        assert_eq!(restored.format, AssetFormat::Jpeg);
+        assert_eq!(restored.width, Some(1920.0));
+    }
+}

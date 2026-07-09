@@ -5,7 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0-rc.1] - 2026-07-08
+
+### Migration Guide from 1.0.x
+
+This release contains significant API changes. Key migration items:
+
+#### Block Enum Expansion (18 new variants)
+- `Block` grew from ~12 variants to **30 variants**: PageBreak, SectionBreak, HeaderFooter, Bibliography, FormField, Revision, ChemicalFormula, QrCode, Graph, etc.
+- All match arms on `Block` must be updated. Use `cargo build` to find missing arms — each missing arm produces a compiler error.
+
+#### Inline Enum Expansion (6 new variants)
+- `Inline` added: Anchor, CrossReference, CitationGroup, NoteRef, LineBreak, SoftBreak, Span, Link, Code, Superscript, Subscript.
+- Code with exhaustive `match inline` will fail to compile. Use `cargo build` to locate missing arms.
+
+#### ListBlock / ListItem Breaking Changes
+- `ListBlock.ordered: bool` → `ListBlock.style: Option<ListStyle>` with `is_ordered()` accessor.
+  Migration: `if l.ordered` → `if l.is_ordered()`.
+- `ListItem.inlines: Vec<Inline>` → `ListItem.content: Vec<Block>`.
+  Migration: wrap inline content in `Block::Paragraph(...)` or use block-level content.
+
+#### TableBlock Breaking Changes
+- `TableBlock.rows: Vec<Vec<TableCell>>` → `Vec<TableRow>`.
+  Each `TableRow` has `cells: Vec<TableCell>`, `height`, `is_header`.
+  Migration: `for row in &table.rows { for cell in row { ... } }` → `for row in &table.rows { for cell in &row.cells { ... } }`.
+- `TableCell.inlines: Vec<Inline>` → `TableCell.content: Vec<Block>`.
+  Use `cell.collect_inlines()` helper for temporary compatibility.
+
+#### StageRunner API Change
+- `StageRunner::run(&self, spec)` → `StageRunner::run(&self, spec, job_root)`.
+  All stage implementations must be updated to accept `job_root: &JobRoot`.
+
+#### MediaAsset Field Rename
+- `MediaAsset.checksum_sha256: Option<String>` renamed to `checksum: Option<String>`.
+  This affects all construction sites (docx_reader, pptx_reader, html_parser, etc.).
+
+#### ArtifactKind Enum Expansion
+- `ArtifactKind::Source` → `ArtifactKind::SourceDocument`.
+- New variants: `SourceImage`, `ExtractedAsset`, `ProviderRaw`, `Other`.
+
+#### TextRun Struct Changes
+- `TextRun` added `style: Option<TextStyle>` field alongside legacy `bold`/`italic`/`underline`/`strikethrough`.
+  Struct literal constructions must add `style: None`.
+
+#### Deprecations
+- `Document::normalize_assets()` replaces manual legacy image migration.
+- `FigureBlock.caption` deprecated — use `caption_inlines` or `caption_inlines_or_legacy()` accessor.
+- `Inline::Footnote` deprecated — use `Inline::NoteRef` + `Document.notes`.
+- `TextBoxBlock.rotation_deg`/`z_index` deprecated — use `transform`/`layer` fields via `effective_transform()`/`effective_layer()` accessors.
+- `LinkInline.target: String` read via `target_string()` accessor (respects new `link_target` field).
+
+For full details, see the per-crate documentation and docs/ast.md.
 
 ### Added
 

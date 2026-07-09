@@ -292,7 +292,10 @@ impl StageRunner for ConvertStage {
                                 };
                                 produced_artifacts.push(StageProducedArtifact {
                                     id: format!("{}:converted", spec.stage_id),
-                                    kind: ArtifactKind::ConvertedText,
+                                    kind: ArtifactKind::from_output_or_stage(
+                                        &spec.output,
+                                        spec.kind,
+                                    ),
                                     path: out_path.clone(),
                                     mime_type: Some(mime.to_string()),
                                     format: Some(format_label.to_string()),
@@ -304,13 +307,15 @@ impl StageRunner for ConvertStage {
                             diags.extend(conv_diags);
                         }
                         Err(e) => {
-                            diags.push(Diagnostic::new(
-                                DiagnosticLevel::Info,
-                                "I_SOURCE_NOT_AST",
-                                format!("Input is not Document JSON: {}", e),
-                            ));
-                            // Fall back to treating source as direct text
-                            output_artifacts.push(src.clone());
+                            diags.push(
+                                Diagnostic::new(
+                                    DiagnosticLevel::Warning,
+                                    "W_UNSUPPORTED_INPUT",
+                                    format!("Input is not Document JSON: {}", e),
+                                )
+                                .with_recoverable(true),
+                            );
+                            // Don't push to output_artifacts — stage will fail cleanly
                         }
                     }
                 }
@@ -402,7 +407,10 @@ impl StageRunner for ExportStage {
                                     };
                                     produced_artifacts.push(StageProducedArtifact {
                                         id: format!("{}:exported", spec.stage_id),
-                                        kind: ArtifactKind::ExportedFile,
+                                        kind: ArtifactKind::from_output_or_stage(
+                                            &spec.output,
+                                            spec.kind,
+                                        ),
                                         path: out_path.clone(),
                                         mime_type: Some(mime.to_string()),
                                         format: Some(format.to_string()),

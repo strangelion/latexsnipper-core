@@ -372,13 +372,9 @@ impl Document {
             }
             _ => {}
         }
-        // Check inlines for ImageInline.asset_id
+        // Recursively visit all inlines for asset references
         for inline in block.inlines() {
-            if let crate::Inline::Image(img) = inline {
-                if let Some(ref id) = img.asset_id {
-                    f(id);
-                }
-            }
+            Self::visit_inline_asset_refs(inline, f);
         }
         // Check source info
         if let Some(source) = block.source() {
@@ -508,14 +504,10 @@ impl Document {
             }
             _ => {}
         }
-        // Check inlines for ImageInline.asset_id
+        // Recursively visit all inlines for asset references
         if let Some(mut inlines) = block.inlines_mut() {
             for inline in inlines.iter_mut() {
-                if let crate::Inline::Image(img) = inline {
-                    if let Some(ref mut id) = img.asset_id {
-                        f(id);
-                    }
-                }
+                Self::visit_inline_asset_refs_mut(inline, f);
             }
         }
         // Check source info
