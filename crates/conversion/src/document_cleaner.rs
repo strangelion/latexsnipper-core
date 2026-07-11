@@ -538,13 +538,12 @@ mod tests {
             text_block("A", 10.0, 90.0, 0.2),   // duplicate + low conf
         ]);
         let result = clean_document(&doc, &CleanerOptions::default());
-        assert!(
-            result.blocks_removed >= 1,
-            "should remove empty and duplicate"
-        );
-        assert!(
-            result.blocks_merged == 0 || result.blocks_merged > 0,
-            "merge behavior"
+        assert!(result.blocks_removed >= 1, "should remove the empty block");
+        assert_eq!(result.blocks_merged, 1, "should merge same-line blocks");
+        assert_eq!(
+            result.cleaned_document.block_count(),
+            2,
+            "merged text and the low-confidence block should remain"
         );
         assert!(
             !result.diagnostics_added.is_empty(),

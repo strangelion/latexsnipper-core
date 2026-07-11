@@ -4,7 +4,7 @@
 //! preserving colspan, rowspan, and cell content.
 
 #[cfg(test)]
-use latexsnipper_ast::{Block, ParagraphBlock, TableCell, TableRow};
+use latexsnipper_ast::{Block, ParagraphBlock, TableRow};
 use latexsnipper_ast::{Inline, TableBlock};
 
 /// Write a TableBlock to Word OOXML table XML.

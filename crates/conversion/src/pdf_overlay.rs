@@ -170,10 +170,8 @@ mod tests {
         let pages_id = doc.add_object(pages_dict);
 
         // Update page's parent reference
-        if let Ok(obj) = doc.get_object_mut(page_id) {
-            if let Object::Dictionary(ref mut d) = obj {
-                d.set("Parent", Object::Reference(pages_id));
-            }
+        if let Ok(Object::Dictionary(d)) = doc.get_object_mut(page_id) {
+            d.set("Parent", Object::Reference(pages_id));
         }
 
         let mut catalog = lopdf::Dictionary::new();

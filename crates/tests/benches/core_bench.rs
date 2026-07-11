@@ -20,18 +20,12 @@ fn formulas_doc(count: usize, latex: &str) -> Document {
         })
         .collect();
 
-    Document {
-        metadata: Default::default(),
-        pages: vec![Page {
-            width: 800.0,
-            height: 600.0,
-            blocks,
-            page_number: Some(1),
-        }],
-        id_gen: latexsnipper_ast::NodeIdGenerator::new(),
-        notes: Vec::new(),
-        outline: None,
-    }
+    let mut page = Page::new(800.0, 600.0, 1);
+    page.blocks = blocks;
+
+    let mut document = Document::new();
+    document.add_page(page);
+    document
 }
 
 fn run_bench(name: &str, iterations: usize, mut f: impl FnMut()) {

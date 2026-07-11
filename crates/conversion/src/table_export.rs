@@ -1,7 +1,7 @@
 use latexsnipper_ast::Inline;
 use latexsnipper_ast::TableBlock;
 #[cfg(test)]
-use latexsnipper_ast::{Block, ParagraphBlock, TableCell, TableRow};
+use latexsnipper_ast::{Block, ParagraphBlock, TableRow};
 
 /// Exports a TableBlock to various output formats.
 pub struct TableExporter;

@@ -562,9 +562,7 @@ fn test_produced_artifact_metadata() {
     assert!(std::path::Path::new(&art.path).exists(), "path must exist");
     assert!(art.size_bytes.unwrap_or(0) > 0, "size_bytes must be > 0");
     assert!(
-        art.checksum_sha256
-            .as_ref()
-            .map_or(false, |c| c.len() == 64),
+        art.checksum_sha256.as_ref().is_some_and(|c| c.len() == 64),
         "checksum must be 64-char SHA-256 hex"
     );
     assert!(art.mime_type.is_some(), "mime_type should be set");
