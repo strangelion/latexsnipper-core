@@ -1,8 +1,10 @@
 use latexsnipper_ast::{
-    Block, Document, ExportArtifact, Formula, FormulaBlock, FormulaSource, NodeIdGenerator, Page,
+    Block, Document, ExportArtifact, Formula, FormulaBlock, FormulaSource, GeneratedContent,
+    NodeIdGenerator, Page,
 };
 use latexsnipper_export::render_tree::RenderTree;
 use latexsnipper_foundation::Result;
+use sha2::{Digest, Sha256};
 
 use crate::converter::collect_converter_diagnostics;
 use crate::converter::Converter;
@@ -120,6 +122,8 @@ impl DocumentConverter {
     pub fn convert_artifact(&self, doc: &Document) -> std::result::Result<ExportArtifact, String> {
         let text = self.convert(doc).map_err(|e| e.to_string())?;
         let format_str = self.format.name().to_string();
+        let checksum = format!("{:x}", Sha256::digest(text.as_bytes()));
+        let size_bytes = text.len() as u64;
 
         // Collect diagnostics from all sources
         let mut diagnostics = doc.diagnostics.clone();
@@ -134,9 +138,13 @@ impl DocumentConverter {
         Ok(ExportArtifact {
             format: format_str,
             primary_path: None,
+            content: Some(GeneratedContent::Text(text.clone())),
             text: Some(text),
             assets: Vec::new(),
             diagnostics,
+            mime_type: Some(output_mime_type(self.format).to_string()),
+            checksum_sha256: Some(checksum),
+            size_bytes: Some(size_bytes),
         })
     }
 
@@ -210,6 +218,19 @@ impl DocumentConverter {
     pub fn convert_markdown_string(md: &str, format: OutputFormat) -> Result<String> {
         let doc = crate::markdown_parser::parse_markdown_to_document(md);
         DocumentConverter::new(format).convert(&doc)
+    }
+}
+
+fn output_mime_type(format: OutputFormat) -> &'static str {
+    match format {
+        OutputFormat::Latex | OutputFormat::LatexDisplay | OutputFormat::LatexEquation => {
+            "application/x-tex"
+        }
+        OutputFormat::Typst => "text/x-typst",
+        OutputFormat::MarkdownInline | OutputFormat::MarkdownBlock => "text/markdown",
+        OutputFormat::MathML => "application/mathml+xml",
+        OutputFormat::OMML => "application/xml",
+        OutputFormat::Html => "text/html",
     }
 }
 

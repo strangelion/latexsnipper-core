@@ -19,3 +19,4 @@ quick-xml = "0.37"
 regex = "1"
 lopdf = "0.34"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+sha2.workspace = true

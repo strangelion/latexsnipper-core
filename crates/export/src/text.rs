@@ -1,12 +1,13 @@
 use crate::generator::Generator;
 use crate::render_tree::{RenderNode, RenderTree};
+use latexsnipper_ast::GeneratedContent;
 use latexsnipper_foundation::Result;
 
 /// Plain text generator — produces plain text output from RenderTree.
 pub struct TextGenerator;
 
 impl Generator for TextGenerator {
-    fn generate(&self, tree: &RenderTree) -> Result<String> {
+    fn generate(&self, tree: &RenderTree) -> Result<GeneratedContent> {
         let mut parts = Vec::new();
 
         for node in &tree.nodes {
@@ -17,7 +18,7 @@ impl Generator for TextGenerator {
             }
         }
 
-        Ok(parts.join("\n"))
+        Ok(GeneratedContent::Text(parts.join("\n")))
     }
 
     fn extension(&self) -> &str {

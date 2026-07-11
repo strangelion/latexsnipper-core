@@ -75,6 +75,44 @@ impl From<ExportFormat> for TargetFormat {
 // ExportArtifact — the result of an export operation
 // ---------------------------------------------------------------------------
 
+/// Type-safe generated payload.
+///
+/// Binary formats must never be converted to UTF-8 text. Callers can inspect
+/// the variant or use [`GeneratedContent::as_bytes`] for format-agnostic I/O.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+pub enum GeneratedContent {
+    Text(String),
+    Binary(Vec<u8>),
+}
+
+impl GeneratedContent {
+    pub fn as_text(&self) -> Option<&str> {
+        match self {
+            Self::Text(text) => Some(text),
+            Self::Binary(_) => None,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Text(text) => text.as_bytes(),
+            Self::Binary(bytes) => bytes,
+        }
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        match self {
+            Self::Text(text) => text.into_bytes(),
+            Self::Binary(bytes) => bytes,
+        }
+    }
+
+    pub fn is_binary(&self) -> bool {
+        matches!(self, Self::Binary(_))
+    }
+}
+
 /// The output of an Exporter, containing file references, text, assets,
 /// and any diagnostics from the export process.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +121,14 @@ pub struct ExportArtifact {
     pub format: String,
     /// Path to the primary output file (if any).
     pub primary_path: Option<String>,
+    /// Type-safe primary content for both text and binary formats.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<GeneratedContent>,
     /// Text content (for semantic formats like LaTeX, Markdown, etc.).
+    ///
+    /// Compatibility adapter for pre-2.1 callers. Binary exporters always
+    /// leave this field as `None`; new callers should use `content`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// Exported asset copies (images, SVGs, etc.).
     #[serde(default)]
@@ -91,6 +136,68 @@ pub struct ExportArtifact {
     /// Diagnostics (warnings, errors) produced during export.
     #[serde(default)]
     pub diagnostics: Vec<Diagnostic>,
+    /// MIME type of the primary content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    /// SHA-256 checksum of the exact primary content bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checksum_sha256: Option<String>,
+    /// Exact primary content size in bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+}
+
+impl ExportArtifact {
+    /// Return the exact primary output bytes without text transcoding.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        self.content.as_ref().map(GeneratedContent::as_bytes)
+    }
+
+    /// Write the primary output to a writer without changing its bytes.
+    pub fn write_to(&self, mut writer: impl std::io::Write) -> std::io::Result<u64> {
+        let bytes = self.as_bytes().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "artifact has no content")
+        })?;
+        writer.write_all(bytes)?;
+        Ok(bytes.len() as u64)
+    }
+
+    /// Write the primary output to a path and record that path on success.
+    pub fn write_to_path(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<u64> {
+        let path = path.as_ref();
+        let file = std::fs::File::create(path)?;
+        let written = self.write_to(file)?;
+        self.primary_path = Some(path.to_string_lossy().into_owned());
+        Ok(written)
+    }
+}
+
+#[cfg(test)]
+mod export_artifact_tests {
+    use super::*;
+
+    #[test]
+    fn binary_content_is_written_byte_for_byte() {
+        let expected = vec![0, 0xff, 0xfe, b'%', b'P', b'D', b'F', 0, 0x80];
+        let artifact = ExportArtifact {
+            format: "pdf".to_string(),
+            primary_path: None,
+            content: Some(GeneratedContent::Binary(expected.clone())),
+            text: None,
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
+            mime_type: Some("application/pdf".to_string()),
+            checksum_sha256: None,
+            size_bytes: Some(expected.len() as u64),
+        };
+        let mut written = Vec::new();
+        assert_eq!(
+            artifact.write_to(&mut written).unwrap(),
+            expected.len() as u64
+        );
+        assert_eq!(written, expected);
+        assert!(artifact.text.is_none());
+    }
 }
 
 // ---------------------------------------------------------------------------

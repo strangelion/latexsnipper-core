@@ -390,7 +390,7 @@ mod export_tests {
         let tree = RenderTree::from_document(&doc);
         let svg = SvgGenerator;
         let output = svg.generate(&tree).unwrap();
-        assert!(output.contains("<svg"));
+        assert!(output.as_text().unwrap().contains("<svg"));
     }
 
     #[test]
@@ -400,6 +400,7 @@ mod export_tests {
         let tree = RenderTree::from_document(&doc);
         let text = TextGenerator;
         let output = text.generate(&tree).unwrap();
+        let output = output.as_text().unwrap();
         assert!(!output.is_empty());
         assert!(output.contains("Hello") || output.contains("World"));
     }
@@ -933,7 +934,7 @@ mod engine_tests {
         let tree = RenderTree::from_document(&doc);
         let svg = SvgGenerator;
         let svg_out = svg.generate(&tree).unwrap();
-        assert!(svg_out.contains("<svg"));
+        assert!(svg_out.as_text().unwrap().contains("<svg"));
     }
 
     #[test]

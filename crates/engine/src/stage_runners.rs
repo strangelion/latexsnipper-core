@@ -452,24 +452,16 @@ impl StageRunner for ExportStage {
                         let visual_fmt = match format {
                             "svg" => latexsnipper_export::VisualFormat::Svg,
                             "pdf" => latexsnipper_export::VisualFormat::Pdf,
+                            "png" => latexsnipper_export::VisualFormat::Png,
                             "txt" | "text" => latexsnipper_export::VisualFormat::PlainText,
                             _ => latexsnipper_export::VisualFormat::Svg,
                         };
                         match latexsnipper_export::ExportService::export(&doc, visual_fmt) {
-                            Ok(artifact) => {
-                                if let Some(t) = &artifact.text {
-                                    std::fs::write(&out_path, t).map_err(|e| {
+                            Ok(mut artifact) => {
+                                if artifact.content.is_some() {
+                                    artifact.write_to_path(&out_path).map_err(|e| {
                                         format!("Write output '{}': {}", out_path, e)
                                     })?;
-                                    let checksum = compute_file_sha256(&out_path).ok();
-                                    let meta = std::fs::metadata(&out_path).ok();
-                                    let size = meta.map(|m| m.len());
-                                    let mime = match format {
-                                        "svg" => "image/svg+xml",
-                                        "pdf" => "application/pdf",
-                                        "txt" | "text" => "text/plain",
-                                        _ => "application/octet-stream",
-                                    };
                                     produced_artifacts.push(StageProducedArtifact {
                                         id: format!("{}:exported", spec.stage_id),
                                         kind: ArtifactKind::from_output_or_stage(
@@ -477,10 +469,10 @@ impl StageRunner for ExportStage {
                                             spec.kind,
                                         ),
                                         path: out_path.clone(),
-                                        mime_type: Some(mime.to_string()),
+                                        mime_type: artifact.mime_type.clone(),
                                         format: Some(format.to_string()),
-                                        checksum_sha256: checksum,
-                                        size_bytes: size,
+                                        checksum_sha256: artifact.checksum_sha256.clone(),
+                                        size_bytes: artifact.size_bytes,
                                     });
                                     output_artifacts.push(out_path);
                                 }

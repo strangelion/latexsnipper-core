@@ -1,27 +1,43 @@
 use crate::generator::Generator;
+use crate::math_visual::visual_math_text;
 use crate::render_tree::{RenderNode, RenderTree};
+use latexsnipper_ast::GeneratedContent;
 use latexsnipper_foundation::Result;
 
 /// SVG generator — produces SVG output from RenderTree.
 pub struct SvgGenerator;
 
 impl Generator for SvgGenerator {
-    fn generate(&self, tree: &RenderTree) -> Result<String> {
-        let mut svg = String::from(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"200\">\n",
-        );
+    fn generate(&self, tree: &RenderTree) -> Result<GeneratedContent> {
+        let mut body = String::new();
+        let mut page_offset = 0;
+        let mut max_width = 400;
 
-        for node in &tree.nodes {
+        for (page_index, node) in tree.nodes.iter().enumerate() {
             if let RenderNode::Page(nodes) = node {
+                body.push_str(&format!(
+                    "  <g id=\"page-{}\" transform=\"translate(0 {})\">\n",
+                    page_index + 1,
+                    page_offset
+                ));
                 let mut y = 20;
                 for child in nodes {
-                    y = render_node(child, &mut svg, y);
+                    y = render_node(child, &mut body, y);
                 }
+                body.push_str("  </g>\n");
+                page_offset += y.max(40) + 20;
+                max_width = max_width.max(estimate_page_width(nodes));
             }
         }
 
+        let height = page_offset.max(40);
+        let mut svg = format!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
+            max_width, height, max_width, height
+        );
+        svg.push_str(&body);
         svg.push_str("</svg>");
-        Ok(svg)
+        Ok(GeneratedContent::Text(svg))
     }
 
     fn extension(&self) -> &str {
@@ -52,9 +68,13 @@ fn render_node(node: &RenderNode, svg: &mut String, y: i32) -> i32 {
             display_mode,
         } => {
             let size = if *display_mode { 16 } else { 14 };
+            let visual = visual_math_text(latex);
             svg.push_str(&format!(
-                "  <text x=\"20\" y=\"{}\" font-family=\"serif\" font-size=\"{}\" font-style=\"italic\">{}</text>\n",
-                y, size, escape_xml(latex)
+                "    <text x=\"20\" y=\"{}\" font-family=\"serif\" font-size=\"{}\" font-style=\"italic\" data-latex=\"{}\">{}</text>\n",
+                y,
+                size,
+                escape_xml(latex),
+                escape_xml(&visual)
             ));
             y + 25
         }
@@ -176,7 +196,7 @@ fn render_nodes_to_text(nodes: &[RenderNode]) -> String {
 fn node_to_text(node: &RenderNode) -> String {
     match node {
         RenderNode::Text(t) => t.clone(),
-        RenderNode::Formula { latex, .. } => format!("[{}]", latex),
+        RenderNode::Formula { latex, .. } => visual_math_text(latex),
         RenderNode::Paragraph(nodes) => render_nodes_to_text(nodes),
         RenderNode::Heading { nodes, .. } => render_nodes_to_text(nodes),
         RenderNode::Table { rows } => {
@@ -214,6 +234,18 @@ fn node_to_text(node: &RenderNode) -> String {
             format!("[unsupported {}: {}]", block_type, message)
         }
     }
+}
+
+fn estimate_page_width(nodes: &[RenderNode]) -> i32 {
+    let max_columns = nodes
+        .iter()
+        .filter_map(|node| match node {
+            RenderNode::Table { rows } => rows.iter().map(Vec::len).max(),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0);
+    (max_columns as i32 * 80 + 40).max(400)
 }
 
 fn escape_xml(s: &str) -> String {

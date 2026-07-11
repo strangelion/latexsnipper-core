@@ -1,7 +1,9 @@
 use std::io::BufWriter;
 
 use crate::generator::Generator;
+use crate::math_visual::visual_math_text;
 use crate::render_tree::{RenderNode, RenderTree};
+use latexsnipper_ast::GeneratedContent;
 use latexsnipper_foundation::{Result, SnipperError};
 use printpdf::{BuiltinFont, IndirectFontRef, Mm, PdfDocument, PdfLayerIndex, PdfPageIndex};
 
@@ -15,7 +17,7 @@ const FONT_SIZE: f32 = 11.0;
 pub struct PdfGenerator;
 
 impl Generator for PdfGenerator {
-    fn generate(&self, tree: &RenderTree) -> Result<String> {
+    fn generate(&self, tree: &RenderTree) -> Result<GeneratedContent> {
         let (doc, page_idx, layer_idx) = PdfDocument::new(
             "LaTeXSnipper",
             Mm(PAGE_WIDTH * 0.3528),
@@ -87,7 +89,10 @@ impl Generator for PdfGenerator {
             .into_inner()
             .map_err(|e| SnipperError::Export(format!("Failed to get PDF bytes: {}", e)))?;
 
-        Ok(String::from_utf8_lossy(&bytes).to_string())
+        lopdf::Document::load_mem(&bytes)
+            .map_err(|e| SnipperError::Export(format!("Generated PDF failed validation: {e}")))?;
+
+        Ok(GeneratedContent::Binary(bytes))
     }
 
     fn extension(&self) -> &str {
@@ -149,9 +154,7 @@ fn render_node(
             latex,
             display_mode,
         } => {
-            let prefix = if *display_mode { "$$ " } else { "$ " };
-            let suffix = if *display_mode { " $$" } else { " $" };
-            let text = format!("{}{}{}", prefix, latex, suffix);
+            let text = visual_math_text(latex);
             layer.use_text(
                 text.as_str(),
                 FONT_SIZE,
@@ -344,7 +347,7 @@ fn render_node(
 fn node_to_text(node: &RenderNode) -> String {
     match node {
         RenderNode::Text(t) => t.clone(),
-        RenderNode::Formula { latex, .. } => format!("[{}]", latex),
+        RenderNode::Formula { latex, .. } => visual_math_text(latex),
         RenderNode::Paragraph(nodes) => render_nodes_to_text(nodes),
         RenderNode::Heading { nodes, .. } => render_nodes_to_text(nodes),
         RenderNode::Table { rows } => {
@@ -403,8 +406,10 @@ mod tests {
         };
         let generator = PdfGenerator;
         let output = generator.generate(&tree).unwrap();
-        assert!(output.starts_with("%PDF"));
-        assert!(output.ends_with("%%EOF\n") || output.ends_with("%%EOF"));
+        let bytes = output.as_bytes();
+        assert!(bytes.starts_with(b"%PDF"));
+        assert!(bytes.ends_with(b"%%EOF\n") || bytes.ends_with(b"%%EOF"));
+        assert!(lopdf::Document::load_mem(bytes).is_ok());
     }
 
     #[test]
@@ -451,6 +456,6 @@ mod tests {
         };
         let generator = PdfGenerator;
         let output = generator.generate(&tree).unwrap();
-        assert!(output.starts_with("%PDF"));
+        assert!(output.as_bytes().starts_with(b"%PDF"));
     }
 }

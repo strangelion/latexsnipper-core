@@ -31,8 +31,9 @@ pub use builder::DocumentBuilder;
 pub use document::{Document, NormalizeAssetOptions, Page};
 pub use format::{
     CapabilityMatrix, ConversionContext, ExportArtifact, ExportFormat, ExportOptions,
-    FidelityLevel, FormatCapability, ImportOptions, LossKind, ModelCapability, ModelProviderKind,
-    PdfExportMode, PdfExportOptions, RenderOptions, SemanticFormat, TargetFormat,
+    FidelityLevel, FormatCapability, GeneratedContent, ImportOptions, LossKind, ModelCapability,
+    ModelProviderKind, PdfExportMode, PdfExportOptions, RenderOptions, SemanticFormat,
+    TargetFormat,
 };
 pub use formula::{Formula, FormulaSource};
 pub use formula_layout::{

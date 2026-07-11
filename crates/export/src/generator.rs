@@ -1,10 +1,11 @@
 use crate::render_tree::RenderTree;
+use latexsnipper_ast::GeneratedContent;
 use latexsnipper_foundation::Result;
 
 /// Trait for generating output from a RenderTree.
 pub trait Generator {
     /// Generate output from a RenderTree.
-    fn generate(&self, tree: &RenderTree) -> Result<String>;
+    fn generate(&self, tree: &RenderTree) -> Result<GeneratedContent>;
 
     /// Get the file extension for this format.
     fn extension(&self) -> &str;
