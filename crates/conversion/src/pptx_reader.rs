@@ -267,8 +267,9 @@ fn parse_slide_body<R: Read + Seek>(
                         in_table_cell = true;
                         current_cell_inlines.clear();
                     }
-                    b"p:pic" | b"pic" => {
-                        // Extract image from blipFill
+                    b"a:blip" | b"blip" => {
+                        // Image relationships are carried by a:blip/@r:embed,
+                        // not by the outer p:pic element.
                         let img_id = e
                             .attributes()
                             .flatten()
@@ -531,5 +532,33 @@ mod tests {
         let doc = read_pptx(&path).unwrap();
         assert!(!doc.pages.is_empty(), "should have at least one slide");
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn image_relationship_is_read_from_blip_embed() {
+        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        writer
+            .start_file("ppt/media/image1.png", zip::write::FileOptions::default())
+            .unwrap();
+        writer.write_all(b"\x89PNG\r\n\x1a\nasset").unwrap();
+        let cursor = writer.finish().unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(cursor.into_inner())).unwrap();
+        let relationships = std::collections::HashMap::from([(
+            "rIdImage".to_string(),
+            "../media/image1.png".to_string(),
+        )]);
+        let slide = r#"<p:sld xmlns:p="p" xmlns:a="a" xmlns:r="r">
+          <p:cSld><p:spTree><p:pic><p:blipFill>
+            <a:blip r:embed="rIdImage"/>
+          </p:blipFill></p:pic></p:spTree></p:cSld>
+        </p:sld>"#;
+        let (blocks, assets) = parse_slide_body(slide, &mut archive, &relationships, &mut 0usize);
+
+        assert_eq!(assets.len(), 1);
+        assert!(blocks.iter().any(|block| matches!(
+            block,
+            Block::Paragraph(paragraph)
+                if paragraph.inlines.iter().any(|inline| matches!(inline, Inline::Image(_)))
+        )));
     }
 }

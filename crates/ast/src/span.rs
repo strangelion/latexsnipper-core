@@ -155,6 +155,12 @@ pub struct SourceInfo {
     /// Artifact entry ID if this node's source is tracked.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artifact_id: Option<String>,
+    /// Original serialized source fragment for lossless round trips.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_source: Option<String>,
+    /// Format label for `raw_source` (for example `omml`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_source_format: Option<String>,
     /// Media asset ID if this node was derived from an asset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset_id: Option<crate::AssetId>,
@@ -213,6 +219,12 @@ impl SourceInfo {
 
     pub fn with_producer(mut self, producer: impl Into<String>) -> Self {
         self.producer = Some(producer.into());
+        self
+    }
+
+    pub fn with_raw_source(mut self, format: impl Into<String>, source: impl Into<String>) -> Self {
+        self.raw_source_format = Some(format.into());
+        self.raw_source = Some(source.into());
         self
     }
 

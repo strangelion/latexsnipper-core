@@ -581,6 +581,7 @@ pub enum CellDataType {
     Text,
     Number,
     Boolean,
+    Error,
     Date,
     Formula,
     Empty,

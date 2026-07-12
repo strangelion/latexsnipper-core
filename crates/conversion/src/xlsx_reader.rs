@@ -29,6 +29,8 @@ fn read_xlsx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
 
     // Read shared strings
     let shared_strings = read_shared_strings(&mut archive);
+    let styles_xml = read_entry(&mut archive, "xl/styles.xml").unwrap_or_default();
+    let date_styles = parse_date_style_indices(&styles_xml);
 
     // Read workbook for sheet names
     let wb_xml = read_entry(&mut archive, "xl/workbook.xml").unwrap_or_default();
@@ -78,7 +80,7 @@ fn read_xlsx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
             Err(_) => continue,
         };
 
-        let table = parse_sheet_table(&sheet_xml, &shared_strings);
+        let table = parse_sheet_table(&sheet_xml, &shared_strings, &date_styles);
 
         let mut blocks: Vec<Block> = Vec::new();
         blocks.push(Block::Table(table));
@@ -310,7 +312,11 @@ fn parse_rels(xml: &str) -> HashMap<String, String> {
     rels
 }
 
-fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
+fn parse_sheet_table(
+    xml: &str,
+    shared_strings: &[String],
+    date_styles: &std::collections::HashSet<usize>,
+) -> TableBlock {
     let mut rows: Vec<TableRow> = Vec::new();
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
@@ -327,7 +333,9 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
     let mut current_is_text = String::new();
     let mut in_f = false;
     let mut current_cell_formula = String::new();
-    let mut current_row_cells: Vec<(String, String, String, String)> = Vec::new(); // (ref, value, type, formula)
+    let mut current_cell_style = None;
+    let mut current_row_index = 0usize;
+    let mut current_row_cells: Vec<(String, String, String, String, Option<usize>)> = Vec::new();
     let mut columns: Vec<TableColumn> = Vec::new();
     let mut in_merge_cells = false;
     let mut merges: Vec<(u32, u32, u32, u32)> = Vec::new();
@@ -342,6 +350,17 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                     b"row" if in_sheet_data => {
                         in_row = true;
                         current_row_cells.clear();
+                        current_row_index = e
+                            .attributes()
+                            .flatten()
+                            .find(|attribute| attribute.key.as_ref() == b"r")
+                            .and_then(|attribute| {
+                                String::from_utf8_lossy(&attribute.value)
+                                    .parse::<usize>()
+                                    .ok()
+                            })
+                            .and_then(|row| row.checked_sub(1))
+                            .unwrap_or(rows.len());
                     }
                     b"c" if in_row => {
                         in_c = true;
@@ -349,6 +368,7 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                         current_cell_type.clear();
                         current_cell_value.clear();
                         current_cell_formula.clear();
+                        current_cell_style = None;
                         for attr in e.attributes().flatten() {
                             let k = attr.key.as_ref().to_vec();
                             let v = String::from_utf8_lossy(&attr.value).to_string();
@@ -357,6 +377,9 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                             }
                             if k == b"t" {
                                 current_cell_type = v.clone();
+                            }
+                            if k == b"s" {
+                                current_cell_style = v.parse::<usize>().ok();
                             }
                         }
                     }
@@ -435,64 +458,38 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
                                 current_cell_value.clone(),
                                 current_cell_type.clone(),
                                 current_cell_formula.clone(),
+                                current_cell_style,
                             ));
                         }
                     }
                     b"row" => {
                         in_row = false;
-                        // Build row of cells
-                        let row_idx = rows.len();
-                        let table_row: Vec<TableCell> = current_row_cells
-                            .iter()
-                            .enumerate()
-                            .map(|(cell_idx, (ref_str, val, typ, formula))| {
-                                if !ref_str.is_empty() {
-                                    cell_positions.insert(ref_str.clone(), (row_idx, cell_idx));
-                                }
-                                let resolved = resolve_cell_value(val, typ, shared_strings);
-                                let cell_type_enum = match typ.as_str() {
-                                    "b" => Some(CellDataType::Boolean),
-                                    "e" => Some(CellDataType::Date),
-                                    "str" | "inline" => Some(CellDataType::Text),
-                                    _ => None,
+                        while rows.len() < current_row_index {
+                            rows.push(empty_row());
+                        }
+                        if !current_row_cells.is_empty() {
+                            let max_col = current_row_cells
+                                .iter()
+                                .filter_map(|(reference, ..)| parse_cell_ref(reference))
+                                .map(|(column, _)| column as usize)
+                                .max()
+                                .unwrap_or(0);
+                            let mut cells = (0..=max_col).map(|_| empty_cell()).collect::<Vec<_>>();
+                            for (reference, value, cell_type, formula, style) in &current_row_cells
+                            {
+                                let Some((column, _)) = parse_cell_ref(reference) else {
+                                    continue;
                                 };
-                                let data_type = if !formula.is_empty() {
-                                    Some(CellDataType::Formula)
-                                } else {
-                                    cell_type_enum
-                                };
-                                let formula_opt = if formula.is_empty() {
-                                    None
-                                } else {
-                                    Some(formula.clone())
-                                };
-                                TableCell {
-                                    content: vec![Block::Paragraph(ParagraphBlock {
-                                        inlines: vec![Inline::Text(TextRun::new(resolved))],
-                                        geometry: None,
-                                        source: None,
-                                        style: None,
-                                    })],
-                                    colspan: 1,
-                                    rowspan: 1,
-                                    data_type,
-                                    formula: formula_opt,
-                                    style: None,
-                                    border_style: None,
-                                    border_width: None,
-                                    border_color: None,
-                                    background: None,
-                                    alignment: None,
-                                    geometry: None,
-                                    source: None,
-                                }
-                            })
-                            .collect();
-
-                        // Fill gaps for proper column alignment
-                        if !table_row.is_empty() {
+                                let column = column as usize;
+                                let is_date =
+                                    style.is_some_and(|index| date_styles.contains(&index));
+                                cells[column] =
+                                    make_cell(value, cell_type, formula, shared_strings, is_date);
+                                cell_positions
+                                    .insert(reference.clone(), (current_row_index, column));
+                            }
                             rows.push(TableRow {
-                                cells: table_row,
+                                cells,
                                 height: None,
                                 is_header: false,
                             });
@@ -556,7 +553,147 @@ fn parse_sheet_table(xml: &str, shared_strings: &[String]) -> TableBlock {
     }
 }
 
-fn resolve_cell_value(value: &str, cell_type: &str, shared_strings: &[String]) -> String {
+fn parse_date_style_indices(xml: &str) -> std::collections::HashSet<usize> {
+    let mut custom_date_formats = std::collections::HashSet::new();
+    let mut date_styles = std::collections::HashSet::new();
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buffer = Vec::new();
+    let mut in_cell_xfs = false;
+    let mut style_index = 0usize;
+
+    loop {
+        match reader.read_event_into(&mut buffer) {
+            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => match event.name().as_ref() {
+                b"numFmt" => {
+                    let mut id = None;
+                    let mut code = None;
+                    for attribute in event.attributes().flatten() {
+                        match attribute.key.as_ref() {
+                            b"numFmtId" => {
+                                id = String::from_utf8_lossy(&attribute.value)
+                                    .parse::<u32>()
+                                    .ok()
+                            }
+                            b"formatCode" => {
+                                code = Some(String::from_utf8_lossy(&attribute.value).to_string())
+                            }
+                            _ => {}
+                        }
+                    }
+                    if let (Some(id), Some(code)) = (id, code) {
+                        if looks_like_date_format(&code) {
+                            custom_date_formats.insert(id);
+                        }
+                    }
+                }
+                b"cellXfs" => {
+                    in_cell_xfs = true;
+                    style_index = 0;
+                }
+                b"xf" if in_cell_xfs => {
+                    let num_fmt_id = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"numFmtId")
+                        .and_then(|attribute| {
+                            String::from_utf8_lossy(&attribute.value)
+                                .parse::<u32>()
+                                .ok()
+                        })
+                        .unwrap_or(0);
+                    if is_builtin_date_format(num_fmt_id)
+                        || custom_date_formats.contains(&num_fmt_id)
+                    {
+                        date_styles.insert(style_index);
+                    }
+                    style_index += 1;
+                }
+                _ => {}
+            },
+            Ok(Event::End(event)) if event.name().as_ref() == b"cellXfs" => in_cell_xfs = false,
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buffer.clear();
+    }
+    date_styles
+}
+
+fn is_builtin_date_format(id: u32) -> bool {
+    matches!(id, 14..=22 | 27..=36 | 45..=47 | 50..=58)
+}
+
+fn looks_like_date_format(code: &str) -> bool {
+    let normalized = code.to_ascii_lowercase();
+    normalized.contains('y')
+        || normalized.contains('d')
+        || normalized.contains("h:")
+        || normalized.contains(":m")
+        || normalized.contains(":s")
+}
+
+fn make_cell(
+    value: &str,
+    cell_type: &str,
+    formula: &str,
+    shared_strings: &[String],
+    is_date: bool,
+) -> TableCell {
+    let resolved = resolve_cell_value(value, cell_type, shared_strings, is_date);
+    let data_type = if !formula.is_empty() {
+        CellDataType::Formula
+    } else {
+        match cell_type {
+            "b" => CellDataType::Boolean,
+            "e" => CellDataType::Error,
+            "str" | "inline" | "s" => CellDataType::Text,
+            _ if value.is_empty() => CellDataType::Empty,
+            _ if is_date => CellDataType::Date,
+            _ => CellDataType::Number,
+        }
+    };
+    TableCell {
+        content: vec![Block::Paragraph(ParagraphBlock {
+            inlines: vec![Inline::Text(TextRun::new(resolved))],
+            geometry: None,
+            source: None,
+            style: None,
+        })],
+        colspan: 1,
+        rowspan: 1,
+        data_type: Some(data_type),
+        formula: (!formula.is_empty()).then(|| formula.to_string()),
+        style: None,
+        border_style: None,
+        border_width: None,
+        border_color: None,
+        background: None,
+        alignment: None,
+        geometry: None,
+        source: None,
+    }
+}
+
+fn empty_cell() -> TableCell {
+    make_cell("", "", "", &[], false)
+}
+
+fn empty_row() -> TableRow {
+    TableRow {
+        cells: Vec::new(),
+        height: None,
+        is_header: false,
+    }
+}
+
+fn resolve_cell_value(
+    value: &str,
+    cell_type: &str,
+    shared_strings: &[String],
+    is_date: bool,
+) -> String {
     match cell_type {
         "s" => {
             // Shared string: value is the index
@@ -577,8 +714,29 @@ fn resolve_cell_value(value: &str, cell_type: &str, shared_strings: &[String]) -
                 "FALSE".to_string()
             }
         }
-        "e" => format!("={}", value),
-        _ => value.to_string(), // number or other
+        "e" => value.to_string(),
+        _ if is_date => excel_serial_to_iso(value).unwrap_or_else(|| value.to_string()),
+        _ => value.to_string(),
+    }
+}
+
+fn excel_serial_to_iso(value: &str) -> Option<String> {
+    use chrono::{Duration, NaiveDate};
+
+    let serial = value.parse::<f64>().ok()?;
+    if !serial.is_finite() {
+        return None;
+    }
+    let days = serial.floor() as i64;
+    let seconds = ((serial - serial.floor()) * 86_400.0).round() as i64;
+    let epoch = NaiveDate::from_ymd_opt(1899, 12, 30)?.and_hms_opt(0, 0, 0)?;
+    let date_time = epoch
+        .checked_add_signed(Duration::days(days))?
+        .checked_add_signed(Duration::seconds(seconds))?;
+    if seconds == 0 {
+        Some(date_time.format("%Y-%m-%d").to_string())
+    } else {
+        Some(date_time.format("%Y-%m-%dT%H:%M:%S").to_string())
     }
 }
 
@@ -634,5 +792,48 @@ mod tests {
             .any(|b| matches!(b, Block::Table(_)));
         assert!(has_table, "should contain a table block");
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn sparse_error_and_date_cells_keep_types_and_coordinates() {
+        let styles = r#"<styleSheet><cellXfs count="2">
+          <xf numFmtId="0"/><xf numFmtId="14"/>
+        </cellXfs></styleSheet>"#;
+        let date_styles = parse_date_style_indices(styles);
+        let sheet = r#"<worksheet><sheetData>
+          <row r="2">
+            <c r="C2" t="e"><v>#DIV/0!</v></c>
+            <c r="E2" s="1"><v>2</v></c>
+          </row>
+        </sheetData></worksheet>"#;
+        let table = parse_sheet_table(sheet, &[], &date_styles);
+
+        assert_eq!(table.rows.len(), 2, "missing first row must remain sparse");
+        assert!(table.rows[0].cells.is_empty());
+        assert_eq!(table.rows[1].cells.len(), 5, "E2 must remain in column E");
+        assert_eq!(table.rows[1].cells[0].data_type, Some(CellDataType::Empty));
+        assert_eq!(table.rows[1].cells[2].data_type, Some(CellDataType::Error));
+        assert_eq!(table.rows[1].cells[4].data_type, Some(CellDataType::Date));
+        assert_eq!(cell_text(&table.rows[1].cells[2]), "#DIV/0!");
+        assert_eq!(cell_text(&table.rows[1].cells[4]), "1900-01-01");
+    }
+
+    fn cell_text(cell: &TableCell) -> String {
+        cell.content
+            .iter()
+            .filter_map(|block| match block {
+                Block::Paragraph(paragraph) => Some(
+                    paragraph
+                        .inlines
+                        .iter()
+                        .filter_map(|inline| match inline {
+                            Inline::Text(text) => Some(text.text.as_str()),
+                            _ => None,
+                        })
+                        .collect::<String>(),
+                ),
+                _ => None,
+            })
+            .collect()
     }
 }

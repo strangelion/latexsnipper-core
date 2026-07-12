@@ -168,6 +168,79 @@ fn extract_tables_from_xml(xml: &str) -> (Vec<TableBlock>, String) {
     (tables, out)
 }
 
+/// Extract native Word equations before the streaming body parser consumes
+/// their nested text runs. The exact OMML fragment is retained in SourceInfo.
+fn extract_omml_from_xml(xml: &str) -> (Vec<FormulaBlock>, String) {
+    let mut formulas = Vec::new();
+    let mut output = String::with_capacity(xml.len());
+    let mut position = 0usize;
+
+    while position < xml.len() {
+        let para = xml[position..]
+            .find("<m:oMathPara")
+            .map(|offset| (position + offset, "m:oMathPara", "</m:oMathPara>", true));
+        let inline = xml[position..]
+            .find("<m:oMath")
+            .map(|offset| (position + offset, "m:oMath", "</m:oMath>", false));
+        let candidate = match (para, inline) {
+            (Some(para), Some(inline)) => Some(if para.0 <= inline.0 { para } else { inline }),
+            (Some(para), None) => Some(para),
+            (None, Some(inline)) => Some(inline),
+            (None, None) => None,
+        };
+        let Some((start, opening_name, closing, display_mode)) = candidate else {
+            output.push_str(&xml[position..]);
+            break;
+        };
+        output.push_str(&xml[position..start]);
+        let opening_end = match xml[start..].find('>') {
+            Some(offset) => start + offset + 1,
+            None => {
+                output.push_str(&xml[start..]);
+                break;
+            }
+        };
+        let Some(close_offset) = xml[opening_end..].find(closing) else {
+            output.push_str(&xml[start..]);
+            break;
+        };
+        let end = opening_end + close_offset + closing.len();
+        let raw = xml[start..end].to_string();
+        match crate::parse_omml_to_latex(&raw) {
+            Ok(latex) => {
+                let index = formulas.len();
+                let mut formula = Formula::latex(latex);
+                formula.display_mode = display_mode;
+                formula.source_info = Some(
+                    SourceInfo::new()
+                        .with_producer("docx")
+                        .with_raw_source("omml", raw),
+                );
+                formulas.push(FormulaBlock {
+                    formula,
+                    label: None,
+                    number: None,
+                    environment: Some(if display_mode {
+                        FormulaEnvironment::Display
+                    } else {
+                        FormulaEnvironment::Inline
+                    }),
+                    geometry: None,
+                    source: Some(SourceInfo::new().with_producer("docx")),
+                });
+                output.push_str(&format!(
+                    "<docx_math_marker id=\"{index}\" display=\"{}\" source=\"{opening_name}\"/>",
+                    if display_mode { "1" } else { "0" }
+                ));
+            }
+            Err(_) => output.push_str(&raw),
+        }
+        position = end;
+    }
+
+    (formulas, output)
+}
+
 /// Parse the main document body XML and extract blocks with diagnostics and assets.
 fn parse_document_body<R: Read + Seek>(
     xml: &str,
@@ -175,7 +248,8 @@ fn parse_document_body<R: Read + Seek>(
     rels: &std::collections::HashMap<String, String>,
 ) -> (Vec<Block>, Vec<MediaAsset>, Vec<Diagnostic>) {
     // Extract tables before event processing
-    let (table_blocks, processed_xml) = extract_tables_from_xml(xml);
+    let (table_blocks, without_tables) = extract_tables_from_xml(xml);
+    let (math_blocks, processed_xml) = extract_omml_from_xml(&without_tables);
 
     let mut blocks = Vec::new();
     let mut assets = Vec::new();
@@ -339,6 +413,28 @@ fn parse_document_body<R: Read + Seek>(
                             if let Some(table) = table_blocks.get(id_str) {
                                 flush_list(&mut blocks, &mut pending_list_items);
                                 blocks.push(Block::Table(table.clone()));
+                            }
+                        }
+                    }
+                    b"docx_math_marker" => {
+                        if let Some(index) = e
+                            .attributes()
+                            .flatten()
+                            .find(|attribute| attribute.key.as_ref() == b"id")
+                            .and_then(|attribute| {
+                                String::from_utf8_lossy(&attribute.value)
+                                    .parse::<usize>()
+                                    .ok()
+                            })
+                        {
+                            if let Some(formula) = math_blocks.get(index) {
+                                if in_paragraph && !formula.formula.display_mode {
+                                    current_paragraph_inlines
+                                        .push(Inline::Formula(formula.formula.clone()));
+                                } else {
+                                    flush_list(&mut blocks, &mut pending_list_items);
+                                    blocks.push(Block::Formula(formula.clone()));
+                                }
                             }
                         }
                     }
@@ -750,6 +846,54 @@ mod tests {
         });
         assert!(has_anchor, "should contain an anchor inline");
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn native_omml_equations_become_formula_nodes_with_original_source() {
+        let fraction = r#"<m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f>"#;
+        let body = format!(
+            r#"<w:p><w:r><w:t>Inline </w:t></w:r><m:oMath>{fraction}</m:oMath></w:p>
+<m:oMathPara><m:oMath>{fraction}</m:oMath></m:oMathPara>"#
+        );
+        let path = create_docx_with_body(&body, "omml");
+        let document = read_docx(&path).unwrap();
+        std::fs::remove_file(path).ok();
+
+        let inline_formula = document.pages[0]
+            .blocks
+            .iter()
+            .find_map(|block| match block {
+                Block::Paragraph(paragraph) => {
+                    paragraph.inlines.iter().find_map(|inline| match inline {
+                        Inline::Formula(formula) => Some(formula),
+                        _ => None,
+                    })
+                }
+                _ => None,
+            });
+        let display_formula = document.pages[0]
+            .blocks
+            .iter()
+            .find_map(|block| match block {
+                Block::Formula(formula) => Some(&formula.formula),
+                _ => None,
+            });
+
+        let inline_formula = inline_formula.expect("inline OMML formula");
+        assert!(inline_formula.as_latex().contains("\\frac"));
+        assert_eq!(
+            inline_formula
+                .source_info
+                .as_ref()
+                .and_then(|source| source.raw_source_format.as_deref()),
+            Some("omml")
+        );
+        assert!(inline_formula
+            .source_info
+            .as_ref()
+            .and_then(|source| source.raw_source.as_deref())
+            .is_some_and(|source| source.contains("<m:oMath>")));
+        assert!(display_formula.is_some_and(|formula| formula.display_mode));
     }
 
     #[test]
