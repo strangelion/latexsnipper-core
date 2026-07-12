@@ -227,6 +227,8 @@ pub struct FormatCapability {
     pub input: Option<String>,
     /// Output format label (e.g. "Markdown", "HTML", "SVG").
     pub output: Option<String>,
+    /// Whether the importer/exporter pair is registered and callable.
+    pub available: bool,
     pub supports_formula: bool,
     pub supports_table: bool,
     pub supports_image: bool,
@@ -239,6 +241,14 @@ pub struct FormatCapability {
     pub known_loss: Vec<LossKind>,
     #[serde(default)]
     pub notes: Vec<String>,
+    #[serde(default)]
+    pub required_features: Vec<String>,
+    #[serde(default)]
+    pub external_dependencies: Vec<String>,
+    #[serde(default)]
+    pub platform_restrictions: Vec<String>,
+    #[serde(default)]
+    pub experimental: bool,
 }
 
 /// How faithfully the conversion preserves the original content.

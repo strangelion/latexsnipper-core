@@ -4,7 +4,7 @@ use std::io::{Cursor, Write};
 use base64::Engine as _;
 use latexsnipper_ast::{
     AssetFormat, AssetId, AssetStorage, Block, Document, ExportArtifact, ExportFormat,
-    GeneratedContent, Inline, MediaAsset,
+    FidelityLevel, FormatCapability, GeneratedContent, Inline, InputFormat, LossKind, MediaAsset,
 };
 use latexsnipper_export::{ExportService, VisualFormat};
 use latexsnipper_foundation::{Result, SnipperError};
@@ -76,6 +76,143 @@ impl DocumentExportService {
             ExportFormat::Pptx,
             ExportFormat::Xlsx,
         ]
+    }
+
+    /// Generate capabilities directly from the callable importer/exporter registries.
+    pub fn capability_matrix() -> latexsnipper_ast::CapabilityMatrix {
+        let mut entries = Vec::new();
+        for &input in crate::DocumentImporter::supported_formats() {
+            for &output in Self::supported_formats() {
+                entries.push(capability(input, output));
+            }
+        }
+        latexsnipper_ast::CapabilityMatrix {
+            schema_version: "2.0.0".to_string(),
+            entries,
+        }
+    }
+}
+
+fn capability(input: InputFormat, output: ExportFormat) -> FormatCapability {
+    let visual = matches!(
+        output,
+        ExportFormat::Svg | ExportFormat::Pdf | ExportFormat::Png
+    );
+    let office_output = matches!(
+        output,
+        ExportFormat::Docx | ExportFormat::Pptx | ExportFormat::Xlsx
+    );
+    let office_input = matches!(
+        input,
+        InputFormat::OfficeDocx | InputFormat::OfficePptx | InputFormat::OfficeXlsx
+    );
+    let raster_input = matches!(
+        input,
+        InputFormat::ImagePng
+            | InputFormat::ImageJpeg
+            | InputFormat::ImageWebp
+            | InputFormat::ImageBmp
+            | InputFormat::ImageTiff
+            | InputFormat::ImageGif
+    );
+    let mut known_loss = Vec::new();
+    if matches!(
+        output,
+        ExportFormat::PlainText
+            | ExportFormat::Markdown
+            | ExportFormat::Latex
+            | ExportFormat::Typst
+    ) {
+        known_loss.push(LossKind::LayoutLoss);
+    }
+    if office_input && !office_output {
+        known_loss.push(LossKind::OfficeObjectPreviewOnly);
+    }
+    if output == ExportFormat::PlainText {
+        known_loss.push(LossKind::StyleLoss);
+    }
+    FormatCapability {
+        input: Some(input_label(input).to_string()),
+        output: Some(output_label(output).to_string()),
+        available: true,
+        supports_formula: output != ExportFormat::PlainText,
+        supports_table: !matches!(output, ExportFormat::MathML | ExportFormat::OMML),
+        supports_image: !matches!(
+            output,
+            ExportFormat::PlainText | ExportFormat::MathML | ExportFormat::OMML
+        ),
+        supports_svg: matches!(
+            output,
+            ExportFormat::Svg | ExportFormat::Png | ExportFormat::Html
+        ),
+        supports_style: !matches!(
+            output,
+            ExportFormat::PlainText | ExportFormat::MathML | ExportFormat::OMML
+        ),
+        supports_layout: visual || office_output,
+        supports_office_objects: office_output,
+        fidelity: if visual || raster_input {
+            FidelityLevel::VisualOnly
+        } else if office_input || office_output {
+            FidelityLevel::BestEffort
+        } else {
+            FidelityLevel::SemanticOnly
+        },
+        known_loss,
+        notes: vec![if office_input || office_output {
+            "Opaque OOXML parts are preserved when preservation mode is enabled".to_string()
+        } else {
+            "Registered in-process importer/exporter path".to_string()
+        }],
+        required_features: Vec::new(),
+        external_dependencies: Vec::new(),
+        platform_restrictions: Vec::new(),
+        experimental: visual || office_output,
+    }
+}
+
+fn input_label(format: InputFormat) -> &'static str {
+    match format {
+        InputFormat::ImagePng => "PNG",
+        InputFormat::ImageJpeg => "JPEG",
+        InputFormat::ImageWebp => "WebP",
+        InputFormat::ImageBmp => "BMP",
+        InputFormat::ImageTiff => "TIFF",
+        InputFormat::ImageGif => "GIF",
+        InputFormat::ImageSvg => "SVG",
+        InputFormat::Pdf => "PDF",
+        InputFormat::OfficeDocx => "DOCX",
+        InputFormat::OfficePptx => "PPTX",
+        InputFormat::OfficeXlsx => "XLSX",
+        InputFormat::Html => "HTML",
+        InputFormat::Markdown => "Markdown",
+        InputFormat::Latex => "LaTeX",
+        InputFormat::Typst => "Typst",
+        InputFormat::MathML => "MathML",
+        InputFormat::OMML => "OMML",
+        InputFormat::JsonAst => "JSON AST",
+        InputFormat::PlainText => "Plain text",
+        InputFormat::RawPixels | InputFormat::Clipboard | InputFormat::Unknown => "Unregistered",
+    }
+}
+
+fn output_label(format: ExportFormat) -> &'static str {
+    match format {
+        ExportFormat::AstJson => "JSON AST",
+        ExportFormat::PlainText => "Plain text",
+        ExportFormat::Markdown => "Markdown",
+        ExportFormat::Latex => "LaTeX",
+        ExportFormat::Typst => "Typst",
+        ExportFormat::Html => "HTML",
+        ExportFormat::MathML => "MathML",
+        ExportFormat::OMML => "OMML",
+        ExportFormat::Svg => "SVG",
+        ExportFormat::Pdf => "PDF",
+        ExportFormat::Png => "PNG",
+        ExportFormat::Docx => "DOCX",
+        ExportFormat::Pptx => "PPTX",
+        ExportFormat::Xlsx => "XLSX",
+        _ => "Unregistered",
     }
 }
 
@@ -990,6 +1127,25 @@ mod tests {
         .unwrap();
         assert_eq!(bytes, b"opaque-data");
         assert!(archive.by_name("word/document.xml").is_ok());
+    }
+
+    #[test]
+    fn capability_matrix_is_generated_from_callable_registries() {
+        let matrix = DocumentExportService::capability_matrix();
+        assert_eq!(
+            matrix.entries.len(),
+            crate::DocumentImporter::supported_formats().len()
+                * DocumentExportService::supported_formats().len()
+        );
+        assert!(matrix.entries.iter().all(|entry| entry.available));
+        assert!(matrix.query("DOCX", "PNG").is_some());
+
+        let document = sample_document();
+        for &format in DocumentExportService::supported_formats() {
+            let artifact = DocumentExportService::export(&document, format)
+                .unwrap_or_else(|error| panic!("registered {format:?} failed: {error}"));
+            assert!(artifact.as_bytes().is_some_and(|bytes| !bytes.is_empty()));
+        }
     }
 
     fn assert_package_entries(bytes: &[u8], required: &[&str]) {

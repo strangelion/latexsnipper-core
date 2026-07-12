@@ -21,6 +21,30 @@ use crate::{
 pub struct DocumentImporter;
 
 impl DocumentImporter {
+    pub fn supported_formats() -> &'static [InputFormat] {
+        &[
+            InputFormat::ImagePng,
+            InputFormat::ImageJpeg,
+            InputFormat::ImageWebp,
+            InputFormat::ImageBmp,
+            InputFormat::ImageTiff,
+            InputFormat::ImageGif,
+            InputFormat::ImageSvg,
+            InputFormat::Pdf,
+            InputFormat::OfficeDocx,
+            InputFormat::OfficePptx,
+            InputFormat::OfficeXlsx,
+            InputFormat::Html,
+            InputFormat::Markdown,
+            InputFormat::Latex,
+            InputFormat::Typst,
+            InputFormat::MathML,
+            InputFormat::OMML,
+            InputFormat::JsonAst,
+            InputFormat::PlainText,
+        ]
+    }
+
     pub fn from_path(path: impl AsRef<Path>, options: ImportOptions) -> Result<Document> {
         let path = path.as_ref();
         let bytes = std::fs::read(path)
