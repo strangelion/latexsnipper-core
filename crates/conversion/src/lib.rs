@@ -56,7 +56,7 @@ pub use omml::OmmlConverter;
 pub use omml_parser::parse_omml_to_latex;
 pub use package_export::DocumentExportService;
 pub use pdf_native::{extract_pdf_text, extract_pdf_text_bytes};
-pub use pdf_overlay::overlay_pdf;
+pub use pdf_overlay::{overlay_pdf, overlay_pdf_with_options, PdfOverlayOptions};
 pub use pptx_reader::{read_pptx, read_pptx_bytes};
 pub use svg_parser::parse_svg_to_shapes;
 pub use table_export::TableExporter;
