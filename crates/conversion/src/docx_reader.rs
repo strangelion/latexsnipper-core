@@ -14,7 +14,7 @@ use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use std::io::Read;
+use std::io::{Cursor, Read, Seek};
 use std::path::Path;
 
 use crate::parse_word_table_ooxml;
@@ -23,7 +23,16 @@ use crate::parse_word_table_ooxml;
 pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
     let file = std::fs::File::open(path.as_ref())
         .map_err(|e| SnipperError::Export(format!("Failed to open DOCX: {}", e)))?;
-    let mut archive = zip::ZipArchive::new(file)
+    read_docx_archive(file)
+}
+
+/// Parse DOCX package bytes using the same importer as the path API.
+pub fn read_docx_bytes(bytes: &[u8]) -> Result<Document> {
+    read_docx_archive(Cursor::new(bytes))
+}
+
+fn read_docx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
+    let mut archive = zip::ZipArchive::new(reader)
         .map_err(|e| SnipperError::Export(format!("Failed to read DOCX archive: {}", e)))?;
 
     // Read document.xml
@@ -61,7 +70,7 @@ pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
     })
 }
 
-fn read_entry(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<String> {
+fn read_entry<R: Read + Seek>(archive: &mut zip::ZipArchive<R>, name: &str) -> Result<String> {
     let mut file = archive
         .by_name(name)
         .map_err(|_| SnipperError::Export(format!("Entry '{}' not found in DOCX", name)))?;
@@ -160,9 +169,9 @@ fn extract_tables_from_xml(xml: &str) -> (Vec<TableBlock>, String) {
 }
 
 /// Parse the main document body XML and extract blocks with diagnostics and assets.
-fn parse_document_body(
+fn parse_document_body<R: Read + Seek>(
     xml: &str,
-    archive: &mut zip::ZipArchive<std::fs::File>,
+    archive: &mut zip::ZipArchive<R>,
     rels: &std::collections::HashMap<String, String>,
 ) -> (Vec<Block>, Vec<MediaAsset>, Vec<Diagnostic>) {
     // Extract tables before event processing

@@ -17,6 +17,7 @@ latexsnipper-runtime.workspace = true
 latexsnipper-engine.workspace = true
 latexsnipper-inference.workspace = true
 latexsnipper-conversion.workspace = true
+latexsnipper-export.workspace = true
 latexsnipper-model.workspace = true
 latexsnipper-pipeline.workspace = true
 latexsnipper-syntax.workspace = true

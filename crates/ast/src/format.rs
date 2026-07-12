@@ -321,11 +321,44 @@ pub struct PdfExportOptions {
 // ---------------------------------------------------------------------------
 
 /// Options for importing a document from an external format.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportOptions {
     pub preserve_assets: bool,
     pub preserve_layout: bool,
     pub page_range: Option<crate::PageRange>,
+    #[serde(default)]
+    pub ocr_fallback: bool,
+    #[serde(default)]
+    pub strict: bool,
+    #[serde(default)]
+    pub preserve_unknown_parts: bool,
+    #[serde(default = "default_max_decompressed_size")]
+    pub max_decompressed_size: u64,
+    #[serde(default = "default_max_text_size")]
+    pub max_text_size: u64,
+}
+
+impl Default for ImportOptions {
+    fn default() -> Self {
+        Self {
+            preserve_assets: true,
+            preserve_layout: true,
+            page_range: None,
+            ocr_fallback: false,
+            strict: false,
+            preserve_unknown_parts: false,
+            max_decompressed_size: default_max_decompressed_size(),
+            max_text_size: default_max_text_size(),
+        }
+    }
+}
+
+fn default_max_decompressed_size() -> u64 {
+    512 * 1024 * 1024
+}
+
+fn default_max_text_size() -> u64 {
+    64 * 1024 * 1024
 }
 
 /// Options for exporting a document.

@@ -1,7 +1,10 @@
 use clap::{Parser, Subcommand};
-use latexsnipper_ast::{CapabilityMatrix, FidelityLevel, FormatCapability, LossKind};
-use latexsnipper_conversion::OutputFormat;
+use latexsnipper_ast::{
+    CapabilityMatrix, Diagnostic, FidelityLevel, FormatCapability, ImportOptions, LossKind,
+};
+use latexsnipper_conversion::{DocumentImporter, OutputFormat};
 use latexsnipper_engine::{sdk::Snipper, DocumentParseMode, EngineConfig, RecognizeMode};
+use latexsnipper_export::VisualFormat;
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use std::io::{self, Write};
@@ -31,6 +34,54 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Import a supported document and emit its unified JSON AST
+    Import {
+        /// Input document path
+        input: String,
+        /// Output JSON path; stdout when omitted
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+    },
+
+    /// Convert a supported document through the unified AST
+    Convert {
+        /// Input document path
+        input: String,
+        /// Target format
+        #[arg(long)]
+        to: String,
+        /// Output path; required for binary targets
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+    },
+
+    /// Export a document to SVG, PDF, PNG, or plain text
+    Export {
+        /// Input document path
+        input: String,
+        /// Visual target format
+        #[arg(long)]
+        to: String,
+        /// Output path
+        #[arg(short = 'o', long)]
+        output: String,
+    },
+
+    /// Inspect detected format and imported AST statistics
+    Inspect {
+        /// Input document path
+        input: String,
+        /// Emit machine-readable JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Validate that a document is structurally importable
+    Validate {
+        /// Input document path
+        input: String,
+    },
+
     /// Recognize formulas in an image and export to a format
     #[command(long_about = "Recognize mathematical formulas in an image.\n\n\
         Detects formulas (and optionally text) in the input image,\n\
@@ -389,6 +440,90 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Import { input, output } => {
+            let document = DocumentImporter::from_path(&input, ImportOptions::default())
+                .unwrap_or_else(|error| exit_with_error("Import failed", error));
+            let json = serde_json::to_string_pretty(&document)
+                .unwrap_or_else(|error| exit_with_error("JSON serialization failed", error));
+            if let Some(path) = output {
+                std::fs::write(&path, json.as_bytes())
+                    .unwrap_or_else(|error| exit_with_error("Write failed", error));
+                eprintln!("Imported {} to {}", input, path);
+            } else {
+                println!("{json}");
+            }
+        }
+
+        Commands::Convert { input, to, output } => {
+            if let Err(error) = convert_path(&input, &to, output.as_deref()) {
+                exit_with_error("Conversion failed", error);
+            }
+        }
+
+        Commands::Export { input, to, output } => {
+            let visual = VisualFormat::from_label(&to).unwrap_or_else(|| {
+                exit_with_error(
+                    "Export failed",
+                    format!("unsupported visual format '{to}'; use svg, pdf, png, or text"),
+                )
+            });
+            let snipper = Snipper::import_path(&input, ImportOptions::default())
+                .unwrap_or_else(|error| exit_with_error("Import failed", error));
+            let mut artifact = snipper
+                .export(visual)
+                .unwrap_or_else(|error| exit_with_error("Export failed", error));
+            artifact
+                .write_to_path(&output)
+                .unwrap_or_else(|error| exit_with_error("Write failed", error));
+            print_diagnostics(&artifact.diagnostics);
+            eprintln!(
+                "Exported {} bytes to {}",
+                artifact.size_bytes.unwrap_or(0),
+                output
+            );
+        }
+
+        Commands::Inspect { input, json } => {
+            let bytes =
+                std::fs::read(&input).unwrap_or_else(|error| exit_with_error("Read failed", error));
+            let format =
+                DocumentImporter::detect_format(&bytes, Some(std::path::Path::new(&input)))
+                    .unwrap_or_else(|error| exit_with_error("Detection failed", error));
+            let document =
+                DocumentImporter::from_bytes(&bytes, Some(format), ImportOptions::default())
+                    .unwrap_or_else(|error| exit_with_error("Import failed", error));
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "format": format!("{format:?}"),
+                        "pages": document.pages.len(),
+                        "blocks": document.block_count(),
+                        "assets": document.assets.len(),
+                        "diagnostics": document.diagnostics,
+                    })
+                );
+            } else {
+                println!("Format: {format:?}");
+                println!("Pages: {}", document.pages.len());
+                println!("Blocks: {}", document.block_count());
+                println!("Assets: {}", document.assets.len());
+                print_diagnostics(&document.diagnostics);
+            }
+        }
+
+        Commands::Validate { input } => {
+            let document = DocumentImporter::from_path(&input, ImportOptions::default())
+                .unwrap_or_else(|error| exit_with_error("Validation failed", error));
+            print_diagnostics(&document.diagnostics);
+            println!(
+                "Valid: {} page(s), {} block(s), {} asset(s)",
+                document.pages.len(),
+                document.block_count(),
+                document.assets.len()
+            );
+        }
+
         Commands::Recognize {
             input,
             format,
@@ -562,6 +697,68 @@ fn main() {
             }
         },
     }
+}
+
+fn convert_path(input: &str, target: &str, output: Option<&str>) -> Result<(), String> {
+    let snipper =
+        Snipper::import_path(input, ImportOptions::default()).map_err(|e| e.to_string())?;
+    let target = target.to_ascii_lowercase();
+    let text = match target.as_str() {
+        "latex" | "tex" => Some(snipper.to_latex().map_err(|e| e.to_string())?),
+        "markdown" | "md" => Some(snipper.to_markdown().map_err(|e| e.to_string())?),
+        "typst" | "typ" => Some(snipper.to_typst().map_err(|e| e.to_string())?),
+        "html" | "htm" => Some(snipper.to_html().map_err(|e| e.to_string())?),
+        "mathml" | "mml" => Some(snipper.to_mathml().map_err(|e| e.to_string())?),
+        "omml" => Some(snipper.to_omml().map_err(|e| e.to_string())?),
+        "json" | "ast" => Some(snipper.to_json().map_err(|e| e.to_string())?),
+        "svg" | "pdf" | "png" | "text" | "txt" => {
+            let visual = VisualFormat::from_label(&target).expect("matched visual label");
+            let mut artifact = snipper.export(visual).map_err(|e| e.to_string())?;
+            print_diagnostics(&artifact.diagnostics);
+            if let Some(path) = output {
+                artifact.write_to_path(path).map_err(|e| e.to_string())?;
+                eprintln!("Converted {} to {}", input, path);
+                return Ok(());
+            }
+            if let Some(text) = artifact.content.as_ref().and_then(|value| value.as_text()) {
+                println!("{text}");
+                return Ok(());
+            }
+            return Err(format!(
+                "binary target '{target}' requires an output path (-o)"
+            ));
+        }
+        "docx" | "pptx" | "xlsx" => {
+            return Err(format!(
+                "{target} export is not registered; capability reporting does not advertise it"
+            ));
+        }
+        _ => return Err(format!("unsupported target format '{target}'")),
+    };
+
+    if let Some(text) = text {
+        if let Some(path) = output {
+            std::fs::write(path, text.as_bytes()).map_err(|e| e.to_string())?;
+            eprintln!("Converted {} to {}", input, path);
+        } else {
+            println!("{text}");
+        }
+    }
+    Ok(())
+}
+
+fn print_diagnostics(diagnostics: &[Diagnostic]) {
+    for diagnostic in diagnostics {
+        eprintln!(
+            "[{:?}] {}: {}",
+            diagnostic.level, diagnostic.code, diagnostic.message
+        );
+    }
+}
+
+fn exit_with_error(prefix: &str, error: impl std::fmt::Display) -> ! {
+    eprintln!("{prefix}: {error}");
+    std::process::exit(1)
 }
 
 fn handle_models_download(category: Option<String>, all: bool, manifest_url: Option<String>) {

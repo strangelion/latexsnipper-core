@@ -7,14 +7,23 @@ use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use std::io::Read;
+use std::io::{Cursor, Read, Seek};
 use std::path::Path;
 
 /// Parse a .pptx file and produce a Document AST (one Page per slide).
 pub fn read_pptx(path: impl AsRef<Path>) -> Result<Document> {
     let file = std::fs::File::open(path.as_ref())
         .map_err(|e| SnipperError::Export(format!("Failed to open PPTX: {}", e)))?;
-    let mut archive = zip::ZipArchive::new(file)
+    read_pptx_archive(file)
+}
+
+/// Parse PPTX package bytes using the same importer as the path API.
+pub fn read_pptx_bytes(bytes: &[u8]) -> Result<Document> {
+    read_pptx_archive(Cursor::new(bytes))
+}
+
+fn read_pptx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
+    let mut archive = zip::ZipArchive::new(reader)
         .map_err(|e| SnipperError::Export(format!("Failed to read PPTX archive: {}", e)))?;
 
     // Read presentation.xml for slide list and rels for path resolution
@@ -68,7 +77,7 @@ pub fn read_pptx(path: impl AsRef<Path>) -> Result<Document> {
     })
 }
 
-fn read_entry(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<String> {
+fn read_entry<R: Read + Seek>(archive: &mut zip::ZipArchive<R>, name: &str) -> Result<String> {
     let mut file = archive
         .by_name(name)
         .map_err(|_| SnipperError::Export(format!("Entry '{}' not found", name)))?;
@@ -185,9 +194,9 @@ fn parse_rels(xml: &str) -> std::collections::HashMap<String, String> {
     rels
 }
 
-fn parse_slide_body(
+fn parse_slide_body<R: Read + Seek>(
     xml: &str,
-    archive: &mut zip::ZipArchive<std::fs::File>,
+    archive: &mut zip::ZipArchive<R>,
     rels: &std::collections::HashMap<String, String>,
     next_asset_id: &mut usize,
 ) -> (Vec<Block>, Vec<MediaAsset>) {

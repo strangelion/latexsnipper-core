@@ -24,6 +24,18 @@ pub enum SnipperError {
     #[error("Conversion error: {0}")]
     Conversion(String),
 
+    #[error("Invalid or mismatched input format: {0}")]
+    InvalidFormat(String),
+
+    #[error("Unsupported input format: {0}")]
+    UnsupportedFormat(String),
+
+    #[error("Encrypted input requires credentials: {0}")]
+    EncryptedFile(String),
+
+    #[error("Input safety limit exceeded: {0}")]
+    LimitExceeded(String),
+
     #[error("Export error: {0}")]
     Export(String),
 

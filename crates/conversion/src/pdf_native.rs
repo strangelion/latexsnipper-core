@@ -6,7 +6,17 @@ use std::path::Path;
 pub fn extract_pdf_text(path: impl AsRef<Path>) -> Result<Document> {
     let pdf = lopdf::Document::load(path.as_ref())
         .map_err(|e| SnipperError::Export(format!("Failed to load PDF: {}", e)))?;
+    extract_pdf_document(pdf)
+}
 
+/// Extract native PDF text from an in-memory buffer.
+pub fn extract_pdf_text_bytes(bytes: &[u8]) -> Result<Document> {
+    let pdf = lopdf::Document::load_mem(bytes)
+        .map_err(|e| SnipperError::InvalidFormat(format!("Failed to load PDF: {e}")))?;
+    extract_pdf_document(pdf)
+}
+
+fn extract_pdf_document(pdf: lopdf::Document) -> Result<Document> {
     let mut pages_out = Vec::new();
 
     for (&page_num, &object_id) in pdf.get_pages().iter() {

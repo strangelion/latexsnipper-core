@@ -25,6 +25,8 @@ pub enum InputFormat {
     Typst,
     MathML,
     OMML,
+    JsonAst,
+    PlainText,
     Clipboard,
     Unknown,
 }
