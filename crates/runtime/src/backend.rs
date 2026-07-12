@@ -34,4 +34,18 @@ pub trait RuntimeBackend: Send + Sync {
 
     /// Check if this runtime is available on the current platform.
     fn is_available(&self) -> bool;
+
+    /// Provider selected for the most recently created session.
+    fn selected_provider(&self) -> String {
+        self.name().to_string()
+    }
+
+    /// Providers currently available to this backend.
+    fn available_providers(&self) -> Vec<String> {
+        if self.is_available() {
+            vec![self.name().to_string()]
+        } else {
+            Vec::new()
+        }
+    }
 }

@@ -17,6 +17,7 @@ pub enum Acceleration {
     Cuda12,
     Cuda13,
     Directml,
+    Coreml,
     Tensorrt,
 }
 
@@ -74,6 +75,9 @@ impl Platform {
             (Platform::WindowsX64, Acceleration::Directml) => {
                 format!("{}/onnxruntime-win-x64-{}.zip", base, version)
             }
+            (Platform::WindowsX64, Acceleration::Coreml) => {
+                format!("{}/onnxruntime-win-x64-{}.zip", base, version)
+            }
             (Platform::WindowsX64, Acceleration::Tensorrt) => {
                 format!("{}/onnxruntime-win-x64-gpu_cuda12-{}.zip", base, version)
             } // TensorRT uses CUDA backend
@@ -90,6 +94,9 @@ impl Platform {
                 format!("{}/onnxruntime-linux-x64-gpu_cuda13-{}.tgz", base, version)
             }
             (Platform::LinuxX64, Acceleration::Directml) => {
+                format!("{}/onnxruntime-linux-x64-{}.tgz", base, version)
+            }
+            (Platform::LinuxX64, Acceleration::Coreml) => {
                 format!("{}/onnxruntime-linux-x64-{}.tgz", base, version)
             }
             (Platform::LinuxX64, Acceleration::Tensorrt) => {
@@ -125,6 +132,10 @@ impl Platform {
         // Check for DirectML on Windows
         if cfg!(target_os = "windows") {
             return Acceleration::Directml;
+        }
+
+        if cfg!(target_os = "macos") {
+            return Acceleration::Coreml;
         }
 
         Acceleration::CpuOnly

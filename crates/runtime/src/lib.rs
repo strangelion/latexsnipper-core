@@ -36,9 +36,9 @@ pub use model_validation::{
     validate_model_bytes, ValidationReport,
 };
 pub use plugin_loader::load_plugins_from_dir;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub use providers::onnx::OnnxRuntimeBackend;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub use providers::onnx::{Acceleration, Platform};
 #[cfg(feature = "remote-api")]
 pub use providers::remote::{RemoteApiProvider, RemoteApiResult};

@@ -19,6 +19,10 @@ fn models_dir() -> std::path::PathBuf {
     std::env::current_dir().unwrap().join("models")
 }
 
+fn require_real_models() -> bool {
+    std::env::var_os("LATEXSNIPPER_REQUIRE_REAL_MODELS").is_some()
+}
+
 fn load_image(name: &str) -> latexsnipper_image::SnipperImage {
     let path = std::env::current_dir().unwrap().join("fixtures").join(name);
     latexsnipper_image::decode::decode(ImageSource::File(&path)).unwrap()
@@ -57,10 +61,19 @@ fn full_pipeline() {
     let struct_path = struct_backend_path(&models, &struct_backend);
 
     if !det_path.exists() || !tr_path.exists() {
+        assert!(
+            !require_real_models(),
+            "required table detection or text recognition model is missing"
+        );
         eprintln!("SKIP: detection or text-rec model not found");
         return;
     }
     if struct_backend != "projection" && struct_path.is_none() {
+        assert!(
+            !require_real_models(),
+            "required table structure model '{}' is missing",
+            struct_backend
+        );
         eprintln!("SKIP: structure model '{}' not found", struct_backend);
         return;
     }
@@ -117,6 +130,10 @@ fn full_pipeline() {
     eprintln!("Backend '{}': {} grid cells", struct_backend, grid.len());
 
     if grid.is_empty() {
+        assert!(
+            !require_real_models(),
+            "real table model returned no grid cells"
+        );
         eprintln!("No grid cells generated, skipping OCR");
         return;
     }

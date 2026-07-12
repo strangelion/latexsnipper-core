@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use ort::ep::{ExecutionProvider, ExecutionProviderDispatch};
 use ort::{environment::Environment, session::Session, value::Value};
 
 use super::platform::{Acceleration, Platform};
@@ -19,6 +20,8 @@ pub struct OnnxRuntimeBackend {
     #[allow(dead_code)]
     max_threads: usize,
     sessions: Mutex<HashMap<String, Arc<Mutex<Session>>>>,
+    selected_provider: Mutex<String>,
+    provider_fallbacks: Mutex<Vec<String>>,
 }
 
 impl OnnxRuntimeBackend {
@@ -45,6 +48,8 @@ impl OnnxRuntimeBackend {
             acceleration,
             max_threads: 4,
             sessions: Mutex::new(HashMap::new()),
+            selected_provider: Mutex::new("CPU".to_string()),
+            provider_fallbacks: Mutex::new(Vec::new()),
         })
     }
 
@@ -65,6 +70,8 @@ impl OnnxRuntimeBackend {
             acceleration,
             max_threads,
             sessions: Mutex::new(HashMap::new()),
+            selected_provider: Mutex::new("CPU".to_string()),
+            provider_fallbacks: Mutex::new(Vec::new()),
         })
     }
 
@@ -73,6 +80,13 @@ impl OnnxRuntimeBackend {
     }
     pub fn acceleration(&self) -> Acceleration {
         self.acceleration
+    }
+
+    pub fn provider_fallbacks(&self) -> Vec<String> {
+        self.provider_fallbacks
+            .lock()
+            .map(|fallbacks| fallbacks.clone())
+            .unwrap_or_default()
     }
 
     fn resolve_model_path(&self, handle: &ModelHandle) -> std::path::PathBuf {
@@ -110,7 +124,7 @@ impl OnnxRuntimeBackend {
         acceleration: AccelerationMode,
         max_threads: usize,
     ) -> Result<Arc<Mutex<Session>>> {
-        let cache_key = model_path.to_string_lossy().to_string();
+        let cache_key = format!("{}::{acceleration:?}", model_path.to_string_lossy());
 
         // Check cache first (short hold)
         {
@@ -128,14 +142,15 @@ impl OnnxRuntimeBackend {
             SnipperError::Runtime(format!("Failed to create session builder: {}", e))
         })?;
 
-        // Configure execution providers based on acceleration mode
-        match acceleration {
-            AccelerationMode::Gpu | AccelerationMode::Auto => {
-                // Try CUDA first, then fall back to CPU (handled by builder defaults)
-                // _ = builder.with_execution_providers([...]);
-            }
-            AccelerationMode::Cpu => {
-                // CPU only - default
+        let (configured, selected, fallback) = configure_execution_provider(builder, acceleration);
+        builder = configured;
+        if let Ok(mut provider) = self.selected_provider.lock() {
+            *provider = selected.to_string();
+        }
+        if let Some(fallback) = fallback {
+            log::warn!("{fallback}");
+            if let Ok(mut fallbacks) = self.provider_fallbacks.lock() {
+                fallbacks.push(fallback);
             }
         }
 
@@ -171,6 +186,106 @@ impl OnnxRuntimeBackend {
     }
 }
 
+fn configure_execution_provider(
+    mut builder: ort::session::builder::SessionBuilder,
+    mode: AccelerationMode,
+) -> (
+    ort::session::builder::SessionBuilder,
+    &'static str,
+    Option<String>,
+) {
+    if mode == AccelerationMode::Cpu {
+        return (builder, "CPU", None);
+    }
+
+    let mut last_failure = None;
+
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        let cuda = ort::ep::CUDA::default();
+        if cuda.is_available().unwrap_or(false) {
+            let (next, enabled, failure) = try_execution_provider(builder, cuda.build(), "CUDA");
+            builder = next;
+            if enabled {
+                return (builder, "CUDA", None);
+            }
+            if failure.is_some() {
+                last_failure = failure;
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let directml = ort::ep::DirectML::default();
+        if directml.is_available().unwrap_or(false) {
+            let (next, enabled, failure) =
+                try_execution_provider(builder, directml.build(), "DirectML");
+            builder = next;
+            if enabled {
+                return (builder, "DirectML", None);
+            }
+            if failure.is_some() {
+                last_failure = failure;
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let coreml = ort::ep::CoreML::default();
+        if coreml.is_available().unwrap_or(false) {
+            let (next, enabled, failure) =
+                try_execution_provider(builder, coreml.build(), "CoreML");
+            builder = next;
+            if enabled {
+                return (builder, "CoreML", None);
+            }
+            if failure.is_some() {
+                last_failure = failure;
+            }
+        }
+    }
+
+    let fallback = last_failure.or_else(|| {
+        (mode == AccelerationMode::Gpu).then(|| {
+            "GPU provider requested but no usable provider was available; using CPU".to_string()
+        })
+    });
+    (builder, "CPU", fallback)
+}
+
+fn try_execution_provider(
+    builder: ort::session::builder::SessionBuilder,
+    provider: ExecutionProviderDispatch,
+    name: &str,
+) -> (ort::session::builder::SessionBuilder, bool, Option<String>) {
+    match builder.with_execution_providers([provider.error_on_failure()]) {
+        Ok(builder) => (builder, true, None),
+        Err(error) => {
+            let message = format!("{name} provider registration failed: {error}; using CPU");
+            (error.recover(), false, Some(message))
+        }
+    }
+}
+
+fn available_execution_providers() -> Vec<String> {
+    let mut providers = vec!["CPU".to_string()];
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    if ort::ep::CUDA::default().is_available().unwrap_or(false) {
+        providers.push("CUDA".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    if ort::ep::DirectML::default().is_available().unwrap_or(false) {
+        providers.push("DirectML".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    if ort::ep::CoreML::default().is_available().unwrap_or(false) {
+        providers.push("CoreML".to_string());
+    }
+    providers
+}
+
 impl RuntimeBackend for OnnxRuntimeBackend {
     fn create_session(
         &self,
@@ -196,7 +311,18 @@ impl RuntimeBackend for OnnxRuntimeBackend {
     }
 
     fn is_available(&self) -> bool {
-        true
+        Environment::current().is_ok()
+    }
+
+    fn selected_provider(&self) -> String {
+        self.selected_provider
+            .lock()
+            .map(|provider| provider.clone())
+            .unwrap_or_else(|_| "unknown".to_string())
+    }
+
+    fn available_providers(&self) -> Vec<String> {
+        available_execution_providers()
     }
 
     fn clear_sessions(&self) {
@@ -242,7 +368,26 @@ impl InferenceSession for OnnxSession {
                         .into();
                     input_values.push((name, value));
                 }
-                _ => return Err(SnipperError::Inference("Unsupported tensor type".into())),
+                latexsnipper_tensor::TensorData::Int32(data) => {
+                    let shape: Vec<usize> = input.shape().to_vec();
+                    let boxed: Box<[i32]> = data.clone().into();
+                    let value: Value = Value::from_array((shape, boxed))
+                        .map_err(|e| {
+                            SnipperError::Inference(format!("Failed to create tensor: {}", e))
+                        })?
+                        .into();
+                    input_values.push((name, value));
+                }
+                latexsnipper_tensor::TensorData::UInt8(data) => {
+                    let shape: Vec<usize> = input.shape().to_vec();
+                    let boxed: Box<[u8]> = data.clone().into();
+                    let value: Value = Value::from_array((shape, boxed))
+                        .map_err(|e| {
+                            SnipperError::Inference(format!("Failed to create tensor: {}", e))
+                        })?
+                        .into();
+                    input_values.push((name, value));
+                }
             }
         }
 
@@ -346,6 +491,23 @@ impl InferenceSession for OnnxSession {
         // is just an Arc clone pointing to the same Mutex<Session>. Once the Arc
         // refcount drops to zero, the underlying Session is freed.
         // Here we only clear OnnxSession's own reference. The backend cache is
-        // out of scope — use SessionCache::clear() at the backend level instead.
+        // out of scope; use SessionCache::clear() at the backend level instead.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_diagnostics_always_report_cpu() {
+        let backend = OnnxRuntimeBackend::new(std::env::temp_dir()).unwrap();
+        assert!(backend.is_available());
+        assert_eq!(backend.selected_provider(), "CPU");
+        assert!(backend
+            .available_providers()
+            .iter()
+            .any(|item| item == "CPU"));
+        assert!(backend.provider_fallbacks().is_empty());
     }
 }

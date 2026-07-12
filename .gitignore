@@ -20,6 +20,8 @@ onnxruntime-*/
 # Test fixtures (generated images)
 fixtures/*.png
 fixtures/*.typ
+!fixtures/text.png
+!fixtures/formula.png
 
 # Test models (ONNX files)
 test-models/

@@ -27,6 +27,14 @@ fn fixtures_dir() -> PathBuf {
         .join("fixtures")
 }
 
+fn skip_or_require_models(reason: &str) -> bool {
+    if std::env::var_os("LATEXSNIPPER_REQUIRE_REAL_MODELS").is_some() {
+        panic!("required real-model test input is missing: {reason}");
+    }
+    println!("Skipping real-model test: {reason}");
+    true
+}
+
 fn rgba_to_rgb(img: &SnipperImage) -> SnipperImage {
     let mut rgb = Vec::with_capacity((img.width() * img.height() * 3) as usize);
     for chunk in img.pixels().chunks_exact(4) {
@@ -206,7 +214,7 @@ fn test_doc_ori() {
     let model_path = models.join("../test-models/PP-LCNet_x1_0_doc_ori_infer/inference.onnx");
     let image_path = fixtures.join("text.png");
     if !model_path.exists() || !image_path.exists() {
-        println!("Skipping");
+        skip_or_require_models("document orientation model or text fixture");
         return;
     }
 
@@ -250,7 +258,7 @@ fn test_text_det() {
     let model_path = models.join("text-det/v6-small/inference.onnx");
     let image_path = fixtures.join("text.png");
     if !model_path.exists() || !image_path.exists() {
-        println!("Skipping");
+        skip_or_require_models("text detection model or text fixture");
         return;
     }
 
@@ -297,7 +305,7 @@ fn test_text_rec_known_line() {
     let fixtures = fixtures_dir();
     let image_path = fixtures.join("text.png");
     if text_rec_model(&models).is_none() || !image_path.exists() {
-        println!("Skipping");
+        skip_or_require_models("text recognition model or text fixture");
         return;
     }
 
@@ -324,7 +332,7 @@ fn test_formula_det() {
     let model_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
     let image_path = fixtures.join("formula.png");
     if !model_path.exists() || !image_path.exists() {
-        println!("Skipping");
+        skip_or_require_models("formula detection model or formula fixture");
         return;
     }
 
@@ -363,7 +371,7 @@ fn test_formula_rec_e2e() {
     let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
 
     if !enc_path.exists() || !dec_path.exists() || !image_path.exists() {
-        println!("Skipping");
+        skip_or_require_models("formula recognition models or formula fixture");
         return;
     }
 
@@ -424,7 +432,7 @@ fn test_multi_model() {
         }
     }
     if loaded == 0 {
-        println!("No models available (download from release or keep local models/)");
+        skip_or_require_models("no loadable ONNX model was found");
         return;
     }
     println!("Loaded {}/3", loaded);
@@ -438,7 +446,7 @@ fn test_text_e2e() {
     let det_path = models.join("text-det/v6-small/inference.onnx");
     let image_path = fixtures.join("text.png");
     if !det_path.exists() || text_rec_model(&models).is_none() || !image_path.exists() {
-        println!("Skipping");
+        skip_or_require_models("end-to-end text models or text fixture");
         return;
     }
 
@@ -570,7 +578,7 @@ fn test_formula_e2e() {
     let det_path = models.join("formula-det/yolov8-mfd/mathcraft-mfd.onnx");
     let image_path = fixtures.join("formula.png");
     if !det_path.exists() || !image_path.exists() {
-        println!("Skipping");
+        skip_or_require_models("end-to-end formula model or formula fixture");
         return;
     }
 

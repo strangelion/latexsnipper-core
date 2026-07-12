@@ -20,7 +20,7 @@ use latexsnipper_foundation::SnipperError;
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::SnipperImage;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use latexsnipper_runtime::OnnxRuntimeBackend;
 use latexsnipper_runtime::StubRuntime;
 use std::path::Path;
@@ -146,27 +146,27 @@ impl Snipper {
         config: EngineConfig,
         mode: RecognizeMode,
     ) -> Result<Self, SnipperError> {
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         {
-            let backend = OnnxRuntimeBackend::new(config.models_dir.clone())
-                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-            let engine = SnipperEngine::new(config, Box::new(backend));
-
-            let rt =
-                tokio::runtime::Runtime::new().map_err(|e| SnipperError::Runtime(e.to_string()))?;
-            let doc = rt
-                .block_on(engine.recognize_pdf(path.as_ref(), mode))
-                .map_err(|e| SnipperError::Inference(e.to_string()))?;
-
-            Ok(Self {
-                engine,
-                document: doc,
+            let path = path.as_ref().to_path_buf();
+            std::thread::spawn(move || {
+                let backend = OnnxRuntimeBackend::new(config.models_dir.clone())
+                    .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+                let engine = SnipperEngine::new(config, Box::new(backend));
+                let runtime = tokio::runtime::Runtime::new()
+                    .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+                let document = runtime
+                    .block_on(engine.recognize_pdf(&path, mode))
+                    .map_err(|e| SnipperError::Inference(e.to_string()))?;
+                Ok(Self { engine, document })
             })
+            .join()
+            .map_err(|_| SnipperError::Runtime("OCR worker thread panicked".to_string()))?
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
         {
             Err(SnipperError::Runtime(
-                "PDF processing requires Windows (ONNX Runtime)".to_string(),
+                "PDF OCR requires a supported desktop ONNX Runtime backend".to_string(),
             ))
         }
     }
@@ -183,27 +183,26 @@ impl Snipper {
         config: EngineConfig,
         mode: RecognizeMode,
     ) -> Result<Self, SnipperError> {
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         {
-            let backend = OnnxRuntimeBackend::new(config.models_dir.clone())
-                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-            let engine = SnipperEngine::new(config, Box::new(backend));
-
-            let rt =
-                tokio::runtime::Runtime::new().map_err(|e| SnipperError::Runtime(e.to_string()))?;
-            let doc = rt
-                .block_on(engine.recognize(img, mode))
-                .map_err(|e| SnipperError::Inference(e.to_string()))?;
-
-            Ok(Self {
-                engine,
-                document: doc,
+            std::thread::spawn(move || {
+                let backend = OnnxRuntimeBackend::new(config.models_dir.clone())
+                    .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+                let engine = SnipperEngine::new(config, Box::new(backend));
+                let runtime = tokio::runtime::Runtime::new()
+                    .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+                let document = runtime
+                    .block_on(engine.recognize(img, mode))
+                    .map_err(|e| SnipperError::Inference(e.to_string()))?;
+                Ok(Self { engine, document })
             })
+            .join()
+            .map_err(|_| SnipperError::Runtime("OCR worker thread panicked".to_string()))?
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
         {
             Err(SnipperError::Runtime(
-                "Image processing requires Windows (ONNX Runtime)".to_string(),
+                "Image OCR requires a supported desktop ONNX Runtime backend".to_string(),
             ))
         }
     }
@@ -340,5 +339,22 @@ mod tests {
         let snipper = Snipper::from_file(&path).unwrap();
         std::fs::remove_file(path).ok();
         assert!(snipper.document().block_count() >= 2);
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn synchronous_ocr_api_is_safe_inside_tokio_runtime() {
+        let image = SnipperImage::new(1, 1, PixelFormat::Rgb, vec![255, 255, 255]);
+        let config = EngineConfig::with_models_dir(
+            std::env::temp_dir().join(format!("latexsnipper-no-models-{}", std::process::id())),
+        );
+
+        let result = Snipper::from_image_with_config(image, config, RecognizeMode::Formula);
+        if let Err(error) = result {
+            assert!(
+                !error.to_string().contains("OCR worker thread panicked"),
+                "synchronous OCR must not create a nested Tokio runtime"
+            );
+        }
     }
 }
