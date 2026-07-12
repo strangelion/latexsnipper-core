@@ -12,13 +12,17 @@ env:
 
 jobs:
   check:
-    name: Check
-    runs-on: ubuntu-latest
+    name: Check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --all-features
+      - run: cargo check --workspace --all-targets --all-features
 
   test:
     name: Test
@@ -49,7 +53,44 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-features -- -D warnings
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  docs:
+    name: Documentation tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --doc --workspace --all-features
+
+  feature-matrix:
+    name: Feature matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p latexsnipper-runtime --no-default-features
+      - run: cargo check -p latexsnipper-runtime --features remote-api
+      - run: cargo check -p latexsnipper-cli --all-targets
+
+  real-model-windows:
+    name: Real models (Windows CPU)
+    runs-on: windows-latest
+    env:
+      LATEXSNIPPER_REQUIRE_REAL_MODELS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Download and verify model assets
+        shell: pwsh
+        run: ./scripts/setup-real-model-tests.ps1
+      - name: Run text, formula, orientation, and multi-model tests
+        run: cargo test -p latexsnipper-tests --test real_model -- --nocapture
+      - name: Run table recognition test
+        run: cargo test --test table_e2e -- --nocapture
 
   msrv:
     name: MSRV
