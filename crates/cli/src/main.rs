@@ -729,9 +729,23 @@ fn convert_path(input: &str, target: &str, output: Option<&str>) -> Result<(), S
             ));
         }
         "docx" | "pptx" | "xlsx" => {
-            return Err(format!(
-                "{target} export is not registered; capability reporting does not advertise it"
-            ));
+            let format = match target.as_str() {
+                "docx" => latexsnipper_ast::ExportFormat::Docx,
+                "pptx" => latexsnipper_ast::ExportFormat::Pptx,
+                "xlsx" => latexsnipper_ast::ExportFormat::Xlsx,
+                _ => unreachable!(),
+            };
+            let path = output
+                .ok_or_else(|| format!("binary target '{target}' requires an output path (-o)"))?;
+            let mut artifact = snipper
+                .export_format(format)
+                .map_err(|error| error.to_string())?;
+            artifact
+                .write_to_path(path)
+                .map_err(|error| error.to_string())?;
+            print_diagnostics(&artifact.diagnostics);
+            eprintln!("Converted {} to {}", input, path);
+            return Ok(());
         }
         _ => return Err(format!("unsupported target format '{target}'")),
     };

@@ -12,7 +12,9 @@
 //! ```
 
 use latexsnipper_ast::*;
-use latexsnipper_conversion::{DocumentConverter, DocumentImporter, OutputFormat};
+use latexsnipper_conversion::{
+    DocumentConverter, DocumentExportService, DocumentImporter, OutputFormat,
+};
 use latexsnipper_export::{ExportService, VisualFormat};
 use latexsnipper_foundation::SnipperError;
 use latexsnipper_image::color::PixelFormat;
@@ -282,6 +284,11 @@ impl Snipper {
     /// Export the current document to a visual text or binary artifact.
     pub fn export(&self, format: VisualFormat) -> Result<ExportArtifact, SnipperError> {
         ExportService::export(&self.document, format)
+    }
+
+    /// Export through the unified semantic, visual, and package registry.
+    pub fn export_format(&self, format: ExportFormat) -> Result<ExportArtifact, SnipperError> {
+        DocumentExportService::export(&self.document, format)
     }
 }
 
