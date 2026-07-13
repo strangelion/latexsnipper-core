@@ -16,7 +16,7 @@ pub use api_provider::{
     ApiKeyResolver, ApiProviderConfig, ModelProviderKind, PromptExample, PromptPreset,
     PromptProfile, PromptTask, UploadPolicy, UploadScope,
 };
-pub use backend::RuntimeBackend;
+pub use backend::{RuntimeBackend, RuntimeDiagnostics};
 pub use model_handle::ModelHandle;
 pub use model_package::{
     DetectionQuad, DetectionResult, FormulaResult, InferenceContext, LayoutResult, ModelDescriptor,

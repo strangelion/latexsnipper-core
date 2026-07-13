@@ -5,6 +5,8 @@ use latexsnipper_ast::{
 use latexsnipper_conversion::{DocumentImporter, OutputFormat};
 use latexsnipper_engine::{sdk::Snipper, DocumentParseMode, EngineConfig, RecognizeMode};
 use latexsnipper_export::VisualFormat;
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use latexsnipper_runtime::{OnnxRuntimeBackend, RuntimeBackend};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use std::io::{self, Write};
@@ -188,7 +190,7 @@ enum Commands {
         snipper capabilities --input ast --output markdown\n    \
         snipper capabilities --input ast")]
     Capabilities {
-        /// Output format for the matrix: "table" (default) or "markdown"
+        /// Output format for the matrix: "table" (default), "markdown", or "json"
         #[arg(short = 'f', long, default_value = "table")]
         format: String,
 
@@ -662,6 +664,26 @@ fn main() {
             let filtered = filter_capabilities(&matrix, input.as_deref(), output.as_deref());
             match format.as_str() {
                 "markdown" | "md" => print_capabilities_markdown(&filtered),
+                "json" => {
+                    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+                    let runtime = OnnxRuntimeBackend::new(std::path::PathBuf::from("models"))
+                        .ok()
+                        .map(|backend| backend.runtime_diagnostics());
+                    #[cfg(not(any(
+                        target_os = "windows",
+                        target_os = "linux",
+                        target_os = "macos"
+                    )))]
+                    let runtime: Option<serde_json::Value> = None;
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "capabilities": filtered,
+                            "runtime": runtime,
+                        }))
+                        .expect("capability JSON serialization must succeed")
+                    );
+                }
                 _ => print_capabilities_table(&filtered),
             }
         }

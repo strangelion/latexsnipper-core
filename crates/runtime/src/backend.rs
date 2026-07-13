@@ -1,7 +1,20 @@
 use crate::acceleration::AccelerationMode;
 use crate::model_handle::ModelHandle;
 use crate::session::InferenceSession;
+use latexsnipper_ast::Diagnostic;
 use latexsnipper_foundation::Result;
+use serde::{Deserialize, Serialize};
+
+/// Machine-readable runtime and execution-provider status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeDiagnostics {
+    pub runtime: String,
+    pub available: bool,
+    pub selected_provider: String,
+    pub available_providers: Vec<String>,
+    #[serde(default)]
+    pub diagnostics: Vec<Diagnostic>,
+}
 
 /// Abstraction over inference runtimes (ONNX Runtime, TensorRT, etc.).
 /// Core only knows this trait, never OrtSession directly.
@@ -46,6 +59,22 @@ pub trait RuntimeBackend: Send + Sync {
             vec![self.name().to_string()]
         } else {
             Vec::new()
+        }
+    }
+
+    /// Stable diagnostics emitted while selecting execution providers.
+    fn provider_diagnostics(&self) -> Vec<Diagnostic> {
+        Vec::new()
+    }
+
+    /// Return a complete snapshot suitable for SDK and CLI JSON output.
+    fn runtime_diagnostics(&self) -> RuntimeDiagnostics {
+        RuntimeDiagnostics {
+            runtime: self.name().to_string(),
+            available: self.is_available(),
+            selected_provider: self.selected_provider(),
+            available_providers: self.available_providers(),
+            diagnostics: self.provider_diagnostics(),
         }
     }
 }

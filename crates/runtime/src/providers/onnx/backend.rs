@@ -9,6 +9,7 @@ use crate::acceleration::AccelerationMode;
 use crate::backend::RuntimeBackend;
 use crate::model_handle::ModelHandle;
 use crate::session::InferenceSession;
+use latexsnipper_ast::{Diagnostic, DiagnosticLevel, W_GPU_PROVIDER_FALLBACK};
 use latexsnipper_foundation::{Result, SnipperError};
 
 /// ONNX Runtime backend with auto GPU/CPU detection and session caching.
@@ -325,6 +326,17 @@ impl RuntimeBackend for OnnxRuntimeBackend {
         available_execution_providers()
     }
 
+    fn provider_diagnostics(&self) -> Vec<Diagnostic> {
+        self.provider_fallbacks()
+            .into_iter()
+            .map(|message| {
+                Diagnostic::new(DiagnosticLevel::Warning, W_GPU_PROVIDER_FALLBACK, message)
+                    .with_recoverable(true)
+                    .with_remediation("Install a compatible GPU provider or explicitly select CPU")
+            })
+            .collect()
+    }
+
     fn clear_sessions(&self) {
         if let Ok(mut sessions) = self.sessions.lock() {
             let count = sessions.len();
@@ -509,5 +521,10 @@ mod tests {
             .iter()
             .any(|item| item == "CPU"));
         assert!(backend.provider_fallbacks().is_empty());
+        let diagnostics = backend.runtime_diagnostics();
+        assert_eq!(diagnostics.runtime, "onnxruntime");
+        assert!(diagnostics.available);
+        assert_eq!(diagnostics.selected_provider, "CPU");
+        assert!(diagnostics.available_providers.contains(&"CPU".to_string()));
     }
 }

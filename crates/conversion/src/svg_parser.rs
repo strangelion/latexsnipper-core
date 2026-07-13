@@ -1,4 +1,7 @@
-use latexsnipper_ast::{Inline, Rect, ShapeBlock, ShapeStyle, ShapeType, TextRun};
+use latexsnipper_ast::{
+    Diagnostic, DiagnosticLevel, Inline, Rect, ShapeBlock, ShapeStyle, ShapeType, TextRun,
+    W_UNSUPPORTED_FEATURE,
+};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
@@ -7,11 +10,24 @@ use quick_xml::Reader;
 /// Handles basic SVG primitives: `<rect>`, `<circle>`, `<ellipse>`, `<line>`,
 /// `<polyline>`, `<polygon>`, `<text>`, and `<g>` (groups).
 ///
-/// Unsupported elements are silently skipped.
+/// Unsupported elements are reported by [`parse_svg`] and can be preserved by
+/// the unified importer as an opaque source asset.
 pub fn parse_svg_to_shapes(svg: &str) -> Vec<ShapeBlock> {
+    parse_svg(svg).shapes
+}
+
+#[derive(Debug, Default)]
+pub struct SvgParseResult {
+    pub shapes: Vec<ShapeBlock>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+pub fn parse_svg(svg: &str) -> SvgParseResult {
     let mut reader = Reader::from_str(svg);
     reader.config_mut().trim_text(true);
     let mut shapes = Vec::new();
+    let mut diagnostics = Vec::new();
+    let mut reported_unsupported = std::collections::HashSet::new();
     let mut buf = Vec::new();
     let mut current_transform: Option<String> = None;
 
@@ -63,7 +79,8 @@ pub fn parse_svg_to_shapes(svg: &str) -> Vec<ShapeBlock> {
                             });
                         }
                     }
-                    _ => {}
+                    "svg" | "defs" | "title" | "desc" => {}
+                    _ => report_unsupported(&tag, &mut reported_unsupported, &mut diagnostics),
                 }
             }
             Ok(Event::Empty(ref e)) => {
@@ -98,7 +115,8 @@ pub fn parse_svg_to_shapes(svg: &str) -> Vec<ShapeBlock> {
                             shapes.push(shape);
                         }
                     }
-                    _ => {}
+                    "svg" | "defs" | "title" | "desc" => {}
+                    _ => report_unsupported(&tag, &mut reported_unsupported, &mut diagnostics),
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -117,7 +135,29 @@ pub fn parse_svg_to_shapes(svg: &str) -> Vec<ShapeBlock> {
         buf.clear();
     }
 
-    shapes
+    SvgParseResult {
+        shapes,
+        diagnostics,
+    }
+}
+
+fn report_unsupported(
+    tag: &str,
+    reported: &mut std::collections::HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if reported.insert(tag.to_string()) {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticLevel::Warning,
+                W_UNSUPPORTED_FEATURE,
+                format!("SVG element <{tag}> was preserved in the source asset but not converted to a shape"),
+            )
+            .with_formats(Some("SVG"), None)
+            .with_recoverable(true)
+            .with_remediation("Use SVG round-trip preservation or rasterize the source asset"),
+        );
+    }
 }
 
 // ── Element parsers ──

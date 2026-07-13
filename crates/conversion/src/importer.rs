@@ -13,8 +13,8 @@ use latexsnipper_syntax::Parser as _;
 
 use crate::{
     extract_pdf_text_bytes, parse_html_to_document, parse_markdown_to_document,
-    parse_mathml_to_latex, parse_omml_to_latex, parse_svg_to_shapes, parse_typst_to_latex,
-    read_docx_bytes, read_pptx_bytes, read_xlsx_bytes,
+    parse_mathml_to_latex, parse_omml_to_latex, parse_typst_to_latex, read_docx_bytes,
+    read_pptx_bytes, read_xlsx_bytes,
 };
 
 /// Unified, signature-first document importer for file paths and memory buffers.
@@ -92,11 +92,30 @@ impl DocumentImporter {
             ),
             InputFormat::ImageSvg => {
                 let svg = utf8_text(bytes)?;
-                let blocks = parse_svg_to_shapes(svg)
-                    .into_iter()
-                    .map(Block::Shape)
-                    .collect();
-                document_with_blocks(blocks)
+                let parsed = crate::parse_svg(svg);
+                let blocks = parsed.shapes.into_iter().map(Block::Shape).collect();
+                let mut document = document_with_blocks(blocks);
+                document.diagnostics = parsed.diagnostics;
+                document.assets.push(MediaAsset {
+                    id: AssetId("source-svg".to_string()),
+                    format: AssetFormat::Svg,
+                    mime_type: Some("image/svg+xml".to_string()),
+                    role: MediaRole::Diagram,
+                    storage: AssetStorage::InlineBase64 {
+                        data: base64::engine::general_purpose::STANDARD.encode(bytes),
+                    },
+                    width: None,
+                    height: None,
+                    dpi: None,
+                    color_space: None,
+                    checksum: None,
+                    alt_text: Some("Original SVG source".to_string()),
+                    metadata: std::collections::HashMap::from([(
+                        "preservation".to_string(),
+                        serde_json::Value::String("opaque-source".to_string()),
+                    )]),
+                });
+                document
             }
             InputFormat::JsonAst => serde_json::from_slice(bytes).map_err(|e| {
                 SnipperError::InvalidFormat(format!("Invalid Document JSON AST: {e}"))
@@ -545,5 +564,36 @@ mod tests {
         )
         .unwrap();
         assert_eq!(imported.block_count(), 1);
+    }
+
+    #[test]
+    fn svg_import_preserves_unknown_elements_and_reports_fidelity() {
+        let source = br#"<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L10 10"/><rect width="5" height="6"/></svg>"#;
+        let imported = DocumentImporter::from_bytes(
+            source,
+            Some(InputFormat::ImageSvg),
+            ImportOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(imported.block_count(), 1);
+        assert!(imported
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == latexsnipper_ast::W_UNSUPPORTED_FEATURE));
+        let source_asset = imported
+            .assets
+            .iter()
+            .find(|asset| asset.id.0 == "source-svg")
+            .expect("original SVG must be preserved");
+        let AssetStorage::InlineBase64 { data } = &source_asset.storage else {
+            panic!("SVG source must be inline and byte preserving");
+        };
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .unwrap(),
+            source
+        );
     }
 }

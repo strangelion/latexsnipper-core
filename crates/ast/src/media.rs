@@ -155,6 +155,34 @@ pub const W_MISSING_ASSET_REF: &str = "W_MISSING_ASSET_REF";
 pub const E_API_CALL_FAILED: &str = "E_API_CALL_FAILED";
 /// JSON schema validation failed.
 pub const E_SCHEMA_VALIDATION_FAILED: &str = "E_SCHEMA_VALIDATION_FAILED";
+/// An input feature has no semantic representation in the requested output.
+pub const W_UNSUPPORTED_FEATURE: &str = "W_UNSUPPORTED_FEATURE";
+/// Source content was retained as an opaque asset for lossless round trips.
+pub const I_OPAQUE_OBJECT_PRESERVED: &str = "I_OPAQUE_OBJECT_PRESERVED";
+/// Page or object geometry could not be preserved exactly.
+pub const W_LAYOUT_LOSS: &str = "W_LAYOUT_LOSS";
+/// Character or object styling could not be preserved exactly.
+pub const W_STYLE_LOSS: &str = "W_STYLE_LOSS";
+/// Formula output used a non-native fallback.
+pub const W_FORMULA_FALLBACK: &str = "W_FORMULA_FALLBACK";
+/// A requested font was unavailable.
+pub const W_MISSING_FONT: &str = "W_MISSING_FONT";
+/// A required inference model was unavailable.
+pub const E_MISSING_MODEL: &str = "E_MISSING_MODEL";
+/// A package failed structural validation.
+pub const E_INVALID_PACKAGE: &str = "E_INVALID_PACKAGE";
+/// A package relationship was missing or invalid.
+pub const E_RELATIONSHIP_ERROR: &str = "E_RELATIONSHIP_ERROR";
+/// An external executable or service was unavailable.
+pub const W_EXTERNAL_DEPENDENCY_UNAVAILABLE: &str = "W_EXTERNAL_DEPENDENCY_UNAVAILABLE";
+/// OCR was used because native extraction was unavailable.
+pub const I_OCR_FALLBACK_USED: &str = "I_OCR_FALLBACK_USED";
+/// A requested GPU provider could not be used.
+pub const W_GPU_PROVIDER_FALLBACK: &str = "W_GPU_PROVIDER_FALLBACK";
+/// An asset could not be decoded.
+pub const W_ASSET_DECODE_FAILURE: &str = "W_ASSET_DECODE_FAILURE";
+/// An encrypted input cannot be opened without credentials.
+pub const E_ENCRYPTED_FILE: &str = "E_ENCRYPTED_FILE";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
@@ -192,6 +220,46 @@ impl Diagnostic {
     pub fn with_recoverable(mut self, recoverable: bool) -> Self {
         self.recoverable = recoverable;
         self
+    }
+
+    /// Attach stable input/output format context without changing the public schema.
+    pub fn with_formats(mut self, input: Option<&str>, output: Option<&str>) -> Self {
+        self.insert_data("input_format", input);
+        self.insert_data("output_format", output);
+        self
+    }
+
+    /// Attach a page, slide, or sheet index and an optional block/asset identifier.
+    pub fn with_location(
+        mut self,
+        container_kind: &str,
+        container_index: usize,
+        object_id: Option<&str>,
+    ) -> Self {
+        self.insert_data("container_kind", Some(container_kind));
+        self.insert_data("container_index", Some(container_index));
+        self.insert_data("object_id", object_id);
+        self
+    }
+
+    /// Attach actionable remediation for integrations and CLI JSON output.
+    pub fn with_remediation(mut self, remediation: impl Into<String>) -> Self {
+        self.insert_data("suggested_remediation", Some(remediation.into()));
+        self
+    }
+
+    fn insert_data<T: serde::Serialize>(&mut self, key: &str, value: Option<T>) {
+        let Some(value) = value else {
+            return;
+        };
+        if !self.data.is_object() {
+            self.data = serde_json::json!({});
+        }
+        if let Some(object) = self.data.as_object_mut() {
+            if let Ok(value) = serde_json::to_value(value) {
+                object.insert(key.to_string(), value);
+            }
+        }
     }
 }
 

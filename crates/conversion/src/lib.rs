@@ -58,7 +58,7 @@ pub use package_export::DocumentExportService;
 pub use pdf_native::{extract_pdf_text, extract_pdf_text_bytes};
 pub use pdf_overlay::{overlay_pdf, overlay_pdf_with_options, PdfOverlayOptions};
 pub use pptx_reader::{read_pptx, read_pptx_bytes};
-pub use svg_parser::parse_svg_to_shapes;
+pub use svg_parser::{parse_svg, parse_svg_to_shapes, SvgParseResult};
 pub use table_export::TableExporter;
 pub use table_parser::{
     parse_html_table, parse_latex_table, parse_markdown_table, parse_tsv_table, parse_typst_table,
