@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Signature-first unified import for paths and buffers across raster images, SVG, PDF,
+  Office OOXML, Markdown, HTML, LaTeX, Typst, MathML, OMML, JSON AST, and plain text.
+- Binary-safe PDF/PNG/DOCX/PPTX/XLSX artifacts with MIME, SHA-256, and exact byte size.
+- Reopen-tested OOXML package writers, append-only PDF overlay, generated capability registry,
+  structured fidelity diagnostics, and runtime provider diagnostics.
+- ONNX execution-provider registration for CUDA, DirectML, CoreML, and CPU fallback on
+  Windows, Linux, and macOS.
+- Cross-platform CI checks and a checksum-verified Windows real-model test job.
+
+### Changed
+
+- `Snipper::from_file` now routes through the unified importer instead of assuming an image.
+- Synchronous OCR SDK APIs execute on a worker thread and are safe inside an existing Tokio runtime.
+- Visual and Office exporters are documented as experimental/best-effort instead of being
+  described as universally lossless.
+
+### Compatibility
+
+- `ExportArtifact.text` remains available for text callers; new code should use
+  `ExportArtifact.content`, `as_bytes()`, or `write_to()`.
+
 ## [2.0.0] - 2026-07-08
 
 ### Migration Guide from 1.0.x

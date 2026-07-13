@@ -1148,6 +1148,34 @@ mod tests {
         }
     }
 
+    #[test]
+    fn readme_registry_markers_match_executable_formats() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .unwrap();
+        let readme = std::fs::read_to_string(root.join("README.md")).unwrap();
+        let inputs = crate::DocumentImporter::supported_formats()
+            .iter()
+            .map(|format| input_label(*format))
+            .collect::<Vec<_>>()
+            .join(",");
+        let outputs = DocumentExportService::supported_formats()
+            .iter()
+            .map(|format| output_label(*format))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        assert!(
+            readme.contains(&format!("<!-- capability-inputs: {inputs} -->")),
+            "README input registry marker drifted"
+        );
+        assert!(
+            readme.contains(&format!("<!-- capability-outputs: {outputs} -->")),
+            "README output registry marker drifted"
+        );
+    }
+
     fn assert_package_entries(bytes: &[u8], required: &[&str]) {
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
         for entry in required {

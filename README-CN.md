@@ -25,6 +25,14 @@
 
 ## 为什么选择 LaTeXSnipper Core？
 
+> 当前生产状态：语义文本转换为稳定能力；PDF/SVG/PNG 以及
+> DOCX/PPTX/XLSX 包导出属于实验性或 best-effort 能力。发生样式、版式或对象降级时，
+> API 会返回结构化诊断。只有启用 `ImportOptions::preserve_unknown_parts` 时，
+> 才会为 Office round-trip 保留未知 OOXML parts。请以
+> `snipper capabilities --format json` 的可执行注册表为准。
+
+完整边界见 [生产能力与保真策略](docs/production-capabilities.md)。
+
 | 特性 | 说明 |
 |------|------|
 | **平台无关** | 纯 Rust 架构，无 UI 依赖 — 可在桌面、移动端、Office 或 Web 上运行 |

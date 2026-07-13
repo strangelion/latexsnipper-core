@@ -18,7 +18,9 @@ crates/tests/benches/
 └── recognition_bench.rs  # 三种识别模式基准测试（harness=false）
 ```
 
-## 当前测试覆盖（151 项）
+## 测试分层
+
+测试数量由 `cargo test` 动态决定，不在文档中维护易漂移的固定总数。
 
 | 测试组 | 测试数 | 覆盖内容 |
 |---|---|---|
@@ -47,8 +49,11 @@ cargo test --workspace
 # 统一测试
 cargo test -p latexsnipper-tests
 
-# 真实模型测试（需要 models/）
+# 本地真实模型测试（缺模型时明确显示 skip）
 cargo test -p latexsnipper-tests --test real_model -- --nocapture
+
+# CI 等强制门禁：缺模型或 fixture 必须失败
+LATEXSNIPPER_REQUIRE_REAL_MODELS=1 cargo test -p latexsnipper-tests --test real_model -- --nocapture
 
 # Dual-track 对照测试
 cargo test -p latexsnipper-tests --test dual_track -- --nocapture
@@ -66,6 +71,14 @@ cargo bench --bench recognition_bench -- --nocapture
 5. `contract_tests.rs`：API 契约测试
 6. 测试文件不打包进成品（.gitignore 已配置）
 7. 新增功能必须同步添加测试
+
+## CI 门禁
+
+- Windows、Linux、macOS：`cargo check --workspace --all-targets --all-features`
+- Linux：workspace default/all-features tests、fmt、strict Clippy、doc tests、feature matrix、MSRV 1.88.0
+- Windows real-model：运行 `scripts/setup-real-model-tests.ps1`，按 manifest SHA-256
+  校验公式/文本/表格模型，并单独校验方向模型 SHA-256；随后强制执行 real-model 与 table E2E。
+- `LATEXSNIPPER_REQUIRE_REAL_MODELS=1` 下不存在“打印 skipping 后成功”的路径。
 
 ## 文件排除
 

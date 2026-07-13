@@ -33,6 +33,10 @@ pub trait RuntimeBackend: Send + Sync {
     fn create_session(&self, handle: &ModelHandle, acceleration: AccelerationMode) -> Result<Box<dyn InferenceSession>>;
     fn name(&self) -> &str;
     fn is_available(&self) -> bool;
+    fn selected_provider(&self) -> String;
+    fn available_providers(&self) -> Vec<String>;
+    fn provider_diagnostics(&self) -> Vec<Diagnostic>;
+    fn runtime_diagnostics(&self) -> RuntimeDiagnostics;
 }
 ```
 
@@ -176,6 +180,13 @@ pub struct OnnxRuntimeBackend {
 | `OnnxRuntimeBackend::with_acceleration(models_dir, accel)` | 指定加速模式 |
 | `platform()` | 返回检测到的平台 |
 | `acceleration()` | 返回当前加速模式 |
+| `selected_provider()` | 最近创建 session 实际选中的 provider |
+| `available_providers()` | 当前 ORT build 和系统可用的 provider |
+| `runtime_diagnostics()` | runtime/provider 的可序列化诊断快照 |
+
+Provider 选择顺序为：Windows `CUDA → DirectML → CPU`，Linux
+`CUDA → CPU`，macOS `CoreML → CPU`。注册失败会恢复 session builder、继续尝试下一项，
+最终 CPU fallback 会产生 `W_GPU_PROVIDER_FALLBACK`，不会伪装为 GPU 成功。
 
 ### 模型路径解析
 

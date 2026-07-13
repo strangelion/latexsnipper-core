@@ -4,10 +4,10 @@
 
 **One-stop solution from images to multi-format documents**
 
-[![Rust](https://img.shields.io/badge/Rust-1.96+-orange?logo=rust)]()
+[![Rust](https://img.shields.io/badge/MSRV-1.88.0-orange?logo=rust)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
 [![Status](https://img.shields.io/badge/Status-Core%20Pipeline%20Working-brightgreen)]()
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)]()
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 [![Clippy](https://img.shields.io/badge/Clippy-0%20warnings-brightgreen)]()
 [![Version](https://img.shields.io/badge/Version-2.0.0-blue)]()
 
@@ -24,6 +24,18 @@
 ---
 
 ## Quick Start
+
+> Production status: semantic text conversion is stable. PDF/SVG/PNG and
+> DOCX/PPTX/XLSX package export are experimental/best-effort and emit
+> structured diagnostics for downgraded content. Opaque OOXML parts are
+> retained only when `ImportOptions::preserve_unknown_parts` is enabled.
+> Query the executable registry with `snipper capabilities --format json`.
+
+<!-- capability-inputs: PNG,JPEG,WebP,BMP,TIFF,GIF,SVG,PDF,DOCX,PPTX,XLSX,HTML,Markdown,LaTeX,Typst,MathML,OMML,JSON AST,Plain text -->
+<!-- capability-outputs: JSON AST,Plain text,Markdown,LaTeX,Typst,HTML,MathML,OMML,SVG,PDF,PNG,DOCX,PPTX,XLSX -->
+
+See [Production capability and fidelity policy](docs/production-capabilities.md)
+for the exact stability definitions and inherent limitations.
 
 ```rust
 use latexsnipper_engine::sdk::Snipper;

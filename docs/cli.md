@@ -13,9 +13,33 @@
 | 命令 | 说明 | 状态 |
 |------|------|------|
 | `snipper recognize` | 识别图像内容并导出 | ✅ 可用 |
+| `snipper import` | 统一导入并输出 JSON AST | ✅ 可用 |
+| `snipper convert` | 统一 AST 跨格式转换 | ✅ 可用 |
+| `snipper export` | SVG/PDF/PNG/纯文本视觉导出 | ⚠️ 实验性 |
+| `snipper inspect` | 检查格式、页、块、资产与诊断 | ✅ 可用 |
+| `snipper validate` | 解析并验证输入包 | ✅ 可用 |
+| `snipper capabilities` | 查询真实注册表与 runtime provider | ✅ 可用 |
 | `snipper parse` | 解析 LaTeX 为 AST | ✅ 可用 |
 | `snipper render` | 渲染 AST 为 LaTeX | ✅ 可用 |
 | `snipper version` | 显示版本信息 | ✅ 可用 |
+
+## 统一导入与转换
+
+```bash
+snipper convert input.docx --to markdown -o output.md
+snipper convert input.pptx --to pdf -o output.pdf
+snipper convert input.xlsx --to html -o output.html
+snipper convert input.pdf --to docx -o output.docx
+snipper convert input.md --to docx -o output.docx
+snipper convert input.json --to svg -o page.svg
+snipper inspect input.docx --json
+snipper validate output.docx
+snipper capabilities --format json
+```
+
+PDF、PNG、DOCX、PPTX、XLSX 是 binary target，必须提供 `-o/--output`；CLI
+直接写入 bytes，不经过 UTF-8 转换。转换诊断写入 stderr，机器可读的能力与 runtime
+诊断通过 `capabilities --format json` 输出。
 
 ## recognize 命令
 
