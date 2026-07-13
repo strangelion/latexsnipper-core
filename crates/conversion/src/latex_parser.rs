@@ -1032,7 +1032,7 @@ mod tests {
                     // The subscript merge happens at parse() level — check it worked
                     // \lim is emitted as Operator("lim"), then _ is parsed as
                     // Subscript{empty, ...}, then parse() merges them
-                    let result = format!("{:?}", &nodes[0]);
+                    let result = format!("{:?}", nodes[0]);
                     assert!(result.contains("lim"), "lim missing: {}", result);
                 }
             }
