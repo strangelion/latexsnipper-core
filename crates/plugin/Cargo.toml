@@ -9,4 +9,6 @@ publish = false
 latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
 serde_json.workspace = true
+serde.workspace = true
 log.workspace = true
+semver = "1"

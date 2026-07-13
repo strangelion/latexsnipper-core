@@ -3,6 +3,7 @@ use latexsnipper_foundation::Result;
 
 use crate::request::PluginRequest;
 use crate::response::PluginResponse;
+use crate::PluginManifest;
 
 /// Trait for extending Core capabilities with standard interfaces.
 ///
@@ -19,6 +20,11 @@ pub trait Plugin: Send + Sync {
 
     /// Plugin version.
     fn version(&self) -> &str;
+
+    /// Return the versioned identity, ordering, permission, and hook contract.
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::built_in(self.name(), self.version())
+    }
 
     /// Initialize the plugin.
     /// Called once when the plugin is registered.
@@ -40,6 +46,7 @@ pub trait Plugin: Send + Sync {
 pub struct TransformPlugin {
     name: String,
     version: String,
+    manifest: PluginManifest,
     #[allow(clippy::type_complexity)]
     transform: Box<dyn Fn(&mut Document) -> Result<()> + Send + Sync>,
 }
@@ -50,11 +57,21 @@ impl TransformPlugin {
         version: impl Into<String>,
         transform: impl Fn(&mut Document) -> Result<()> + Send + Sync + 'static,
     ) -> Self {
+        let name = name.into();
+        let version = version.into();
         Self {
-            name: name.into(),
-            version: version.into(),
+            manifest: PluginManifest::built_in(name.clone(), version.clone()),
+            name,
+            version,
             transform: Box::new(transform),
         }
+    }
+
+    pub fn with_manifest(mut self, manifest: PluginManifest) -> Self {
+        self.name = manifest.id.clone();
+        self.version = manifest.version.clone();
+        self.manifest = manifest;
+        self
     }
 }
 
@@ -65,6 +82,10 @@ impl Plugin for TransformPlugin {
 
     fn version(&self) -> &str {
         &self.version
+    }
+
+    fn manifest(&self) -> PluginManifest {
+        self.manifest.clone()
     }
 
     fn handle(&self, request: &PluginRequest) -> Result<PluginResponse> {
