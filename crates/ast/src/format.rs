@@ -346,6 +346,18 @@ pub struct ImportOptions {
     pub max_decompressed_size: u64,
     #[serde(default = "default_max_text_size")]
     pub max_text_size: u64,
+    #[serde(default = "default_max_zip_entries")]
+    pub max_zip_entries: usize,
+    #[serde(default = "default_max_compression_ratio")]
+    pub max_compression_ratio: u64,
+    #[serde(default = "default_max_xml_depth")]
+    pub max_xml_depth: usize,
+    #[serde(default = "default_max_xml_elements")]
+    pub max_xml_elements: usize,
+    #[serde(default = "default_max_pages")]
+    pub max_pages: usize,
+    #[serde(default = "default_max_assets")]
+    pub max_assets: usize,
 }
 
 impl Default for ImportOptions {
@@ -359,6 +371,12 @@ impl Default for ImportOptions {
             preserve_unknown_parts: false,
             max_decompressed_size: default_max_decompressed_size(),
             max_text_size: default_max_text_size(),
+            max_zip_entries: default_max_zip_entries(),
+            max_compression_ratio: default_max_compression_ratio(),
+            max_xml_depth: default_max_xml_depth(),
+            max_xml_elements: default_max_xml_elements(),
+            max_pages: default_max_pages(),
+            max_assets: default_max_assets(),
         }
     }
 }
@@ -369,6 +387,30 @@ fn default_max_decompressed_size() -> u64 {
 
 fn default_max_text_size() -> u64 {
     64 * 1024 * 1024
+}
+
+fn default_max_zip_entries() -> usize {
+    10_000
+}
+
+fn default_max_compression_ratio() -> u64 {
+    200
+}
+
+fn default_max_xml_depth() -> usize {
+    128
+}
+
+fn default_max_xml_elements() -> usize {
+    1_000_000
+}
+
+fn default_max_pages() -> usize {
+    10_000
+}
+
+fn default_max_assets() -> usize {
+    50_000
 }
 
 /// Options for exporting a document.
