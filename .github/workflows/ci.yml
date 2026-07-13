@@ -89,6 +89,10 @@ jobs:
         run: ./scripts/setup-real-model-tests.ps1
       - name: Run text, formula, orientation, and multi-model tests
         run: cargo test -p latexsnipper-tests --test real_model -- --nocapture
+      - name: Run real-model pipeline integration tests
+        run: cargo test -p latexsnipper-tests --test pipeline_integration -- --nocapture
+      - name: Run full recognition pipeline tests
+        run: cargo test -p latexsnipper-tests --test pipeline_e2e -- --nocapture
       - name: Run table recognition test
         run: cargo test --test table_e2e -- --nocapture
 

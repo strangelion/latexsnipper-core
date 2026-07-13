@@ -34,6 +34,14 @@ fn fixtures_dir() -> PathBuf {
         .join("fixtures")
 }
 
+fn skip_or_require_models(reason: &str) {
+    assert!(
+        std::env::var_os("LATEXSNIPPER_REQUIRE_REAL_MODELS").is_none(),
+        "required pipeline E2E input is missing: {reason}"
+    );
+    println!("Skipping pipeline E2E test: {reason}");
+}
+
 fn rgba_to_rgb(img: &SnipperImage) -> SnipperImage {
     let mut rgb = Vec::with_capacity((img.width() * img.height() * 3) as usize);
     for chunk in img.pixels().chunks_exact(4) {
@@ -130,7 +138,7 @@ fn test_formula_pipeline_e2e() {
     let tok_path = models.join("formula-rec/trocr-deit/tokenizer.json");
 
     if !det_path.exists() || !enc_path.exists() || !image_path.exists() {
-        println!("Skipping: models or fixture not found");
+        skip_or_require_models("formula pipeline models or fixture");
         return;
     }
 
@@ -274,7 +282,7 @@ fn test_text_pipeline_e2e() {
     let keys_path = keys_candidates.iter().find(|p| p.exists());
 
     if det_path.is_none() || rec_path.is_none() || !image_path.exists() {
-        println!("Skipping: models or fixture not found");
+        skip_or_require_models("text pipeline models or fixture");
         return;
     }
 
@@ -473,7 +481,7 @@ fn test_mixed_pipeline_e2e() {
     let keys_path = keys_candidates.iter().find(|p| p.exists());
 
     if !det_path.exists() || !enc_path.exists() || !image_path.exists() {
-        println!("Skipping: models or fixture not found");
+        skip_or_require_models("mixed pipeline models or fixture");
         return;
     }
 

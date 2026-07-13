@@ -32,6 +32,14 @@ fn fixtures_dir() -> PathBuf {
         .join("fixtures")
 }
 
+fn skip_or_require_models(reason: &str) {
+    assert!(
+        std::env::var_os("LATEXSNIPPER_REQUIRE_REAL_MODELS").is_none(),
+        "required pipeline integration input is missing: {reason}"
+    );
+    println!("Skipping pipeline integration test: {reason}");
+}
+
 fn rgba_to_rgb(img: &SnipperImage) -> SnipperImage {
     let mut rgb = Vec::with_capacity((img.width() * img.height() * 3) as usize);
     for chunk in img.pixels().chunks_exact(4) {
@@ -50,7 +58,7 @@ fn test_formula_detection_with_real_model() {
     let image_path = fixtures.join("formula.png");
 
     if !model_path.exists() || !image_path.exists() {
-        println!("Skipping: model or fixture not found");
+        skip_or_require_models("formula detection model or fixture");
         return;
     }
 
@@ -96,7 +104,7 @@ fn test_formula_recognition_with_real_model() {
     let image_path = fixtures.join("formula.png");
 
     if !enc_path.exists() || !dec_path.exists() || !image_path.exists() {
-        println!("Skipping: models or fixture not found");
+        skip_or_require_models("formula recognition models or fixture");
         return;
     }
 
@@ -145,7 +153,7 @@ fn test_text_detection_with_real_model() {
     let image_path = fixtures.join("text.png");
 
     if model_path.is_none() || !image_path.exists() {
-        println!("Skipping: model or fixture not found");
+        skip_or_require_models("text detection model or fixture");
         return;
     }
 
@@ -214,7 +222,7 @@ fn test_text_recognition_with_real_model() {
     let keys_path = keys_candidates.iter().find(|p| p.exists());
 
     if rec_path.is_none() || keys_path.is_none() || !image_path.exists() {
-        println!("Skipping: model or fixture not found");
+        skip_or_require_models("text recognition model, keys, or fixture");
         return;
     }
 
