@@ -252,3 +252,48 @@ fn completions_and_manpages_are_generated_from_the_cli_schema() {
     assert!(manpage.contains("convert"));
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn model_purge_requires_confirmation_stays_scoped_and_preserves_manifest() {
+    let directory = workspace();
+    let models = directory.join("models");
+    let first = models.join("formula-det/default");
+    let second = models.join("text-rec/base");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    std::fs::write(first.join("model.onnx"), b"fixture").unwrap();
+    std::fs::write(second.join("model.onnx"), b"fixture").unwrap();
+    std::fs::write(models.join("model-manifest.json"), b"{}").unwrap();
+
+    let refused = snipper()
+        .current_dir(&directory)
+        .args(["models", "purge"])
+        .output()
+        .unwrap();
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(first.is_dir());
+
+    let traversal = snipper()
+        .current_dir(&directory)
+        .args(["models", "purge", "--category", "../outside", "--yes"])
+        .output()
+        .unwrap();
+    assert_eq!(traversal.status.code(), Some(2));
+    assert!(second.is_dir());
+
+    let removed = snipper()
+        .current_dir(&directory)
+        .args(["models", "purge", "--yes"])
+        .output()
+        .unwrap();
+    assert!(
+        removed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&removed.stderr)
+    );
+    assert!(!first.exists());
+    assert!(!second.exists());
+    assert!(models.join("model-manifest.json").is_file());
+
+    std::fs::remove_dir_all(directory).unwrap();
+}

@@ -420,6 +420,21 @@ snipper models verify --category formula-det"
         #[arg(short = 'c', long)]
         category: Option<String>,
     },
+
+    /// Remove installed model variants while preserving the manifest
+    Purge {
+        /// Limit removal to one model category
+        #[arg(short = 'c', long)]
+        category: Option<String>,
+
+        /// Limit removal to one variant; requires --category
+        #[arg(long, requires = "category")]
+        variant: Option<String>,
+
+        /// Confirm destructive removal
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 fn resolve_format(format: &str, output: Option<&str>) -> String {
@@ -880,6 +895,15 @@ fn main() {
             }
             ModelsCommand::Verify { category } => {
                 handle_models_verify(category);
+            }
+            ModelsCommand::Purge {
+                category,
+                variant,
+                yes,
+            } => {
+                if let Err(error) = handle_models_purge(category, variant, yes) {
+                    exit_with_code(error.code, "Model purge failed", error.message);
+                }
             }
         },
         Commands::Job(cmd) => match cmd {
@@ -1909,6 +1933,84 @@ fn handle_models_verify(category: Option<String>) {
 }
 
 // ── Job handlers ─────────────────────────────────────────────
+
+fn handle_models_purge(
+    category: Option<String>,
+    variant: Option<String>,
+    confirmed: bool,
+) -> Result<(), CliFailure> {
+    if !confirmed {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "refusing to remove models without --yes",
+        ));
+    }
+    if let Some(value) = category.as_deref() {
+        validate_storage_name(value, "category")?;
+    }
+    if let Some(value) = variant.as_deref() {
+        validate_storage_name(value, "variant")?;
+    }
+
+    let models_dir = std::path::PathBuf::from("models");
+    let manager = latexsnipper_model::ModelManager::new(models_dir.clone());
+    let categories = if let Some(category) = category {
+        vec![category]
+    } else if models_dir.is_dir() {
+        let mut names = std::fs::read_dir(&models_dir)
+            .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().is_dir())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|name| validate_storage_name(name, "category").is_ok())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    } else {
+        Vec::new()
+    };
+
+    let mut removed = 0usize;
+    for category in categories {
+        let variants = if let Some(variant) = variant.as_ref() {
+            vec![variant.clone()]
+        } else {
+            manager.list_installed(&category)
+        };
+        for variant in variants {
+            let directory = manager.variant_dir(&category, &variant);
+            if !directory.is_dir() {
+                continue;
+            }
+            manager
+                .delete_variant(&category, &variant)
+                .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
+            removed += 1;
+            eprintln!("Removed {category}/{variant}");
+        }
+    }
+    eprintln!("Removed {removed} installed model variant(s); manifest files were preserved.");
+    Ok(())
+}
+
+fn validate_storage_name(value: &str, label: &str) -> Result<(), CliFailure> {
+    let path = std::path::Path::new(value);
+    if value.is_empty()
+        || value == "."
+        || value == ".."
+        || path.components().count() != 1
+        || !matches!(
+            path.components().next(),
+            Some(std::path::Component::Normal(_))
+        )
+    {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            format!("invalid model {label}: {value}"),
+        ));
+    }
+    Ok(())
+}
 
 fn handle_job_run(input: &str, format: &str, output: Option<&str>, mode: &str) {
     use latexsnipper_engine::Job;
