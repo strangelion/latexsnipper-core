@@ -215,9 +215,17 @@ fn preprocess(image: &SnipperImage, params: &TextRecParams) -> (SnipperImage, u3
 pub fn load_keys(path: &Path) -> Result<(Vec<String>, usize)> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| SnipperError::Model(format!("Failed to read keys: {}", e)))?;
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    load_keys_from_str(&content, file_name)
+}
 
-    if path.file_name().and_then(|n| n.to_str()) == Some("inference.yml") {
-        return Ok((load_paddle_character_dict(&content), 1));
+/// Load character keys from in-memory text.
+pub fn load_keys_from_str(content: &str, file_name: &str) -> Result<(Vec<String>, usize)> {
+    if file_name == "inference.yml" {
+        return Ok((load_paddle_character_dict(content), 1));
     }
 
     // For .txt keys files, strip only newlines (not whitespace)

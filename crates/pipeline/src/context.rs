@@ -119,16 +119,30 @@ impl PipelineContext {
     }
 
     /// Get or initialize the shared text recognition service.
-    /// Uses ctx.backend, ctx.acceleration, and ctx.model_variants["text-rec"].
+    /// Uses the model resolver first and falls back to the native filesystem.
     pub fn get_or_init_text_rec_service(&mut self) -> Option<Arc<TextRecognitionService>> {
         if self.text_rec_service.is_some() {
             return self.text_rec_service.clone();
         }
+        let variant = self.model_variants.get("text-rec").cloned()?;
+        let backend = self.backend.clone()?;
+        if let Some(resolver) = &self.model_resolver {
+            if let Some(service) = TextRecognitionService::try_load_from_resolver(
+                resolver,
+                &variant,
+                backend,
+                self.acceleration,
+            ) {
+                let service = Arc::new(service);
+                self.text_rec_service = Some(service.clone());
+                return Some(service);
+            }
+        }
+
         let models_dir = self.models_dir.clone()?;
-        let variant = self.model_variants.get("text-rec").cloned();
         let service = TextRecognitionService::try_load(
             &models_dir,
-            variant.as_deref(),
+            Some(&variant),
             self.backend.clone(),
             self.acceleration,
         )?;

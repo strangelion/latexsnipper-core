@@ -43,6 +43,55 @@ impl Default for RecognitionParams {
     }
 }
 
+impl RecognitionParams {
+    /// Build recognition parameters from a model configuration.
+    pub fn from_config(config: &latexsnipper_model::ModelConfig) -> Self {
+        let mut params = Self::default();
+
+        if let Some(encoder) = &config.encoder {
+            if let Some(size) = encoder.input.shape.get(2) {
+                params.img_size = *size as u32;
+            }
+        }
+        if let Some(preprocessing) = &config.preprocessing {
+            if let Some(normalization) = &preprocessing.normalization {
+                if let Some(mean) = &normalization.mean {
+                    if mean.len() >= 3 {
+                        params.mean = [mean[0], mean[1], mean[2]];
+                    }
+                }
+                if let Some(std) = &normalization.std {
+                    if std.len() >= 3 {
+                        params.std = [std[0], std[1], std[2]];
+                    }
+                }
+            }
+        }
+        if let Some(decoder) = &config.decoder {
+            if let Some(max_length) = decoder.max_length {
+                params.max_tokens = max_length;
+            }
+            if let Some(eos_token_id) = decoder.eos_token_id {
+                params.eos_token_id = eos_token_id;
+                params.decoder_start_id = eos_token_id;
+            }
+            if let Some(pad_token_id) = decoder.pad_token_id {
+                params.pad_token_id = pad_token_id;
+            }
+        }
+        if let Some(decoding) = &config.decoding {
+            if let Some(beam_width) = decoding.beam_width {
+                params.beam_width = beam_width;
+            }
+            if let Some(top_k) = decoding.top_k {
+                params.top_k = top_k;
+            }
+        }
+
+        params
+    }
+}
+
 /// Recognize formula using TrOCR encoder + decoder.
 pub fn recognize_formula(
     image: &SnipperImage,
@@ -52,7 +101,17 @@ pub fn recognize_formula(
     params: &RecognitionParams,
 ) -> Result<RecognitionResult> {
     let tokenizer = load_tokenizer(tokenizer_path)?;
+    recognize_formula_with_tokenizer(image, encoder, decoder, &tokenizer, params)
+}
 
+/// Recognize a formula with an already loaded in-memory tokenizer.
+pub fn recognize_formula_with_tokenizer(
+    image: &SnipperImage,
+    encoder: &dyn InferenceSession,
+    decoder: &dyn InferenceSession,
+    tokenizer: &HashMap<i64, String>,
+    params: &RecognitionParams,
+) -> Result<RecognitionResult> {
     let resized = latexsnipper_image::operations::resize(image, params.img_size, params.img_size);
     let pixels = latexsnipper_image::operations::normalize(&resized, &params.mean, &params.std);
 
@@ -71,9 +130,9 @@ pub fn recognize_formula(
     let hidden_shape = encoder_outputs.first().unwrap().shape().to_vec();
 
     let (decoded_text, confidence) = if params.greedy {
-        greedy_decode(decoder, &hidden_states, &hidden_shape, &tokenizer, params)?
+        greedy_decode(decoder, &hidden_states, &hidden_shape, tokenizer, params)?
     } else {
-        beam_search(decoder, &hidden_states, &hidden_shape, &tokenizer, params)?
+        beam_search(decoder, &hidden_states, &hidden_shape, tokenizer, params)?
     };
 
     let text = latex_repair::repair_latex(&decoded_text);
@@ -184,7 +243,12 @@ fn greedy_decode(
 fn load_tokenizer(path: &Path) -> Result<HashMap<i64, String>> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| SnipperError::Model(format!("Failed to read tokenizer: {}", e)))?;
-    let json: serde_json::Value = serde_json::from_str(&content)
+    load_tokenizer_from_str(&content)
+}
+
+/// Load a tokenizer from an in-memory JSON string.
+pub fn load_tokenizer_from_str(content: &str) -> Result<HashMap<i64, String>> {
+    let json: serde_json::Value = serde_json::from_str(content)
         .map_err(|e| SnipperError::Model(format!("Invalid tokenizer JSON: {}", e)))?;
 
     let vocab = json

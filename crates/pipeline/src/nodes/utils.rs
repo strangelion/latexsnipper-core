@@ -1,5 +1,5 @@
 use latexsnipper_foundation::{Result, SnipperError};
-use latexsnipper_runtime::{ModelHandle, RuntimeBackend};
+use latexsnipper_runtime::{ModelHandle, ModelId, RuntimeBackend};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -69,6 +69,23 @@ pub fn resolve_variant(
     std::path::PathBuf,
 )> {
     if let Some(variant) = ctx.model_variants.get(category) {
+        if let Some(resolver) = &ctx.model_resolver {
+            let id = ModelId::new(category, variant);
+            if let Ok(config_text) = resolver.read_text_artifact(&id, "config.json") {
+                let config = latexsnipper_model::ModelConfig::from_json_str(&config_text)?;
+                let variant_dir = std::path::PathBuf::from("/virtual-models")
+                    .join(category)
+                    .join(variant);
+                let primary_name = config
+                    .pipeline
+                    .as_ref()
+                    .and_then(|pipeline| pipeline.model_files.as_ref())
+                    .and_then(|files| files.primary.clone())
+                    .unwrap_or_else(|| "model.onnx".to_string());
+                return Ok((config, variant_dir.join(primary_name), variant_dir));
+            }
+        }
+
         let variant_dir = models.join(category).join(variant);
         if !variant_dir.is_dir() {
             return Err(SnipperError::Model(format!(
@@ -101,15 +118,27 @@ pub fn resolve_model_handle(
     fallback_path: std::path::PathBuf,
 ) -> Result<ModelHandle> {
     if let Some(resolver) = &ctx.model_resolver {
-        let model_id = latexsnipper_runtime::ModelId::from_composite_key(id);
-        // Try resolver first
+        let category = id.split('/').next().unwrap_or(id);
+        if let Some(variant) = ctx.model_variants.get(category) {
+            let model_id = ModelId::new(category, variant);
+            if let Some(artifact) = fallback_path.file_name().and_then(|name| name.to_str()) {
+                match resolver.resolve_artifact(&model_id, artifact) {
+                    Ok(handle) => return Ok(handle),
+                    Err(error) if !fallback_path.exists() => return Err(error),
+                    Err(_) => {}
+                }
+            }
+        }
+
+        let model_id = ModelId::from_composite_key(id);
         match resolver.resolve(&model_id) {
             Ok(handle) => return Ok(handle),
-            Err(e) => {
+            Err(error) if !fallback_path.exists() => return Err(error),
+            Err(error) => {
                 log::info!(
                     "Model resolver failed for '{}': {}. Falling back to path {}",
                     id,
-                    e,
+                    error,
                     fallback_path.display()
                 );
             }

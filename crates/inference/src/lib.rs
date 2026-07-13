@@ -24,7 +24,9 @@ pub use formula_detector::{
     detect_formulas, filter_formula_detections, group_formula_detections, DetectionParams,
 };
 pub use formula_parser::parse_formula_latex;
-pub use formula_recognizer::{recognize_formula, RecognitionParams};
+pub use formula_recognizer::{
+    load_tokenizer_from_str, recognize_formula, recognize_formula_with_tokenizer, RecognitionParams,
+};
 pub use handwriting_detector::{
     detect_handwriting, filter_handwriting_detections, HandwritingDetParams,
 };
@@ -42,5 +44,7 @@ pub use table_transformer::{
     TABLE_DETECTION_LABELS, TABLE_STRUCTURE_LABELS,
 };
 pub use text_detector::{detect_text, TextDetParams};
-pub use text_recognizer::{load_keys, recognize_text, recognize_text_with_keys, TextRecParams};
+pub use text_recognizer::{
+    load_keys, load_keys_from_str, recognize_text, recognize_text_with_keys, TextRecParams,
+};
 pub use types::{DetectionBox, GridCell, RecognitionResult};

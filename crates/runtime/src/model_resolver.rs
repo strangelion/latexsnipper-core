@@ -1,5 +1,6 @@
 use crate::model_handle::ModelHandle;
 use latexsnipper_foundation::{Result, SnipperError};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -46,6 +47,42 @@ pub trait ModelResolver: Send + Sync {
 
     /// Check if a model is available.
     fn is_available(&self, id: &ModelId) -> bool;
+
+    /// Resolve a named artifact within a model package.
+    fn resolve_artifact(&self, id: &ModelId, artifact: &str) -> Result<ModelHandle> {
+        let key = format!("{}/{}", id.composite_key(), artifact);
+        self.resolve(&ModelId::from_composite_key(&key))
+    }
+
+    /// Read a UTF-8 artifact such as a tokenizer or model configuration.
+    fn read_text_artifact(&self, id: &ModelId, artifact: &str) -> Result<String> {
+        let handle = self.resolve_artifact(id, artifact)?;
+        let bytes = handle.model_bytes().ok_or_else(|| {
+            SnipperError::Model(format!(
+                "Text artifact is not available as bytes: {}/{}",
+                id.composite_key(),
+                artifact
+            ))
+        })?;
+        String::from_utf8(bytes.to_vec()).map_err(|error| {
+            SnipperError::Model(format!(
+                "Text artifact is not valid UTF-8 ({}/{}): {}",
+                id.composite_key(),
+                artifact,
+                error
+            ))
+        })
+    }
+
+    /// List the artifacts currently available for a model package.
+    fn list_artifacts(&self, _id: &ModelId) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// Normalize model-store keys across browser and native callers.
+pub fn normalize_key(key: &str) -> String {
+    key.replace('\\', "/").trim_start_matches('/').to_string()
 }
 
 /// Filesystem-based model resolver (native).
@@ -97,6 +134,53 @@ impl ModelResolver for FsModelResolver {
     fn is_available(&self, id: &ModelId) -> bool {
         self.resolve(id).is_ok()
     }
+
+    fn resolve_artifact(&self, id: &ModelId, artifact: &str) -> Result<ModelHandle> {
+        let path = self
+            .models_dir
+            .join(&id.category)
+            .join(&id.variant)
+            .join(artifact);
+        if path.exists() {
+            Ok(ModelHandle::with_path(
+                format!("{}/{}", id.composite_key(), artifact),
+                path,
+            ))
+        } else {
+            Err(SnipperError::Model(format!(
+                "Artifact not found: {}/{}",
+                id.composite_key(),
+                artifact
+            )))
+        }
+    }
+
+    fn read_text_artifact(&self, id: &ModelId, artifact: &str) -> Result<String> {
+        let path = self
+            .models_dir
+            .join(&id.category)
+            .join(&id.variant)
+            .join(artifact);
+        std::fs::read_to_string(&path).map_err(|error| {
+            SnipperError::Model(format!(
+                "Failed to read {}/{}: {}",
+                id.composite_key(),
+                artifact,
+                error
+            ))
+        })
+    }
+
+    fn list_artifacts(&self, id: &ModelId) -> Vec<String> {
+        let variant_dir = self.models_dir.join(&id.category).join(&id.variant);
+        std::fs::read_dir(variant_dir)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().is_file())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .collect()
+    }
 }
 
 /// In-memory model resolver (WASM).
@@ -114,7 +198,7 @@ impl MemoryModelResolver {
     /// Store a model by key.
     pub fn store(&self, key: impl Into<String>, bytes: Vec<u8>) {
         if let Ok(mut store) = self.store.lock() {
-            store.insert(key.into(), bytes);
+            store.insert(normalize_key(&key.into()), bytes);
         }
     }
 
@@ -122,13 +206,13 @@ impl MemoryModelResolver {
     pub fn has(&self, key: &str) -> bool {
         self.store
             .lock()
-            .map(|s| s.contains_key(key))
+            .map(|s| s.contains_key(&normalize_key(key)))
             .unwrap_or(false)
     }
 
     /// Get a model by key.
     pub fn get(&self, key: &str) -> Option<Vec<u8>> {
-        self.store.lock().ok()?.get(key).cloned()
+        self.store.lock().ok()?.get(&normalize_key(key)).cloned()
     }
 
     /// List all loaded model keys.
@@ -137,6 +221,31 @@ impl MemoryModelResolver {
             .lock()
             .map(|s| s.keys().cloned().collect())
             .unwrap_or_default()
+    }
+
+    /// Remove every loaded artifact.
+    pub fn clear(&self) {
+        if let Ok(mut store) = self.store.lock() {
+            store.clear();
+        }
+    }
+
+    /// Remove one loaded artifact.
+    pub fn remove(&self, key: &str) -> bool {
+        self.store
+            .lock()
+            .map(|mut store| store.remove(&normalize_key(key)).is_some())
+            .unwrap_or(false)
+    }
+
+    /// Return the number of loaded artifacts.
+    pub fn len(&self) -> usize {
+        self.store.lock().map(|store| store.len()).unwrap_or(0)
+    }
+
+    /// Return whether the store has no loaded artifacts.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -177,9 +286,28 @@ impl ModelResolver for MemoryModelResolver {
     fn is_available(&self, id: &ModelId) -> bool {
         self.has(&id.composite_key()) || self.has(&id.category)
     }
-}
 
-use std::collections::HashMap;
+    fn resolve_artifact(&self, id: &ModelId, artifact: &str) -> Result<ModelHandle> {
+        let key = format!("{}/{}", id.composite_key(), artifact);
+        if let Some(bytes) = self.get(&key) {
+            return Ok(ModelHandle::with_bytes(key, bytes));
+        }
+
+        Err(SnipperError::Model(format!(
+            "Artifact not found in memory store: {}",
+            key
+        )))
+    }
+
+    fn list_artifacts(&self, id: &ModelId) -> Vec<String> {
+        let prefix = format!("{}/", id.composite_key());
+        self.list()
+            .into_iter()
+            .filter(|key| key.starts_with(&prefix))
+            .map(|key| key[prefix.len()..].to_string())
+            .collect()
+    }
+}
 
 /// A shared model resolver that can be used across the pipeline.
 pub type SharedModelResolver = Arc<dyn ModelResolver>;
