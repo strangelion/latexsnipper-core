@@ -117,6 +117,23 @@ try {
     Assert-True ($attempts.Count -eq 2) "diagnostic log should contain every attempt"
     Assert-True (-not (Test-Path -LiteralPath "$output.partial")) "failed transfer should clean partial file"
 
+    $manifestPath = Join-Path (Split-Path -Parent $PSScriptRoot) "model-manifest.template.json"
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $orientation = $manifest.testAssets.orientation
+    Assert-True ($orientation.fileName -match "\.onnx$") "orientation input should be an ONNX model"
+    Assert-True ($orientation.sha256 -match "^[0-9a-f]{64}$") "orientation checksum should be a SHA-256 digest"
+    Assert-True ($orientation.sourceRevision -match "^[0-9a-f]{40}$") "orientation source should pin a commit"
+    Assert-True ($orientation.license -eq "Apache-2.0") "orientation source license should be explicit"
+    Assert-True (
+        $orientation.destination -eq "PP-LCNet_x1_0_doc_ori_infer/inference.onnx"
+    ) "orientation destination should match the real-model test contract"
+    Assert-True ($orientation.sources.Count -gt 0) "orientation model should have a verified source"
+    foreach ($source in $orientation.sources) {
+        Assert-True (
+            $source -match ("/resolve/" + $orientation.sourceRevision + "/inference\.onnx$")
+        ) "orientation URL should pin the declared source revision"
+    }
+
     Write-Host "VerifiedDownload tests passed."
 }
 finally {

@@ -18,11 +18,13 @@
                   },
     "testAssets":  {
                        "orientation":  {
-                                           "fileName":  "PP-LCNet_x1_0_doc_ori_infer.tar",
-                                           "sha256":  "282337df5c41f7cdf8dacd5acf71fddfdc10218399f4b318463c17f4eae96c97",
+                                           "fileName":  "PP-LCNet_x1_0_doc_ori_inference.onnx",
+                                           "sha256":  "af9a0a4f317ff0709ce752067807f819cb15d883f8ecad89f28df1c6ee2d9c92",
+                                           "destination":  "PP-LCNet_x1_0_doc_ori_infer/inference.onnx",
+                                           "sourceRevision":  "7330ab7039123e46af2dc03154b9969aa412c61d",
+                                           "license":  "Apache-2.0",
                                            "sources":  [
-                                                           "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-LCNet_x1_0_doc_ori_infer.tar",
-                                                           "https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/PP-LCNet_x1_0_doc_ori_infer.tar"
+                                                           "https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_doc_ori_onnx/resolve/7330ab7039123e46af2dc03154b9969aa412c61d/inference.onnx"
                                                        ]
                                        }
                    },

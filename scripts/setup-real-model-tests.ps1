@@ -132,7 +132,12 @@ try {
     }
 
     $orientation = $manifest.testAssets.orientation
-    if (-not $orientation -or -not $orientation.fileName -or -not $orientation.sha256) {
+    if (
+        -not $orientation -or
+        -not $orientation.fileName -or
+        -not $orientation.sha256 -or
+        -not $orientation.destination
+    ) {
         throw "Orientation test asset is missing from the model manifest"
     }
 
@@ -146,11 +151,26 @@ try {
         -TimeoutSeconds $TimeoutSeconds `
         -AttemptLog $attempts | Out-Null
 
-    $testModels = Join-Path $root "test-models"
-    New-Item -ItemType Directory -Path $testModels -Force | Out-Null
-    tar -xf $orientationArchive -C $testModels
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to extract orientation model"
+    $testModels = [System.IO.Path]::GetFullPath((Join-Path $root "test-models"))
+    $orientationDestination = [System.IO.Path]::GetFullPath(
+        (Join-Path $testModels $orientation.destination)
+    )
+    $testModelsPrefix = $testModels.TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    ) + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $orientationDestination.StartsWith(
+            $testModelsPrefix,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )) {
+        throw "Orientation model destination escapes the test-models directory"
+    }
+
+    New-Item -ItemType Directory -Path (Split-Path -Parent $orientationDestination) -Force | Out-Null
+    Copy-Item -LiteralPath $orientationArchive -Destination $orientationDestination -Force
+    $installedSha256 = Get-FileSha256 -Path $orientationDestination
+    if ($installedSha256 -ne $orientation.sha256.ToLowerInvariant()) {
+        throw "Installed orientation model checksum mismatch"
     }
 
     Write-Host "Verified real-model test assets are ready."
