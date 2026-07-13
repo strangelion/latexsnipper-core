@@ -349,12 +349,14 @@ mod tests {
             std::env::temp_dir().join(format!("latexsnipper-no-models-{}", std::process::id())),
         );
 
-        let result = Snipper::from_image_with_config(image, config, RecognizeMode::Formula);
-        if let Err(error) = result {
-            assert!(
-                !error.to_string().contains("OCR worker thread panicked"),
-                "synchronous OCR must not create a nested Tokio runtime"
+        let snipper = Snipper::from_image_with_config(image, config, RecognizeMode::Formula)
+            .expect(
+                "missing models should be reported as diagnostics without a nested runtime panic",
             );
-        }
+        assert!(snipper.document().diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("Formula detection model not found")
+        }));
     }
 }

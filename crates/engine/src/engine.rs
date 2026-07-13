@@ -570,6 +570,7 @@ impl SnipperEngine {
 
         // Extract blocks from artifacts (already sorted by PostprocessNode)
         let blocks = Self::collect_blocks_from_context(&ctx);
+        let diagnostics = ctx.diagnostics.into_iter().map(Into::into).collect();
 
         Ok(Document {
             metadata: Metadata::default(),
@@ -582,7 +583,7 @@ impl SnipperEngine {
                 background_asset_id: None,
             }],
             assets: Vec::new(),
-            diagnostics: Vec::new(),
+            diagnostics,
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
@@ -604,6 +605,7 @@ impl SnipperEngine {
 
         let graph = self.build_pipeline(mode);
         let mut doc_pages = Vec::new();
+        let mut diagnostics = Vec::new();
 
         for (page_idx, page_img) in pages.iter().enumerate() {
             if page_idx > 0 {
@@ -621,6 +623,7 @@ impl SnipperEngine {
 
             // Collect blocks (already sorted by PostprocessNode)
             let blocks = Self::collect_blocks_from_context(&ctx);
+            diagnostics.extend(ctx.diagnostics.into_iter().map(Into::into));
 
             doc_pages.push(Page {
                 width: page_img.width() as f32,
@@ -642,7 +645,7 @@ impl SnipperEngine {
             metadata: Metadata::default(),
             pages: doc_pages,
             assets: Vec::new(),
-            diagnostics: Vec::new(),
+            diagnostics,
             id_gen: latexsnipper_ast::NodeIdGenerator::new(),
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
