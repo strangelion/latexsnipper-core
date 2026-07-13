@@ -311,8 +311,8 @@ Engine
 | **Pipeline** | ✅ | Node-based async pipeline with ModelTask abstraction + ReadingOrder + ModelPackage fallback |
 | **Plugin** | ✅ | Plugin trait, Registry, TransformPlugin |
 | **FFI** | ✅ | Android JNI + iOS C FFI |
-| **WASM** | ✅ | Full parse/render/convert/recognize bindings with Tract backend |
-| **CLI** | ✅ | recognize/parse/render/version commands, file export, format hints, minigame |
+| **WASM** | ⚠️ | Stable semantic conversion; experimental async Tract recognition with model-gated capabilities |
+| **CLI** | ✅ | Unified convert, stdin/stdout, atomic output, diagnostics, doctor, recognition, and model commands |
 | **Export** | ✅ | SVG/Text/PDF with printpdf, headings, tables, lists, code, formulas, page selection |
 | **Table Recognition** | ✅ | SLANet+ / TATR table structure + PP-DocLayout v3 layout detection |
 | **Handwriting** | ✅ | Handwriting detection + TrOCR recognition + postprocessing |
@@ -340,7 +340,7 @@ crates/
 ├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
 ├── api-types/      ✅ Public API types (RecognizeMode, Request, Response, StreamItem)
 ├── tract/          ✅ Tract-based WASM RuntimeBackend
-├── plugin/         ✅ Plugin trait, Registry
+├── plugin/         ⚠️ Deterministic registry and verified package store; external ABI/WASI hosts are not implemented
 ├── mock/           ✅ Fake implementations for testing
 ├── ffi/            ✅ Android JNI + iOS C FFI
 ├── wasm/           ✅ WebAssembly bindings with Tract backend

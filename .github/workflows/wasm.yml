@@ -1,0 +1,87 @@
+name: WASM
+
+on:
+  push:
+    branches: [main, develop, wasm]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wasm-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  WASM_PACK_VERSION: 0.13.1
+
+jobs:
+  quality:
+    name: WASM fmt, check, and Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check isolated WASM engine
+        run: >-
+          cargo check -p latexsnipper-engine --no-default-features
+          --features wasm --target wasm32-unknown-unknown
+      - name: Check WASM package
+        run: cargo check -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown
+      - name: Lint WASM package
+        run: cargo clippy -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown -- -D warnings
+
+  package:
+    name: Build and package WASM
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install pinned wasm-pack
+        run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
+      - name: Build web package
+        run: >-
+          wasm-pack build crates/wasm --target web --release
+          --out-dir ../../target/wasm-web
+      - name: Record package sizes
+        run: |
+          find target/wasm-web -maxdepth 1 -type f -printf '%f %s bytes\n' | sort | tee target/wasm-web/size-report.txt
+      - name: Smoke-test npm package metadata
+        working-directory: target/wasm-web
+        run: npm pack --dry-run
+      - name: Upload browser package
+        uses: actions/upload-artifact@v4
+        with:
+          name: latexsnipper-wasm-web
+          path: target/wasm-web
+          if-no-files-found: error
+          retention-days: 14
+
+  browser-tests:
+    name: Browser tests (Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install pinned wasm-pack
+        run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
+      - name: Run headless Chrome tests
+        run: wasm-pack test --headless --chrome crates/wasm

@@ -1,54 +1,34 @@
-# Security Policy
+# Security policy
 
-## Reporting a Vulnerability
+Please report suspected vulnerabilities privately through GitHub Security
+Advisories. Do not include private documents, model credentials, or production
+tokens in a public issue.
 
-If you discover a security vulnerability within LaTeXSnipper Core, please send an email to [SECURITY_EMAIL] instead of using the issue tracker. All security vulnerabilities will be promptly addressed.
+## Input boundaries
 
-Please include the following information in your report:
+`DocumentImporter` applies configurable limits before OOXML parsing: compressed
+entry count, total decompressed bytes, compression ratio, enclosed relative
+paths, XML nesting depth, XML element count, forbidden DTD/entity declarations,
+and external or absolute relationship targets. It also limits parsed pages and
+assets. `ImportOptions` owns these budgets; callers processing untrusted data
+should lower them for their deployment.
 
-- Type of issue (e.g., buffer overflow, code injection, etc.)
-- Full paths of source file(s) related to the manifestation of the issue
-- The location of the affected source code (tag/branch/commit or direct URL)
-- Any special configuration required to reproduce the issue
-- Step-by-step instructions to reproduce the issue
-- Proof-of-concept or exploit code (if possible)
-- Impact of the issue, including how an attacker might exploit it
+The WASM adapter separately enforces RGBA length, maximum pixel count,
+per-artifact bytes, total model bytes, SHA-256 checks, transaction rollback, and
+LRU eviction. ONNX artifacts are parsed by Tract before they become live.
 
-This information will help us triage your report more quickly.
+## Trust boundaries
 
-## Supported Versions
+- Built-in Rust plugins are trusted in-process code. Panics are contained, but
+  they are not a security sandbox.
+- Native ABI and WASI Component manifests describe permissions and budgets;
+  loading/executing those classes remains unsupported until their hosts are
+  implemented and tested.
+- Remote model/API credentials must be supplied through environment variables or
+  platform secret stores. Never commit them.
+- Binary output should be reopened and validated before it replaces a target.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x     | :white_check_mark: |
+## Supported versions
 
-## Security Considerations
-
-### Model Security
-
-- Models are verified using SHA256 checksums
-- Only download models from official releases
-- Verify model integrity before use
-
-### Runtime Security
-
-- ONNX Runtime sessions are isolated
-- Memory safety is guaranteed by Rust's type system
-- Input validation is performed at API boundaries
-
-### Platform Security
-
-- FFI boundaries are carefully audited
-- WASM modules run in sandboxed environments
-- No unsafe code without explicit safety comments
-
-## Best Practices
-
-1. Always validate input images before processing
-2. Use the latest stable Rust version
-3. Keep dependencies updated
-4. Review security advisories for dependencies
-
-## Acknowledgments
-
-We would like to thank all security researchers who responsibly disclose vulnerabilities.
+Security fixes are applied to the current `main` line and the newest tagged
+release. Older releases may require upgrading before a fix is available.

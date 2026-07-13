@@ -12,23 +12,37 @@ categories.workspace = true
 [dependencies]
 latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
-latexsnipper-image.workspace = true
+latexsnipper-image = { workspace = true, default-features = false }
 latexsnipper-runtime.workspace = true
 latexsnipper-inference.workspace = true
-latexsnipper-pipeline.workspace = true
+latexsnipper-pipeline = { workspace = true, default-features = false }
 latexsnipper-model.workspace = true
 latexsnipper-api-types.workspace = true
-latexsnipper-conversion.workspace = true
-latexsnipper-export.workspace = true
+latexsnipper-conversion = { workspace = true, optional = true }
+latexsnipper-export = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 thiserror.workspace = true
 sha2.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["rt"] }
+
 [features]
-default = []
+default = ["native"]
+native = [
+    "dep:latexsnipper-conversion",
+    "latexsnipper-conversion/native",
+    "dep:latexsnipper-export",
+    "latexsnipper-image/native",
+    "latexsnipper-model/native",
+    "latexsnipper-pipeline/native",
+]
+wasm = ["latexsnipper-pipeline/wasm"]
 remote-api = ["latexsnipper-runtime/remote-api"]
 
 [dev-dependencies]

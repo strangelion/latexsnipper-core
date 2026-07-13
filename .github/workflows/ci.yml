@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ main, develop ]
@@ -13,6 +17,7 @@ env:
 jobs:
   check:
     name: Check (${{ matrix.os }})
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +32,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -34,9 +40,44 @@ jobs:
       - run: cargo test --workspace
       - run: cargo test --workspace --all-features
 
+  focused-tests:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Package validation
+            command: cargo test -p latexsnipper-conversion package_export
+          - name: Parser security and fuzz smoke
+            command: cargo test -p latexsnipper-conversion importer::tests
+          - name: Round-trip corpus
+            command: cargo test --test conversion_roundtrip
+          - name: CLI smoke
+            command: cargo test -p latexsnipper-cli --test cli_convert
+          - name: Plugin lifecycle and package management
+            command: cargo test -p latexsnipper-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: ${{ matrix.command }}
+
+  benchmark-smoke:
+    name: Benchmark smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo bench -p latexsnipper-tests --bench core_bench
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -47,6 +88,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -58,6 +100,7 @@ jobs:
   docs:
     name: Documentation tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -67,6 +110,7 @@ jobs:
   feature-matrix:
     name: Feature matrix
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -78,12 +122,21 @@ jobs:
   real-model-windows:
     name: Real models (Windows CPU)
     runs-on: windows-latest
+    timeout-minutes: 90
     env:
       LATEXSNIPPER_REQUIRE_REAL_MODELS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Test verified downloader
+        shell: pwsh
+        run: ./scripts/tests/VerifiedDownload.Tests.ps1
+      - name: Cache verified model archives
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/latexsnipper-model-cache
+          key: real-models-${{ runner.os }}-${{ hashFiles('scripts/model-manifest.template.json', 'scripts/VerifiedDownload.psm1', 'scripts/setup-real-model-tests.ps1') }}
       - name: Download and verify model assets
         shell: pwsh
         run: ./scripts/setup-real-model-tests.ps1
@@ -95,10 +148,19 @@ jobs:
         run: cargo test -p latexsnipper-tests --test pipeline_e2e -- --nocapture
       - name: Run table recognition test
         run: cargo test --test table_e2e -- --nocapture
+      - name: Upload model setup diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-model-setup-diagnostics-${{ runner.os }}
+          path: ${{ runner.temp }}/latexsnipper-model-diagnostics
+          if-no-files-found: warn
+          retention-days: 14
 
   msrv:
     name: MSRV
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88.0

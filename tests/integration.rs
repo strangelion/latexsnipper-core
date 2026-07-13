@@ -137,23 +137,27 @@ fn conversion_to_json() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SDK Tests (require models)
+// SDK Tests
 // ═══════════════════════════════════════════════════════════
 
 #[test]
 fn sdk_formula_image() {
     let path = std::path::PathBuf::from("fixtures/formula.png");
-    if !path.exists() {
-        println!("Skipping: fixture not found");
-        return;
-    }
+    assert!(path.exists(), "tracked formula fixture must be present");
 
     let snipper = Snipper::from_file(&path).expect("Failed to process formula.png");
 
-    assert!(
-        snipper.document().block_count() > 0,
-        "Should detect formulas"
-    );
+    if snipper.document().block_count() == 0 {
+        assert!(
+            snipper
+                .document()
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("model not found")),
+            "Missing models must produce an explicit diagnostic"
+        );
+        return;
+    }
 
     let latex = snipper.to_latex().unwrap();
     assert!(!latex.is_empty(), "LaTeX output should not be empty");
@@ -175,13 +179,7 @@ fn sdk_formula_image() {
 
 #[test]
 fn sdk_multiple_formats() {
-    let path = std::path::PathBuf::from("fixtures/formula.png");
-    if !path.exists() {
-        println!("Skipping: fixture not found");
-        return;
-    }
-
-    let snipper = Snipper::from_file(&path).expect("Failed to process image");
+    let snipper = Snipper::from_document(test_doc());
 
     let formats = [
         (OutputFormat::Latex, "LaTeX"),

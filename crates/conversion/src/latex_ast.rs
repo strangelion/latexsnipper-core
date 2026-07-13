@@ -175,7 +175,7 @@ impl std::fmt::Display for LatexNode {
                         // Only add space if not adjacent to a previous symbol/operator
                         // that would make the spacing wrong (e.g. E=mc^2 should not become E = m c ^ 2)
                         let prev_str = format!("{}", n);
-                        let prev_text = format!("{}", &nodes[i - 1]);
+                        let prev_text = format!("{}", nodes[i - 1]);
                         // Don't add space:
                         // - before superscript/subscript
                         // - between single chars that form a contiguous token

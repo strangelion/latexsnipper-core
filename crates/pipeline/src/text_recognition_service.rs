@@ -8,8 +8,13 @@ use latexsnipper_ast::{Quad, Rect};
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_image::SnipperImage;
-use latexsnipper_inference::{load_keys, recognize_text_with_keys, TextRecParams};
-use latexsnipper_runtime::{AccelerationMode, InferenceSession, ModelHandle, RuntimeBackend};
+use latexsnipper_inference::{
+    load_keys, load_keys_from_str, recognize_text_with_keys, TextRecParams,
+};
+use latexsnipper_model::ModelConfig;
+use latexsnipper_runtime::{
+    AccelerationMode, InferenceSession, ModelHandle, ModelId, RuntimeBackend, SharedModelResolver,
+};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -96,6 +101,58 @@ impl TextRecognitionService {
                 .map(|chars| (chars, 0))
                 .unwrap_or((Vec::new(), 1))
         });
+
+        Some(Self {
+            session: Arc::new(session),
+            params,
+            keys,
+            first_char_id,
+        })
+    }
+
+    /// Load a text recognition model and its metadata from an in-memory resolver.
+    pub fn try_load_from_resolver(
+        resolver: &SharedModelResolver,
+        variant: &str,
+        backend: Arc<dyn RuntimeBackend>,
+        acceleration: AccelerationMode,
+    ) -> Option<Self> {
+        let id = ModelId::new("text-rec", variant);
+        let config_text = resolver.read_text_artifact(&id, "config.json").ok()?;
+        let config = ModelConfig::from_json_str(&config_text).ok()?;
+        let primary_name = config
+            .pipeline
+            .as_ref()
+            .and_then(|pipeline| pipeline.model_files.as_ref())
+            .and_then(|files| files.primary.as_deref())
+            .unwrap_or("model.onnx");
+        let model_handle = resolver.resolve_artifact(&id, primary_name).ok()?;
+        let session = backend.create_session(&model_handle, acceleration).ok()?;
+        let params = TextRecParams::from_config(&config);
+        let keys_name = config
+            .decoding
+            .as_ref()
+            .and_then(|decoding| decoding.keys_file.as_deref())
+            .or_else(|| {
+                config
+                    .decoding
+                    .as_ref()
+                    .and_then(|decoding| decoding.tokenizer_file.as_deref())
+            })
+            .unwrap_or("charset.txt");
+
+        let fallback_keys = || {
+            session
+                .get_character_list()
+                .filter(|characters| !characters.is_empty())
+                .map(|characters| (characters, 0))
+                .unwrap_or((Vec::new(), 1))
+        };
+        let (keys, first_char_id) = resolver
+            .read_text_artifact(&id, keys_name)
+            .ok()
+            .and_then(|text| load_keys_from_str(&text, keys_name).ok())
+            .unwrap_or_else(fallback_keys);
 
         Some(Self {
             session: Arc::new(session),

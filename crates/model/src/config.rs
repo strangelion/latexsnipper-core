@@ -396,6 +396,19 @@ impl ModelConfig {
             .map_err(|e| SnipperError::Model(format!("Invalid config.json: {}", e)))
     }
 
+    /// Parse model configuration from a JSON string.
+    pub fn from_json_str(value: &str) -> Result<Self> {
+        Self::parse(value)
+    }
+
+    /// Parse model configuration from in-memory JSON bytes.
+    pub fn from_json_bytes(value: &[u8]) -> Result<Self> {
+        let text = std::str::from_utf8(value).map_err(|error| {
+            SnipperError::Model(format!("Model config is not valid UTF-8: {}", error))
+        })?;
+        Self::from_json_str(text)
+    }
+
     /// Create a minimal config with default values.
     ///
     /// Used when no config.json exists but a model needs to be loaded.

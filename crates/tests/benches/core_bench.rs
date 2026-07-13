@@ -1,8 +1,12 @@
 use latexsnipper_ast::{
-    Block, Document, DocumentVisitor, Formula, FormulaBlock, Page, TextCollector,
+    Block, Document, DocumentVisitor, ExportFormat, Formula, FormulaBlock, Page, TextCollector,
 };
-use latexsnipper_conversion::{Converter, MathmlConverter, OmmlConverter, TypstConverter};
+use latexsnipper_conversion::{
+    read_docx_bytes, read_pptx_bytes, read_xlsx_bytes, Converter, DocumentExportService,
+    MathmlConverter, OmmlConverter, TypstConverter,
+};
 use latexsnipper_pipeline::{PipelineContext, PipelineGraph, TransformNode};
+use latexsnipper_plugin::{PluginRegistry, PluginRequest, TransformPlugin};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -39,6 +43,15 @@ fn run_bench(name: &str, iterations: usize, mut f: impl FnMut()) {
 fn report(name: &str, iterations: usize, elapsed: Duration) {
     let per_iter = elapsed.as_nanos() / iterations as u128;
     println!("bench {name}: {iterations} iterations, {elapsed:?}, {per_iter} ns/iter");
+    println!(
+        "benchmark_json={}",
+        serde_json::json!({
+            "name": name,
+            "iterations": iterations,
+            "elapsedNanos": elapsed.as_nanos(),
+            "nanosPerIteration": per_iter,
+        })
+    );
 }
 
 fn bench_ast_visitor() {
@@ -95,8 +108,61 @@ fn bench_pipeline() {
     });
 }
 
+fn bench_visual_and_package_exports() {
+    let document = formulas_doc(4, r"\frac{a+b}{c+d}");
+    for (name, format, iterations) in [
+        ("export_svg", ExportFormat::Svg, 20),
+        ("export_png", ExportFormat::Png, 5),
+        ("export_pdf", ExportFormat::Pdf, 20),
+        ("export_docx", ExportFormat::Docx, 20),
+        ("export_pptx", ExportFormat::Pptx, 20),
+        ("export_xlsx", ExportFormat::Xlsx, 20),
+    ] {
+        run_bench(name, iterations, || {
+            let artifact = DocumentExportService::export(black_box(&document), format).unwrap();
+            black_box(artifact.as_bytes().map_or(0, <[u8]>::len));
+        });
+    }
+}
+
+fn bench_office_imports() {
+    let document = formulas_doc(4, r"x^2+y^2");
+    let docx = DocumentExportService::export(&document, ExportFormat::Docx).unwrap();
+    let pptx = DocumentExportService::export(&document, ExportFormat::Pptx).unwrap();
+    let xlsx = DocumentExportService::export(&document, ExportFormat::Xlsx).unwrap();
+    run_bench("import_docx", 50, || {
+        black_box(read_docx_bytes(docx.as_bytes().unwrap()).unwrap());
+    });
+    run_bench("import_pptx", 50, || {
+        black_box(read_pptx_bytes(pptx.as_bytes().unwrap()).unwrap());
+    });
+    run_bench("import_xlsx", 50, || {
+        black_box(read_xlsx_bytes(xlsx.as_bytes().unwrap()).unwrap());
+    });
+}
+
+fn bench_plugin_chain() {
+    let mut registry = PluginRegistry::new();
+    for index in 0..8 {
+        registry
+            .register(Box::new(TransformPlugin::new(
+                format!("plugin-{index}"),
+                "1.0.0",
+                |_| Ok(()),
+            )))
+            .unwrap();
+    }
+    let request = PluginRequest::new("after_export", formulas_doc(16, "a+b"));
+    run_bench("plugin_chain_8", 1_000, || {
+        black_box(registry.handle_all(black_box(&request)).unwrap());
+    });
+}
+
 fn main() {
     bench_ast_visitor();
     bench_conversion();
     bench_pipeline();
+    bench_visual_and_package_exports();
+    bench_office_imports();
+    bench_plugin_chain();
 }

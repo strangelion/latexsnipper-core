@@ -1,183 +1,514 @@
-use latexsnipper_ast::Document;
-use latexsnipper_conversion::{
-    Converter, HtmlConverter, LatexConverter, MarkdownBlockConverter, MarkdownInlineConverter,
-    MathmlConverter, OmmlConverter, TypstConverter,
-};
+use std::sync::Arc;
+
+use js_sys::{Function, Reflect, Uint8Array};
+use latexsnipper_ast::{DiagnosticLevel, Document, GeneratedContent};
+use latexsnipper_conversion::{DocumentConverter, OutputFormat};
 use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
 use latexsnipper_image::PixelFormat;
+use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend, SharedModelResolver};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::markdown::MarkdownRenderer;
 use latexsnipper_syntax::typst::TypstRenderer;
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use latexsnipper_tract::TractBackend;
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-mod model_store;
+mod api;
+mod capabilities;
+mod error;
+mod profiles;
+mod state;
 
-/// Initialize the WASM module.
+use error::{ApiDiagnostic, WasmError, WasmErrorCode, WasmResponse};
+use profiles::{validate_profile, ProfileValidation};
+use state::{MemoryLimits, STATE};
+
 #[wasm_bindgen]
 pub fn init() {
     log::info!("LaTeXSnipper WASM initialized");
 }
 
-// ============================================================================
-// Model Management
-// ============================================================================
-
-/// Load a model from bytes (fetched by JS).
-///
-/// Models are stored by name and can be retrieved later for inference.
-/// Call this after fetching model files with `fetch()` in JavaScript.
 #[wasm_bindgen]
-pub fn load_model(name: &str, bytes: &[u8]) {
-    model_store::store_model(name, bytes.to_vec());
+pub fn api_info_v2() -> JsValue {
+    response_to_js(WasmResponse::success(api::ApiInfo::current(), Vec::new()))
 }
 
-/// Check if a model is loaded.
 #[wasm_bindgen]
-pub fn is_model_loaded(name: &str) -> bool {
-    model_store::has_model(name)
+pub fn capabilities_v2() -> JsValue {
+    STATE.with(|cell| {
+        let state = cell.borrow();
+        response_to_js(WasmResponse::success(
+            capabilities::collect(&state.resolver, state.limits(), state.usage()),
+            Vec::new(),
+        ))
+    })
 }
 
-/// Get list of loaded model names as a JSON array string.
 #[wasm_bindgen]
-pub fn loaded_models() -> String {
-    let models = model_store::list_models();
-    serde_json::to_string(&models).unwrap_or_default()
-}
-
-// ============================================================================
-// Image Recognition
-// ============================================================================
-
-/// Recognize an image and return the result as Document JSON.
-///
-/// # Arguments
-/// * `width` - Image width in pixels
-/// * `height` - Image height in pixels
-/// * `pixels` - Raw pixel data (RGBA format, 4 bytes per pixel)
-/// * `mode` - Recognition mode: "formula", "text", "mixed", "handwriting", "table"
-///
-/// # Returns
-/// JSON string containing the recognized Document.
-///
-/// # Example (JavaScript)
-/// ```js
-/// const imageData = canvas.getImageData(0, 0, w, h);
-/// const docJson = recognize(w, h, new Uint8Array(imageData.data.buffer), "formula");
-/// const latex = convert_document(docJson, "latex");
-/// ```
-#[wasm_bindgen]
-pub fn recognize(width: u32, height: u32, pixels: &[u8], mode: &str) -> Result<String, JsValue> {
-    // Create image from RGBA pixels
-    let expected_len = (width * height * 4) as usize;
-    if pixels.len() != expected_len {
-        return Err(JsValue::from_str(&format!(
-            "Pixel data length mismatch: expected {} bytes, got {}",
-            expected_len,
-            pixels.len()
-        )));
+pub fn load_model_v2(name: &str, bytes: Vec<u8>, expected_sha256: Option<String>) -> JsValue {
+    if let Err(error) = validate_model_artifact(name, &bytes) {
+        return error_to_js(error);
     }
-
-    let image =
-        latexsnipper_image::SnipperImage::new(width, height, PixelFormat::Rgba, pixels.to_vec());
-    let recognize_mode = parse_mode(mode)?;
-
-    // Create engine config (models_dir is not used in WASM, models come from store)
-    let config = EngineConfig::with_models_dir(std::path::PathBuf::from("/dev/null"));
-    let engine = SnipperEngine::new(config, Box::new(TractBackend::new(None)));
-
-    // Run recognition in tokio runtime
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(err_to_js)?;
-
-    let doc = rt
-        .block_on(engine.recognize(image, recognize_mode))
-        .map_err(err_to_js)?;
-
-    serde_json::to_string(&doc).map_err(err_to_js)
+    STATE.with(|cell| {
+        let result = cell
+            .borrow_mut()
+            .load(name, bytes, expected_sha256.as_deref());
+        result_to_js(result, Vec::new())
+    })
 }
 
-/// Recognize an image from a Uint8Array of pixel data.
-///
-/// This is a convenience wrapper that takes the mode as a string.
 #[wasm_bindgen]
-pub fn recognize_formula(width: u32, height: u32, pixels: &[u8]) -> Result<String, JsValue> {
-    recognize(width, height, pixels, "formula")
+pub fn unload_model_v2(name: &str) -> JsValue {
+    STATE.with(|cell| result_to_js(cell.borrow_mut().unload(name), Vec::new()))
 }
 
-/// Recognize text in an image.
 #[wasm_bindgen]
-pub fn recognize_text(width: u32, height: u32, pixels: &[u8]) -> Result<String, JsValue> {
-    recognize(width, height, pixels, "text")
+pub fn clear_models_v2() -> JsValue {
+    STATE.with(|cell| {
+        cell.borrow_mut().clear();
+        response_to_js(WasmResponse::success(true, Vec::new()))
+    })
 }
 
-/// Recognize mixed content (formulas + text) in an image.
 #[wasm_bindgen]
-pub fn recognize_mixed(width: u32, height: u32, pixels: &[u8]) -> Result<String, JsValue> {
-    recognize(width, height, pixels, "mixed")
+pub fn loaded_models_v2() -> JsValue {
+    STATE.with(|cell| response_to_js(WasmResponse::success(cell.borrow().list(), Vec::new())))
 }
 
-// ============================================================================
-// Existing AST/Conversion APIs (unchanged)
-// ============================================================================
-
-/// Parse a LaTeX string and return the Document as a JS object.
 #[wasm_bindgen]
-pub fn parse_latex(latex: &str) -> Result<JsValue, JsValue> {
-    let parser = LatexParser;
-    let doc = parser.parse(latex).map_err(err_to_js)?;
-    to_js_value(&doc)
+pub fn model_memory_v2() -> JsValue {
+    STATE.with(|cell| {
+        let state = cell.borrow();
+        response_to_js(WasmResponse::success(
+            serde_json::json!({
+                "limits": state.limits(),
+                "usage": state.usage(),
+            }),
+            Vec::new(),
+        ))
+    })
 }
 
-/// Render a Document (as JSON string) to LaTeX string.
 #[wasm_bindgen]
-pub fn render_latex(doc_json: &str) -> Result<String, JsValue> {
-    let doc: Document = serde_json::from_str(doc_json).map_err(err_to_js)?;
-    let renderer = LatexRenderer;
-    renderer.render(&doc).map_err(err_to_js)
+pub fn set_model_memory_limits_v2(
+    per_artifact_bytes: u64,
+    total_model_bytes: u64,
+    max_image_pixels: u64,
+) -> JsValue {
+    STATE.with(|cell| {
+        result_to_js(
+            cell.borrow_mut().set_limits(MemoryLimits {
+                per_artifact_bytes,
+                total_model_bytes,
+                max_image_pixels,
+                profile: "custom",
+            }),
+            Vec::new(),
+        )
+    })
 }
 
-/// Render a Document (as JSON string) to Typst string.
 #[wasm_bindgen]
-pub fn render_typst(doc_json: &str) -> Result<String, JsValue> {
-    let doc: Document = serde_json::from_str(doc_json).map_err(err_to_js)?;
-    let renderer = TypstRenderer;
-    renderer.render(&doc).map_err(err_to_js)
+pub fn set_model_memory_profile_v2(profile: &str) -> JsValue {
+    let limits = match profile {
+        "balanced" => MemoryLimits::default(),
+        "low-memory" | "low_memory" => MemoryLimits::low_memory(),
+        _ => {
+            return error_to_js(WasmError::new(
+                WasmErrorCode::InvalidArgument,
+                "Unknown memory profile; use 'balanced' or 'low-memory'",
+            ));
+        }
+    };
+    STATE.with(|cell| result_to_js(cell.borrow_mut().set_limits(limits), Vec::new()))
 }
 
-/// Render a Document (as JSON string) to Markdown string.
 #[wasm_bindgen]
-pub fn render_markdown(doc_json: &str) -> Result<String, JsValue> {
-    let doc: Document = serde_json::from_str(doc_json).map_err(err_to_js)?;
-    let renderer = MarkdownRenderer;
-    renderer.render(&doc).map_err(err_to_js)
+pub fn begin_model_update_v2() -> JsValue {
+    STATE.with(|cell| result_to_js(cell.borrow_mut().begin_update(), Vec::new()))
 }
 
-/// Convert a Document JSON to the specified format.
 #[wasm_bindgen]
-pub fn convert_document(doc_json: &str, format: &str) -> Result<String, JsValue> {
-    let doc: Document = serde_json::from_str(doc_json).map_err(err_to_js)?;
+pub fn commit_model_update_v2() -> JsValue {
+    STATE.with(|cell| result_to_js(cell.borrow_mut().commit_update(), Vec::new()))
+}
 
-    let result = match format {
-        "latex" => LatexConverter.convert(&doc),
-        "latex_display" => latexsnipper_conversion::LatexDisplayConverter.convert(&doc),
-        "latex_equation" => latexsnipper_conversion::LatexEquationConverter.convert(&doc),
-        "markdown_inline" => MarkdownInlineConverter.convert(&doc),
-        "markdown_block" => MarkdownBlockConverter.convert(&doc),
-        "mathml" => MathmlConverter.convert(&doc),
-        "omml" => OmmlConverter.convert(&doc),
-        "typst" => TypstConverter.convert(&doc),
-        "html" => HtmlConverter.convert(&doc),
-        _ => return Err(JsValue::from_str(&format!("Unknown format: {}", format))),
+#[wasm_bindgen]
+pub fn rollback_model_update_v2() -> JsValue {
+    STATE.with(|cell| result_to_js(cell.borrow_mut().rollback_update(), Vec::new()))
+}
+
+#[wasm_bindgen]
+pub fn cancel_recognition_v2() -> JsValue {
+    STATE.with(|cell| cell.borrow_mut().request_cancellation());
+    response_to_js(WasmResponse::success(true, Vec::new()))
+}
+
+#[wasm_bindgen]
+pub async fn recognize_v2(width: u32, height: u32, pixels: Vec<u8>, mode: String) -> JsValue {
+    recognize_internal(width, height, pixels, mode, None).await
+}
+
+#[wasm_bindgen]
+pub async fn recognize_v2_with_progress(
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+    mode: String,
+    progress: Function,
+) -> JsValue {
+    recognize_internal(width, height, pixels, mode, Some(progress)).await
+}
+
+async fn recognize_internal(
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+    mode: String,
+    progress: Option<Function>,
+) -> JsValue {
+    if let Err(error) = emit_progress(progress.as_ref(), "validating", 0.05) {
+        return error_to_js(error);
+    }
+    let image = match validate_image(width, height, pixels) {
+        Ok(image) => image,
+        Err(error) => return error_to_js(error),
+    };
+    let recognize_mode = match parse_mode(&mode) {
+        Ok(mode) => mode,
+        Err(error) => return error_to_js(error),
     };
 
-    result.map_err(err_to_js)
+    let (resolver, validation) = match prepare_profile(&mode) {
+        Ok(value) => value,
+        Err(error) => return error_to_js(error),
+    };
+    if let Err(error) = emit_progress(progress.as_ref(), "models-ready", 0.15) {
+        return error_to_js(error);
+    }
+
+    let config = engine_config(&validation);
+    let shared: SharedModelResolver = resolver as Arc<dyn latexsnipper_runtime::ModelResolver>;
+    let engine =
+        SnipperEngine::with_model_resolver(config, Box::new(TractBackend::new(None)), shared);
+
+    if let Err(error) = emit_progress(progress.as_ref(), "inference", 0.25) {
+        return error_to_js(error);
+    }
+    let document = match engine.recognize(image, recognize_mode).await {
+        Ok(document) => document,
+        Err(error) => {
+            return error_to_js(
+                WasmError::new(WasmErrorCode::InferenceFailed, error.to_string())
+                    .at_stage("inference"),
+            );
+        }
+    };
+
+    let cancelled = STATE.with(|cell| {
+        let mut state = cell.borrow_mut();
+        let cancelled = state.cancellation_requested();
+        state.reset_cancellation();
+        cancelled
+    });
+    if cancelled {
+        return error_to_js(WasmError::recoverable(
+            WasmErrorCode::Cancelled,
+            "Recognition was cancelled at a cooperative stage boundary",
+        ));
+    }
+    if let Err(error) = emit_progress(progress.as_ref(), "completed", 1.0) {
+        return error_to_js(error);
+    }
+
+    let diagnostics = document.diagnostics.iter().map(api_diagnostic).collect();
+    response_to_js(WasmResponse::success(document, diagnostics))
 }
 
-/// Get the LaTeX string from a formula JSON.
+fn prepare_profile(
+    mode: &str,
+) -> Result<
+    (
+        Arc<latexsnipper_runtime::MemoryModelResolver>,
+        ProfileValidation,
+    ),
+    WasmError,
+> {
+    STATE.with(|cell| {
+        let mut state = cell.borrow_mut();
+        if state.cancellation_requested() {
+            state.reset_cancellation();
+            return Err(WasmError::recoverable(
+                WasmErrorCode::Cancelled,
+                "Recognition was cancelled before inference started",
+            ));
+        }
+        let canonical = canonical_mode(mode);
+        let profile = validate_profile(&state.resolver, &canonical)?;
+        if !profile.ready {
+            return Err(WasmError::recoverable(
+                WasmErrorCode::ModelArtifactMissing,
+                format!("Model profile '{}' is not ready", profile.profile),
+            )
+            .with_details(serde_json::json!({ "missing": profile.missing })));
+        }
+        state.touch_all();
+        Ok((state.resolver.clone(), profile))
+    })
+}
+
+fn engine_config(profile: &ProfileValidation) -> EngineConfig {
+    let mut config = EngineConfig::with_models_dir(std::path::PathBuf::from("/virtual-models"));
+    for selected in &profile.variants {
+        let Some((category, variant)) = selected.split_once('/') else {
+            continue;
+        };
+        config = match category {
+            "formula-det" => config.set_formula_det(variant),
+            "formula-rec" => config.set_formula_rec(variant),
+            "text-det" => config.set_text_det(variant),
+            "text-rec" => config.set_text_rec(variant),
+            "table-det" => config.set_table_det(variant),
+            "table-struct" => config.set_table_struct(variant),
+            _ => config,
+        };
+    }
+    config
+}
+
+fn validate_image(
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+) -> Result<latexsnipper_image::SnipperImage, WasmError> {
+    if width == 0 || height == 0 {
+        return Err(WasmError::new(
+            WasmErrorCode::InvalidImage,
+            "Image width and height must be positive",
+        ));
+    }
+    let pixel_count = u64::from(width)
+        .checked_mul(u64::from(height))
+        .ok_or_else(|| WasmError::new(WasmErrorCode::ImageLimitExceeded, "Image is too large"))?;
+    let limit = STATE.with(|cell| cell.borrow().limits().max_image_pixels);
+    if pixel_count > limit {
+        return Err(WasmError::new(
+            WasmErrorCode::ImageLimitExceeded,
+            format!("Image has {pixel_count} pixels; configured limit is {limit}"),
+        ));
+    }
+    let expected_len = pixel_count
+        .checked_mul(4)
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| WasmError::new(WasmErrorCode::ImageLimitExceeded, "Image is too large"))?;
+    if pixels.len() != expected_len {
+        return Err(WasmError::new(
+            WasmErrorCode::InvalidImage,
+            format!(
+                "RGBA pixel length mismatch: expected {expected_len} bytes, got {}",
+                pixels.len()
+            ),
+        ));
+    }
+    Ok(latexsnipper_image::SnipperImage::new(
+        width,
+        height,
+        PixelFormat::Rgba,
+        pixels,
+    ))
+}
+
+fn emit_progress(callback: Option<&Function>, stage: &str, progress: f64) -> Result<(), WasmError> {
+    let Some(callback) = callback else {
+        return Ok(());
+    };
+    let event = serde_wasm_bindgen::to_value(&serde_json::json!({
+        "stage": stage,
+        "progress": progress,
+    }))
+    .map_err(|error| {
+        WasmError::new(WasmErrorCode::SerializationFailed, error.to_string()).at_stage("progress")
+    })?;
+    callback
+        .call1(&JsValue::NULL, &event)
+        .map_err(|_| {
+            WasmError::recoverable(
+                WasmErrorCode::InternalError,
+                "The progress callback threw an exception",
+            )
+            .at_stage("progress")
+        })
+        .map(|_| ())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmArtifact {
+    format: String,
+    mime_type: String,
+    suggested_file_name: Option<String>,
+    text: Option<String>,
+    #[serde(skip)]
+    bytes: Option<Vec<u8>>,
+    diagnostics: Vec<latexsnipper_ast::Diagnostic>,
+    checksum: Option<String>,
+    size_bytes: u64,
+}
+
+#[wasm_bindgen]
+pub fn convert_v2(doc_json: &str, format: &str) -> JsValue {
+    let document: Document = match serde_json::from_str(doc_json) {
+        Ok(document) => document,
+        Err(error) => {
+            return error_to_js(
+                WasmError::new(WasmErrorCode::InvalidArgument, error.to_string())
+                    .at_stage("parse-document"),
+            );
+        }
+    };
+    let output_format = match output_format(format) {
+        Some(format) => format,
+        None => {
+            return error_to_js(
+                WasmError::new(
+                    WasmErrorCode::UnsupportedFormat,
+                    format!("Format '{format}' is unavailable in the WASM build"),
+                )
+                .with_details(serde_json::json!({
+                    "available": OutputFormat::all().iter().map(OutputFormat::name).collect::<Vec<_>>()
+                })),
+            );
+        }
+    };
+    let artifact = match DocumentConverter::new(output_format).convert_artifact(&document) {
+        Ok(artifact) => artifact,
+        Err(error) => {
+            return error_to_js(
+                WasmError::new(WasmErrorCode::ConversionFailed, error).at_stage("conversion"),
+            );
+        }
+    };
+    let diagnostics: Vec<_> = artifact.diagnostics.iter().map(api_diagnostic).collect();
+    let (text, bytes) = match artifact.content {
+        Some(GeneratedContent::Text(text)) => (Some(text), None),
+        Some(GeneratedContent::Binary(bytes)) => (None, Some(bytes)),
+        None => (artifact.text, None),
+    };
+    let value = WasmArtifact {
+        format: artifact.format,
+        mime_type: artifact
+            .mime_type
+            .unwrap_or_else(|| capabilities::mime_type(format).to_string()),
+        suggested_file_name: Some(format!("latexsnipper.{}", output_format.extension())),
+        text,
+        size_bytes: artifact.size_bytes.unwrap_or(0),
+        checksum: artifact.checksum_sha256,
+        diagnostics: artifact.diagnostics,
+        bytes,
+    };
+    artifact_response_to_js(value, diagnostics)
+}
+
+fn artifact_response_to_js(artifact: WasmArtifact, diagnostics: Vec<ApiDiagnostic>) -> JsValue {
+    let bytes = artifact
+        .bytes
+        .as_ref()
+        .map(|value| Uint8Array::from(value.as_slice()));
+    let response = response_to_js(WasmResponse::success(artifact, diagnostics));
+    if let Some(bytes) = bytes {
+        if let Ok(data) = Reflect::get(&response, &JsValue::from_str("data")) {
+            let _ = Reflect::set(&data, &JsValue::from_str("bytes"), &bytes);
+        }
+    }
+    response
+}
+
+#[wasm_bindgen]
+pub fn load_model(name: &str, bytes: &[u8]) -> Result<(), JsValue> {
+    validate_model_artifact(name, bytes).map_err(wasm_error_to_js_exception)?;
+    STATE.with(|cell| {
+        cell.borrow_mut()
+            .load(name, bytes.to_vec(), None)
+            .map(|_| ())
+            .map_err(wasm_error_to_js_exception)
+    })
+}
+
+#[wasm_bindgen]
+pub fn is_model_loaded(name: &str) -> bool {
+    STATE.with(|cell| cell.borrow().is_loaded(name))
+}
+
+#[wasm_bindgen]
+pub fn loaded_models() -> String {
+    STATE.with(|cell| {
+        let names: Vec<_> = cell
+            .borrow()
+            .list()
+            .into_iter()
+            .map(|artifact| artifact.name)
+            .collect();
+        serde_json::to_string(&names).unwrap_or_else(|_| "[]".to_string())
+    })
+}
+
+/// Deprecated legacy synchronous recognition is intentionally disabled in browsers.
+/// Use `recognize_v2`, which returns a Promise and does not create a nested runtime.
+#[wasm_bindgen]
+pub fn recognize(
+    _width: u32,
+    _height: u32,
+    _pixels: &[u8],
+    _mode: &str,
+) -> Result<String, JsValue> {
+    Err(JsValue::from_str(
+        "Synchronous browser inference is disabled; use recognize_v2",
+    ))
+}
+
+#[wasm_bindgen]
+pub fn parse_latex(latex: &str) -> Result<JsValue, JsValue> {
+    let document = LatexParser.parse(latex).map_err(err_to_js)?;
+    to_js_value(&document)
+}
+
+#[wasm_bindgen]
+pub fn render_latex(doc_json: &str) -> Result<String, JsValue> {
+    LatexRenderer
+        .render(&parse_document(doc_json)?)
+        .map_err(err_to_js)
+}
+
+#[wasm_bindgen]
+pub fn render_typst(doc_json: &str) -> Result<String, JsValue> {
+    TypstRenderer
+        .render(&parse_document(doc_json)?)
+        .map_err(err_to_js)
+}
+
+#[wasm_bindgen]
+pub fn render_markdown(doc_json: &str) -> Result<String, JsValue> {
+    MarkdownRenderer
+        .render(&parse_document(doc_json)?)
+        .map_err(err_to_js)
+}
+
+#[wasm_bindgen]
+pub fn convert_document(doc_json: &str, format: &str) -> Result<String, JsValue> {
+    let document = parse_document(doc_json)?;
+    let format = output_format(format)
+        .ok_or_else(|| JsValue::from_str(&format!("Unknown WASM format: {format}")))?;
+    DocumentConverter::new(format)
+        .convert(&document)
+        .map_err(err_to_js)
+}
+
+#[wasm_bindgen]
+pub fn convert_from_json(doc_json: &str, format: &str) -> Result<String, JsValue> {
+    convert_document(doc_json, format)
+}
+
 #[wasm_bindgen]
 pub fn formula_to_latex(formula_json: &str) -> Result<String, JsValue> {
     let formula: latexsnipper_ast::Formula =
@@ -185,100 +516,154 @@ pub fn formula_to_latex(formula_json: &str) -> Result<String, JsValue> {
     Ok(formula.as_latex().to_string())
 }
 
-/// Get available conversion formats as a JSON array string.
 #[wasm_bindgen]
 pub fn available_formats() -> String {
-    let formats = vec![
-        "latex",
-        "latex_display",
-        "latex_equation",
-        "markdown_inline",
-        "markdown_block",
-        "mathml",
-        "omml",
-        "typst",
-        "html",
-    ];
-    serde_json::to_string(&formats).unwrap_or_default()
+    let formats: Vec<_> = OutputFormat::all().iter().map(OutputFormat::name).collect();
+    serde_json::to_string(&formats).unwrap_or_else(|_| "[]".to_string())
 }
 
-/// Build a Document from JSON and export to the specified format.
-/// This is the main "AST -> Export" function for WASM.
-#[wasm_bindgen]
-pub fn convert_from_json(doc_json: &str, format: &str) -> Result<String, JsValue> {
-    convert_document(doc_json, format)
-}
-
-/// Create a Document with a formula and export to format.
-/// Convenience function for simple use cases.
 #[wasm_bindgen]
 pub fn formula_to_document(latex: &str, format: &str) -> Result<String, JsValue> {
-    let doc = Document {
-        metadata: latexsnipper_ast::Metadata::default(),
-        pages: vec![latexsnipper_ast::Page {
-            width: 800.0,
-            height: 600.0,
-            blocks: vec![latexsnipper_ast::Block::Formula(
-                latexsnipper_ast::FormulaBlock {
-                    formula: latexsnipper_ast::Formula::latex(latex),
-                    label: None,
-                    number: None,
-                    environment: None,
-                    geometry: None,
-                    source: None,
-                },
-            )],
-            page_number: Some(1),
-            layout: None,
-            background_asset_id: None,
-        }],
-        assets: Vec::new(),
-        diagnostics: Vec::new(),
-        id_gen: latexsnipper_ast::NodeIdGenerator::new(),
-        schema_version: "1.0.0".to_string(),
-        notes: Vec::new(),
-        outline: None,
-    };
-
-    let doc_json = serde_json::to_string(&doc).map_err(err_to_js)?;
-    convert_document(&doc_json, format)
+    let document = LatexParser.parse(latex).map_err(err_to_js)?;
+    let json = serde_json::to_string(&document).map_err(err_to_js)?;
+    convert_document(&json, format)
 }
 
-/// Check if the WASM module is working.
 #[wasm_bindgen]
 pub fn health_check() -> String {
     "ok".to_string()
 }
 
-/// Get module version.
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-fn parse_mode(mode: &str) -> Result<RecognizeMode, JsValue> {
-    match mode.to_lowercase().as_str() {
-        "formula" | "f" => Ok(RecognizeMode::Formula),
-        "text" | "t" => Ok(RecognizeMode::Text),
-        "mixed" | "m" => Ok(RecognizeMode::Mixed),
-        "handwriting" | "hw" => Ok(RecognizeMode::Handwriting),
-        "table" | "tbl" => Ok(RecognizeMode::Table),
-        "formula_layout" | "fl" => Ok(RecognizeMode::FormulaLayout),
-        _ => Err(JsValue::from_str(&format!(
-            "Unknown recognition mode: '{}'. Use 'formula', 'text', 'mixed', 'handwriting', or 'table'.",
-            mode
-        ))),
+fn canonical_mode(mode: &str) -> String {
+    match mode.to_ascii_lowercase().as_str() {
+        "f" | "formula" => "formula".to_string(),
+        "t" | "text" => "text".to_string(),
+        "m" | "mixed" => "mixed".to_string(),
+        "fl" | "formula_layout" => "formula_layout".to_string(),
+        "tbl" | "table" => "table".to_string(),
+        "hw" | "handwriting" => "handwriting".to_string(),
+        _ => mode.to_ascii_lowercase(),
     }
 }
 
-fn err_to_js<E: std::fmt::Display>(e: E) -> JsValue {
-    JsValue::from_str(&e.to_string())
+fn parse_mode(mode: &str) -> Result<RecognizeMode, WasmError> {
+    match canonical_mode(mode).as_str() {
+        "formula" => Ok(RecognizeMode::Formula),
+        "text" => Ok(RecognizeMode::Text),
+        "mixed" => Ok(RecognizeMode::Mixed),
+        "formula_layout" => Ok(RecognizeMode::FormulaLayout),
+        "table" => Ok(RecognizeMode::Table),
+        "handwriting" => Ok(RecognizeMode::Handwriting),
+        _ => Err(WasmError::new(
+            WasmErrorCode::UnsupportedMode,
+            format!("Unknown recognition mode: {mode}"),
+        )),
+    }
 }
 
-fn to_js_value<T: serde::Serialize>(v: &T) -> Result<JsValue, JsValue> {
-    serde_wasm_bindgen::to_value(v).map_err(|e| JsValue::from_str(&e.to_string()))
+fn output_format(name: &str) -> Option<OutputFormat> {
+    OutputFormat::all()
+        .iter()
+        .copied()
+        .find(|format| format.name().eq_ignore_ascii_case(name))
+}
+
+fn parse_document(doc_json: &str) -> Result<Document, JsValue> {
+    serde_json::from_str(doc_json).map_err(err_to_js)
+}
+
+fn validate_model_artifact(name: &str, bytes: &[u8]) -> Result<(), WasmError> {
+    if !name.to_ascii_lowercase().ends_with(".onnx") {
+        return Ok(());
+    }
+    let backend = TractBackend::new(None);
+    backend
+        .create_session(
+            &ModelHandle::with_bytes(name, bytes.to_vec()),
+            AccelerationMode::Cpu,
+        )
+        .map(|_| ())
+        .map_err(|error| {
+            WasmError::new(
+                WasmErrorCode::ModelArtifactInvalid,
+                format!("Invalid or unsupported ONNX artifact '{name}': {error}"),
+            )
+            .at_stage("model-validation")
+        })
+}
+
+fn api_diagnostic(diagnostic: &latexsnipper_ast::Diagnostic) -> ApiDiagnostic {
+    ApiDiagnostic {
+        level: match diagnostic.level {
+            DiagnosticLevel::Info => "info",
+            DiagnosticLevel::Warning => "warning",
+            DiagnosticLevel::Error => "error",
+        },
+        code: diagnostic.code.clone(),
+        message: diagnostic.message.clone(),
+        stage: Some("recognition".to_string()),
+    }
+}
+
+fn response_to_js<T: Serialize>(response: WasmResponse<T>) -> JsValue {
+    serde_wasm_bindgen::to_value(&response).unwrap_or_else(|error| {
+        JsValue::from_str(&format!("WASM response serialization failed: {error}"))
+    })
+}
+
+fn result_to_js<T: Serialize>(
+    result: Result<T, WasmError>,
+    diagnostics: Vec<ApiDiagnostic>,
+) -> JsValue {
+    match result {
+        Ok(value) => response_to_js(WasmResponse::success(value, diagnostics)),
+        Err(error) => response_to_js(WasmResponse::<()>::failure(error, diagnostics)),
+    }
+}
+
+fn error_to_js(error: WasmError) -> JsValue {
+    response_to_js(WasmResponse::<()>::failure(error, Vec::new()))
+}
+
+fn wasm_error_to_js_exception(error: WasmError) -> JsValue {
+    serde_json::to_string(&WasmResponse::<()>::failure(error, Vec::new()))
+        .map(|value| JsValue::from_str(&value))
+        .unwrap_or_else(|_| JsValue::from_str("WASM operation failed"))
+}
+
+fn err_to_js<E: std::fmt::Display>(error: E) -> JsValue {
+    JsValue::from_str(&error.to_string())
+}
+
+fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(value).map_err(err_to_js)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_registry_drives_public_format_list() {
+        let exported: Vec<String> = serde_json::from_str(&available_formats()).unwrap();
+        let expected: Vec<_> = OutputFormat::all()
+            .iter()
+            .map(|format| format.name().to_string())
+            .collect();
+        assert_eq!(exported, expected);
+    }
+
+    #[test]
+    fn image_validation_rejects_overflow_and_length_mismatch() {
+        let mismatch = validate_image(2, 2, vec![0; 15]).unwrap_err();
+        assert_eq!(mismatch.code, WasmErrorCode::InvalidImage);
+
+        let oversized = validate_image(u32::MAX, u32::MAX, Vec::new()).unwrap_err();
+        assert_eq!(oversized.code, WasmErrorCode::ImageLimitExceeded);
+    }
 }

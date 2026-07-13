@@ -12,15 +12,21 @@ categories.workspace = true
 [dependencies]
 latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
-latexsnipper-export.workspace = true
+latexsnipper-export = { workspace = true, optional = true }
 latexsnipper-syntax.workspace = true
 log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 quick-xml = "0.37"
 regex = "1"
-lopdf = "0.34"
-zip = { version = "0.6", default-features = false, features = ["deflate"] }
+imagesize = "0.13"
+lopdf = { version = "0.34", optional = true }
+zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 sha2.workspace = true
 base64 = "0.22"
-chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono = { version = "0.4", default-features = false, features = ["std"], optional = true }
+
+[features]
+default = ["native"]
+native = ["dep:latexsnipper-export", "dep:lopdf", "dep:zip", "dep:chrono"]
+wasm = []

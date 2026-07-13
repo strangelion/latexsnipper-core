@@ -1,20 +1,61 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 use latexsnipper_ast::{
-    CapabilityMatrix, Diagnostic, FidelityLevel, FormatCapability, ImportOptions, LossKind,
+    CapabilityMatrix, Diagnostic, DiagnosticLevel, Document, ExportArtifact, ExportFormat,
+    FidelityLevel, FormatCapability, GeneratedContent, ImportOptions, LossKind,
 };
-use latexsnipper_conversion::{DocumentImporter, OutputFormat};
+use latexsnipper_conversion::{
+    DocumentConverter, DocumentExportService, DocumentImporter, OutputFormat,
+};
 use latexsnipper_engine::{sdk::Snipper, DocumentParseMode, EngineConfig, RecognizeMode};
 use latexsnipper_export::VisualFormat;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use latexsnipper_runtime::{OnnxRuntimeBackend, RuntimeBackend};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 
-const SUPPORTED_FORMATS: &str =
-    "latex, latex_display, latex_equation, markdown, markdown_inline, typst, html, mathml, omml, json";
 const SUPPORTED_PARSE_MODES: &str = "specialized, openocr-text, opendoc-hybrid";
 const SUPPORTED_RECOGNIZE_MODES: &str = "formula, text, mixed, handwriting, table, formula-layout";
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum DiagnosticsFormat {
+    Text,
+    Json,
+    Sarif,
+}
+
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CliExitCode {
+    GenericFailure = 1,
+    InvalidArguments = 2,
+    InvalidInput = 3,
+    MissingModel = 4,
+    RecognitionFailure = 5,
+    UnsupportedConversion = 6,
+    OutputValidationFailure = 7,
+    StrictDiagnosticFailure = 8,
+    PluginFailure = 9,
+    PartialBatchFailure = 10,
+}
+
+impl CliExitCode {
+    const fn contract() -> [(Self, &'static str); 10] {
+        [
+            (Self::GenericFailure, "generic failure"),
+            (Self::InvalidArguments, "invalid arguments"),
+            (Self::InvalidInput, "invalid or unsupported input"),
+            (Self::MissingModel, "missing or invalid model"),
+            (Self::RecognitionFailure, "recognition failure"),
+            (Self::UnsupportedConversion, "unsupported conversion"),
+            (Self::OutputValidationFailure, "output validation failure"),
+            (Self::StrictDiagnosticFailure, "strict diagnostic failure"),
+            (Self::PluginFailure, "plugin failure"),
+            (Self::PartialBatchFailure, "partial batch failure"),
+        ]
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "snipper")]
@@ -47,14 +88,57 @@ enum Commands {
 
     /// Convert a supported document through the unified AST
     Convert {
-        /// Input document path
-        input: String,
+        /// Input paths, glob patterns, or directories
+        #[arg(required = true)]
+        input: Vec<String>,
         /// Target format
         #[arg(long)]
         to: String,
         /// Output path; required for binary targets
         #[arg(short = 'o', long)]
         output: Option<String>,
+        /// Permit binary bytes on stdout when output is '-'
+        #[arg(long)]
+        force_binary_stdout: bool,
+        /// Replace an existing output file
+        #[arg(long, conflicts_with = "no_clobber")]
+        force: bool,
+        /// Refuse to replace an existing output file
+        #[arg(long)]
+        no_clobber: bool,
+        /// Write through a same-directory temporary file and rename on success
+        #[arg(long, default_value_t = true)]
+        atomic: bool,
+        /// Diagnostic rendering format
+        #[arg(long, value_enum, default_value_t = DiagnosticsFormat::Text)]
+        diagnostics: DiagnosticsFormat,
+        /// Fail when any non-info diagnostic is emitted
+        #[arg(long)]
+        strict: bool,
+        /// Fail when any warning diagnostic is emitted
+        #[arg(long)]
+        fail_on_warning: bool,
+        /// Suppress non-data status output
+        #[arg(long, conflicts_with = "verbose")]
+        quiet: bool,
+        /// Emit additional operational details to stderr
+        #[arg(long)]
+        verbose: bool,
+        /// Convert directory contents recursively
+        #[arg(long)]
+        recursive: bool,
+        /// Output directory for multiple inputs; relative paths are preserved
+        #[arg(long)]
+        output_dir: Option<String>,
+        /// Maximum number of files converted concurrently
+        #[arg(long, default_value_t = 1)]
+        jobs: usize,
+        /// Continue processing after a per-file failure
+        #[arg(long)]
+        continue_on_error: bool,
+        /// Write a machine-readable batch report
+        #[arg(long)]
+        report: Option<String>,
     },
 
     /// Export a document to SVG, PDF, PNG, or plain text
@@ -179,6 +263,9 @@ enum Commands {
         Use '-v' or '--version' as a flag on the root command for brief output.")]
     Version,
 
+    /// Diagnose runtime, model, output, and capability readiness
+    Doctor,
+
     /// Show conversion capabilities matrix
     #[command(long_about = "Display the conversion/export capabilities matrix.\n\n\
         Lists all supported input/output formats with fidelity levels,\n\
@@ -225,9 +312,33 @@ enum Commands {
     #[command(subcommand)]
     Models(ModelsCommand),
 
+    /// Verify and manage explicitly installed plugin packages
+    Plugin {
+        /// Plugin store directory
+        #[arg(long, default_value = ".snipper/plugins", global = true)]
+        store_dir: String,
+
+        #[command(subcommand)]
+        command: PluginCommand,
+    },
+
     /// Manage processing jobs
     #[command(subcommand)]
     Job(JobCommand),
+
+    /// Generate shell completion definitions
+    Completions {
+        /// Target shell
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+
+    /// Generate a roff man page
+    Manpages {
+        /// Directory that receives snipper.1
+        #[arg(long, default_value = ".")]
+        output_dir: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -319,6 +430,41 @@ snipper models verify --category formula-det"
         #[arg(short = 'c', long)]
         category: Option<String>,
     },
+
+    /// Remove installed model variants while preserving the manifest
+    Purge {
+        /// Limit removal to one model category
+        #[arg(short = 'c', long)]
+        category: Option<String>,
+
+        /// Limit removal to one variant; requires --category
+        #[arg(long, requires = "category")]
+        variant: Option<String>,
+
+        /// Confirm destructive removal
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum PluginCommand {
+    /// List installed plugin manifests and activation state
+    List,
+    /// Show one installed plugin manifest
+    Info { id: String },
+    /// Verify a local package without installing or executing it
+    Verify { path: String },
+    /// Verify and install a local package in disabled state
+    Install { path: String },
+    /// Remove an installed package
+    Uninstall { id: String },
+    /// Mark an installed package enabled for a compatible host
+    Enable { id: String },
+    /// Mark an installed package disabled
+    Disable { id: String },
+    /// Verify every installed package and report execution-host readiness
+    Doctor,
 }
 
 fn resolve_format(format: &str, output: Option<&str>) -> String {
@@ -439,7 +585,7 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 fn main() {
     env_logger::init();
 
-    let cli = Cli::parse();
+    let cli = parse_cli();
 
     match cli.command {
         Commands::Import { input, output } => {
@@ -456,9 +602,46 @@ fn main() {
             }
         }
 
-        Commands::Convert { input, to, output } => {
-            if let Err(error) = convert_path(&input, &to, output.as_deref()) {
-                exit_with_error("Conversion failed", error);
+        Commands::Convert {
+            input,
+            to,
+            output,
+            force_binary_stdout,
+            force,
+            no_clobber,
+            atomic,
+            diagnostics,
+            strict,
+            fail_on_warning,
+            quiet,
+            verbose,
+            recursive,
+            output_dir,
+            jobs,
+            continue_on_error,
+            report,
+        } => {
+            let options = ConvertOptions {
+                output: output.as_deref(),
+                force_binary_stdout,
+                force,
+                no_clobber,
+                atomic,
+                diagnostics,
+                strict,
+                fail_on_warning,
+                quiet,
+                verbose,
+            };
+            let batch = BatchOptions {
+                recursive,
+                output_dir: output_dir.as_deref(),
+                jobs,
+                continue_on_error,
+                report: report.as_deref(),
+            };
+            if let Err(error) = convert_inputs(&input, &to, options, batch) {
+                exit_with_code(error.code, "Conversion failed", error.message);
             }
         }
 
@@ -590,7 +773,10 @@ fn main() {
                     if let Some(suggestion) = suggest_format(&resolved_format) {
                         eprintln!("  Did you mean '{}'?", suggestion);
                     }
-                    eprintln!("  Supported formats: {}", SUPPORTED_FORMATS);
+                    eprintln!(
+                        "  Supported formats: {}",
+                        registered_format_names().join(", ")
+                    );
                     eprintln!("  Hint: use -h to see all options");
                     std::process::exit(1);
                 }
@@ -651,8 +837,47 @@ fn main() {
         Commands::Version => {
             println!("snipper {}", env!("CARGO_PKG_VERSION"));
             println!("LaTeXSnipper Core -- Real ONNX Runtime Mode");
+            println!("Stable exit codes:");
+            for (code, description) in CliExitCode::contract() {
+                println!("  {} {description}", code as i32);
+            }
             println!();
             println!("Try 'snipper play' for a hidden mini-game!");
+        }
+
+        Commands::Doctor => {
+            let current_dir = std::env::current_dir().unwrap_or_default();
+            let models_dir = current_dir.join("models");
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+            let runtime = OnnxRuntimeBackend::new(models_dir.clone())
+                .ok()
+                .map(|backend| backend.runtime_diagnostics());
+            #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+            let runtime: Option<serde_json::Value> = None;
+            let capabilities = build_capability_matrix();
+            let model_state = doctor_model_state(&models_dir);
+            let plugin_state = doctor_plugin_state(std::path::Path::new(".snipper/plugins"));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "os": std::env::consts::OS,
+                    "architecture": std::env::consts::ARCH,
+                    "coreVersion": env!("CARGO_PKG_VERSION"),
+                    "runtime": runtime,
+                    "modelDirectory": models_dir,
+                    "modelDirectoryExists": models_dir.is_dir(),
+                    "models": model_state,
+                    "outputDirectory": current_dir,
+                    "outputDirectoryWritable": directory_is_writable(&current_dir),
+                    "plugins": plugin_state,
+                    "availableConversions": capabilities.entries.iter().filter(|entry| entry.available).count(),
+                    "exitCodes": CliExitCode::contract().into_iter().map(|(code, description)| serde_json::json!({
+                        "code": code as i32,
+                        "description": description,
+                    })).collect::<Vec<_>>(),
+                }))
+                .expect("doctor report serialization must succeed")
+            );
         }
 
         Commands::Capabilities {
@@ -704,7 +929,21 @@ fn main() {
             ModelsCommand::Verify { category } => {
                 handle_models_verify(category);
             }
+            ModelsCommand::Purge {
+                category,
+                variant,
+                yes,
+            } => {
+                if let Err(error) = handle_models_purge(category, variant, yes) {
+                    exit_with_code(error.code, "Model purge failed", error.message);
+                }
+            }
         },
+        Commands::Plugin { store_dir, command } => {
+            if let Err(error) = handle_plugin_command(&store_dir, command) {
+                exit_with_code(CliExitCode::PluginFailure, "Plugin command failed", error);
+            }
+        }
         Commands::Job(cmd) => match cmd {
             JobCommand::Run {
                 input,
@@ -718,69 +957,796 @@ fn main() {
                 handle_job_inspect(&job_id);
             }
         },
+        Commands::Completions { shell } => {
+            let mut command = Cli::command();
+            clap_complete::generate(shell, &mut command, "snipper", &mut io::stdout());
+        }
+        Commands::Manpages { output_dir } => {
+            let directory = std::path::Path::new(&output_dir);
+            std::fs::create_dir_all(directory)
+                .unwrap_or_else(|error| exit_with_error("Man page directory failed", error));
+            let path = directory.join("snipper.1");
+            let mut file = std::fs::File::create(&path)
+                .unwrap_or_else(|error| exit_with_error("Man page creation failed", error));
+            clap_mangen::Man::new(Cli::command())
+                .render(&mut file)
+                .unwrap_or_else(|error| exit_with_error("Man page rendering failed", error));
+            eprintln!("Generated {}", path.display());
+        }
     }
 }
 
-fn convert_path(input: &str, target: &str, output: Option<&str>) -> Result<(), String> {
-    let snipper =
-        Snipper::import_path(input, ImportOptions::default()).map_err(|e| e.to_string())?;
-    let target = target.to_ascii_lowercase();
-    let text = match target.as_str() {
-        "latex" | "tex" => Some(snipper.to_latex().map_err(|e| e.to_string())?),
-        "markdown" | "md" => Some(snipper.to_markdown().map_err(|e| e.to_string())?),
-        "typst" | "typ" => Some(snipper.to_typst().map_err(|e| e.to_string())?),
-        "html" | "htm" => Some(snipper.to_html().map_err(|e| e.to_string())?),
-        "mathml" | "mml" => Some(snipper.to_mathml().map_err(|e| e.to_string())?),
-        "omml" => Some(snipper.to_omml().map_err(|e| e.to_string())?),
-        "json" | "ast" => Some(snipper.to_json().map_err(|e| e.to_string())?),
-        "svg" | "pdf" | "png" | "text" | "txt" => {
-            let visual = VisualFormat::from_label(&target).expect("matched visual label");
-            let mut artifact = snipper.export(visual).map_err(|e| e.to_string())?;
-            print_diagnostics(&artifact.diagnostics);
-            if let Some(path) = output {
-                artifact.write_to_path(path).map_err(|e| e.to_string())?;
-                eprintln!("Converted {} to {}", input, path);
-                return Ok(());
-            }
-            if let Some(text) = artifact.content.as_ref().and_then(|value| value.as_text()) {
-                println!("{text}");
-                return Ok(());
-            }
-            return Err(format!(
-                "binary target '{target}' requires an output path (-o)"
+fn parse_cli() -> Cli {
+    let formats: &'static str = Box::leak(
+        format!(
+            "Available formats on this build: {}",
+            registered_format_names().join(", ")
+        )
+        .into_boxed_str(),
+    );
+    let matches = Cli::command()
+        .mut_subcommand("convert", |command| command.after_help(formats))
+        .get_matches();
+    Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit())
+}
+
+#[derive(Clone, Copy)]
+struct ConvertOptions<'a> {
+    output: Option<&'a str>,
+    force_binary_stdout: bool,
+    force: bool,
+    no_clobber: bool,
+    atomic: bool,
+    diagnostics: DiagnosticsFormat,
+    strict: bool,
+    fail_on_warning: bool,
+    quiet: bool,
+    verbose: bool,
+}
+
+#[derive(Clone, Copy)]
+struct BatchOptions<'a> {
+    recursive: bool,
+    output_dir: Option<&'a str>,
+    jobs: usize,
+    continue_on_error: bool,
+    report: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
+struct CliFailure {
+    code: CliExitCode,
+    message: String,
+}
+
+impl CliFailure {
+    fn new(code: CliExitCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CliTarget {
+    Semantic(OutputFormat),
+    Export(ExportFormat),
+}
+
+#[derive(Debug, Clone)]
+struct BatchTask {
+    input: std::path::PathBuf,
+    relative: std::path::PathBuf,
+    output: Option<std::path::PathBuf>,
+}
+
+#[derive(Debug)]
+struct BatchOutcome {
+    input: String,
+    output: Option<String>,
+    success: bool,
+    exit_code: i32,
+    message: Option<String>,
+}
+
+fn convert_inputs(
+    inputs: &[String],
+    target_label: &str,
+    options: ConvertOptions<'_>,
+    batch: BatchOptions<'_>,
+) -> Result<(), CliFailure> {
+    if batch.jobs == 0 {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "--jobs must be greater than zero",
+        ));
+    }
+    let target = resolve_cli_target(target_label).ok_or_else(|| {
+        CliFailure::new(
+            CliExitCode::UnsupportedConversion,
+            format!("unsupported target format '{target_label}'"),
+        )
+    })?;
+    let mut tasks = expand_batch_inputs(inputs, batch.recursive)?;
+    if tasks.is_empty() {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidInput,
+            "no input files matched",
+        ));
+    }
+    if tasks.len() > 1 && options.output.is_some() {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "-o/--output is only valid for one input; use --output-dir for batch conversion",
+        ));
+    }
+    if tasks.len() > 1 && batch.output_dir.is_none() {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "multiple inputs require --output-dir",
+        ));
+    }
+
+    if let Some(output_dir) = batch.output_dir {
+        let output_dir = std::path::Path::new(output_dir);
+        let extension = target_extension(target);
+        for task in &mut tasks {
+            let mut relative = task.relative.clone();
+            relative.set_extension(&extension);
+            task.output = Some(output_dir.join(relative));
+        }
+    } else if tasks.len() == 1 {
+        tasks[0].output = options.output.map(std::path::PathBuf::from);
+    }
+
+    let worker_count = batch.jobs.min(tasks.len()).max(1);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let outcomes = std::sync::Mutex::new(Vec::with_capacity(tasks.len()));
+    std::thread::scope(|scope| {
+        for _ in 0..worker_count {
+            scope.spawn(|| loop {
+                if stop.load(std::sync::atomic::Ordering::Acquire) {
+                    break;
+                }
+                let index = next.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                let Some(task) = tasks.get(index) else {
+                    break;
+                };
+                let output = task
+                    .output
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().into_owned());
+                let input = task.input.to_string_lossy().into_owned();
+                let task_options = ConvertOptions {
+                    output: output.as_deref(),
+                    ..options
+                };
+                let result = convert_path(&input, target_label, task_options);
+                let outcome = match result {
+                    Ok(()) => BatchOutcome {
+                        input,
+                        output,
+                        success: true,
+                        exit_code: 0,
+                        message: None,
+                    },
+                    Err(error) => {
+                        if !batch.continue_on_error {
+                            stop.store(true, std::sync::atomic::Ordering::Release);
+                        }
+                        BatchOutcome {
+                            input,
+                            output,
+                            success: false,
+                            exit_code: error.code as i32,
+                            message: Some(error.message),
+                        }
+                    }
+                };
+                outcomes.lock().unwrap().push(outcome);
+            });
+        }
+    });
+
+    let mut outcomes = outcomes.into_inner().unwrap();
+    outcomes.sort_by(|left, right| left.input.cmp(&right.input));
+    if let Some(report) = batch.report {
+        write_batch_report(report, target_label, &outcomes)?;
+    }
+    let failures: Vec<_> = outcomes.iter().filter(|outcome| !outcome.success).collect();
+    if failures.is_empty() {
+        return Ok(());
+    }
+    if batch.continue_on_error {
+        return Err(CliFailure::new(
+            CliExitCode::PartialBatchFailure,
+            format!(
+                "{} of {} batch conversions failed",
+                failures.len(),
+                outcomes.len()
+            ),
+        ));
+    }
+    let failure = failures[0];
+    Err(CliFailure::new(
+        exit_code_from_i32(failure.exit_code),
+        failure
+            .message
+            .clone()
+            .unwrap_or_else(|| "batch conversion failed".to_string()),
+    ))
+}
+
+fn expand_batch_inputs(inputs: &[String], recursive: bool) -> Result<Vec<BatchTask>, CliFailure> {
+    if inputs.iter().any(|input| input == "-") {
+        if inputs.len() != 1 {
+            return Err(CliFailure::new(
+                CliExitCode::InvalidArguments,
+                "stdin cannot be combined with other batch inputs",
             ));
         }
-        "docx" | "pptx" | "xlsx" => {
-            let format = match target.as_str() {
-                "docx" => latexsnipper_ast::ExportFormat::Docx,
-                "pptx" => latexsnipper_ast::ExportFormat::Pptx,
-                "xlsx" => latexsnipper_ast::ExportFormat::Xlsx,
-                _ => unreachable!(),
-            };
-            let path = output
-                .ok_or_else(|| format!("binary target '{target}' requires an output path (-o)"))?;
-            let mut artifact = snipper
-                .export_format(format)
-                .map_err(|error| error.to_string())?;
-            artifact
-                .write_to_path(path)
-                .map_err(|error| error.to_string())?;
-            print_diagnostics(&artifact.diagnostics);
-            eprintln!("Converted {} to {}", input, path);
-            return Ok(());
-        }
-        _ => return Err(format!("unsupported target format '{target}'")),
-    };
+        return Ok(vec![BatchTask {
+            input: std::path::PathBuf::from("-"),
+            relative: std::path::PathBuf::from("stdin"),
+            output: None,
+        }]);
+    }
 
-    if let Some(text) = text {
-        if let Some(path) = output {
-            std::fs::write(path, text.as_bytes()).map_err(|e| e.to_string())?;
-            eprintln!("Converted {} to {}", input, path);
+    let mut discovered =
+        std::collections::BTreeMap::<std::path::PathBuf, std::path::PathBuf>::new();
+    for input in inputs {
+        if contains_glob(input) {
+            let root = glob_root(input);
+            let mut matched = false;
+            for entry in glob::glob(input).map_err(|error| {
+                CliFailure::new(CliExitCode::InvalidArguments, format!("{input}: {error}"))
+            })? {
+                let path = entry.map_err(|error| {
+                    CliFailure::new(CliExitCode::InvalidInput, error.to_string())
+                })?;
+                if path.is_file() {
+                    matched = true;
+                    let relative = safe_relative_path(&path, &root);
+                    discovered.insert(path, relative);
+                }
+            }
+            if !matched {
+                return Err(CliFailure::new(
+                    CliExitCode::InvalidInput,
+                    format!("glob matched no files: {input}"),
+                ));
+            }
+            continue;
+        }
+
+        let path = std::path::PathBuf::from(input);
+        if path.is_dir() {
+            collect_directory_inputs(&path, &path, recursive, &mut discovered)?;
         } else {
-            println!("{text}");
+            let relative = path
+                .file_name()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("input"));
+            discovered.insert(path, relative);
+        }
+    }
+    Ok(discovered
+        .into_iter()
+        .map(|(input, relative)| BatchTask {
+            input,
+            relative,
+            output: None,
+        })
+        .collect())
+}
+
+fn collect_directory_inputs(
+    root: &std::path::Path,
+    directory: &std::path::Path,
+    recursive: bool,
+    discovered: &mut std::collections::BTreeMap<std::path::PathBuf, std::path::PathBuf>,
+) -> Result<(), CliFailure> {
+    let mut entries: Vec<_> = std::fs::read_dir(directory)
+        .map_err(|error| {
+            CliFailure::new(
+                CliExitCode::InvalidInput,
+                format!("{}: {error}", directory.display()),
+            )
+        })?
+        .collect::<Result<_, _>>()
+        .map_err(|error| CliFailure::new(CliExitCode::InvalidInput, error.to_string()))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let path = entry.path();
+        if path.is_file() {
+            discovered.insert(path.clone(), safe_relative_path(&path, root));
+        } else if recursive && path.is_dir() {
+            collect_directory_inputs(root, &path, true, discovered)?;
         }
     }
     Ok(())
+}
+
+fn contains_glob(input: &str) -> bool {
+    input
+        .chars()
+        .any(|character| matches!(character, '*' | '?' | '['))
+}
+
+fn glob_root(pattern: &str) -> std::path::PathBuf {
+    let wildcard = pattern
+        .char_indices()
+        .find_map(|(index, character)| "*?[".contains(character).then_some(index))
+        .unwrap_or(pattern.len());
+    let prefix = &pattern[..wildcard];
+    let path = std::path::Path::new(prefix);
+    if prefix.ends_with('/') || prefix.ends_with('\\') {
+        path.to_path_buf()
+    } else {
+        path.parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf()
+    }
+}
+
+fn safe_relative_path(path: &std::path::Path, root: &std::path::Path) -> std::path::PathBuf {
+    path.strip_prefix(root)
+        .ok()
+        .filter(|relative| {
+            relative
+                .components()
+                .all(|component| matches!(component, std::path::Component::Normal(_)))
+        })
+        .map(std::path::PathBuf::from)
+        .or_else(|| path.file_name().map(std::path::PathBuf::from))
+        .unwrap_or_else(|| std::path::PathBuf::from("input"))
+}
+
+fn target_extension(target: CliTarget) -> String {
+    match target {
+        CliTarget::Semantic(format) => format.extension().to_string(),
+        CliTarget::Export(format) => DocumentExportService::format_label(format).to_string(),
+    }
+}
+
+fn write_batch_report(
+    report: &str,
+    target: &str,
+    outcomes: &[BatchOutcome],
+) -> Result<(), CliFailure> {
+    let entries: Vec<_> = outcomes
+        .iter()
+        .map(|outcome| {
+            serde_json::json!({
+                "input": outcome.input,
+                "output": outcome.output,
+                "success": outcome.success,
+                "exitCode": outcome.exit_code,
+                "message": outcome.message,
+            })
+        })
+        .collect();
+    let successful = outcomes.iter().filter(|outcome| outcome.success).count();
+    let bytes = serde_json::to_vec_pretty(&serde_json::json!({
+        "schemaVersion": 1,
+        "target": target,
+        "total": outcomes.len(),
+        "successful": successful,
+        "failed": outcomes.len() - successful,
+        "files": entries,
+    }))
+    .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
+    let report_options = ConvertOptions {
+        output: Some(report),
+        force_binary_stdout: false,
+        force: true,
+        no_clobber: false,
+        atomic: true,
+        diagnostics: DiagnosticsFormat::Text,
+        strict: false,
+        fail_on_warning: false,
+        quiet: true,
+        verbose: false,
+    };
+    write_output_file(report, &bytes, &report_options)
+}
+
+fn exit_code_from_i32(code: i32) -> CliExitCode {
+    CliExitCode::contract()
+        .into_iter()
+        .find_map(|(candidate, _)| (candidate as i32 == code).then_some(candidate))
+        .unwrap_or(CliExitCode::GenericFailure)
+}
+
+fn convert_path(input: &str, target: &str, options: ConvertOptions<'_>) -> Result<(), CliFailure> {
+    let target = resolve_cli_target(target).ok_or_else(|| {
+        let suggestion = suggest_registered_format(target)
+            .map(|value| format!("; did you mean '{value}'?"))
+            .unwrap_or_default();
+        CliFailure::new(
+            CliExitCode::UnsupportedConversion,
+            format!(
+                "unsupported target format '{target}'{suggestion}; available formats: {}",
+                registered_format_names().join(", ")
+            ),
+        )
+    })?;
+    let document = read_document(input)?;
+    let artifact =
+        match target {
+            CliTarget::Semantic(format) => DocumentConverter::new(format)
+                .convert_artifact(&document)
+                .map_err(|error| CliFailure::new(CliExitCode::UnsupportedConversion, error))?,
+            CliTarget::Export(format) => {
+                DocumentExportService::export(&document, format).map_err(|error| {
+                    CliFailure::new(CliExitCode::UnsupportedConversion, error.to_string())
+                })?
+            }
+        };
+
+    if !options.quiet {
+        emit_diagnostics(&artifact.diagnostics, options.diagnostics)?;
+    }
+    if diagnostics_fail(
+        &artifact.diagnostics,
+        options.strict,
+        options.fail_on_warning,
+    ) {
+        return Err(CliFailure::new(
+            CliExitCode::StrictDiagnosticFailure,
+            "diagnostics exceeded the requested strictness threshold",
+        ));
+    }
+
+    let bytes = artifact.as_bytes().ok_or_else(|| {
+        CliFailure::new(
+            CliExitCode::OutputValidationFailure,
+            "exporter returned no primary content",
+        )
+    })?;
+    let binary = artifact
+        .content
+        .as_ref()
+        .is_some_and(GeneratedContent::is_binary);
+    let output = options.output.unwrap_or("-");
+    if output == "-" {
+        if binary && !options.force_binary_stdout {
+            return Err(CliFailure::new(
+                CliExitCode::InvalidArguments,
+                "binary stdout is disabled; pass --force-binary-stdout explicitly",
+            ));
+        }
+        let mut stdout = io::stdout().lock();
+        stdout.write_all(bytes).map_err(|error| {
+            CliFailure::new(CliExitCode::GenericFailure, format!("stdout: {error}"))
+        })?;
+        stdout.flush().map_err(|error| {
+            CliFailure::new(CliExitCode::GenericFailure, format!("stdout: {error}"))
+        })?;
+        return Ok(());
+    }
+
+    validate_generated_artifact(&artifact, output)?;
+    write_output_file(output, bytes, &options)?;
+    if options.verbose && !options.quiet {
+        eprintln!(
+            "Converted {input} to {output} ({} bytes, format {})",
+            bytes.len(),
+            artifact.format
+        );
+    }
+    Ok(())
+}
+
+fn resolve_cli_target(label: &str) -> Option<CliTarget> {
+    let lowercase = label.trim().to_ascii_lowercase();
+    let normalized = match lowercase.as_str() {
+        "display" => "latex_display",
+        "equation" | "eqn" => "latex_equation",
+        "md_inline" => "markdown_inline",
+        other => other,
+    };
+    if let Some(format) = OutputFormat::all()
+        .iter()
+        .copied()
+        .find(|format| format.name() == normalized)
+    {
+        return Some(CliTarget::Semantic(format));
+    }
+    DocumentExportService::format_from_label(normalized).map(CliTarget::Export)
+}
+
+fn registered_format_names() -> Vec<&'static str> {
+    let mut names: Vec<_> = OutputFormat::all().iter().map(OutputFormat::name).collect();
+    names.extend(
+        DocumentExportService::supported_formats()
+            .iter()
+            .map(|format| DocumentExportService::format_label(*format)),
+    );
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
+fn suggest_registered_format(input: &str) -> Option<&'static str> {
+    registered_format_names()
+        .into_iter()
+        .min_by_key(|candidate| levenshtein_distance(&input.to_ascii_lowercase(), candidate))
+        .filter(|candidate| levenshtein_distance(&input.to_ascii_lowercase(), candidate) <= 3)
+}
+
+fn read_document(input: &str) -> Result<Document, CliFailure> {
+    if input != "-" {
+        return DocumentImporter::from_path(input, ImportOptions::default()).map_err(|error| {
+            CliFailure::new(CliExitCode::InvalidInput, format!("{input}: {error}"))
+        });
+    }
+
+    let mut bytes = Vec::new();
+    io::stdin()
+        .read_to_end(&mut bytes)
+        .map_err(|error| CliFailure::new(CliExitCode::InvalidInput, format!("stdin: {error}")))?;
+    if bytes.is_empty() {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidInput,
+            "stdin did not contain a document",
+        ));
+    }
+    DocumentImporter::from_bytes(&bytes, None, ImportOptions::default())
+        .map_err(|error| CliFailure::new(CliExitCode::InvalidInput, format!("stdin: {error}")))
+}
+
+fn emit_diagnostics(
+    diagnostics: &[Diagnostic],
+    format: DiagnosticsFormat,
+) -> Result<(), CliFailure> {
+    match format {
+        DiagnosticsFormat::Text => print_diagnostics(diagnostics),
+        DiagnosticsFormat::Json => eprintln!(
+            "{}",
+            serde_json::to_string(diagnostics).map_err(|error| {
+                CliFailure::new(CliExitCode::GenericFailure, error.to_string())
+            })?
+        ),
+        DiagnosticsFormat::Sarif => {
+            let results: Vec<_> = diagnostics
+                .iter()
+                .map(|diagnostic| {
+                    serde_json::json!({
+                        "ruleId": diagnostic.code,
+                        "level": match diagnostic.level {
+                            DiagnosticLevel::Info => "note",
+                            DiagnosticLevel::Warning => "warning",
+                            DiagnosticLevel::Error => "error",
+                        },
+                        "message": { "text": diagnostic.message },
+                    })
+                })
+                .collect();
+            eprintln!(
+                "{}",
+                serde_json::json!({
+                    "version": "2.1.0",
+                    "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+                    "runs": [{
+                        "tool": { "driver": { "name": "LaTeXSnipper", "version": env!("CARGO_PKG_VERSION") } },
+                        "results": results,
+                    }]
+                })
+            );
+        }
+    }
+    Ok(())
+}
+
+fn diagnostics_fail(diagnostics: &[Diagnostic], strict: bool, fail_on_warning: bool) -> bool {
+    diagnostics.iter().any(|diagnostic| match diagnostic.level {
+        DiagnosticLevel::Error => strict,
+        DiagnosticLevel::Warning => strict || fail_on_warning,
+        DiagnosticLevel::Info => false,
+    })
+}
+
+fn validate_generated_artifact(artifact: &ExportArtifact, output: &str) -> Result<(), CliFailure> {
+    let Some(GeneratedContent::Binary(bytes)) = artifact.content.as_ref() else {
+        return Ok(());
+    };
+    let hint = std::path::Path::new(output);
+    let format = DocumentImporter::detect_format(bytes, Some(hint)).map_err(|error| {
+        CliFailure::new(
+            CliExitCode::OutputValidationFailure,
+            format!(
+                "generated {} failed format validation: {error}",
+                artifact.format
+            ),
+        )
+    })?;
+    DocumentImporter::from_bytes(bytes, Some(format), ImportOptions::default()).map_err(
+        |error| {
+            CliFailure::new(
+                CliExitCode::OutputValidationFailure,
+                format!(
+                    "generated {} could not be reopened: {error}",
+                    artifact.format
+                ),
+            )
+        },
+    )?;
+    Ok(())
+}
+
+fn write_output_file(
+    output: &str,
+    bytes: &[u8],
+    options: &ConvertOptions<'_>,
+) -> Result<(), CliFailure> {
+    let path = std::path::Path::new(output);
+    let parent = path
+        .parent()
+        .filter(|value| !value.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    std::fs::create_dir_all(parent).map_err(|error| {
+        CliFailure::new(
+            CliExitCode::GenericFailure,
+            format!(
+                "could not create output directory {}: {error}",
+                parent.display()
+            ),
+        )
+    })?;
+    if path.exists() && (options.no_clobber || !options.force) {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            format!("output already exists: {output}; pass --force to replace it"),
+        ));
+    }
+    if !options.atomic {
+        return std::fs::write(path, bytes).map_err(|error| {
+            CliFailure::new(CliExitCode::GenericFailure, format!("{output}: {error}"))
+        });
+    }
+
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| CliFailure::new(CliExitCode::InvalidArguments, "invalid output path"))?;
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let temporary = parent.join(format!(
+        ".{file_name}.snipper-{}-{unique}.tmp",
+        std::process::id()
+    ));
+    let result = (|| -> Result<(), CliFailure> {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
+        file.write_all(bytes)
+            .and_then(|_| file.flush())
+            .and_then(|_| file.sync_all())
+            .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
+        drop(file);
+        if options.force && path.exists() {
+            std::fs::remove_file(path)
+                .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
+        }
+        std::fs::rename(&temporary, path)
+            .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn doctor_model_state(models_dir: &std::path::Path) -> serde_json::Value {
+    let manifest_path = models_dir.join("model-manifest.json");
+    if !manifest_path.is_file() {
+        return serde_json::json!({
+            "manifestAvailable": false,
+            "installedVariants": 0,
+            "expectedFilesPresent": false,
+            "checksumStatus": "unavailable_without_manifest",
+        });
+    }
+    let manifest = match latexsnipper_model::ModelManifest::load(&manifest_path) {
+        Ok(value) => value,
+        Err(error) => {
+            return serde_json::json!({
+                "manifestAvailable": true,
+                "manifestValid": false,
+                "error": error.to_string(),
+            });
+        }
+    };
+    let manager = latexsnipper_model::ModelManager::new(models_dir.to_path_buf());
+    let mut installed = 0usize;
+    let mut checked_files = 0usize;
+    let mut missing_files = 0usize;
+    for (category, info) in &manifest.categories {
+        for variant_id in manager.list_installed(category) {
+            installed += 1;
+            if let Some(variant) = info
+                .variants
+                .iter()
+                .find(|candidate| candidate.id == variant_id)
+            {
+                let directory = manager.variant_dir(category, &variant_id);
+                for file in &variant.files {
+                    checked_files += 1;
+                    if !directory.join(file).is_file() {
+                        missing_files += 1;
+                    }
+                }
+            }
+        }
+    }
+    serde_json::json!({
+        "manifestAvailable": true,
+        "manifestValid": true,
+        "installedVariants": installed,
+        "checkedFiles": checked_files,
+        "missingFiles": missing_files,
+        "expectedFilesPresent": missing_files == 0,
+        "checksumStatus": "archives_verified_at_download; extracted_files_checked_for_presence",
+    })
+}
+
+fn doctor_plugin_state(store_dir: &std::path::Path) -> serde_json::Value {
+    let store = latexsnipper_plugin::PluginStore::new(store_dir.to_path_buf());
+    let plugins = match store.list() {
+        Ok(value) => value,
+        Err(error) => {
+            return serde_json::json!({
+                "storeDirectory": store_dir,
+                "registryValid": false,
+                "error": error.to_string(),
+                "nativeAbiHostAvailable": false,
+                "wasiComponentHostAvailable": false,
+            });
+        }
+    };
+    let enabled = plugins.iter().filter(|plugin| plugin.enabled).count();
+    let failed_integrity = plugins
+        .iter()
+        .filter(|plugin| store.verify_installed(&plugin.manifest.id).is_err())
+        .count();
+    serde_json::json!({
+        "storeDirectory": store_dir,
+        "registryValid": true,
+        "installed": plugins.len(),
+        "enabled": enabled,
+        "failedIntegrity": failed_integrity,
+        "nativeAbiHostAvailable": false,
+        "wasiComponentHostAvailable": false,
+    })
+}
+
+fn directory_is_writable(directory: &std::path::Path) -> bool {
+    let probe = directory.join(format!(
+        ".snipper-write-probe-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+    {
+        Ok(file) => {
+            drop(file);
+            std::fs::remove_file(probe).is_ok()
+        }
+        Err(_) => false,
+    }
 }
 
 fn print_diagnostics(diagnostics: &[Diagnostic]) {
@@ -795,6 +1761,11 @@ fn print_diagnostics(diagnostics: &[Diagnostic]) {
 fn exit_with_error(prefix: &str, error: impl std::fmt::Display) -> ! {
     eprintln!("{prefix}: {error}");
     std::process::exit(1)
+}
+
+fn exit_with_code(code: CliExitCode, prefix: &str, error: impl std::fmt::Display) -> ! {
+    eprintln!("{prefix}: {error}");
+    std::process::exit(code as i32)
 }
 
 fn handle_models_download(category: Option<String>, all: bool, manifest_url: Option<String>) {
@@ -1083,6 +2054,225 @@ fn handle_models_verify(category: Option<String>) {
 }
 
 // ── Job handlers ─────────────────────────────────────────────
+
+fn handle_models_purge(
+    category: Option<String>,
+    variant: Option<String>,
+    confirmed: bool,
+) -> Result<(), CliFailure> {
+    if !confirmed {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "refusing to remove models without --yes",
+        ));
+    }
+    if let Some(value) = category.as_deref() {
+        validate_storage_name(value, "category")?;
+    }
+    if let Some(value) = variant.as_deref() {
+        validate_storage_name(value, "variant")?;
+    }
+
+    let models_dir = std::path::PathBuf::from("models");
+    let manager = latexsnipper_model::ModelManager::new(models_dir.clone());
+    let categories = if let Some(category) = category {
+        vec![category]
+    } else if models_dir.is_dir() {
+        let mut names = std::fs::read_dir(&models_dir)
+            .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().is_dir())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|name| validate_storage_name(name, "category").is_ok())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    } else {
+        Vec::new()
+    };
+
+    let mut removed = 0usize;
+    for category in categories {
+        let variants = if let Some(variant) = variant.as_ref() {
+            vec![variant.clone()]
+        } else {
+            manager.list_installed(&category)
+        };
+        for variant in variants {
+            let directory = manager.variant_dir(&category, &variant);
+            if !directory.is_dir() {
+                continue;
+            }
+            manager
+                .delete_variant(&category, &variant)
+                .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
+            removed += 1;
+            eprintln!("Removed {category}/{variant}");
+        }
+    }
+    eprintln!("Removed {removed} installed model variant(s); manifest files were preserved.");
+    Ok(())
+}
+
+fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), String> {
+    let store = latexsnipper_plugin::PluginStore::new(std::path::PathBuf::from(store_dir));
+    match command {
+        PluginCommand::List => {
+            let plugins = store.list().map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "schemaVersion": 1,
+                    "storeDirectory": store.root(),
+                    "plugins": plugins,
+                }))
+                .map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Info { id } => {
+            let plugin = store
+                .get(&id)
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| format!("Plugin '{id}' is not installed"))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&plugin).map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Verify { path } => {
+            reject_remote_plugin_source(&path)?;
+            let verification = store
+                .verify_package(std::path::Path::new(&path))
+                .map_err(|error| error.to_string())?;
+            print_plugin_verification(&verification)?;
+        }
+        PluginCommand::Install { path } => {
+            reject_remote_plugin_source(&path)?;
+            let installed = store
+                .install(std::path::Path::new(&path))
+                .map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "installed": installed,
+                    "executed": false,
+                    "message": "Package verified and installed disabled; no plugin code was executed",
+                }))
+                .map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Uninstall { id } => {
+            store.uninstall(&id).map_err(|error| error.to_string())?;
+            println!("Plugin '{id}' uninstalled");
+        }
+        PluginCommand::Enable { id } => {
+            let plugin = store
+                .set_enabled(&id, true)
+                .map_err(|error| error.to_string())?;
+            println!(
+                "Plugin '{}' enabled in store metadata; execution still requires a compatible host",
+                plugin.manifest.id
+            );
+        }
+        PluginCommand::Disable { id } => {
+            let plugin = store
+                .set_enabled(&id, false)
+                .map_err(|error| error.to_string())?;
+            println!("Plugin '{}' disabled", plugin.manifest.id);
+        }
+        PluginCommand::Doctor => {
+            let plugins = store.list().map_err(|error| error.to_string())?;
+            let checks = plugins
+                .iter()
+                .map(|plugin| match store.verify_installed(&plugin.manifest.id) {
+                    Ok(verification) => serde_json::json!({
+                        "id": plugin.manifest.id,
+                        "enabled": plugin.enabled,
+                        "verified": true,
+                        "entrypointSha256": verification.entrypoint_sha256,
+                        "executionHostAvailable": false,
+                    }),
+                    Err(error) => serde_json::json!({
+                        "id": plugin.manifest.id,
+                        "enabled": plugin.enabled,
+                        "verified": false,
+                        "error": error.to_string(),
+                        "executionHostAvailable": false,
+                    }),
+                })
+                .collect::<Vec<_>>();
+            let healthy = checks
+                .iter()
+                .all(|check| check["verified"].as_bool() == Some(true));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "schemaVersion": 1,
+                    "storeDirectory": store.root(),
+                    "installed": plugins.len(),
+                    "packageIntegrityHealthy": healthy,
+                    "nativeAbiHostAvailable": false,
+                    "wasiComponentHostAvailable": false,
+                    "plugins": checks,
+                }))
+                .map_err(|error| error.to_string())?
+            );
+            if !healthy {
+                return Err("one or more installed plugin packages failed verification".to_string());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reject_remote_plugin_source(source: &str) -> Result<(), String> {
+    if source.contains("://") {
+        return Err(
+            "remote plugin installation is unsupported; download the package and verify its local path"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn print_plugin_verification(
+    verification: &latexsnipper_plugin::PluginVerification,
+) -> Result<(), String> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "verified": true,
+            "executed": false,
+            "manifest": verification.manifest,
+            "manifestPath": verification.manifest_path,
+            "entrypointPath": verification.entrypoint_path,
+            "entrypointSha256": verification.entrypoint_sha256,
+            "fileCount": verification.file_count,
+            "totalBytes": verification.total_bytes,
+        }))
+        .map_err(|error| error.to_string())?
+    );
+    Ok(())
+}
+
+fn validate_storage_name(value: &str, label: &str) -> Result<(), CliFailure> {
+    let path = std::path::Path::new(value);
+    if value.is_empty()
+        || value == "."
+        || value == ".."
+        || path.components().count() != 1
+        || !matches!(
+            path.components().next(),
+            Some(std::path::Component::Normal(_))
+        )
+    {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            format!("invalid model {label}: {value}"),
+        ));
+    }
+    Ok(())
+}
 
 fn handle_job_run(input: &str, format: &str, output: Option<&str>, mode: &str) {
     use latexsnipper_engine::Job;

@@ -2,6 +2,7 @@ use latexsnipper_ast::{
     Block, Document, ExportArtifact, Formula, FormulaBlock, FormulaSource, GeneratedContent,
     NodeIdGenerator, Page,
 };
+#[cfg(feature = "native")]
 use latexsnipper_export::render_tree::RenderTree;
 use latexsnipper_foundation::Result;
 use sha2::{Digest, Sha256};
@@ -128,9 +129,12 @@ impl DocumentConverter {
         // Collect diagnostics from all sources
         let mut diagnostics = doc.diagnostics.clone();
 
-        // 1. RenderTree warns about unsupported blocks in visual export
-        let tree = RenderTree::from_document(doc);
-        diagnostics.extend(tree.diagnostics);
+        // RenderTree warns about unsupported blocks in native visual export.
+        #[cfg(feature = "native")]
+        {
+            let tree = RenderTree::from_document(doc);
+            diagnostics.extend(tree.diagnostics);
+        }
 
         // 2. Converter-level diagnostics for placeholder-rendered blocks
         diagnostics.extend(collect_converter_diagnostics(doc));

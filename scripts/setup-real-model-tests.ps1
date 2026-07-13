@@ -1,17 +1,95 @@
 param(
-    [string]$Tag = "models-v2.0.0"
+    [string]$Tag = "models-v2.0.0",
+    [string]$CacheDir = $(
+        if ($env:LATEXSNIPPER_MODEL_CACHE) {
+            $env:LATEXSNIPPER_MODEL_CACHE
+        }
+        elseif ($env:RUNNER_TEMP) {
+            Join-Path $env:RUNNER_TEMP "latexsnipper-model-cache"
+        }
+        else {
+            Join-Path ([System.IO.Path]::GetTempPath()) "latexsnipper-model-cache"
+        }
+    ),
+    [string]$DiagnosticDir = $(
+        if ($env:LATEXSNIPPER_MODEL_DIAGNOSTICS) {
+            $env:LATEXSNIPPER_MODEL_DIAGNOSTICS
+        }
+        elseif ($env:RUNNER_TEMP) {
+            Join-Path $env:RUNNER_TEMP "latexsnipper-model-diagnostics"
+        }
+        else {
+            Join-Path ([System.IO.Path]::GetTempPath()) "latexsnipper-model-diagnostics"
+        }
+    ),
+    [string]$OverrideBaseUrl = $env:LATEXSNIPPER_MODEL_BASE_URL,
+    [ValidateRange(1, 20)]
+    [int]$MaxAttempts = 4,
+    [ValidateRange(1, 7200)]
+    [int]$TimeoutSeconds = 600
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
 $root = Split-Path -Parent $PSScriptRoot
 $manifestPath = Join-Path $PSScriptRoot "model-manifest.template.json"
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-$downloadDir = Join-Path ([System.IO.Path]::GetTempPath()) "latexsnipper-model-ci"
+$attempts = [System.Collections.ArrayList]::new()
 
-if (Test-Path -LiteralPath $downloadDir) {
-    Remove-Item -LiteralPath $downloadDir -Recurse -Force
+Import-Module (Join-Path $PSScriptRoot "VerifiedDownload.psm1") -Force
+
+function Get-CandidateUrls {
+    param([Parameter(Mandatory = $true)][string]$AssetName)
+
+    $urls = [System.Collections.Generic.List[string]]::new()
+    $urls.Add($manifest.baseUrl.TrimEnd("/") + "/" + $AssetName)
+    foreach ($mirror in $manifest.mirrors) {
+        $urls.Add($mirror.TrimEnd("/") + "/" + $AssetName)
+    }
+    if ($OverrideBaseUrl) {
+        $urls.Add($OverrideBaseUrl.TrimEnd("/") + "/" + $AssetName)
+    }
+    return $urls.ToArray()
 }
-New-Item -ItemType Directory -Path $downloadDir | Out-Null
+
+function Write-SetupDiagnostics {
+    param([Parameter(Mandatory = $true)][string]$Failure)
+
+    New-Item -ItemType Directory -Path $DiagnosticDir -Force | Out-Null
+    Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $DiagnosticDir "model-manifest.json") -Force
+
+    $existingFiles = @()
+    if (Test-Path -LiteralPath $CacheDir) {
+        $existingFiles = Get-ChildItem -LiteralPath $CacheDir -File -Force | ForEach-Object {
+            $sha = $null
+            try {
+                $sha = Get-FileSha256 -Path $_.FullName
+            }
+            catch {
+                $sha = $null
+            }
+            [pscustomobject]@{
+                Name = $_.Name
+                SizeBytes = $_.Length
+                Sha256 = $sha
+            }
+        }
+    }
+
+    $report = [ordered]@{
+        TimestampUtc = (Get-Date).ToUniversalTime().ToString("o")
+        Failure = $Failure
+        Tag = $Tag
+        CacheDir = $CacheDir
+        RunnerOs = $env:RUNNER_OS
+        OsDescription = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
+        PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+        Attempts = @($attempts)
+        ExistingFiles = @($existingFiles)
+    }
+    $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $DiagnosticDir "setup-report.json") -Encoding utf8
+}
 
 $variants = @(
     @{ Category = "formula-det"; Id = "yolov8-mfd" },
@@ -22,46 +100,82 @@ $variants = @(
     @{ Category = "table-struct"; Id = "tatr-structure" }
 )
 
-foreach ($item in $variants) {
-    $category = $manifest.categories.($item.Category)
-    $variant = $category.variants | Where-Object { $_.id -eq $item.Id } | Select-Object -First 1
-    if (-not $variant) {
-        throw "Model manifest entry missing: $($item.Category)/$($item.Id)"
+try {
+    New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
+
+    foreach ($item in $variants) {
+        $category = $manifest.categories.($item.Category)
+        $variant = $category.variants | Where-Object { $_.id -eq $item.Id } | Select-Object -First 1
+        if (-not $variant) {
+            throw "Model manifest entry missing: $($item.Category)/$($item.Id)"
+        }
+
+        $assetName = $variant.zipFile
+        $expected = $manifest.checksums.$assetName
+        if (-not $expected) {
+            throw "Checksum missing for required real-model asset: $assetName"
+        }
+
+        $archive = Join-Path $CacheDir $assetName
+        Invoke-VerifiedDownload `
+            -Urls (Get-CandidateUrls -AssetName $assetName) `
+            -OutputPath $archive `
+            -ExpectedSha256 $expected `
+            -AssetName $assetName `
+            -MaxAttempts $MaxAttempts `
+            -TimeoutSeconds $TimeoutSeconds `
+            -AttemptLog $attempts | Out-Null
+
+        $destination = Join-Path (Join-Path $root "models") $item.Category
+        New-Item -ItemType Directory -Path $destination -Force | Out-Null
+        Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force
     }
 
-    $zipName = $variant.zipFile
-    $expected = $manifest.checksums.$zipName
-    if (-not $expected) {
-        throw "Checksum missing for required real-model asset: $zipName"
+    $orientation = $manifest.testAssets.orientation
+    if (
+        -not $orientation -or
+        -not $orientation.fileName -or
+        -not $orientation.sha256 -or
+        -not $orientation.destination
+    ) {
+        throw "Orientation test asset is missing from the model manifest"
     }
 
-    $archive = Join-Path $downloadDir $zipName
-    $url = "https://github.com/strangelion/latexsnipper-core/releases/download/$Tag/$zipName"
-    Write-Host "Downloading $url"
-    Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
-    $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actual -ne $expected.ToLowerInvariant()) {
-        throw "Checksum mismatch for $zipName`: expected $expected, got $actual"
+    $orientationArchive = Join-Path $CacheDir $orientation.fileName
+    Invoke-VerifiedDownload `
+        -Urls @($orientation.sources) `
+        -OutputPath $orientationArchive `
+        -ExpectedSha256 $orientation.sha256 `
+        -AssetName $orientation.fileName `
+        -MaxAttempts $MaxAttempts `
+        -TimeoutSeconds $TimeoutSeconds `
+        -AttemptLog $attempts | Out-Null
+
+    $testModels = [System.IO.Path]::GetFullPath((Join-Path $root "test-models"))
+    $orientationDestination = [System.IO.Path]::GetFullPath(
+        (Join-Path $testModels $orientation.destination)
+    )
+    $testModelsPrefix = $testModels.TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    ) + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $orientationDestination.StartsWith(
+            $testModelsPrefix,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )) {
+        throw "Orientation model destination escapes the test-models directory"
     }
 
-    $destination = Join-Path (Join-Path $root "models") $item.Category
-    New-Item -ItemType Directory -Path $destination -Force | Out-Null
-    Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force
-}
+    New-Item -ItemType Directory -Path (Split-Path -Parent $orientationDestination) -Force | Out-Null
+    Copy-Item -LiteralPath $orientationArchive -Destination $orientationDestination -Force
+    $installedSha256 = Get-FileSha256 -Path $orientationDestination
+    if ($installedSha256 -ne $orientation.sha256.ToLowerInvariant()) {
+        throw "Installed orientation model checksum mismatch"
+    }
 
-$orientationUrl = "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-LCNet_x1_0_doc_ori_infer.tar"
-$orientationSha256 = "282337df5c41f7cdf8dacd5acf71fddfdc10218399f4b318463c17f4eae96c97"
-$orientationArchive = Join-Path $downloadDir "PP-LCNet_x1_0_doc_ori_infer.tar"
-Invoke-WebRequest -Uri $orientationUrl -OutFile $orientationArchive -UseBasicParsing
-$actualOrientation = (Get-FileHash -LiteralPath $orientationArchive -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actualOrientation -ne $orientationSha256) {
-    throw "Checksum mismatch for orientation model"
+    Write-Host "Verified real-model test assets are ready."
 }
-$testModels = Join-Path $root "test-models"
-New-Item -ItemType Directory -Path $testModels -Force | Out-Null
-tar -xf $orientationArchive -C $testModels
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to extract orientation model"
+catch {
+    Write-SetupDiagnostics -Failure $_.Exception.Message
+    throw
 }
-
-Write-Host "Verified real-model test assets are ready."

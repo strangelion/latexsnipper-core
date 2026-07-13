@@ -32,6 +32,18 @@ impl TractBackend {
 }
 
 impl RuntimeBackend for TractBackend {
+    fn clear_sessions(&self) {
+        match self.session_cache.lock() {
+            Ok(mut cache) => {
+                cache.clear();
+                log::info!("Tract session cache cleared");
+            }
+            Err(error) => {
+                log::error!("Failed to clear Tract session cache: {}", error);
+            }
+        }
+    }
+
     fn create_session(
         &self,
         handle: &ModelHandle,

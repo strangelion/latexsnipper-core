@@ -27,8 +27,13 @@ successfully proves structural validity, not full Microsoft Office visual parity
 ## Import policy
 
 Format detection is signature/package-first, then MIME, then extension. Mismatched
-hints return typed errors. OOXML imports enforce safe enclosed paths and total
-decompressed-size limits. Encrypted OOXML packages return `EncryptedFile`.
+hints return typed errors. OOXML imports enforce safe enclosed paths, entry-count,
+decompressed-size, compression-ratio, XML depth/element, DTD/entity, external
+relationship, page, and asset limits. Encrypted OOXML packages return `EncryptedFile`.
+Raster headers are checked before decode/allocation for width, height, and total pixels.
+OOXML imports also enforce distinct slide, sheet, and embedded-object budgets. Model
+archives require a manifest SHA-256 and enforce download, entry, decompressed-size,
+compression-ratio, enclosed-path, duplicate-output, and symlink limits.
 Unsupported SVG elements retain the original SVG source asset and emit
 `W_UNSUPPORTED_FEATURE`. Office unknown parts are retained only with
 `ImportOptions::preserve_unknown_parts`.
@@ -60,3 +65,13 @@ reject warning/error diagnostics or set strict import options.
 New callers should read `ExportArtifact.content` or use `as_bytes()`/`write_to()`.
 Synchronous OCR SDK entry points execute work on a dedicated OS thread so callers
 inside an existing Tokio runtime do not trigger nested-runtime panics.
+
+WASM semantic conversion is stable. WASM recognition, progress/cancellation, and
+model-memory management remain experimental; hosted Chrome runs a complete tiny
+ONNX detector/recognizer inference through Tract and the document pipeline. Capability readiness follows loaded artifact
+profiles; table and handwriting remain unavailable. Native binary exporters are
+not linked into the browser target.
+
+Built-in Rust plugin ordering, failure policies, transactional patches, and execution
+deadlines are stable. External Native ABI/WASI packages can be verified and installed
+disabled, but their execution hosts are not available or advertised in this release.

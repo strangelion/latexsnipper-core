@@ -1,0 +1,21 @@
+{
+  "model_type": "crnn_ctc",
+  "license": "AGPL-3.0",
+  "input": { "name": "x", "shape": [1, 3, 48, 320], "dtype": "float32" },
+  "output": { "name": "output", "shape": [1, 3, 4] },
+  "preprocessing": {
+    "resize": { "width": 320, "height": 48, "keep_ratio": true, "pad_value": 0 },
+    "normalization": { "mean": [0, 0, 0], "std": [1, 1, 1] },
+    "color_format": "RGB"
+  },
+  "decoding": {
+    "type": "ctc_greedy",
+    "blank_id": 0,
+    "output_layout": "ntc",
+    "logits_kind": "logits",
+    "keys_file": "keys.txt"
+  },
+  "pipeline": {
+    "model_files": { "primary": "model.onnx", "tokenizer": "keys.txt" }
+  }
+}

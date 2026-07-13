@@ -4,9 +4,10 @@ use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
 use latexsnipper_inference::formula_lines::split_formula_line_groups;
 use latexsnipper_inference::{
-    load_keys, recognize_formula, recognize_text_with_keys, RecognitionParams, TextRecParams,
+    load_keys, load_tokenizer_from_str, recognize_formula, recognize_formula_with_tokenizer,
+    recognize_text_with_keys, RecognitionParams, TextRecParams,
 };
-use latexsnipper_runtime::{InferenceContext, ModelInput, ModelOutput, ModelTask};
+use latexsnipper_runtime::{InferenceContext, ModelId, ModelInput, ModelOutput, ModelTask};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -223,6 +224,20 @@ impl RecognizerNode {
         let tokenizer_path = rec_config
             .pipeline_tokenizer_path(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
+        let tokenizer_name = tokenizer_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("tokenizer.json");
+        let tokenizer = ctx
+            .model_resolver
+            .as_ref()
+            .and_then(|resolver| {
+                let variant = ctx.model_variants.get("formula-rec")?;
+                resolver
+                    .read_text_artifact(&ModelId::new("formula-rec", variant), tokenizer_name)
+                    .ok()
+            })
+            .and_then(|text| load_tokenizer_from_str(&text).ok());
 
         let backend = get_backend(ctx)?;
         let enc_handle = resolve_model_handle(ctx, "formula-rec/encoder", encoder_path)?;
@@ -231,7 +246,26 @@ impl RecognizerNode {
         let enc_session = get_or_create_session(ctx, "formula_encoder", &backend, &enc_handle)?;
         let dec_session = get_or_create_session(ctx, "formula_decoder", &backend, &dec_handle)?;
 
-        let params = RecognitionParams::default();
+        let params = RecognitionParams::from_config(&rec_config);
+        let recognize_crop = |image: &latexsnipper_image::SnipperImage| {
+            if let Some(tokenizer) = &tokenizer {
+                recognize_formula_with_tokenizer(
+                    image,
+                    &**enc_session,
+                    &**dec_session,
+                    tokenizer,
+                    &params,
+                )
+            } else {
+                recognize_formula(
+                    image,
+                    &**enc_session,
+                    &**dec_session,
+                    &tokenizer_path,
+                    &params,
+                )
+            }
+        };
         let mut blocks = Vec::new();
 
         for det in detections {
@@ -247,13 +281,7 @@ impl RecognizerNode {
                     let line_groups = split_formula_line_groups(&cropped);
 
                     if line_groups.is_empty() {
-                        match recognize_formula(
-                            &cropped,
-                            &*enc_session,
-                            &*dec_session,
-                            &tokenizer_path,
-                            &params,
-                        ) {
+                        match recognize_crop(&cropped) {
                             Ok(result) => {
                                 let mut f = Formula::latex(result.text);
                                 f.confidence = result.confidence;
@@ -285,13 +313,7 @@ impl RecognizerNode {
                                     latexsnipper_image::color::PixelFormat::Rgb,
                                     crop.pixels.clone(),
                                 );
-                                match recognize_formula(
-                                    &crop_img,
-                                    &*enc_session,
-                                    &*dec_session,
-                                    &tokenizer_path,
-                                    &params,
-                                ) {
+                                match recognize_crop(&crop_img) {
                                     Ok(result) => all_results.push(result.text),
                                     Err(e) => log::warn!("Formula line rec failed: {}", e),
                                 }

@@ -29,7 +29,8 @@ pub use model_registry::{
     ModelManifest, ModelRegistry,
 };
 pub use model_resolver::{
-    FsModelResolver, MemoryModelResolver, ModelId, ModelResolver, SharedModelResolver,
+    normalize_key, FsModelResolver, MemoryModelResolver, ModelId, ModelResolver,
+    SharedModelResolver,
 };
 pub use model_validation::{
     compute_bytes_checksum, compute_checksum, load_checksums, validate_all_models, validate_model,

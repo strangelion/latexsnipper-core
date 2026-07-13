@@ -1,13 +1,16 @@
 pub mod asset_helper;
 pub mod asset_resolver;
+#[cfg(feature = "native")]
 pub mod clipboard;
 pub mod converter;
 pub mod document_cleaner;
 pub mod document_converter;
+#[cfg(feature = "native")]
 pub mod docx_reader;
 pub mod export_format;
 pub mod html;
 pub mod html_parser;
+#[cfg(feature = "native")]
 pub mod importer;
 pub mod latex;
 pub mod latex_ast;
@@ -18,12 +21,17 @@ pub mod markdown;
 pub mod markdown_parser;
 pub mod mathml;
 pub mod mathml_parser;
+#[cfg(feature = "native")]
 pub mod office_insert;
 pub mod omml;
 pub mod omml_parser;
+#[cfg(feature = "native")]
 pub mod package_export;
+#[cfg(feature = "native")]
 pub mod pdf_native;
+#[cfg(feature = "native")]
 pub mod pdf_overlay;
+#[cfg(feature = "native")]
 pub mod pptx_reader;
 pub mod svg_parser;
 pub mod table_export;
@@ -32,31 +40,40 @@ pub mod typst;
 pub mod typst_parser;
 pub mod word_ooxml_table_parser;
 pub mod word_ooxml_table_writer;
+#[cfg(feature = "native")]
 pub mod xlsx_reader;
 
 pub use asset_helper::{
     resolve_asset_ref, resolve_image_html, resolve_image_latex, resolve_image_markdown,
     resolve_image_typst,
 };
+#[cfg(feature = "native")]
 pub use clipboard::ClipboardBundle;
 pub use converter::Converter;
 pub use document_cleaner::{clean_document, CleanResult, CleanerOptions};
 pub use document_converter::{DocumentConverter, OutputFormat};
+#[cfg(feature = "native")]
 pub use docx_reader::{read_docx, read_docx_bytes};
 pub use html::HtmlConverter;
 pub use html_parser::parse_html_to_document;
+#[cfg(feature = "native")]
 pub use importer::DocumentImporter;
 pub use latex::{LatexConverter, LatexDisplayConverter, LatexEquationConverter};
 pub use markdown::{MarkdownBlockConverter, MarkdownInlineConverter};
 pub use markdown_parser::parse_markdown_to_document;
 pub use mathml::{MathmlAttrConverter, MathmlConverter, MathmlMConverter, MathmlMmlConverter};
 pub use mathml_parser::parse_mathml_to_latex;
+#[cfg(feature = "native")]
 pub use office_insert::{OfficeInsertResult, OfficeInsertService};
 pub use omml::OmmlConverter;
 pub use omml_parser::parse_omml_to_latex;
+#[cfg(feature = "native")]
 pub use package_export::DocumentExportService;
+#[cfg(feature = "native")]
 pub use pdf_native::{extract_pdf_text, extract_pdf_text_bytes};
+#[cfg(feature = "native")]
 pub use pdf_overlay::{overlay_pdf, overlay_pdf_with_options, PdfOverlayOptions};
+#[cfg(feature = "native")]
 pub use pptx_reader::{read_pptx, read_pptx_bytes};
 pub use svg_parser::{parse_svg, parse_svg_to_shapes, SvgParseResult};
 pub use table_export::TableExporter;
@@ -67,6 +84,7 @@ pub use typst::TypstConverter;
 pub use typst_parser::parse_typst_to_latex;
 pub use word_ooxml_table_parser::parse_word_table_ooxml;
 pub use word_ooxml_table_writer::write_word_table_ooxml;
+#[cfg(feature = "native")]
 pub use xlsx_reader::{read_xlsx, read_xlsx_bytes};
 
 #[cfg(test)]

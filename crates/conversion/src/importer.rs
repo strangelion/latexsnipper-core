@@ -10,6 +10,7 @@ use latexsnipper_ast::{
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_syntax::latex::LatexParser;
 use latexsnipper_syntax::Parser as _;
+use quick_xml::events::Event;
 
 use crate::{
     extract_pdf_text_bytes, parse_html_to_document, parse_markdown_to_document,
@@ -47,6 +48,15 @@ impl DocumentImporter {
 
     pub fn from_path(path: impl AsRef<Path>, options: ImportOptions) -> Result<Document> {
         let path = path.as_ref();
+        let input_size = std::fs::metadata(path)
+            .map_err(|e| SnipperError::Io(format!("Failed to inspect '{}': {e}", path.display())))?
+            .len();
+        if input_size > options.max_input_size {
+            return Err(SnipperError::LimitExceeded(format!(
+                "input is {input_size} bytes; limit is {}",
+                options.max_input_size
+            )));
+        }
         let bytes = std::fs::read(path)
             .map_err(|e| SnipperError::Io(format!("Failed to read '{}': {e}", path.display())))?;
         let format = Self::detect_format(&bytes, Some(path))?;
@@ -214,6 +224,12 @@ impl DocumentImporter {
 fn detect_ooxml_package(bytes: &[u8]) -> Result<InputFormat> {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
         .map_err(|e| SnipperError::InvalidFormat(format!("Invalid ZIP package: {e}")))?;
+    if archive.len() > 10_000 {
+        return Err(SnipperError::LimitExceeded(format!(
+            "ZIP contains {} entries; detection limit is 10000",
+            archive.len()
+        )));
+    }
     let mut docx = false;
     let mut pptx = false;
     let mut xlsx = false;
@@ -253,6 +269,42 @@ fn resolve_hint(detected: InputFormat, hint: Option<InputFormat>) -> Result<Inpu
 }
 
 fn enforce_input_limits(bytes: &[u8], format: InputFormat, options: &ImportOptions) -> Result<()> {
+    if bytes.len() as u64 > options.max_input_size {
+        return Err(SnipperError::LimitExceeded(format!(
+            "input is {} bytes; limit is {}",
+            bytes.len(),
+            options.max_input_size
+        )));
+    }
+    if matches!(
+        format,
+        InputFormat::ImagePng
+            | InputFormat::ImageJpeg
+            | InputFormat::ImageWebp
+            | InputFormat::ImageBmp
+            | InputFormat::ImageTiff
+            | InputFormat::ImageGif
+    ) {
+        let size = imagesize::blob_size(bytes)
+            .map_err(|error| SnipperError::InvalidFormat(format!("Invalid image: {error}")))?;
+        let pixels = (size.width as u64)
+            .checked_mul(size.height as u64)
+            .ok_or_else(|| SnipperError::LimitExceeded("image pixel count overflow".to_string()))?;
+        if size.width > options.max_image_width
+            || size.height > options.max_image_height
+            || pixels > options.max_image_pixels
+        {
+            return Err(SnipperError::LimitExceeded(format!(
+                "image is {}x{} ({} pixels); limits are {}x{} and {} pixels",
+                size.width,
+                size.height,
+                pixels,
+                options.max_image_width,
+                options.max_image_height,
+                options.max_image_pixels
+            )));
+        }
+    }
     if !is_office(format) && bytes.len() as u64 > options.max_text_size {
         return Err(SnipperError::LimitExceeded(format!(
             "input is {} bytes; limit is {}",
@@ -263,15 +315,57 @@ fn enforce_input_limits(bytes: &[u8], format: InputFormat, options: &ImportOptio
     if is_office(format) {
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
             .map_err(|e| SnipperError::InvalidFormat(format!("Invalid OOXML ZIP: {e}")))?;
+        if archive.len() > options.max_zip_entries {
+            return Err(SnipperError::LimitExceeded(format!(
+                "package contains {} entries; limit is {}",
+                archive.len(),
+                options.max_zip_entries
+            )));
+        }
         let mut total = 0u64;
+        let mut slide_count = 0usize;
+        let mut sheet_count = 0usize;
         for index in 0..archive.len() {
-            let file = archive.by_index(index).map_err(|e| {
+            let mut file = archive.by_index(index).map_err(|e| {
                 SnipperError::InvalidFormat(format!("Invalid OOXML ZIP entry: {e}"))
             })?;
             if file.enclosed_name().is_none() {
                 return Err(SnipperError::InvalidFormat(format!(
                     "unsafe package path: {}",
                     file.name()
+                )));
+            }
+            let normalized_name = file.name().replace('\\', "/");
+            if normalized_name.starts_with("ppt/slides/slide") && normalized_name.ends_with(".xml")
+            {
+                slide_count = slide_count.saturating_add(1);
+            }
+            if normalized_name.starts_with("xl/worksheets/sheet")
+                && normalized_name.ends_with(".xml")
+            {
+                sheet_count = sheet_count.saturating_add(1);
+            }
+            if normalized_name.contains("/embeddings/")
+                && file.size() > options.max_embedded_object_size
+            {
+                return Err(SnipperError::LimitExceeded(format!(
+                    "embedded object '{}' is {} bytes; limit is {}",
+                    file.name(),
+                    file.size(),
+                    options.max_embedded_object_size
+                )));
+            }
+            let compressed = file.compressed_size();
+            if file.size() > 1024 * 1024
+                && file.size()
+                    > compressed
+                        .max(1)
+                        .saturating_mul(options.max_compression_ratio)
+            {
+                return Err(SnipperError::LimitExceeded(format!(
+                    "package entry '{}' has compression ratio above {}",
+                    file.name(),
+                    options.max_compression_ratio
                 )));
             }
             total = total
@@ -283,6 +377,122 @@ fn enforce_input_limits(bytes: &[u8], format: InputFormat, options: &ImportOptio
                     options.max_decompressed_size
                 )));
             }
+            if file.name().ends_with(".xml") || file.name().ends_with(".rels") {
+                let name = file.name().to_string();
+                let mut xml = Vec::with_capacity(file.size().min(8 * 1024 * 1024) as usize);
+                file.read_to_end(&mut xml).map_err(|error| {
+                    SnipperError::InvalidFormat(format!("Cannot read XML part '{name}': {error}"))
+                })?;
+                validate_xml_part(&name, &xml, options)?;
+            }
+        }
+        if slide_count > options.max_slides {
+            return Err(SnipperError::LimitExceeded(format!(
+                "presentation has {slide_count} slides; limit is {}",
+                options.max_slides
+            )));
+        }
+        if sheet_count > options.max_sheets {
+            return Err(SnipperError::LimitExceeded(format!(
+                "workbook has {sheet_count} sheets; limit is {}",
+                options.max_sheets
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_xml_part(name: &str, bytes: &[u8], options: &ImportOptions) -> Result<()> {
+    let mut reader = quick_xml::Reader::from_reader(bytes);
+    reader.config_mut().check_end_names = true;
+    let mut depth = 0usize;
+    let mut elements = 0usize;
+    let mut buffer = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buffer) {
+            Ok(Event::Start(event)) => {
+                depth = depth.saturating_add(1);
+                elements = elements.saturating_add(1);
+                validate_xml_counters(name, depth, elements, options)?;
+                validate_relationship_attributes(name, &event, &reader)?;
+            }
+            Ok(Event::Empty(event)) => {
+                elements = elements.saturating_add(1);
+                validate_xml_counters(name, depth.saturating_add(1), elements, options)?;
+                validate_relationship_attributes(name, &event, &reader)?;
+            }
+            Ok(Event::End(_)) => depth = depth.saturating_sub(1),
+            Ok(Event::DocType(_)) => {
+                return Err(SnipperError::InvalidFormat(format!(
+                    "DOCTYPE is forbidden in XML part '{name}'"
+                )));
+            }
+            Ok(Event::Eof) => break,
+            Err(error) => {
+                return Err(SnipperError::InvalidFormat(format!(
+                    "Malformed XML part '{name}': {error}"
+                )));
+            }
+            _ => {}
+        }
+        buffer.clear();
+    }
+    Ok(())
+}
+
+fn validate_xml_counters(
+    name: &str,
+    depth: usize,
+    elements: usize,
+    options: &ImportOptions,
+) -> Result<()> {
+    if depth > options.max_xml_depth {
+        return Err(SnipperError::LimitExceeded(format!(
+            "XML part '{name}' exceeds nesting depth {}",
+            options.max_xml_depth
+        )));
+    }
+    if elements > options.max_xml_elements {
+        return Err(SnipperError::LimitExceeded(format!(
+            "XML part '{name}' exceeds element limit {}",
+            options.max_xml_elements
+        )));
+    }
+    Ok(())
+}
+
+fn validate_relationship_attributes(
+    name: &str,
+    event: &quick_xml::events::BytesStart<'_>,
+    reader: &quick_xml::Reader<&[u8]>,
+) -> Result<()> {
+    if !name.ends_with(".rels") {
+        return Ok(());
+    }
+    for attribute in event.attributes() {
+        let attribute = attribute.map_err(|error| {
+            SnipperError::InvalidFormat(format!(
+                "Malformed relationship attribute in '{name}': {error}"
+            ))
+        })?;
+        let key = attribute.key.as_ref();
+        let value = attribute
+            .decode_and_unescape_value(reader.decoder())
+            .map_err(|error| SnipperError::InvalidFormat(error.to_string()))?;
+        if key.eq_ignore_ascii_case(b"TargetMode") && value.eq_ignore_ascii_case("External") {
+            return Err(SnipperError::InvalidFormat(format!(
+                "external relationship is forbidden in '{name}'"
+            )));
+        }
+        if key.eq_ignore_ascii_case(b"Target")
+            && (value.starts_with('/')
+                || value.starts_with('\\')
+                || value.contains("://")
+                || value.contains(":\\"))
+        {
+            return Err(SnipperError::InvalidFormat(format!(
+                "absolute relationship target is forbidden in '{name}'"
+            )));
         }
     }
     Ok(())
@@ -299,7 +509,9 @@ fn preserve_package_parts(bytes: &[u8], document: &mut Document, limit: u64) -> 
         if file.is_dir() {
             continue;
         }
-        total += file.size();
+        total = total
+            .checked_add(file.size())
+            .ok_or_else(|| SnipperError::LimitExceeded("package size overflow".to_string()))?;
         if total > limit {
             return Err(SnipperError::LimitExceeded(
                 "opaque package part limit exceeded".to_string(),
@@ -335,6 +547,20 @@ fn preserve_package_parts(bytes: &[u8], document: &mut Document, limit: u64) -> 
 }
 
 fn apply_options(document: &mut Document, options: &ImportOptions) -> Result<()> {
+    if document.pages.len() > options.max_pages {
+        return Err(SnipperError::LimitExceeded(format!(
+            "document has {} pages; limit is {}",
+            document.pages.len(),
+            options.max_pages
+        )));
+    }
+    if document.assets.len() > options.max_assets {
+        return Err(SnipperError::LimitExceeded(format!(
+            "document has {} assets; limit is {}",
+            document.assets.len(),
+            options.max_assets
+        )));
+    }
     if let Some(range) = options.page_range {
         if range.start == 0 || range.end < range.start {
             return Err(SnipperError::InvalidFormat(format!(
@@ -515,7 +741,26 @@ fn format_from_extension(extension: &str) -> Option<InputFormat> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
+
+    fn docx_with_parts(parts: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut output);
+            let options = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file("word/document.xml", options).unwrap();
+            zip.write_all(b"<document><body/></document>").unwrap();
+            for (name, bytes) in parts {
+                zip.start_file(*name, options).unwrap();
+                zip.write_all(bytes).unwrap();
+            }
+            zip.finish().unwrap();
+        }
+        output.into_inner()
+    }
 
     #[test]
     fn signatures_win_over_wrong_extensions() {
@@ -595,5 +840,184 @@ mod tests {
                 .unwrap(),
             source
         );
+    }
+
+    #[test]
+    fn rejects_zip_path_traversal_and_entry_overflow() {
+        let traversal = docx_with_parts(&[("../outside.xml", b"<x/>")]);
+        let error = DocumentImporter::from_bytes(
+            &traversal,
+            Some(InputFormat::OfficeDocx),
+            ImportOptions::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("unsafe package path"));
+
+        let crowded = docx_with_parts(&[("a.xml", b"<a/>"), ("b.xml", b"<b/>")]);
+        let options = ImportOptions {
+            max_zip_entries: 2,
+            ..ImportOptions::default()
+        };
+        let error = DocumentImporter::from_bytes(&crowded, Some(InputFormat::OfficeDocx), options)
+            .unwrap_err();
+        assert!(error.to_string().contains("entries"));
+    }
+
+    #[test]
+    fn rejects_xml_entities_depth_and_external_relationships() {
+        let entity = docx_with_parts(&[(
+            "custom.xml",
+            b"<!DOCTYPE x [<!ENTITY e SYSTEM 'file:///etc/passwd'>]><x>&e;</x>",
+        )]);
+        let error = DocumentImporter::from_bytes(
+            &entity,
+            Some(InputFormat::OfficeDocx),
+            ImportOptions::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("DOCTYPE"));
+
+        let nested = docx_with_parts(&[("custom.xml", b"<a><b><c/></b></a>")]);
+        let options = ImportOptions {
+            max_xml_depth: 2,
+            ..ImportOptions::default()
+        };
+        let error = DocumentImporter::from_bytes(&nested, Some(InputFormat::OfficeDocx), options)
+            .unwrap_err();
+        assert!(error.to_string().contains("nesting depth"));
+
+        let relationships = docx_with_parts(&[(
+            "word/_rels/document.xml.rels",
+            br#"<Relationships><Relationship TargetMode="External" Target="https://example.invalid/file"/></Relationships>"#,
+        )]);
+        let error = DocumentImporter::from_bytes(
+            &relationships,
+            Some(InputFormat::OfficeDocx),
+            ImportOptions::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("external relationship"));
+    }
+
+    #[test]
+    fn rejects_high_compression_ratio() {
+        let mut xml = b"<root>".to_vec();
+        xml.extend(std::iter::repeat_n(b' ', 2 * 1024 * 1024));
+        xml.extend_from_slice(b"</root>");
+        let package = docx_with_parts(&[("large.xml", &xml)]);
+        let options = ImportOptions {
+            max_compression_ratio: 10,
+            ..ImportOptions::default()
+        };
+        let error = DocumentImporter::from_bytes(&package, Some(InputFormat::OfficeDocx), options)
+            .unwrap_err();
+        assert!(error.to_string().contains("compression ratio"));
+    }
+
+    #[test]
+    fn rejects_input_image_and_embedded_object_budgets() {
+        let options = ImportOptions {
+            max_input_size: 3,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(b"four", InputFormat::PlainText, &options).unwrap_err();
+        assert!(error.to_string().contains("input is"));
+
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        png.extend_from_slice(&100_000u32.to_be_bytes());
+        png.extend_from_slice(&100_000u32.to_be_bytes());
+        png.extend_from_slice(&[8, 6, 0, 0, 0]);
+        let options = ImportOptions {
+            max_image_width: 4096,
+            max_image_height: 4096,
+            max_image_pixels: 16_000_000,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&png, InputFormat::ImagePng, &options).unwrap_err();
+        assert!(error.to_string().contains("image is"));
+
+        let package = docx_with_parts(&[("word/embeddings/object.bin", &[0u8; 32])]);
+        let options = ImportOptions {
+            max_embedded_object_size: 16,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&package, InputFormat::OfficeDocx, &options).unwrap_err();
+        assert!(error.to_string().contains("embedded object"));
+    }
+
+    #[test]
+    fn rejects_slide_sheet_element_and_absolute_relationship_limits() {
+        let slides = docx_with_parts(&[
+            ("ppt/slides/slide1.xml", b"<slide/>"),
+            ("ppt/slides/slide2.xml", b"<slide/>"),
+        ]);
+        let options = ImportOptions {
+            max_slides: 1,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&slides, InputFormat::OfficePptx, &options).unwrap_err();
+        assert!(error.to_string().contains("slides"));
+
+        let sheets = docx_with_parts(&[
+            ("xl/worksheets/sheet1.xml", b"<sheet/>"),
+            ("xl/worksheets/sheet2.xml", b"<sheet/>"),
+        ]);
+        let options = ImportOptions {
+            max_sheets: 1,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&sheets, InputFormat::OfficeXlsx, &options).unwrap_err();
+        assert!(error.to_string().contains("sheets"));
+
+        let elements = docx_with_parts(&[("custom.xml", b"<a><b/><c/></a>")]);
+        let options = ImportOptions {
+            max_xml_elements: 2,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&elements, InputFormat::OfficeDocx, &options).unwrap_err();
+        assert!(error.to_string().contains("element limit"));
+
+        let relationships = docx_with_parts(&[(
+            "word/_rels/document.xml.rels",
+            br#"<Relationships><Relationship Target="/absolute.xml"/></Relationships>"#,
+        )]);
+        let error = enforce_input_limits(
+            &relationships,
+            InputFormat::OfficeDocx,
+            &ImportOptions::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("absolute relationship"));
+    }
+
+    #[test]
+    fn malformed_input_fuzz_smoke_never_panics() {
+        let formats = [
+            InputFormat::OfficeDocx,
+            InputFormat::Pdf,
+            InputFormat::ImagePng,
+            InputFormat::JsonAst,
+            InputFormat::Html,
+            InputFormat::MathML,
+        ];
+        let mut state = 0x9e37_79b9_u32;
+        for length in 0..256usize {
+            let mut bytes = vec![0u8; length];
+            for byte in &mut bytes {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                *byte = state as u8;
+            }
+            for format in formats {
+                let result = std::panic::catch_unwind(|| {
+                    DocumentImporter::from_bytes(&bytes, Some(format), ImportOptions::default())
+                });
+                assert!(
+                    result.is_ok(),
+                    "importer panicked for {format:?} length {length}"
+                );
+            }
+        }
     }
 }

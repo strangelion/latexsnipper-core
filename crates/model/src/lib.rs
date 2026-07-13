@@ -1,4 +1,5 @@
 pub mod config;
+#[cfg(feature = "native")]
 pub mod manager;
 pub mod manifest;
 
@@ -7,5 +8,6 @@ pub use config::{
     InputConfig, LogitsKind, ModelConfig, ModelFiles, NormalizationConfig, OutputConfig,
     PostprocessConfig, PreprocessConfig, QuantizationConfig, ResizeConfig, TensorConfig,
 };
-pub use manager::{DownloadProgress, DownloadStatus, ModelManager};
+#[cfg(feature = "native")]
+pub use manager::{DownloadProgress, DownloadStatus, ModelManager, ModelSecurityLimits};
 pub use manifest::ModelManifest;
