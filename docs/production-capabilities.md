@@ -27,8 +27,9 @@ successfully proves structural validity, not full Microsoft Office visual parity
 ## Import policy
 
 Format detection is signature/package-first, then MIME, then extension. Mismatched
-hints return typed errors. OOXML imports enforce safe enclosed paths and total
-decompressed-size limits. Encrypted OOXML packages return `EncryptedFile`.
+hints return typed errors. OOXML imports enforce safe enclosed paths, entry-count,
+decompressed-size, compression-ratio, XML depth/element, DTD/entity, external
+relationship, page, and asset limits. Encrypted OOXML packages return `EncryptedFile`.
 Unsupported SVG elements retain the original SVG source asset and emit
 `W_UNSUPPORTED_FEATURE`. Office unknown parts are retained only with
 `ImportOptions::preserve_unknown_parts`.
@@ -60,3 +61,13 @@ reject warning/error diagnostics or set strict import options.
 New callers should read `ExportArtifact.content` or use `as_bytes()`/`write_to()`.
 Synchronous OCR SDK entry points execute work on a dedicated OS thread so callers
 inside an existing Tokio runtime do not trigger nested-runtime panics.
+
+WASM semantic conversion is stable. WASM recognition, progress/cancellation, and
+model-memory management are experimental until the hosted Chrome workflow proves
+real licensed model inference. Capability readiness follows loaded artifact
+profiles; table and handwriting remain unavailable. Native binary exporters are
+not linked into the browser target.
+
+Built-in Rust plugin ordering and failure policies are stable. Native ABI and
+WASI Component manifests are forward contracts only; no external plugin runtime
+is advertised in this release.

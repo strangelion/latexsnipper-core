@@ -28,6 +28,9 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: snipper-windows-amd64.exe
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: snipper-macos-amd64
 
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +64,40 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.*
+
+  supply-chain:
+    name: SBOM, licenses, and source manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: target/latexsnipper-core.spdx.json
+          upload-artifact: false
+      - name: Generate third-party license report
+        run: |
+          cargo install cargo-license --version 0.6.1 --locked
+          cargo license --json > target/third-party-licenses.json
+      - name: Record source artifact manifest
+        run: |
+          git ls-files | LC_ALL=C sort > target/source-manifest.txt
+          git rev-parse HEAD > target/source-commit.txt
+      - name: Upload supply-chain metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: supply-chain-metadata
+          path: |
+            target/latexsnipper-core.spdx.json
+            target/third-party-licenses.json
+            target/source-manifest.txt
+            target/source-commit.txt
+            NOTICE
+          if-no-files-found: error
 
   # ============================================================
   # Job 2: Test SDK
@@ -173,7 +210,7 @@ jobs:
   # ============================================================
   release-cli:
     name: Release CLI
-    needs: [build-cli, publish-crates]
+    needs: [build-cli, publish-crates, supply-chain]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -189,6 +226,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+
+      - name: Generate release checksums and artifact manifest
+        run: |
+          find artifacts -type f ! -name SHA256SUMS ! -name ARTIFACTS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          find artifacts -type f ! -name SHA256SUMS ! -name ARTIFACTS.txt -printf '%P\n' | LC_ALL=C sort > ARTIFACTS.txt
+          mv SHA256SUMS ARTIFACTS.txt artifacts/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -225,5 +268,9 @@ jobs:
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
+            artifacts/**/*.json
+            artifacts/**/*.txt
+            artifacts/SHA256SUMS
+            artifacts/ARTIFACTS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

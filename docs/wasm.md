@@ -1,88 +1,43 @@
-# WASM Crate
+# WASM adapter
 
-> WebAssembly 绑定 — 浏览器端运行 Core
+状态：语义转换稳定；浏览器推理与模型内存 API 为 experimental。
 
-## 核心原则
+纯 WASM 构建使用 Tract，不链接 ONNX Runtime、PDF/PNG/Office native
+exporter、文件系统下载器或 native Tokio runtime。`capabilities_v2()` 是当前
+浏览器构建和已加载模型 readiness 的事实来源。
 
-1. **WASM 只是 Engine 的另一个 Adapter**
-2. **共享同一套 Core 代码，不重复实现**
-3. **所有转换逻辑在 WASM 内完成，无需网络请求**
+## v2 API
 
-## 架构
+- `api_info_v2()` / `capabilities_v2()`：返回 API、schema、capability 版本。
+- `load_model_v2()`：校验 SHA-256；ONNX artifact 在上线前由 Tract 解析。
+- `begin_model_update_v2()` / `commit_model_update_v2()` /
+  `rollback_model_update_v2()`：批量事务更新。
+- `unload_model_v2()` / `clear_models_v2()`：释放 artifact。
+- `recognize_v2()`：真正的 async Promise API，直接 await engine。
+- `recognize_v2_with_progress()`：在 validation、model readiness、inference、
+  completion 边界报告进度。
+- `cancel_recognition_v2()`：stage-boundary cooperative cancellation。
+- `convert_v2()`：返回 text/binary-safe artifact；若未来启用 binary exporter，
+  bytes 以 `Uint8Array` 返回。
 
-```
-Browser
-  ├── DOM / Canvas / File Picker
-  └── WASM Boundary
-       ├── parse_latex() → Document JSON
-       ├── render_latex/typst/markdown()
-       ├── convert_document(json, format)
-       └── formula_to_latex()
-```
+所有 v2 调用返回稳定 envelope：`ok`、`apiVersion`、`capabilityVersion`、
+`coreVersion`、`schemaVersion`、`diagnostics`，以及 `data` 或结构化 `error`。
 
-## 导出函数
+## 能力边界
 
-| 函数 | 参数 | 返回 | 说明 |
-|------|------|------|------|
-| `init()` | — | — | 初始化模块 |
-| `parse_latex(latex)` | LaTeX 字符串 | Document JSON | 解析 LaTeX 为 AST |
-| `render_latex(doc_json)` | Document JSON | LaTeX 字符串 | 渲染为 LaTeX |
-| `render_typst(doc_json)` | Document JSON | Typst 字符串 | 渲染为 Typst |
-| `render_markdown(doc_json)` | Document JSON | Markdown 字符串 | 渲染为 Markdown |
-| `convert_document(doc_json, format)` | Document JSON + 格式名 | 目标格式字符串 | 格式转换 |
-| `formula_to_latex(formula_json)` | Formula JSON | LaTeX 字符串 | 公式转 LaTeX |
-| `available_formats()` | — | JSON 数组字符串 | 获取支持的格式列表 |
-| `health_check()` | — | "ok" | 健康检查 |
+Formula、text、mixed 和 formula-layout 只有在所需 config、model、tokenizer/
+keys artifact 完整时才会报告 ready。Table 与 handwriting 浏览器 pipeline 尚未实现，
+因此始终 unavailable。PDF、PNG、DOCX、PPTX、XLSX native exporter 被明确隔离，
+不会在 WASM 中虚假报告支持。
 
-## 支持的转换格式
+IndexedDB cache 和 incremental download 尚未实现。主线程执行大模型会阻塞页面，
+生产集成应在 Web Worker 中加载 package 并调用 async API。
 
-`convert_document()` 的 format 参数：
-
-| format | 说明 |
-|--------|------|
-| `latex` | LaTeX inline `$...$` |
-| `latex_display` | LaTeX display `\[...\]` |
-| `latex_equation` | LaTeX equation |
-| `markdown_inline` | Markdown inline `$...$` |
-| `markdown_block` | Markdown block `$$...$$` |
-| `mathml` | MathML |
-| `omml` | Office Math ML |
-| `typst` | Typst |
-| `html` | HTML + MathJax |
-
-## 依赖
-
-```
-wasm-bindgen, js-sys, serde-wasm-bindgen
-latexsnipper-{foundation, ast, syntax, conversion}
-```
-
-## 与 FFI Crate 的区别
-
-| | FFI | WASM |
-|---|-----|------|
-| 目标平台 | Android / iOS | Browser |
-| 接口类型 | JNI / C ABI | wasm-bindgen |
-| Runtime | ONNX Runtime (native) | onnxruntime-web（未来） |
-| 图像输入 | byte[] | ImageData / Blob |
-
-## 构建
+## 验证
 
 ```bash
-# 需要 wasm32-unknown-unknown target
-rustup target add wasm32-unknown-unknown
-
-# 构建
-cargo build --target wasm32-unknown-unknown --release
-
-# 或使用 wasm-pack
-wasm-pack build --target web
-```
-
-## 依赖关系
-
-```
-WASM
-↑ 依赖 Syntax, Conversion, AST
-↓ 被 Web 前端调用
+cargo check -p latexsnipper-engine --no-default-features --features wasm --target wasm32-unknown-unknown
+cargo clippy -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown -- -D warnings
+wasm-pack build crates/wasm --target web --release --out-dir ../../target/wasm-web
+wasm-pack test crates/wasm --headless --chrome
 ```

@@ -1,128 +1,31 @@
-# CLI Crate
+# CLI
 
-> 命令行工具 — snipper 命令
-
-## 模块
-
-| 模块 | 文件 | 说明 |
-|------|------|------|
-| `main` | main.rs | clap CLI 入口 + 子命令 |
-
-## 子命令
-
-| 命令 | 说明 | 状态 |
-|------|------|------|
-| `snipper recognize` | 识别图像内容并导出 | ✅ 可用 |
-| `snipper import` | 统一导入并输出 JSON AST | ✅ 可用 |
-| `snipper convert` | 统一 AST 跨格式转换 | ✅ 可用 |
-| `snipper export` | SVG/PDF/PNG/纯文本视觉导出 | ⚠️ 实验性 |
-| `snipper inspect` | 检查格式、页、块、资产与诊断 | ✅ 可用 |
-| `snipper validate` | 解析并验证输入包 | ✅ 可用 |
-| `snipper capabilities` | 查询真实注册表与 runtime provider | ✅ 可用 |
-| `snipper parse` | 解析 LaTeX 为 AST | ✅ 可用 |
-| `snipper render` | 渲染 AST 为 LaTeX | ✅ 可用 |
-| `snipper version` | 显示版本信息 | ✅ 可用 |
-
-## 统一导入与转换
+`snipper convert` 是语义、visual 和 Office package 输出的统一入口。格式列表、
+help、拼写建议与 capability 输出由可执行 registry 生成，不维护第二份常量。
 
 ```bash
 snipper convert input.docx --to markdown -o output.md
-snipper convert input.pptx --to pdf -o output.pdf
-snipper convert input.xlsx --to html -o output.html
+snipper convert input.docx --to pdf -o output.pdf
+snipper convert input.json --to png -o output.png
 snipper convert input.pdf --to docx -o output.docx
-snipper convert input.md --to docx -o output.docx
-snipper convert input.json --to svg -o page.svg
-snipper inspect input.docx --json
-snipper validate output.docx
-snipper capabilities --format json
+Get-Content input.json -Raw | snipper convert - --to markdown -o -
 ```
 
-PDF、PNG、DOCX、PPTX、XLSX 是 binary target，必须提供 `-o/--output`；CLI
-直接写入 bytes，不经过 UTF-8 转换。转换诊断写入 stderr，机器可读的能力与 runtime
-诊断通过 `capabilities --format json` 输出。
+`-` 表示 stdin/stdout。二进制 stdout 默认拒绝，必须显式传入
+`--force-binary-stdout`。数据只写 stdout；状态和 diagnostics 只写 stderr。
 
-## recognize 命令
+文件输出默认通过同目录临时文件、flush、sync 和 rename 完成；目标已存在时默认
+拒绝，使用 `--force` 明确替换，或用 `--no-clobber` 表达严格策略。二进制 artifact
+写入前会通过统一 importer 重开验证。
 
-### 参数
+Diagnostics 支持 `--diagnostics text|json|sarif`、`--strict`、
+`--fail-on-warning`、`--quiet` 和 `--verbose`。稳定退出码可由 `snipper version`
+查看：0 成功，1 通用失败，2 参数错误，3 输入错误，4 model 错误，5 recognition
+错误，6 conversion 不支持，7 输出验证失败，8 strict diagnostics，9 plugin，
+10 batch 部分失败。
 
-| 参数 | 短选项 | 说明 | 默认值 |
-|------|--------|------|--------|
-| `--input` | `-i` | 输入图像路径 | 必填 |
-| `--format` | `-f` | 输出格式 | `latex` |
-| `--output` | `-o` | 输出文件路径 | stdout |
+`snipper doctor` 输出 OS、架构、core/runtime、model 目录、输出目录可写性、
+capability 数和 exit-code contract。`models list|download|verify` 继续可用。
 
-### 支持的格式
-
-| 格式 | 关键字 | 扩展名 |
-|------|--------|--------|
-| LaTeX | `latex`, `tex` | `.tex` |
-| Markdown | `markdown`, `md` | `.md` |
-| Typst | `typst` | `.typ` |
-| HTML | `html` | `.html` |
-| MathML | `mathml` | `.xml` |
-| OMML | `omml` | `.xml` |
-| JSON | `json` | `.json` |
-
-### 格式推断
-
-当指定 `--output` 时，自动根据文件扩展名推断格式：
-
-```
-output.tex → latex
-output.typ → typst
-output.md  → markdown
-output.html → html
-output.json → json
-```
-
-### 使用示例
-
-```bash
-# 输出到 stdout（默认 latex）
-snipper recognize -i image.png
-
-# 导出为 LaTeX 文件
-snipper recognize -i image.png -o output.tex
-
-# 导出为 Typst 文件
-snipper recognize -i image.png -o output.typ
-
-# 指定格式 + 输出文件
-snipper recognize -i image.png -f markdown -o output.md
-
-# 导出 JSON
-snipper recognize -i image.png -o result.json
-```
-
-## parse 命令
-
-解析 LaTeX 字符串为 AST JSON。
-
-```bash
-snipper parse --latex "$$\frac{a+b}{c}$$"
-```
-
-输出 Document AST 的 JSON 表示。
-
-## render 命令
-
-将 LaTeX 字符串解析后重新渲染。
-
-```bash
-snipper render --latex "$$\frac{a+b}{c}$$"
-```
-
-## version 命令
-
-```bash
-snipper version
-# snipper 1.0.0
-# LaTeXSnipper Core — Real ONNX Runtime Mode
-```
-
-## 依赖关系
-
-```
-CLI
-↑ 依赖 Engine, Mock, Syntax, Export, Pipeline
-```
+尚未实现：glob/recursive batch、completion/man page、plugin 安装管理、models purge。
+这些命令不得在 capability 或文档中标记为 production-ready。
