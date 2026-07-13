@@ -3,8 +3,11 @@ pub mod config;
 pub mod engine;
 pub mod job;
 pub mod metrics;
-pub mod sdk;
 pub mod service;
+
+#[cfg(feature = "native")]
+pub mod sdk;
+#[cfg(feature = "native")]
 pub mod stage_runners;
 
 #[cfg(feature = "remote-api")]

@@ -13,9 +13,9 @@ latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
 latexsnipper-image.workspace = true
 latexsnipper-runtime.workspace = true
-latexsnipper-engine.workspace = true
+latexsnipper-engine = { workspace = true, default-features = false, features = ["wasm"] }
 latexsnipper-syntax.workspace = true
-latexsnipper-conversion.workspace = true
+latexsnipper-conversion = { workspace = true, default-features = false, features = ["wasm"] }
 latexsnipper-tract.workspace = true
 serde_json.workspace = true
 log.workspace = true
@@ -24,7 +24,7 @@ js-sys = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
 once_cell = "1"
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

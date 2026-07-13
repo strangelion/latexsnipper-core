@@ -14,12 +14,12 @@ latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
 latexsnipper-image.workspace = true
 latexsnipper-runtime.workspace = true
-latexsnipper-engine.workspace = true
+latexsnipper-engine = { workspace = true, features = ["native"] }
 latexsnipper-inference.workspace = true
-latexsnipper-conversion.workspace = true
+latexsnipper-conversion = { workspace = true, features = ["native"] }
 latexsnipper-export.workspace = true
-latexsnipper-model.workspace = true
-latexsnipper-pipeline.workspace = true
+latexsnipper-model = { workspace = true, features = ["native"] }
+latexsnipper-pipeline = { workspace = true, features = ["native"] }
 latexsnipper-syntax.workspace = true
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }

@@ -36,12 +36,12 @@ latexsnipper-tensor.workspace = true
 latexsnipper-image.workspace = true
 latexsnipper-runtime.workspace = true
 latexsnipper-inference.workspace = true
-latexsnipper-pipeline.workspace = true
-latexsnipper-model.workspace = true
-latexsnipper-engine.workspace = true
+latexsnipper-pipeline = { workspace = true, features = ["native"] }
+latexsnipper-model = { workspace = true, features = ["native"] }
+latexsnipper-engine = { workspace = true, features = ["native"] }
 latexsnipper-mock.workspace = true
 latexsnipper-syntax.workspace = true
-latexsnipper-conversion.workspace = true
+latexsnipper-conversion = { workspace = true, features = ["native"] }
 latexsnipper-plugin.workspace = true
 latexsnipper-export.workspace = true
 latexsnipper-ffi.workspace = true

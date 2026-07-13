@@ -15,8 +15,13 @@ latexsnipper-ast.workspace = true
 image = "0.25"
 imageproc = "0.25"
 ndarray = "0.16"
-lopdf = "0.34"
+lopdf = { version = "0.34", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 thiserror.workspace = true
+
+[features]
+default = ["native"]
+native = ["dep:lopdf"]
+wasm = []

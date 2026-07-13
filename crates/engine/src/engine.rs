@@ -1,17 +1,20 @@
 use log::info;
 use std::collections::HashMap;
+#[cfg(feature = "native")]
 use std::path::Path;
 use std::sync::Arc;
 
 use latexsnipper_ast::*;
 use latexsnipper_foundation::Result;
+#[cfg(feature = "native")]
 use latexsnipper_image::pdf::{decode_pdf, PdfSource};
 use latexsnipper_image::SnipperImage;
+#[cfg(feature = "native")]
 use latexsnipper_model::ModelManager;
 use latexsnipper_pipeline::{DocumentParseMode, PipelineContext, PipelineGraph};
-use latexsnipper_runtime::{
-    FsModelResolver, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver,
-};
+#[cfg(feature = "native")]
+use latexsnipper_runtime::FsModelResolver;
+use latexsnipper_runtime::{ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver};
 
 use crate::config::EngineConfig;
 use crate::job::JobQueue;
@@ -24,6 +27,7 @@ pub struct SnipperEngine {
     config: EngineConfig,
     runtime: Arc<dyn RuntimeBackend>,
     model_resolver: Option<SharedModelResolver>,
+    #[cfg(feature = "native")]
     model_manager: ModelManager,
     job_queue: JobQueue,
     /// Registered model packages for type-safe inference.
@@ -33,13 +37,18 @@ pub struct SnipperEngine {
 impl SnipperEngine {
     /// Create a new engine with the given config and runtime backend.
     pub fn new(config: EngineConfig, runtime: Box<dyn RuntimeBackend>) -> Self {
+        #[cfg(feature = "native")]
         let model_manager = ModelManager::new(config.models_dir.clone());
+        #[cfg(feature = "native")]
         let model_resolver: Option<SharedModelResolver> =
             Some(Arc::new(FsModelResolver::new(config.models_dir.clone())));
+        #[cfg(not(feature = "native"))]
+        let model_resolver = None;
         Self {
             config,
             runtime: Arc::from(runtime),
             model_resolver,
+            #[cfg(feature = "native")]
             model_manager,
             job_queue: JobQueue::new(),
             model_packages: HashMap::new(),
@@ -52,11 +61,13 @@ impl SnipperEngine {
         runtime: Box<dyn RuntimeBackend>,
         resolver: SharedModelResolver,
     ) -> Self {
+        #[cfg(feature = "native")]
         let model_manager = ModelManager::new(config.models_dir.clone());
         Self {
             config,
             runtime: Arc::from(runtime),
             model_resolver: Some(resolver),
+            #[cfg(feature = "native")]
             model_manager,
             job_queue: JobQueue::new(),
             model_packages: HashMap::new(),
@@ -66,6 +77,7 @@ impl SnipperEngine {
     pub fn runtime(&self) -> &dyn RuntimeBackend {
         &*self.runtime
     }
+    #[cfg(feature = "native")]
     pub fn model_manager(&self) -> &ModelManager {
         &self.model_manager
     }
@@ -595,6 +607,7 @@ impl SnipperEngine {
     ///
     /// Each page is processed independently through the pipeline.
     /// Uses `pdftoppm` (poppler) or `mutool` (MuPDF) for rendering.
+    #[cfg(feature = "native")]
     pub async fn recognize_pdf(&self, pdf_path: &Path, mode: RecognizeMode) -> Result<Document> {
         info!("Recognizing PDF {:?} in {:?} mode", pdf_path, mode);
 

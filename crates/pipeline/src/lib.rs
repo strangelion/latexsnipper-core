@@ -11,6 +11,7 @@ pub mod region_graph;
     since = "1.1.0",
     note = "Use latexsnipper_engine::sdk::Snipper instead"
 )]
+#[cfg(feature = "native")]
 pub mod sdk;
 pub mod simple;
 pub mod text_recognition_service;
@@ -36,6 +37,7 @@ pub use nodes::resize_node::ResizeNode;
 pub use nodes::table_recognizer_node::TableRecognizerNode;
 pub use nodes::table_structure_node::TableStructureNode;
 #[allow(deprecated)]
+#[cfg(feature = "native")]
 pub use sdk::Snipper;
 pub use simple::{MockCropper, MockDetector, MockRecognizer, SimpleContext, SimplePipeline, Stage};
 

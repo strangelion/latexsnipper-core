@@ -1,6 +1,7 @@
 use latexsnipper_foundation::{Result, SnipperError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(feature = "native")]
 use std::path::Path;
 
 /// Model manifest describing available models and their variants.
@@ -55,6 +56,7 @@ pub struct VariantInfo {
 
 impl ModelManifest {
     /// Load manifest from a JSON file.
+    #[cfg(feature = "native")]
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| SnipperError::Model(format!("Failed to read manifest: {}", e)))?;
@@ -107,6 +109,7 @@ impl ModelManifest {
     }
 
     /// Download manifest from a remote URL.
+    #[cfg(feature = "native")]
     pub fn download(url: &str) -> Result<Self> {
         let response = ureq::get(url)
             .call()
@@ -120,6 +123,7 @@ impl ModelManifest {
     }
 
     /// Save manifest to a file, creating parent directories if needed.
+    #[cfg(feature = "native")]
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
