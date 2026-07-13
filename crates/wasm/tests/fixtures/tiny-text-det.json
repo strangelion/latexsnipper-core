@@ -1,0 +1,18 @@
+{
+  "model_type": "dbnet",
+  "license": "AGPL-3.0",
+  "input": { "name": "x", "shape": [1, 3, 32, 32], "dtype": "float32" },
+  "output": { "name": "output", "shape": [1, 1, 32, 32] },
+  "preprocessing": {
+    "normalization": { "mean": [0, 0, 0], "std": [1, 1, 1] },
+    "color_format": "RGB",
+    "divisible_by": 32
+  },
+  "postprocessing": {
+    "type": "dbnet",
+    "threshold": 0.3,
+    "box_threshold": 0.5,
+    "unclip_ratio": 1.0
+  },
+  "pipeline": { "model_files": { "primary": "model.onnx" } }
+}

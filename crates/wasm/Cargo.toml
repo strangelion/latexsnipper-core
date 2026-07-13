@@ -29,4 +29,5 @@ once_cell = "1"
 sha2.workspace = true
 
 [dev-dependencies]
+latexsnipper-inference.workspace = true
 wasm-bindgen-test = "0.3"
