@@ -115,6 +115,7 @@ fn capability(input: InputFormat, output: ExportFormat) -> FormatCapability {
             | InputFormat::ImageTiff
             | InputFormat::ImageGif
     );
+    let available = !raster_input || output == ExportFormat::AstJson;
     let mut known_loss = Vec::new();
     if matches!(
         output,
@@ -131,26 +132,44 @@ fn capability(input: InputFormat, output: ExportFormat) -> FormatCapability {
     if output == ExportFormat::PlainText {
         known_loss.push(LossKind::StyleLoss);
     }
+    let mut notes = vec![if office_input || office_output {
+        "Opaque OOXML parts are preserved when preservation mode is enabled".to_string()
+    } else {
+        "Registered in-process importer/exporter path".to_string()
+    }];
+    let mut required_features = Vec::new();
+    let mut external_dependencies = Vec::new();
+    if raster_input && !available {
+        notes.push(
+            "Direct raster import preserves the source asset but does not run OCR; use the recognize workflow first"
+                .to_string(),
+        );
+        required_features.push("ocr-recognition".to_string());
+        external_dependencies.push("configured OCR models".to_string());
+    }
     FormatCapability {
         input: Some(input_label(input).to_string()),
         output: Some(output_label(output).to_string()),
-        available: true,
-        supports_formula: output != ExportFormat::PlainText,
-        supports_table: !matches!(output, ExportFormat::MathML | ExportFormat::OMML),
-        supports_image: !matches!(
-            output,
-            ExportFormat::PlainText | ExportFormat::MathML | ExportFormat::OMML
-        ),
-        supports_svg: matches!(
-            output,
-            ExportFormat::Svg | ExportFormat::Png | ExportFormat::Html
-        ),
-        supports_style: !matches!(
-            output,
-            ExportFormat::PlainText | ExportFormat::MathML | ExportFormat::OMML
-        ),
-        supports_layout: visual || office_output,
-        supports_office_objects: office_output,
+        available,
+        supports_formula: available && output != ExportFormat::PlainText,
+        supports_table: available && !matches!(output, ExportFormat::MathML | ExportFormat::OMML),
+        supports_image: available
+            && !matches!(
+                output,
+                ExportFormat::PlainText | ExportFormat::MathML | ExportFormat::OMML
+            ),
+        supports_svg: available
+            && matches!(
+                output,
+                ExportFormat::Svg | ExportFormat::Png | ExportFormat::Html
+            ),
+        supports_style: available
+            && !matches!(
+                output,
+                ExportFormat::PlainText | ExportFormat::MathML | ExportFormat::OMML
+            ),
+        supports_layout: available && (visual || office_output),
+        supports_office_objects: available && office_output,
         fidelity: if visual || raster_input {
             FidelityLevel::VisualOnly
         } else if office_input || office_output {
@@ -159,13 +178,9 @@ fn capability(input: InputFormat, output: ExportFormat) -> FormatCapability {
             FidelityLevel::SemanticOnly
         },
         known_loss,
-        notes: vec![if office_input || office_output {
-            "Opaque OOXML parts are preserved when preservation mode is enabled".to_string()
-        } else {
-            "Registered in-process importer/exporter path".to_string()
-        }],
-        required_features: Vec::new(),
-        external_dependencies: Vec::new(),
+        notes,
+        required_features,
+        external_dependencies,
         platform_restrictions: Vec::new(),
         experimental: visual || office_output,
     }
@@ -1137,8 +1152,14 @@ mod tests {
             crate::DocumentImporter::supported_formats().len()
                 * DocumentExportService::supported_formats().len()
         );
-        assert!(matrix.entries.iter().all(|entry| entry.available));
         assert!(matrix.query("DOCX", "PNG").is_some());
+        assert!(matrix.query("DOCX", "PNG").unwrap().available);
+        assert!(matrix.query("PNG", "JSON AST").unwrap().available);
+        let png_markdown = matrix.query("PNG", "Markdown").unwrap();
+        assert!(!png_markdown.available);
+        assert!(png_markdown
+            .required_features
+            .contains(&"ocr-recognition".to_string()));
 
         let document = sample_document();
         for &format in DocumentExportService::supported_formats() {

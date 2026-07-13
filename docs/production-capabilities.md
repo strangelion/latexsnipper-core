@@ -33,6 +33,12 @@ Unsupported SVG elements retain the original SVG source asset and emit
 `W_UNSUPPORTED_FEATURE`. Office unknown parts are retained only with
 `ImportOptions::preserve_unknown_parts`.
 
+Raster image import preserves the original scan asset in the AST; it does not
+implicitly perform OCR. Consequently direct PNG/JPEG/BMP/TIFF/WebP/GIF to semantic
+or document output pairs are reported unavailable. Use `snipper recognize` (or the
+SDK recognition API) first. Raster to JSON AST remains available for asset-preserving
+ingestion.
+
 Native PDF extraction is inherently best effort because arbitrary font encodings,
 missing `ToUnicode` maps, complex graphics-state transforms, and reading order can
 be ambiguous. Scanned pages require OCR models and a rendering dependency.
