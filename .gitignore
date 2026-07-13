@@ -22,6 +22,7 @@ fixtures/*.png
 fixtures/*.typ
 !fixtures/text.png
 !fixtures/formula.png
+!fixtures/mixed.png
 
 # Test models (ONNX files)
 test-models/

@@ -480,7 +480,15 @@ fn test_mixed_pipeline_e2e() {
     ];
     let keys_path = keys_candidates.iter().find(|p| p.exists());
 
-    if !det_path.exists() || !enc_path.exists() || !image_path.exists() {
+    if !det_path.exists()
+        || !enc_path.exists()
+        || !dec_path.exists()
+        || !tok_path.exists()
+        || text_det_path.is_none()
+        || text_rec_path.is_none()
+        || keys_path.is_none()
+        || !image_path.exists()
+    {
         skip_or_require_models("mixed pipeline models or fixture");
         return;
     }
