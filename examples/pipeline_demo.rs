@@ -8,7 +8,6 @@ fn main() {
     #[cfg(not(target_os = "windows"))]
     {
         println!("This example requires Windows (ONNX Runtime).");
-        return;
     }
 
     #[cfg(target_os = "windows")]
