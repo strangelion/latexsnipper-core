@@ -1,4 +1,5 @@
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 use latexsnipper_ast::{
     CapabilityMatrix, Diagnostic, DiagnosticLevel, Document, ExportArtifact, ExportFormat,
     FidelityLevel, FormatCapability, GeneratedContent, ImportOptions, LossKind,
@@ -87,8 +88,9 @@ enum Commands {
 
     /// Convert a supported document through the unified AST
     Convert {
-        /// Input document path
-        input: String,
+        /// Input paths, glob patterns, or directories
+        #[arg(required = true)]
+        input: Vec<String>,
         /// Target format
         #[arg(long)]
         to: String,
@@ -122,6 +124,21 @@ enum Commands {
         /// Emit additional operational details to stderr
         #[arg(long)]
         verbose: bool,
+        /// Convert directory contents recursively
+        #[arg(long)]
+        recursive: bool,
+        /// Output directory for multiple inputs; relative paths are preserved
+        #[arg(long)]
+        output_dir: Option<String>,
+        /// Maximum number of files converted concurrently
+        #[arg(long, default_value_t = 1)]
+        jobs: usize,
+        /// Continue processing after a per-file failure
+        #[arg(long)]
+        continue_on_error: bool,
+        /// Write a machine-readable batch report
+        #[arg(long)]
+        report: Option<String>,
     },
 
     /// Export a document to SVG, PDF, PNG, or plain text
@@ -298,6 +315,20 @@ enum Commands {
     /// Manage processing jobs
     #[command(subcommand)]
     Job(JobCommand),
+
+    /// Generate shell completion definitions
+    Completions {
+        /// Target shell
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+
+    /// Generate a roff man page
+    Manpages {
+        /// Directory that receives snipper.1
+        #[arg(long, default_value = ".")]
+        output_dir: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -539,6 +570,11 @@ fn main() {
             fail_on_warning,
             quiet,
             verbose,
+            recursive,
+            output_dir,
+            jobs,
+            continue_on_error,
+            report,
         } => {
             let options = ConvertOptions {
                 output: output.as_deref(),
@@ -552,7 +588,14 @@ fn main() {
                 quiet,
                 verbose,
             };
-            if let Err(error) = convert_path(&input, &to, options) {
+            let batch = BatchOptions {
+                recursive,
+                output_dir: output_dir.as_deref(),
+                jobs,
+                continue_on_error,
+                report: report.as_deref(),
+            };
+            if let Err(error) = convert_inputs(&input, &to, options, batch) {
                 exit_with_code(error.code, "Conversion failed", error.message);
             }
         }
@@ -852,6 +895,22 @@ fn main() {
                 handle_job_inspect(&job_id);
             }
         },
+        Commands::Completions { shell } => {
+            let mut command = Cli::command();
+            clap_complete::generate(shell, &mut command, "snipper", &mut io::stdout());
+        }
+        Commands::Manpages { output_dir } => {
+            let directory = std::path::Path::new(&output_dir);
+            std::fs::create_dir_all(directory)
+                .unwrap_or_else(|error| exit_with_error("Man page directory failed", error));
+            let path = directory.join("snipper.1");
+            let mut file = std::fs::File::create(&path)
+                .unwrap_or_else(|error| exit_with_error("Man page creation failed", error));
+            clap_mangen::Man::new(Cli::command())
+                .render(&mut file)
+                .unwrap_or_else(|error| exit_with_error("Man page rendering failed", error));
+            eprintln!("Generated {}", path.display());
+        }
     }
 }
 
@@ -869,6 +928,7 @@ fn parse_cli() -> Cli {
     Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit())
 }
 
+#[derive(Clone, Copy)]
 struct ConvertOptions<'a> {
     output: Option<&'a str>,
     force_binary_stdout: bool,
@@ -882,7 +942,16 @@ struct ConvertOptions<'a> {
     verbose: bool,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy)]
+struct BatchOptions<'a> {
+    recursive: bool,
+    output_dir: Option<&'a str>,
+    jobs: usize,
+    continue_on_error: bool,
+    report: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
 struct CliFailure {
     code: CliExitCode,
     message: String,
@@ -901,6 +970,332 @@ impl CliFailure {
 enum CliTarget {
     Semantic(OutputFormat),
     Export(ExportFormat),
+}
+
+#[derive(Debug, Clone)]
+struct BatchTask {
+    input: std::path::PathBuf,
+    relative: std::path::PathBuf,
+    output: Option<std::path::PathBuf>,
+}
+
+#[derive(Debug)]
+struct BatchOutcome {
+    input: String,
+    output: Option<String>,
+    success: bool,
+    exit_code: i32,
+    message: Option<String>,
+}
+
+fn convert_inputs(
+    inputs: &[String],
+    target_label: &str,
+    options: ConvertOptions<'_>,
+    batch: BatchOptions<'_>,
+) -> Result<(), CliFailure> {
+    if batch.jobs == 0 {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "--jobs must be greater than zero",
+        ));
+    }
+    let target = resolve_cli_target(target_label).ok_or_else(|| {
+        CliFailure::new(
+            CliExitCode::UnsupportedConversion,
+            format!("unsupported target format '{target_label}'"),
+        )
+    })?;
+    let mut tasks = expand_batch_inputs(inputs, batch.recursive)?;
+    if tasks.is_empty() {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidInput,
+            "no input files matched",
+        ));
+    }
+    if tasks.len() > 1 && options.output.is_some() {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "-o/--output is only valid for one input; use --output-dir for batch conversion",
+        ));
+    }
+    if tasks.len() > 1 && batch.output_dir.is_none() {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "multiple inputs require --output-dir",
+        ));
+    }
+
+    if let Some(output_dir) = batch.output_dir {
+        let output_dir = std::path::Path::new(output_dir);
+        let extension = target_extension(target);
+        for task in &mut tasks {
+            let mut relative = task.relative.clone();
+            relative.set_extension(&extension);
+            task.output = Some(output_dir.join(relative));
+        }
+    } else if tasks.len() == 1 {
+        tasks[0].output = options.output.map(std::path::PathBuf::from);
+    }
+
+    let worker_count = batch.jobs.min(tasks.len()).max(1);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let outcomes = std::sync::Mutex::new(Vec::with_capacity(tasks.len()));
+    std::thread::scope(|scope| {
+        for _ in 0..worker_count {
+            scope.spawn(|| loop {
+                if stop.load(std::sync::atomic::Ordering::Acquire) {
+                    break;
+                }
+                let index = next.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                let Some(task) = tasks.get(index) else {
+                    break;
+                };
+                let output = task
+                    .output
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().into_owned());
+                let input = task.input.to_string_lossy().into_owned();
+                let task_options = ConvertOptions {
+                    output: output.as_deref(),
+                    ..options
+                };
+                let result = convert_path(&input, target_label, task_options);
+                let outcome = match result {
+                    Ok(()) => BatchOutcome {
+                        input,
+                        output,
+                        success: true,
+                        exit_code: 0,
+                        message: None,
+                    },
+                    Err(error) => {
+                        if !batch.continue_on_error {
+                            stop.store(true, std::sync::atomic::Ordering::Release);
+                        }
+                        BatchOutcome {
+                            input,
+                            output,
+                            success: false,
+                            exit_code: error.code as i32,
+                            message: Some(error.message),
+                        }
+                    }
+                };
+                outcomes.lock().unwrap().push(outcome);
+            });
+        }
+    });
+
+    let mut outcomes = outcomes.into_inner().unwrap();
+    outcomes.sort_by(|left, right| left.input.cmp(&right.input));
+    if let Some(report) = batch.report {
+        write_batch_report(report, target_label, &outcomes)?;
+    }
+    let failures: Vec<_> = outcomes.iter().filter(|outcome| !outcome.success).collect();
+    if failures.is_empty() {
+        return Ok(());
+    }
+    if batch.continue_on_error {
+        return Err(CliFailure::new(
+            CliExitCode::PartialBatchFailure,
+            format!(
+                "{} of {} batch conversions failed",
+                failures.len(),
+                outcomes.len()
+            ),
+        ));
+    }
+    let failure = failures[0];
+    Err(CliFailure::new(
+        exit_code_from_i32(failure.exit_code),
+        failure
+            .message
+            .clone()
+            .unwrap_or_else(|| "batch conversion failed".to_string()),
+    ))
+}
+
+fn expand_batch_inputs(inputs: &[String], recursive: bool) -> Result<Vec<BatchTask>, CliFailure> {
+    if inputs.iter().any(|input| input == "-") {
+        if inputs.len() != 1 {
+            return Err(CliFailure::new(
+                CliExitCode::InvalidArguments,
+                "stdin cannot be combined with other batch inputs",
+            ));
+        }
+        return Ok(vec![BatchTask {
+            input: std::path::PathBuf::from("-"),
+            relative: std::path::PathBuf::from("stdin"),
+            output: None,
+        }]);
+    }
+
+    let mut discovered =
+        std::collections::BTreeMap::<std::path::PathBuf, std::path::PathBuf>::new();
+    for input in inputs {
+        if contains_glob(input) {
+            let root = glob_root(input);
+            let mut matched = false;
+            for entry in glob::glob(input).map_err(|error| {
+                CliFailure::new(CliExitCode::InvalidArguments, format!("{input}: {error}"))
+            })? {
+                let path = entry.map_err(|error| {
+                    CliFailure::new(CliExitCode::InvalidInput, error.to_string())
+                })?;
+                if path.is_file() {
+                    matched = true;
+                    let relative = safe_relative_path(&path, &root);
+                    discovered.insert(path, relative);
+                }
+            }
+            if !matched {
+                return Err(CliFailure::new(
+                    CliExitCode::InvalidInput,
+                    format!("glob matched no files: {input}"),
+                ));
+            }
+            continue;
+        }
+
+        let path = std::path::PathBuf::from(input);
+        if path.is_dir() {
+            collect_directory_inputs(&path, &path, recursive, &mut discovered)?;
+        } else {
+            let relative = path
+                .file_name()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("input"));
+            discovered.insert(path, relative);
+        }
+    }
+    Ok(discovered
+        .into_iter()
+        .map(|(input, relative)| BatchTask {
+            input,
+            relative,
+            output: None,
+        })
+        .collect())
+}
+
+fn collect_directory_inputs(
+    root: &std::path::Path,
+    directory: &std::path::Path,
+    recursive: bool,
+    discovered: &mut std::collections::BTreeMap<std::path::PathBuf, std::path::PathBuf>,
+) -> Result<(), CliFailure> {
+    let mut entries: Vec<_> = std::fs::read_dir(directory)
+        .map_err(|error| {
+            CliFailure::new(
+                CliExitCode::InvalidInput,
+                format!("{}: {error}", directory.display()),
+            )
+        })?
+        .collect::<Result<_, _>>()
+        .map_err(|error| CliFailure::new(CliExitCode::InvalidInput, error.to_string()))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let path = entry.path();
+        if path.is_file() {
+            discovered.insert(path.clone(), safe_relative_path(&path, root));
+        } else if recursive && path.is_dir() {
+            collect_directory_inputs(root, &path, true, discovered)?;
+        }
+    }
+    Ok(())
+}
+
+fn contains_glob(input: &str) -> bool {
+    input
+        .chars()
+        .any(|character| matches!(character, '*' | '?' | '['))
+}
+
+fn glob_root(pattern: &str) -> std::path::PathBuf {
+    let wildcard = pattern
+        .char_indices()
+        .find_map(|(index, character)| "*?[".contains(character).then_some(index))
+        .unwrap_or(pattern.len());
+    let prefix = &pattern[..wildcard];
+    let path = std::path::Path::new(prefix);
+    if prefix.ends_with('/') || prefix.ends_with('\\') {
+        path.to_path_buf()
+    } else {
+        path.parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf()
+    }
+}
+
+fn safe_relative_path(path: &std::path::Path, root: &std::path::Path) -> std::path::PathBuf {
+    path.strip_prefix(root)
+        .ok()
+        .filter(|relative| {
+            relative
+                .components()
+                .all(|component| matches!(component, std::path::Component::Normal(_)))
+        })
+        .map(std::path::PathBuf::from)
+        .or_else(|| path.file_name().map(std::path::PathBuf::from))
+        .unwrap_or_else(|| std::path::PathBuf::from("input"))
+}
+
+fn target_extension(target: CliTarget) -> String {
+    match target {
+        CliTarget::Semantic(format) => format.extension().to_string(),
+        CliTarget::Export(format) => DocumentExportService::format_label(format).to_string(),
+    }
+}
+
+fn write_batch_report(
+    report: &str,
+    target: &str,
+    outcomes: &[BatchOutcome],
+) -> Result<(), CliFailure> {
+    let entries: Vec<_> = outcomes
+        .iter()
+        .map(|outcome| {
+            serde_json::json!({
+                "input": outcome.input,
+                "output": outcome.output,
+                "success": outcome.success,
+                "exitCode": outcome.exit_code,
+                "message": outcome.message,
+            })
+        })
+        .collect();
+    let successful = outcomes.iter().filter(|outcome| outcome.success).count();
+    let bytes = serde_json::to_vec_pretty(&serde_json::json!({
+        "schemaVersion": 1,
+        "target": target,
+        "total": outcomes.len(),
+        "successful": successful,
+        "failed": outcomes.len() - successful,
+        "files": entries,
+    }))
+    .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
+    let report_options = ConvertOptions {
+        output: Some(report),
+        force_binary_stdout: false,
+        force: true,
+        no_clobber: false,
+        atomic: true,
+        diagnostics: DiagnosticsFormat::Text,
+        strict: false,
+        fail_on_warning: false,
+        quiet: true,
+        verbose: false,
+    };
+    write_output_file(report, &bytes, &report_options)
+}
+
+fn exit_code_from_i32(code: i32) -> CliExitCode {
+    CliExitCode::contract()
+        .into_iter()
+        .find_map(|(candidate, _)| (candidate as i32 == code).then_some(candidate))
+        .unwrap_or(CliExitCode::GenericFailure)
 }
 
 fn convert_path(input: &str, target: &str, options: ConvertOptions<'_>) -> Result<(), CliFailure> {
@@ -1126,6 +1521,19 @@ fn write_output_file(
     options: &ConvertOptions<'_>,
 ) -> Result<(), CliFailure> {
     let path = std::path::Path::new(output);
+    let parent = path
+        .parent()
+        .filter(|value| !value.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    std::fs::create_dir_all(parent).map_err(|error| {
+        CliFailure::new(
+            CliExitCode::GenericFailure,
+            format!(
+                "could not create output directory {}: {error}",
+                parent.display()
+            ),
+        )
+    })?;
     if path.exists() && (options.no_clobber || !options.force) {
         return Err(CliFailure::new(
             CliExitCode::InvalidArguments,
@@ -1138,10 +1546,6 @@ fn write_output_file(
         });
     }
 
-    let parent = path
-        .parent()
-        .filter(|value| !value.as_os_str().is_empty())
-        .unwrap_or_else(|| std::path::Path::new("."));
     let file_name = path
         .file_name()
         .and_then(|value| value.to_str())

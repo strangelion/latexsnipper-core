@@ -140,3 +140,115 @@ fn convert_help_is_generated_from_the_format_registry() {
         assert!(stdout.contains(expected), "missing {expected} in {stdout}");
     }
 }
+
+#[test]
+fn batch_conversion_preserves_relative_paths_and_writes_a_report() {
+    let directory = workspace();
+    let input = directory.join("input");
+    let nested = input.join("nested");
+    let output_dir = directory.join("output");
+    let report = directory.join("report.json");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(input.join("first.tex"), "a+b").unwrap();
+    std::fs::write(nested.join("second.tex"), r"\frac{c}{d}").unwrap();
+
+    let result = snipper()
+        .args([
+            "convert",
+            input.to_str().unwrap(),
+            "--recursive",
+            "--to",
+            "json",
+            "--output-dir",
+            output_dir.to_str().unwrap(),
+            "--jobs",
+            "2",
+            "--report",
+            report.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(output_dir.join("first.json").is_file());
+    assert!(output_dir.join("nested/second.json").is_file());
+    let report: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(report).unwrap()).unwrap();
+    assert_eq!(report["schemaVersion"], 1);
+    assert_eq!(report["total"], 2);
+    assert_eq!(report["successful"], 2);
+    assert_eq!(report["failed"], 0);
+
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn batch_continue_on_error_returns_partial_failure_and_complete_report() {
+    let directory = workspace();
+    let valid = directory.join("valid.tex");
+    let missing = directory.join("missing.tex");
+    let output_dir = directory.join("output");
+    let report = directory.join("report.json");
+    std::fs::write(&valid, "x+y").unwrap();
+
+    let result = snipper()
+        .args([
+            "convert",
+            valid.to_str().unwrap(),
+            missing.to_str().unwrap(),
+            "--to",
+            "json",
+            "--output-dir",
+            output_dir.to_str().unwrap(),
+            "--jobs",
+            "2",
+            "--continue-on-error",
+            "--report",
+            report.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(10));
+    assert!(output_dir.join("valid.json").is_file());
+    let report: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(report).unwrap()).unwrap();
+    assert_eq!(report["total"], 2);
+    assert_eq!(report["successful"], 1);
+    assert_eq!(report["failed"], 1);
+    assert_eq!(report["files"].as_array().unwrap().len(), 2);
+
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn completions_and_manpages_are_generated_from_the_cli_schema() {
+    for shell in ["bash", "powershell"] {
+        let result = snipper().args(["completions", shell]).output().unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        assert!(stdout.contains("snipper"));
+        assert!(stdout.contains("convert"));
+    }
+
+    let directory = workspace();
+    let result = snipper()
+        .args(["manpages", "--output-dir", directory.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let manpage = std::fs::read_to_string(directory.join("snipper.1")).unwrap();
+    assert!(manpage.contains("snipper"));
+    assert!(manpage.contains("convert"));
+    std::fs::remove_dir_all(directory).unwrap();
+}
