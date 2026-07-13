@@ -45,8 +45,8 @@ pub struct CachedSession {
     pub session: Arc<Box<dyn InferenceSession>>,
     /// Model version when this session was created.
     pub version: String,
-    /// When this session was created.
-    pub created_at: std::time::Instant,
+    /// When this session was created, if the target provides a monotonic clock.
+    pub created_at: Option<std::time::Instant>,
 }
 
 /// Context passed through the pipeline.
@@ -221,7 +221,7 @@ impl PipelineContext {
             CachedSession {
                 session: Arc::new(session),
                 version: String::new(),
-                created_at: std::time::Instant::now(),
+                created_at: session_created_at(),
             },
         );
     }
@@ -238,7 +238,7 @@ impl PipelineContext {
             CachedSession {
                 session: Arc::new(session),
                 version: version.into(),
-                created_at: std::time::Instant::now(),
+                created_at: session_created_at(),
             },
         );
     }
@@ -319,4 +319,14 @@ impl Default for PipelineContext {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn session_created_at() -> Option<std::time::Instant> {
+    Some(std::time::Instant::now())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn session_created_at() -> Option<std::time::Instant> {
+    None
 }
