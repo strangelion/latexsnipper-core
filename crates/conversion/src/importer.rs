@@ -1011,13 +1011,12 @@ mod tests {
             }
             for format in formats {
                 let result = std::panic::catch_unwind(|| {
-                    DocumentImporter::from_bytes(
-                        &bytes,
-                        Some(format),
-                        ImportOptions::default(),
-                    )
+                    DocumentImporter::from_bytes(&bytes, Some(format), ImportOptions::default())
                 });
-                assert!(result.is_ok(), "importer panicked for {format:?} length {length}");
+                assert!(
+                    result.is_ok(),
+                    "importer panicked for {format:?} length {length}"
+                );
             }
         }
     }
