@@ -350,7 +350,13 @@ fn find_contours(binary: &[u8], width: usize, height: usize) -> Vec<Vec<(i32, i3
                     .collect();
 
                 if boundary.len() >= 4 {
-                    contours.push(boundary);
+                    // Flood-fill discovery order is not polygon order. Reduce the
+                    // boundary to an ordered convex hull before computing area,
+                    // perimeter, expansion, and the minimum-area rectangle.
+                    let hull = convex_hull(&boundary);
+                    if hull.len() >= 3 {
+                        contours.push(hull);
+                    }
                 }
             }
         }
@@ -639,6 +645,27 @@ fn polygon_average_score(map: &[f32], width: usize, height: usize, quad: &Quad, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_component_produces_a_valid_detection_box() {
+        let mut probability_map = vec![0.0; 32 * 32];
+        for row in 6..26 {
+            for column in 4..28 {
+                probability_map[row * 32 + column] = 0.95;
+            }
+        }
+        let params = TextDetParams {
+            unclip_ratio: 1.0,
+            ..TextDetParams::default()
+        };
+
+        let boxes = postprocess(&probability_map, &[1, 1, 32, 32], 32, 32, 1.0, &params)
+            .expect("bounded probability region should be valid");
+
+        assert_eq!(boxes.len(), 1);
+        assert!(boxes[0].rect.width > 10.0);
+        assert!(boxes[0].rect.height > 10.0);
+    }
 
     #[test]
     fn test_text_det_params_from_paddle_fallback() {
