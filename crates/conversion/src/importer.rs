@@ -48,6 +48,15 @@ impl DocumentImporter {
 
     pub fn from_path(path: impl AsRef<Path>, options: ImportOptions) -> Result<Document> {
         let path = path.as_ref();
+        let input_size = std::fs::metadata(path)
+            .map_err(|e| SnipperError::Io(format!("Failed to inspect '{}': {e}", path.display())))?
+            .len();
+        if input_size > options.max_input_size {
+            return Err(SnipperError::LimitExceeded(format!(
+                "input is {input_size} bytes; limit is {}",
+                options.max_input_size
+            )));
+        }
         let bytes = std::fs::read(path)
             .map_err(|e| SnipperError::Io(format!("Failed to read '{}': {e}", path.display())))?;
         let format = Self::detect_format(&bytes, Some(path))?;
@@ -260,6 +269,42 @@ fn resolve_hint(detected: InputFormat, hint: Option<InputFormat>) -> Result<Inpu
 }
 
 fn enforce_input_limits(bytes: &[u8], format: InputFormat, options: &ImportOptions) -> Result<()> {
+    if bytes.len() as u64 > options.max_input_size {
+        return Err(SnipperError::LimitExceeded(format!(
+            "input is {} bytes; limit is {}",
+            bytes.len(),
+            options.max_input_size
+        )));
+    }
+    if matches!(
+        format,
+        InputFormat::ImagePng
+            | InputFormat::ImageJpeg
+            | InputFormat::ImageWebp
+            | InputFormat::ImageBmp
+            | InputFormat::ImageTiff
+            | InputFormat::ImageGif
+    ) {
+        let size = imagesize::blob_size(bytes)
+            .map_err(|error| SnipperError::InvalidFormat(format!("Invalid image: {error}")))?;
+        let pixels = (size.width as u64)
+            .checked_mul(size.height as u64)
+            .ok_or_else(|| SnipperError::LimitExceeded("image pixel count overflow".to_string()))?;
+        if size.width > options.max_image_width
+            || size.height > options.max_image_height
+            || pixels > options.max_image_pixels
+        {
+            return Err(SnipperError::LimitExceeded(format!(
+                "image is {}x{} ({} pixels); limits are {}x{} and {} pixels",
+                size.width,
+                size.height,
+                pixels,
+                options.max_image_width,
+                options.max_image_height,
+                options.max_image_pixels
+            )));
+        }
+    }
     if !is_office(format) && bytes.len() as u64 > options.max_text_size {
         return Err(SnipperError::LimitExceeded(format!(
             "input is {} bytes; limit is {}",
@@ -278,6 +323,8 @@ fn enforce_input_limits(bytes: &[u8], format: InputFormat, options: &ImportOptio
             )));
         }
         let mut total = 0u64;
+        let mut slide_count = 0usize;
+        let mut sheet_count = 0usize;
         for index in 0..archive.len() {
             let mut file = archive.by_index(index).map_err(|e| {
                 SnipperError::InvalidFormat(format!("Invalid OOXML ZIP entry: {e}"))
@@ -286,6 +333,26 @@ fn enforce_input_limits(bytes: &[u8], format: InputFormat, options: &ImportOptio
                 return Err(SnipperError::InvalidFormat(format!(
                     "unsafe package path: {}",
                     file.name()
+                )));
+            }
+            let normalized_name = file.name().replace('\\', "/");
+            if normalized_name.starts_with("ppt/slides/slide") && normalized_name.ends_with(".xml")
+            {
+                slide_count = slide_count.saturating_add(1);
+            }
+            if normalized_name.starts_with("xl/worksheets/sheet")
+                && normalized_name.ends_with(".xml")
+            {
+                sheet_count = sheet_count.saturating_add(1);
+            }
+            if normalized_name.contains("/embeddings/")
+                && file.size() > options.max_embedded_object_size
+            {
+                return Err(SnipperError::LimitExceeded(format!(
+                    "embedded object '{}' is {} bytes; limit is {}",
+                    file.name(),
+                    file.size(),
+                    options.max_embedded_object_size
                 )));
             }
             let compressed = file.compressed_size();
@@ -318,6 +385,18 @@ fn enforce_input_limits(bytes: &[u8], format: InputFormat, options: &ImportOptio
                 })?;
                 validate_xml_part(&name, &xml, options)?;
             }
+        }
+        if slide_count > options.max_slides {
+            return Err(SnipperError::LimitExceeded(format!(
+                "presentation has {slide_count} slides; limit is {}",
+                options.max_slides
+            )));
+        }
+        if sheet_count > options.max_sheets {
+            return Err(SnipperError::LimitExceeded(format!(
+                "workbook has {sheet_count} sheets; limit is {}",
+                options.max_sheets
+            )));
         }
     }
     Ok(())
@@ -430,7 +509,9 @@ fn preserve_package_parts(bytes: &[u8], document: &mut Document, limit: u64) -> 
         if file.is_dir() {
             continue;
         }
-        total += file.size();
+        total = total
+            .checked_add(file.size())
+            .ok_or_else(|| SnipperError::LimitExceeded("package size overflow".to_string()))?;
         if total > limit {
             return Err(SnipperError::LimitExceeded(
                 "opaque package part limit exceeded".to_string(),
@@ -831,5 +912,81 @@ mod tests {
         let error = DocumentImporter::from_bytes(&package, Some(InputFormat::OfficeDocx), options)
             .unwrap_err();
         assert!(error.to_string().contains("compression ratio"));
+    }
+
+    #[test]
+    fn rejects_input_image_and_embedded_object_budgets() {
+        let options = ImportOptions {
+            max_input_size: 3,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(b"four", InputFormat::PlainText, &options).unwrap_err();
+        assert!(error.to_string().contains("input is"));
+
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        png.extend_from_slice(&100_000u32.to_be_bytes());
+        png.extend_from_slice(&100_000u32.to_be_bytes());
+        png.extend_from_slice(&[8, 6, 0, 0, 0]);
+        let options = ImportOptions {
+            max_image_width: 4096,
+            max_image_height: 4096,
+            max_image_pixels: 16_000_000,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&png, InputFormat::ImagePng, &options).unwrap_err();
+        assert!(error.to_string().contains("image is"));
+
+        let package = docx_with_parts(&[("word/embeddings/object.bin", &[0u8; 32])]);
+        let options = ImportOptions {
+            max_embedded_object_size: 16,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&package, InputFormat::OfficeDocx, &options).unwrap_err();
+        assert!(error.to_string().contains("embedded object"));
+    }
+
+    #[test]
+    fn rejects_slide_sheet_element_and_absolute_relationship_limits() {
+        let slides = docx_with_parts(&[
+            ("ppt/slides/slide1.xml", b"<slide/>"),
+            ("ppt/slides/slide2.xml", b"<slide/>"),
+        ]);
+        let options = ImportOptions {
+            max_slides: 1,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&slides, InputFormat::OfficePptx, &options).unwrap_err();
+        assert!(error.to_string().contains("slides"));
+
+        let sheets = docx_with_parts(&[
+            ("xl/worksheets/sheet1.xml", b"<sheet/>"),
+            ("xl/worksheets/sheet2.xml", b"<sheet/>"),
+        ]);
+        let options = ImportOptions {
+            max_sheets: 1,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&sheets, InputFormat::OfficeXlsx, &options).unwrap_err();
+        assert!(error.to_string().contains("sheets"));
+
+        let elements = docx_with_parts(&[("custom.xml", b"<a><b/><c/></a>")]);
+        let options = ImportOptions {
+            max_xml_elements: 2,
+            ..ImportOptions::default()
+        };
+        let error = enforce_input_limits(&elements, InputFormat::OfficeDocx, &options).unwrap_err();
+        assert!(error.to_string().contains("element limit"));
+
+        let relationships = docx_with_parts(&[(
+            "word/_rels/document.xml.rels",
+            br#"<Relationships><Relationship Target="/absolute.xml"/></Relationships>"#,
+        )]);
+        let error = enforce_input_limits(
+            &relationships,
+            InputFormat::OfficeDocx,
+            &ImportOptions::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("absolute relationship"));
     }
 }

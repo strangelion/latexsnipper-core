@@ -342,6 +342,8 @@ pub struct ImportOptions {
     pub strict: bool,
     #[serde(default)]
     pub preserve_unknown_parts: bool,
+    #[serde(default = "default_max_input_size")]
+    pub max_input_size: u64,
     #[serde(default = "default_max_decompressed_size")]
     pub max_decompressed_size: u64,
     #[serde(default = "default_max_text_size")]
@@ -356,8 +358,20 @@ pub struct ImportOptions {
     pub max_xml_elements: usize,
     #[serde(default = "default_max_pages")]
     pub max_pages: usize,
+    #[serde(default = "default_max_pages")]
+    pub max_slides: usize,
+    #[serde(default = "default_max_pages")]
+    pub max_sheets: usize,
     #[serde(default = "default_max_assets")]
     pub max_assets: usize,
+    #[serde(default = "default_max_embedded_object_size")]
+    pub max_embedded_object_size: u64,
+    #[serde(default = "default_max_image_dimension")]
+    pub max_image_width: usize,
+    #[serde(default = "default_max_image_dimension")]
+    pub max_image_height: usize,
+    #[serde(default = "default_max_image_pixels")]
+    pub max_image_pixels: u64,
 }
 
 impl Default for ImportOptions {
@@ -369,6 +383,7 @@ impl Default for ImportOptions {
             ocr_fallback: false,
             strict: false,
             preserve_unknown_parts: false,
+            max_input_size: default_max_input_size(),
             max_decompressed_size: default_max_decompressed_size(),
             max_text_size: default_max_text_size(),
             max_zip_entries: default_max_zip_entries(),
@@ -376,9 +391,19 @@ impl Default for ImportOptions {
             max_xml_depth: default_max_xml_depth(),
             max_xml_elements: default_max_xml_elements(),
             max_pages: default_max_pages(),
+            max_slides: default_max_pages(),
+            max_sheets: default_max_pages(),
             max_assets: default_max_assets(),
+            max_embedded_object_size: default_max_embedded_object_size(),
+            max_image_width: default_max_image_dimension(),
+            max_image_height: default_max_image_dimension(),
+            max_image_pixels: default_max_image_pixels(),
         }
     }
+}
+
+fn default_max_input_size() -> u64 {
+    512 * 1024 * 1024
 }
 
 fn default_max_decompressed_size() -> u64 {
@@ -411,6 +436,18 @@ fn default_max_pages() -> usize {
 
 fn default_max_assets() -> usize {
     50_000
+}
+
+fn default_max_embedded_object_size() -> u64 {
+    128 * 1024 * 1024
+}
+
+fn default_max_image_dimension() -> usize {
+    32_768
+}
+
+fn default_max_image_pixels() -> u64 {
+    268_435_456
 }
 
 /// Options for exporting a document.

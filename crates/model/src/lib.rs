@@ -9,5 +9,5 @@ pub use config::{
     PostprocessConfig, PreprocessConfig, QuantizationConfig, ResizeConfig, TensorConfig,
 };
 #[cfg(feature = "native")]
-pub use manager::{DownloadProgress, DownloadStatus, ModelManager};
+pub use manager::{DownloadProgress, DownloadStatus, ModelManager, ModelSecurityLimits};
 pub use manifest::ModelManifest;
