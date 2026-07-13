@@ -340,7 +340,7 @@ crates/
 ├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
 ├── api-types/      ✅ Public API types (RecognizeMode, Request, Response, StreamItem)
 ├── tract/          ✅ Tract-based WASM RuntimeBackend
-├── plugin/         ⚠️ Deterministic built-in registry; external ABI/WASI hosts are not implemented
+├── plugin/         ⚠️ Deterministic registry and verified package store; external ABI/WASI hosts are not implemented
 ├── mock/           ✅ Fake implementations for testing
 ├── ffi/            ✅ Android JNI + iOS C FFI
 ├── wasm/           ✅ WebAssembly bindings with Tract backend

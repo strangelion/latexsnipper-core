@@ -989,4 +989,36 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("absolute relationship"));
     }
+
+    #[test]
+    fn malformed_input_fuzz_smoke_never_panics() {
+        let formats = [
+            InputFormat::OfficeDocx,
+            InputFormat::Pdf,
+            InputFormat::ImagePng,
+            InputFormat::JsonAst,
+            InputFormat::Html,
+            InputFormat::MathML,
+        ];
+        let mut state = 0x9e37_79b9_u32;
+        for length in 0..256usize {
+            let mut bytes = vec![0u8; length];
+            for byte in &mut bytes {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                *byte = state as u8;
+            }
+            for format in formats {
+                let result = std::panic::catch_unwind(|| {
+                    DocumentImporter::from_bytes(
+                        &bytes,
+                        Some(format),
+                        ImportOptions::default(),
+                    )
+                });
+                assert!(result.is_ok(), "importer panicked for {format:?} length {length}");
+            }
+        }
+    }
 }

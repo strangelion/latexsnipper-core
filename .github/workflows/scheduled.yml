@@ -1,0 +1,79 @@
+name: Scheduled hardening
+
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+
+  benchmark-regression:
+    name: Comparable benchmark snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run benchmark suite
+        run: cargo bench -p latexsnipper-tests --bench core_bench | tee target/benchmark-output.txt
+      - name: Build comparable JSON
+        run: |
+          grep '^benchmark_json=' target/benchmark-output.txt \
+            | sed 's/^benchmark_json=//' \
+            | jq -s --arg commit "$GITHUB_SHA" \
+              '{schemaVersion: 1, commit: $commit, benchmarks: .}' \
+            > target/benchmark-results.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: target/benchmark-results.json
+          if-no-files-found: error
+          retention-days: 90
+
+  fuzz-smoke:
+    name: Deterministic parser fuzz smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p latexsnipper-conversion malformed_input_fuzz_smoke_never_panics -- --nocapture
+
+  model-url-verification:
+    name: Verified model URLs
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      LATEXSNIPPER_REQUIRE_REAL_MODELS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache verified model archives
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/latexsnipper-model-cache
+          key: scheduled-models-${{ runner.os }}-${{ hashFiles('scripts/model-manifest.template.json', 'scripts/VerifiedDownload.psm1', 'scripts/setup-real-model-tests.ps1') }}
+      - name: Verify primary and mirror download paths
+        shell: pwsh
+        run: ./scripts/setup-real-model-tests.ps1
