@@ -297,3 +297,119 @@ fn model_purge_requires_confirmation_stays_scoped_and_preserves_manifest() {
 
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn plugin_management_verifies_installs_disabled_and_reports_tampering() {
+    let directory = workspace();
+    let package = directory.join("package");
+    let store = directory.join("store");
+    std::fs::create_dir_all(&package).unwrap();
+    std::fs::write(package.join("plugin.wasm"), b"fixture component").unwrap();
+    let manifest = serde_json::json!({
+        "id": "example.plugin",
+        "name": "Example Plugin",
+        "version": "1.0.0",
+        "pluginApiVersion": 1,
+        "coreVersionRequirement": "^2.0.0",
+        "capabilities": [],
+        "hooks": [],
+        "priority": 0,
+        "dependencies": [],
+        "before": [],
+        "after": [],
+        "permissions": {},
+        "platforms": [],
+        "architectures": [],
+        "license": "MIT",
+        "entrypoint": "plugin.wasm",
+        "checksumSha256": "f07a9bfe5aa29b53c1b093fd13fd43d4de7f1af45da70524dc5afb899683b2a3",
+        "signature": null,
+        "configurationSchema": null,
+        "class": "wasi_component"
+    });
+    std::fs::write(
+        package.join("plugin.json"),
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+
+    let verified = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "verify",
+            package.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        verified.status.success(),
+        "{}",
+        String::from_utf8_lossy(&verified.stderr)
+    );
+    assert!(String::from_utf8_lossy(&verified.stdout).contains("\"verified\": true"));
+
+    let installed = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "install",
+            package.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        installed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+    assert!(String::from_utf8_lossy(&installed.stdout).contains("\"enabled\": false"));
+
+    let enabled = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "enable",
+            "example.plugin",
+        ])
+        .output()
+        .unwrap();
+    assert!(enabled.status.success());
+    let doctor = snipper()
+        .args(["plugin", "--store-dir", store.to_str().unwrap(), "doctor"])
+        .output()
+        .unwrap();
+    assert!(doctor.status.success());
+    assert!(
+        String::from_utf8_lossy(&doctor.stdout).contains("\"wasiComponentHostAvailable\": false")
+    );
+
+    std::fs::write(
+        store.join("packages/example.plugin/plugin.wasm"),
+        b"tampered",
+    )
+    .unwrap();
+    let tampered = snipper()
+        .args(["plugin", "--store-dir", store.to_str().unwrap(), "doctor"])
+        .output()
+        .unwrap();
+    assert_eq!(tampered.status.code(), Some(9));
+    assert!(String::from_utf8_lossy(&tampered.stdout).contains("\"verified\": false"));
+
+    let uninstalled = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "uninstall",
+            "example.plugin",
+        ])
+        .output()
+        .unwrap();
+    assert!(uninstalled.status.success());
+    assert!(!store.join("packages/example.plugin").exists());
+    std::fs::remove_dir_all(directory).unwrap();
+}

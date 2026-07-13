@@ -312,6 +312,16 @@ enum Commands {
     #[command(subcommand)]
     Models(ModelsCommand),
 
+    /// Verify and manage explicitly installed plugin packages
+    Plugin {
+        /// Plugin store directory
+        #[arg(long, default_value = ".snipper/plugins", global = true)]
+        store_dir: String,
+
+        #[command(subcommand)]
+        command: PluginCommand,
+    },
+
     /// Manage processing jobs
     #[command(subcommand)]
     Job(JobCommand),
@@ -435,6 +445,26 @@ snipper models verify --category formula-det"
         #[arg(long)]
         yes: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum PluginCommand {
+    /// List installed plugin manifests and activation state
+    List,
+    /// Show one installed plugin manifest
+    Info { id: String },
+    /// Verify a local package without installing or executing it
+    Verify { path: String },
+    /// Verify and install a local package in disabled state
+    Install { path: String },
+    /// Remove an installed package
+    Uninstall { id: String },
+    /// Mark an installed package enabled for a compatible host
+    Enable { id: String },
+    /// Mark an installed package disabled
+    Disable { id: String },
+    /// Verify every installed package and report execution-host readiness
+    Doctor,
 }
 
 fn resolve_format(format: &str, output: Option<&str>) -> String {
@@ -825,6 +855,8 @@ fn main() {
             #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let runtime: Option<serde_json::Value> = None;
             let capabilities = build_capability_matrix();
+            let model_state = doctor_model_state(&models_dir);
+            let plugin_state = doctor_plugin_state(std::path::Path::new(".snipper/plugins"));
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
@@ -834,9 +866,10 @@ fn main() {
                     "runtime": runtime,
                     "modelDirectory": models_dir,
                     "modelDirectoryExists": models_dir.is_dir(),
+                    "models": model_state,
                     "outputDirectory": current_dir,
                     "outputDirectoryWritable": directory_is_writable(&current_dir),
-                    "pluginState": "built-in registry only",
+                    "plugins": plugin_state,
                     "availableConversions": capabilities.entries.iter().filter(|entry| entry.available).count(),
                     "exitCodes": CliExitCode::contract().into_iter().map(|(code, description)| serde_json::json!({
                         "code": code as i32,
@@ -906,6 +939,11 @@ fn main() {
                 }
             }
         },
+        Commands::Plugin { store_dir, command } => {
+            if let Err(error) = handle_plugin_command(&store_dir, command) {
+                exit_with_code(CliExitCode::PluginFailure, "Plugin command failed", error);
+            }
+        }
         Commands::Job(cmd) => match cmd {
             JobCommand::Run {
                 input,
@@ -1606,6 +1644,89 @@ fn write_output_file(
     result
 }
 
+fn doctor_model_state(models_dir: &std::path::Path) -> serde_json::Value {
+    let manifest_path = models_dir.join("model-manifest.json");
+    if !manifest_path.is_file() {
+        return serde_json::json!({
+            "manifestAvailable": false,
+            "installedVariants": 0,
+            "expectedFilesPresent": false,
+            "checksumStatus": "unavailable_without_manifest",
+        });
+    }
+    let manifest = match latexsnipper_model::ModelManifest::load(&manifest_path) {
+        Ok(value) => value,
+        Err(error) => {
+            return serde_json::json!({
+                "manifestAvailable": true,
+                "manifestValid": false,
+                "error": error.to_string(),
+            });
+        }
+    };
+    let manager = latexsnipper_model::ModelManager::new(models_dir.to_path_buf());
+    let mut installed = 0usize;
+    let mut checked_files = 0usize;
+    let mut missing_files = 0usize;
+    for (category, info) in &manifest.categories {
+        for variant_id in manager.list_installed(category) {
+            installed += 1;
+            if let Some(variant) = info
+                .variants
+                .iter()
+                .find(|candidate| candidate.id == variant_id)
+            {
+                let directory = manager.variant_dir(category, &variant_id);
+                for file in &variant.files {
+                    checked_files += 1;
+                    if !directory.join(file).is_file() {
+                        missing_files += 1;
+                    }
+                }
+            }
+        }
+    }
+    serde_json::json!({
+        "manifestAvailable": true,
+        "manifestValid": true,
+        "installedVariants": installed,
+        "checkedFiles": checked_files,
+        "missingFiles": missing_files,
+        "expectedFilesPresent": missing_files == 0,
+        "checksumStatus": "archives_verified_at_download; extracted_files_checked_for_presence",
+    })
+}
+
+fn doctor_plugin_state(store_dir: &std::path::Path) -> serde_json::Value {
+    let store = latexsnipper_plugin::PluginStore::new(store_dir.to_path_buf());
+    let plugins = match store.list() {
+        Ok(value) => value,
+        Err(error) => {
+            return serde_json::json!({
+                "storeDirectory": store_dir,
+                "registryValid": false,
+                "error": error.to_string(),
+                "nativeAbiHostAvailable": false,
+                "wasiComponentHostAvailable": false,
+            });
+        }
+    };
+    let enabled = plugins.iter().filter(|plugin| plugin.enabled).count();
+    let failed_integrity = plugins
+        .iter()
+        .filter(|plugin| store.verify_installed(&plugin.manifest.id).is_err())
+        .count();
+    serde_json::json!({
+        "storeDirectory": store_dir,
+        "registryValid": true,
+        "installed": plugins.len(),
+        "enabled": enabled,
+        "failedIntegrity": failed_integrity,
+        "nativeAbiHostAvailable": false,
+        "wasiComponentHostAvailable": false,
+    })
+}
+
 fn directory_is_writable(directory: &std::path::Path) -> bool {
     let probe = directory.join(format!(
         ".snipper-write-probe-{}-{}",
@@ -1990,6 +2111,147 @@ fn handle_models_purge(
         }
     }
     eprintln!("Removed {removed} installed model variant(s); manifest files were preserved.");
+    Ok(())
+}
+
+fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), String> {
+    let store = latexsnipper_plugin::PluginStore::new(std::path::PathBuf::from(store_dir));
+    match command {
+        PluginCommand::List => {
+            let plugins = store.list().map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "schemaVersion": 1,
+                    "storeDirectory": store.root(),
+                    "plugins": plugins,
+                }))
+                .map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Info { id } => {
+            let plugin = store
+                .get(&id)
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| format!("Plugin '{id}' is not installed"))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&plugin).map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Verify { path } => {
+            reject_remote_plugin_source(&path)?;
+            let verification = store
+                .verify_package(std::path::Path::new(&path))
+                .map_err(|error| error.to_string())?;
+            print_plugin_verification(&verification)?;
+        }
+        PluginCommand::Install { path } => {
+            reject_remote_plugin_source(&path)?;
+            let installed = store
+                .install(std::path::Path::new(&path))
+                .map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "installed": installed,
+                    "executed": false,
+                    "message": "Package verified and installed disabled; no plugin code was executed",
+                }))
+                .map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Uninstall { id } => {
+            store.uninstall(&id).map_err(|error| error.to_string())?;
+            println!("Plugin '{id}' uninstalled");
+        }
+        PluginCommand::Enable { id } => {
+            let plugin = store
+                .set_enabled(&id, true)
+                .map_err(|error| error.to_string())?;
+            println!(
+                "Plugin '{}' enabled in store metadata; execution still requires a compatible host",
+                plugin.manifest.id
+            );
+        }
+        PluginCommand::Disable { id } => {
+            let plugin = store
+                .set_enabled(&id, false)
+                .map_err(|error| error.to_string())?;
+            println!("Plugin '{}' disabled", plugin.manifest.id);
+        }
+        PluginCommand::Doctor => {
+            let plugins = store.list().map_err(|error| error.to_string())?;
+            let checks = plugins
+                .iter()
+                .map(|plugin| match store.verify_installed(&plugin.manifest.id) {
+                    Ok(verification) => serde_json::json!({
+                        "id": plugin.manifest.id,
+                        "enabled": plugin.enabled,
+                        "verified": true,
+                        "entrypointSha256": verification.entrypoint_sha256,
+                        "executionHostAvailable": false,
+                    }),
+                    Err(error) => serde_json::json!({
+                        "id": plugin.manifest.id,
+                        "enabled": plugin.enabled,
+                        "verified": false,
+                        "error": error.to_string(),
+                        "executionHostAvailable": false,
+                    }),
+                })
+                .collect::<Vec<_>>();
+            let healthy = checks
+                .iter()
+                .all(|check| check["verified"].as_bool() == Some(true));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "schemaVersion": 1,
+                    "storeDirectory": store.root(),
+                    "installed": plugins.len(),
+                    "packageIntegrityHealthy": healthy,
+                    "nativeAbiHostAvailable": false,
+                    "wasiComponentHostAvailable": false,
+                    "plugins": checks,
+                }))
+                .map_err(|error| error.to_string())?
+            );
+            if !healthy {
+                return Err("one or more installed plugin packages failed verification".to_string());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reject_remote_plugin_source(source: &str) -> Result<(), String> {
+    if source.contains("://") {
+        return Err(
+            "remote plugin installation is unsupported; download the package and verify its local path"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn print_plugin_verification(
+    verification: &latexsnipper_plugin::PluginVerification,
+) -> Result<(), String> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "verified": true,
+            "executed": false,
+            "manifest": verification.manifest,
+            "manifestPath": verification.manifest_path,
+            "entrypointPath": verification.entrypoint_path,
+            "entrypointSha256": verification.entrypoint_sha256,
+            "fileCount": verification.file_count,
+            "totalBytes": verification.total_bytes,
+        }))
+        .map_err(|error| error.to_string())?
+    );
     Ok(())
 }
 
