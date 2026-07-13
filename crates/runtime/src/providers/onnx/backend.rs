@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use ort::ep::{ExecutionProvider, ExecutionProviderDispatch};
 use ort::{environment::Environment, session::Session, value::Value};
@@ -143,7 +143,8 @@ impl OnnxRuntimeBackend {
             SnipperError::Runtime(format!("Failed to create session builder: {}", e))
         })?;
 
-        let (configured, selected, fallback) = configure_execution_provider(builder, acceleration);
+        let (configured, selected, fallback) =
+            configure_execution_provider(builder, acceleration, self.acceleration);
         builder = configured;
         if let Ok(mut provider) = self.selected_provider.lock() {
             *provider = selected.to_string();
@@ -155,6 +156,22 @@ impl OnnxRuntimeBackend {
             }
         }
 
+        if selected == "DirectML" {
+            builder = builder
+                .with_memory_pattern(false)
+                .map_err(|error| {
+                    SnipperError::Runtime(format!(
+                        "Failed to disable memory patterns for DirectML: {error}"
+                    ))
+                })?
+                .with_parallel_execution(false)
+                .map_err(|error| {
+                    SnipperError::Runtime(format!(
+                        "Failed to select sequential execution for DirectML: {error}"
+                    ))
+                })?;
+        }
+
         let thread_count = max_threads.max(1);
 
         // Configure thread count via ORT 2.0 API
@@ -162,6 +179,7 @@ impl OnnxRuntimeBackend {
             .with_intra_threads(thread_count)
             .map_err(|e| SnipperError::Runtime(format!("Failed to set thread count: {}", e)))?;
 
+        let _provider_guard = provider_operation_guard(selected)?;
         let session = builder.commit_from_file(model_path).map_err(|e| {
             SnipperError::Runtime(format!(
                 "Failed to load model {}: {}",
@@ -190,12 +208,15 @@ impl OnnxRuntimeBackend {
 fn configure_execution_provider(
     mut builder: ort::session::builder::SessionBuilder,
     mode: AccelerationMode,
+    detected: Acceleration,
 ) -> (
     ort::session::builder::SessionBuilder,
     &'static str,
     Option<String>,
 ) {
-    if mode == AccelerationMode::Cpu {
+    if mode == AccelerationMode::Cpu
+        || (mode == AccelerationMode::Auto && detected == Acceleration::CpuOnly)
+    {
         return (builder, "CPU", None);
     }
 
@@ -203,8 +224,13 @@ fn configure_execution_provider(
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
+        let should_try_cuda = mode == AccelerationMode::Gpu
+            || matches!(
+                detected,
+                Acceleration::Cuda12 | Acceleration::Cuda13 | Acceleration::Tensorrt
+            );
         let cuda = ort::ep::CUDA::default();
-        if cuda.is_available().unwrap_or(false) {
+        if should_try_cuda && cuda.is_available().unwrap_or(false) {
             let (next, enabled, failure) = try_execution_provider(builder, cuda.build(), "CUDA");
             builder = next;
             if enabled {
@@ -218,8 +244,10 @@ fn configure_execution_provider(
 
     #[cfg(target_os = "windows")]
     {
+        let should_try_directml =
+            mode == AccelerationMode::Gpu || detected == Acceleration::Directml;
         let directml = ort::ep::DirectML::default();
-        if directml.is_available().unwrap_or(false) {
+        if should_try_directml && directml.is_available().unwrap_or(false) {
             let (next, enabled, failure) =
                 try_execution_provider(builder, directml.build(), "DirectML");
             builder = next;
@@ -234,8 +262,9 @@ fn configure_execution_provider(
 
     #[cfg(target_os = "macos")]
     {
+        let should_try_coreml = mode == AccelerationMode::Gpu || detected == Acceleration::Coreml;
         let coreml = ort::ep::CoreML::default();
-        if coreml.is_available().unwrap_or(false) {
+        if should_try_coreml && coreml.is_available().unwrap_or(false) {
             let (next, enabled, failure) =
                 try_execution_provider(builder, coreml.build(), "CoreML");
             builder = next;
@@ -304,7 +333,10 @@ impl RuntimeBackend for OnnxRuntimeBackend {
     ) -> Result<Box<dyn InferenceSession>> {
         let model_path = self.resolve_model_path(handle);
         let shared = self.get_or_create_session(&model_path, acceleration, max_threads)?;
-        Ok(Box::new(OnnxSession { session: shared }))
+        Ok(Box::new(OnnxSession {
+            session: shared,
+            provider: self.selected_provider(),
+        }))
     }
 
     fn name(&self) -> &str {
@@ -348,6 +380,7 @@ impl RuntimeBackend for OnnxRuntimeBackend {
 
 struct OnnxSession {
     session: Arc<Mutex<Session>>,
+    provider: String,
 }
 
 impl InferenceSession for OnnxSession {
@@ -355,6 +388,7 @@ impl InferenceSession for OnnxSession {
         &self,
         inputs: &[latexsnipper_tensor::Tensor],
     ) -> Result<Vec<latexsnipper_tensor::Tensor>> {
+        let _provider_guard = provider_operation_guard(&self.provider)?;
         let mut input_values: Vec<(String, Value)> = Vec::new();
 
         for input in inputs {
@@ -507,6 +541,31 @@ impl InferenceSession for OnnxSession {
     }
 }
 
+fn provider_operation_guard(provider: &str) -> Result<Option<MutexGuard<'static, ()>>> {
+    static GPU_OPERATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    if provider == "CPU" {
+        return Ok(None);
+    }
+    GPU_OPERATION_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map(Some)
+        .map_err(|_| SnipperError::Runtime("GPU provider operation lock poisoned".to_string()))
+}
+
+impl Drop for OnnxRuntimeBackend {
+    fn drop(&mut self) {
+        // ORT GPU execution providers may release device resources from Session::drop.
+        // Keep destruction serialized with session creation and inference in other backends.
+        let Ok(_guard) = provider_operation_guard("GPU") else {
+            return;
+        };
+        if let Ok(sessions) = self.sessions.get_mut() {
+            sessions.clear();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -526,5 +585,14 @@ mod tests {
         assert!(diagnostics.available);
         assert_eq!(diagnostics.selected_provider, "CPU");
         assert!(diagnostics.available_providers.contains(&"CPU".to_string()));
+    }
+
+    #[test]
+    fn auto_mode_respects_cpu_only_hardware_detection() {
+        let builder = Session::builder().unwrap();
+        let (_builder, selected, fallback) =
+            configure_execution_provider(builder, AccelerationMode::Auto, Acceleration::CpuOnly);
+        assert_eq!(selected, "CPU");
+        assert!(fallback.is_none());
     }
 }

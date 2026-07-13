@@ -188,6 +188,10 @@ Provider 选择顺序为：Windows `CUDA → DirectML → CPU`，Linux
 `CUDA → CPU`，macOS `CoreML → CPU`。注册失败会恢复 session builder、继续尝试下一项，
 最终 CPU fallback 会产生 `W_GPU_PROVIDER_FALLBACK`，不会伪装为 GPU 成功。
 
+`Auto` 只尝试硬件探测结果对应的 provider，不会因为某个 EP 动态库可加载就误选该
+provider。显式 `Gpu` 模式才会依次尝试平台上的全部 GPU provider。GPU session 创建、
+推理及 cache 析构在进程内串行化，避免多个独立 backend 竞争原生 provider 生命周期。
+
 ### 模型路径解析
 
 1. 如果 `ModelHandle` 有显式 `model_path`，直接使用
