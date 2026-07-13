@@ -1,12 +1,15 @@
 use std::collections::{HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 
+use latexsnipper_ast::CapabilityMatrix;
 use latexsnipper_foundation::{Result, SnipperError};
 use log::info;
 use serde::Serialize;
 
-use crate::manifest::{PluginManifest, PLUGIN_API_VERSION};
+use crate::manifest::{PluginHook, PluginManifest, PLUGIN_API_VERSION};
+use crate::patch::{DocumentPatch, DocumentView};
 use crate::plugin::Plugin;
 use crate::request::PluginRequest;
 use crate::response::PluginResponse;
@@ -38,7 +41,7 @@ pub struct PluginRunResult {
 }
 
 struct PluginEntry {
-    plugin: Box<dyn Plugin>,
+    plugin: Arc<RwLock<Box<dyn Plugin>>>,
     manifest: PluginManifest,
     registration_order: u64,
     enabled: AtomicBool,
@@ -75,7 +78,7 @@ impl PluginRegistry {
         self.plugins.insert(
             id,
             PluginEntry {
-                plugin,
+                plugin: Arc::new(RwLock::new(plugin)),
                 manifest,
                 registration_order: self.next_registration_order,
                 enabled: AtomicBool::new(true),
@@ -90,7 +93,12 @@ impl PluginRegistry {
             return Ok(());
         };
         info!("Unregistering plugin: {id}");
-        catch_plugin_panic(id, "cleanup", || entry.plugin.cleanup())?;
+        let mut plugin = entry
+            .plugin
+            .write()
+            .map_err(|_| plugin_error(format!("Plugin '{id}' lock is poisoned")))?;
+        catch_plugin_panic(id, "cleanup", || plugin.cleanup())?;
+        drop(plugin);
         self.plugins.remove(id);
         Ok(())
     }
@@ -155,6 +163,18 @@ impl PluginRegistry {
         capabilities
     }
 
+    /// Merge enabled plugin capabilities into the shared executable matrix.
+    pub fn extend_capability_matrix(&self, matrix: &mut CapabilityMatrix) {
+        for id in self.execution_order().unwrap_or_default() {
+            let entry = &self.plugins[&id];
+            if entry.enabled.load(Ordering::Acquire) {
+                matrix
+                    .entries
+                    .extend(entry.manifest.format_capabilities.iter().cloned());
+            }
+        }
+    }
+
     pub fn handle(&self, plugin_id: &str, request: &PluginRequest) -> Result<PluginResponse> {
         let entry = self
             .plugins
@@ -163,7 +183,19 @@ impl PluginRegistry {
         if !entry.enabled.load(Ordering::Acquire) {
             return Err(plugin_error(format!("Plugin '{plugin_id}' is disabled")));
         }
-        catch_plugin_panic(plugin_id, "handle", || entry.plugin.handle(request))
+        match invoke_plugin(plugin_id, entry, request)
+            .map_err(|diagnostic| plugin_error(diagnostic.message))?
+        {
+            PluginExecution::Response(response) => Ok(*response),
+            PluginExecution::Patch(patch) => {
+                let mut document = request.document.clone();
+                patch.apply(&mut document)?;
+                Ok(PluginResponse {
+                    document,
+                    metadata: request.metadata.clone(),
+                })
+            }
+        }
     }
 
     pub fn handle_all(&self, request: &PluginRequest) -> Result<PluginResponse> {
@@ -205,14 +237,30 @@ impl PluginRegistry {
                 continue;
             }
             info!("Processing with plugin: {id}");
-            match catch_plugin_panic_diagnostic(&id, || entry.plugin.handle(&current)) {
+            let result = match invoke_plugin(&id, entry, &current) {
+                Ok(PluginExecution::Patch(patch)) => patch
+                    .apply(&mut current.document)
+                    .map(|_| None)
+                    .map_err(|error| PluginDiagnostic {
+                        plugin_id: id.clone(),
+                        code: "PLUGIN_PATCH_REJECTED",
+                        message: error.to_string(),
+                        panic_contained: false,
+                        disabled: false,
+                    }),
+                Ok(PluginExecution::Response(response)) => Ok(Some(*response)),
+                Err(diagnostic) => Err(diagnostic),
+            };
+            match result {
                 Ok(response) => {
                     executed.push(id);
-                    current = PluginRequest {
-                        action: current.action.clone(),
-                        document: response.document,
-                        metadata: response.metadata,
-                    };
+                    if let Some(response) = response {
+                        current = PluginRequest {
+                            action: current.action.clone(),
+                            document: response.document,
+                            metadata: response.metadata,
+                        };
+                    }
                 }
                 Err(mut diagnostic) => match policy {
                     PluginFailurePolicy::Stop => return Err(plugin_error(diagnostic.message)),
@@ -278,6 +326,29 @@ fn validate_manifest(manifest: &PluginManifest, name: &str, version: &str) -> Re
         return Err(plugin_error(format!(
             "Plugin '{}' requires API {}, host provides {}",
             manifest.id, manifest.plugin_api_version, PLUGIN_API_VERSION
+        )));
+    }
+    if !manifest.format_capabilities.is_empty()
+        && !manifest.hooks.iter().any(|hook| {
+            matches!(
+                hook,
+                PluginHook::RegisterImporter | PluginHook::RegisterExporter
+            )
+        })
+    {
+        return Err(plugin_error(format!(
+            "Plugin '{}' declares format capabilities without a registration hook",
+            manifest.id
+        )));
+    }
+    if manifest
+        .format_capabilities
+        .iter()
+        .any(|capability| capability.input.is_none() || capability.output.is_none())
+    {
+        return Err(plugin_error(format!(
+            "Plugin '{}' format capabilities require input and output labels",
+            manifest.id
         )));
     }
     parse_version(&manifest.version)?;
@@ -422,6 +493,66 @@ fn add_edge(
     }
 }
 
+enum PluginExecution {
+    Response(Box<PluginResponse>),
+    Patch(DocumentPatch),
+}
+
+fn invoke_plugin(
+    plugin_id: &str,
+    entry: &PluginEntry,
+    request: &PluginRequest,
+) -> std::result::Result<PluginExecution, PluginDiagnostic> {
+    let Some(timeout_millis) = entry.manifest.permissions.timeout_millis else {
+        return invoke_locked(plugin_id, &entry.plugin, request);
+    };
+
+    let plugin = Arc::clone(&entry.plugin);
+    let plugin_id_owned = plugin_id.to_string();
+    let request = request.clone();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let result = invoke_locked(&plugin_id_owned, &plugin, &request);
+        let _ = sender.send(result);
+    });
+    match receiver.recv_timeout(std::time::Duration::from_millis(timeout_millis)) {
+        Ok(result) => result,
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(PluginDiagnostic {
+            plugin_id: plugin_id.to_string(),
+            code: "PLUGIN_TIMEOUT",
+            message: format!("Plugin '{plugin_id}' exceeded its {timeout_millis}ms timeout"),
+            panic_contained: false,
+            disabled: false,
+        }),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(PluginDiagnostic {
+            plugin_id: plugin_id.to_string(),
+            code: "PLUGIN_WORKER_DISCONNECTED",
+            message: format!("Plugin '{plugin_id}' worker disconnected"),
+            panic_contained: false,
+            disabled: false,
+        }),
+    }
+}
+
+fn invoke_locked(
+    plugin_id: &str,
+    plugin: &RwLock<Box<dyn Plugin>>,
+    request: &PluginRequest,
+) -> std::result::Result<PluginExecution, PluginDiagnostic> {
+    catch_plugin_panic_diagnostic(plugin_id, || {
+        let plugin = plugin
+            .read()
+            .map_err(|_| plugin_error(format!("Plugin '{plugin_id}' lock is poisoned")))?;
+        match plugin.document_patch(DocumentView::new(&request.document))? {
+            Some(patch) => Ok(PluginExecution::Patch(patch)),
+            None => plugin
+                .handle(request)
+                .map(Box::new)
+                .map(PluginExecution::Response),
+        }
+    })
+}
+
 fn catch_plugin_panic<T>(
     plugin_id: &str,
     stage: &str,
@@ -476,11 +607,12 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
     use std::sync::Arc;
 
-    use latexsnipper_ast::{Document, Page};
+    use latexsnipper_ast::{Document, FidelityLevel, FormatCapability, Page};
 
     use super::*;
     use crate::manifest::PluginDependency;
-    use crate::plugin::TransformPlugin;
+    use crate::patch::{DocumentPatch, PatchOperation};
+    use crate::plugin::{PatchPlugin, TransformPlugin};
 
     fn plugin(id: &str, priority: i32) -> TransformPlugin {
         let mut manifest = PluginManifest::built_in(id, "1.0.0");
@@ -615,6 +747,26 @@ mod tests {
     fn capabilities_follow_enable_and_disable() {
         let mut manifest = PluginManifest::built_in("exporter", "1.0.0");
         manifest.capabilities.push("export:custom".to_string());
+        manifest.hooks.push(PluginHook::RegisterExporter);
+        manifest.format_capabilities.push(FormatCapability {
+            input: Some("AST".to_string()),
+            output: Some("custom".to_string()),
+            available: true,
+            supports_formula: true,
+            supports_table: false,
+            supports_image: false,
+            supports_svg: false,
+            supports_style: false,
+            supports_layout: false,
+            supports_office_objects: false,
+            fidelity: FidelityLevel::SemanticOnly,
+            known_loss: Vec::new(),
+            notes: vec!["Registered by exporter plugin".to_string()],
+            required_features: Vec::new(),
+            external_dependencies: Vec::new(),
+            platform_restrictions: Vec::new(),
+            experimental: true,
+        });
         let mut registry = PluginRegistry::new();
         registry
             .register(Box::new(
@@ -622,8 +774,18 @@ mod tests {
             ))
             .unwrap();
         assert_eq!(registry.capabilities(), ["export:custom"]);
+        let mut matrix = CapabilityMatrix {
+            schema_version: "2.0.0".to_string(),
+            entries: Vec::new(),
+        };
+        registry.extend_capability_matrix(&mut matrix);
+        assert_eq!(matrix.entries.len(), 1);
+        assert_eq!(matrix.entries[0].output.as_deref(), Some("custom"));
         registry.disable("exporter").unwrap();
         assert!(registry.capabilities().is_empty());
+        matrix.entries.clear();
+        registry.extend_capability_matrix(&mut matrix);
+        assert!(matrix.entries.is_empty());
     }
 
     #[test]
@@ -679,5 +841,58 @@ mod tests {
             .unwrap();
         assert_eq!(continued.diagnostics.len(), 1);
         assert_eq!(continued.response.document.pages.len(), 1);
+    }
+
+    #[test]
+    fn configured_timeout_returns_without_waiting_for_plugin_completion() {
+        let mut manifest = PluginManifest::built_in("slow", "1.0.0");
+        manifest.permissions.timeout_millis = Some(10);
+        let mut registry = PluginRegistry::new();
+        registry
+            .register(Box::new(
+                TransformPlugin::new("slow", "1.0.0", |_| {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    Ok(())
+                })
+                .with_manifest(manifest),
+            ))
+            .unwrap();
+
+        let started = std::time::Instant::now();
+        let result = registry
+            .handle_all_with_policy(
+                &PluginRequest::new("transform", Document::new()),
+                PluginFailurePolicy::Continue,
+            )
+            .unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_millis(200));
+        assert_eq!(result.diagnostics[0].code, "PLUGIN_TIMEOUT");
+    }
+
+    #[test]
+    fn patch_plugin_rolls_back_partial_mutations_on_failure() {
+        let mut registry = PluginRegistry::new();
+        registry
+            .register(Box::new(PatchPlugin::new("patch", "1.0.0", |_| {
+                Ok(DocumentPatch::new()
+                    .push(PatchOperation::InsertPage {
+                        index: 1,
+                        page: Page::new(200.0, 200.0, 2),
+                    })
+                    .push(PatchOperation::RemovePage { index: 20 }))
+            })))
+            .unwrap();
+        let mut document = Document::new();
+        document.pages.push(Page::new(100.0, 100.0, 1));
+
+        let result = registry
+            .handle_all_with_policy(
+                &PluginRequest::new("transform", document),
+                PluginFailurePolicy::Continue,
+            )
+            .unwrap();
+        assert_eq!(result.response.document.pages.len(), 1);
+        assert_eq!(result.response.document.pages[0].width, 100.0);
+        assert_eq!(result.diagnostics[0].code, "PLUGIN_PATCH_REJECTED");
     }
 }

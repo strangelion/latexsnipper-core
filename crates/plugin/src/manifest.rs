@@ -1,3 +1,4 @@
+use latexsnipper_ast::FormatCapability;
 use serde::{Deserialize, Serialize};
 
 pub const PLUGIN_API_VERSION: u32 = 1;
@@ -60,6 +61,9 @@ pub struct PluginManifest {
     pub core_version_requirement: String,
     #[serde(default)]
     pub capabilities: Vec<String>,
+    /// Typed importer/exporter capabilities contributed while this plugin is enabled.
+    #[serde(default)]
+    pub format_capabilities: Vec<FormatCapability>,
     #[serde(default)]
     pub hooks: Vec<PluginHook>,
     #[serde(default)]
@@ -94,6 +98,7 @@ impl PluginManifest {
             plugin_api_version: PLUGIN_API_VERSION,
             core_version_requirement: format!("^{}", env!("CARGO_PKG_VERSION")),
             capabilities: Vec::new(),
+            format_capabilities: Vec::new(),
             hooks: Vec::new(),
             priority: 0,
             dependencies: Vec::new(),
