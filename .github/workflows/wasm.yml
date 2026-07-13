@@ -84,4 +84,4 @@ jobs:
       - name: Install pinned wasm-pack
         run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
       - name: Run headless Chrome tests
-        run: wasm-pack test crates/wasm --headless --chrome
+        run: wasm-pack test --headless --chrome crates/wasm
