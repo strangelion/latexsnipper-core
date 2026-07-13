@@ -1,10 +1,12 @@
 use latexsnipper_ast::Document;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::manifest::PluginHook;
 
 /// A request sent to a plugin.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PluginRequest {
     /// The action to perform (e.g., "post_process", "detect", "transform").
     pub action: String,

@@ -1,14 +1,19 @@
 use std::collections::{HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use latexsnipper_ast::CapabilityMatrix;
 use latexsnipper_foundation::{Result, SnipperError};
 use log::info;
 use serde::Serialize;
 
-use crate::manifest::{PluginHook, PluginManifest, PLUGIN_API_VERSION};
+use crate::execution::{
+    CancellationToken, DiagnosticSink, EffectivePluginPermissions, PluginExecutionClass,
+    PluginExecutionContext,
+};
+use crate::manifest::{PluginClass, PluginHook, PluginManifest, PLUGIN_API_VERSION};
 use crate::patch::{DocumentPatch, DocumentView};
 use crate::plugin::Plugin;
 use crate::request::PluginRequest;
@@ -30,6 +35,29 @@ pub struct PluginDiagnostic {
     pub message: String,
     pub panic_contained: bool,
     pub disabled: bool,
+    pub soft_timeout: bool,
+    pub execution_may_still_be_running: bool,
+    pub execution_class: PluginExecutionClass,
+}
+
+impl PluginDiagnostic {
+    fn new(
+        plugin_id: impl Into<String>,
+        code: &'static str,
+        message: impl Into<String>,
+        execution_class: PluginExecutionClass,
+    ) -> Self {
+        Self {
+            plugin_id: plugin_id.into(),
+            code,
+            message: message.into(),
+            panic_contained: false,
+            disabled: false,
+            soft_timeout: false,
+            execution_may_still_be_running: false,
+            execution_class,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +73,99 @@ struct PluginEntry {
     manifest: PluginManifest,
     registration_order: u64,
     enabled: AtomicBool,
+    execution_class: PluginExecutionClass,
+    permissions: EffectivePluginPermissions,
+    runtime: Arc<PluginRuntimeState>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginExecutionStatus {
+    pub execution_class: PluginExecutionClass,
+    pub enabled: bool,
+    pub quarantined: bool,
+    pub outstanding_executions: usize,
+    pub max_concurrent_executions: usize,
+}
+
+struct PluginRuntimeState {
+    quarantined: AtomicBool,
+    outstanding: AtomicUsize,
+    max_concurrent: usize,
+    cancellation_tokens: Mutex<Vec<CancellationToken>>,
+}
+
+impl PluginRuntimeState {
+    fn new(max_concurrent: usize) -> Self {
+        Self {
+            quarantined: AtomicBool::new(false),
+            outstanding: AtomicUsize::new(0),
+            max_concurrent: max_concurrent.max(1),
+            cancellation_tokens: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn begin(
+        self: &Arc<Self>,
+        plugin_id: &str,
+        execution_class: PluginExecutionClass,
+        token: CancellationToken,
+    ) -> std::result::Result<PluginExecutionGuard, PluginDiagnostic> {
+        if self.quarantined.load(Ordering::Acquire) {
+            return Err(PluginDiagnostic::new(
+                plugin_id,
+                "PLUGIN_QUARANTINED",
+                format!("Plugin '{plugin_id}' is quarantined after a timed-out execution"),
+                execution_class,
+            ));
+        }
+        if self
+            .outstanding
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                (current < self.max_concurrent).then_some(current + 1)
+            })
+            .is_err()
+        {
+            return Err(PluginDiagnostic::new(
+                plugin_id,
+                "PLUGIN_CONCURRENCY_LIMIT",
+                format!(
+                    "Plugin '{plugin_id}' reached its {} execution limit",
+                    self.max_concurrent
+                ),
+                execution_class,
+            ));
+        }
+        if let Ok(mut tokens) = self.cancellation_tokens.lock() {
+            tokens.push(token.clone());
+        }
+        Ok(PluginExecutionGuard {
+            runtime: Arc::clone(self),
+            token,
+        })
+    }
+
+    fn cancel_all(&self) {
+        if let Ok(tokens) = self.cancellation_tokens.lock() {
+            for token in tokens.iter() {
+                token.cancel();
+            }
+        }
+    }
+}
+
+struct PluginExecutionGuard {
+    runtime: Arc<PluginRuntimeState>,
+    token: CancellationToken,
+}
+
+impl Drop for PluginExecutionGuard {
+    fn drop(&mut self) {
+        if let Ok(mut tokens) = self.runtime.cancellation_tokens.lock() {
+            tokens.retain(|token| !token.same_signal(&self.token));
+        }
+        self.runtime.outstanding.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 pub struct PluginRegistry {
@@ -68,6 +189,20 @@ impl PluginRegistry {
             return Err(plugin_error(format!("Plugin '{id}' is already registered")));
         }
         validate_manifest(&manifest, plugin.name(), plugin.version())?;
+        if manifest.class != PluginClass::BuiltInRust {
+            return Err(plugin_error(format!(
+                "Plugin '{}' uses {:?} and must be loaded by an external execution host",
+                manifest.id, manifest.class
+            )));
+        }
+        let permission_base = std::env::current_dir()
+            .map_err(|error| plugin_error(format!("Could not resolve permission base: {error}")))?;
+        let permissions =
+            EffectivePluginPermissions::from_manifest(&manifest.permissions, &permission_base)?;
+        let execution_class = PluginExecutionClass::TrustedInProcess;
+        let runtime = Arc::new(PluginRuntimeState::new(
+            permissions.max_concurrent_executions,
+        ));
 
         let mut prospective = self.manifest_records();
         prospective.push((id.clone(), manifest.clone(), self.next_registration_order));
@@ -82,6 +217,9 @@ impl PluginRegistry {
                 manifest,
                 registration_order: self.next_registration_order,
                 enabled: AtomicBool::new(true),
+                execution_class,
+                permissions,
+                runtime,
             },
         );
         self.next_registration_order = self.next_registration_order.saturating_add(1);
@@ -92,6 +230,12 @@ impl PluginRegistry {
         let Some(entry) = self.plugins.get_mut(id) else {
             return Ok(());
         };
+        let outstanding = entry.runtime.outstanding.load(Ordering::Acquire);
+        if outstanding != 0 {
+            return Err(plugin_error(format!(
+                "Plugin '{id}' cannot be unregistered while {outstanding} execution(s) remain"
+            )));
+        }
         info!("Unregistering plugin: {id}");
         let mut plugin = entry
             .plugin
@@ -128,6 +272,33 @@ impl PluginRegistry {
             .get(id)
             .ok_or_else(|| plugin_error(format!("Plugin '{id}' not found")))?;
         entry.enabled.store(false, Ordering::Release);
+        entry.runtime.cancel_all();
+        Ok(())
+    }
+
+    pub fn execution_status(&self, id: &str) -> Option<PluginExecutionStatus> {
+        self.plugins.get(id).map(|entry| PluginExecutionStatus {
+            execution_class: entry.execution_class,
+            enabled: entry.enabled.load(Ordering::Acquire),
+            quarantined: entry.runtime.quarantined.load(Ordering::Acquire),
+            outstanding_executions: entry.runtime.outstanding.load(Ordering::Acquire),
+            max_concurrent_executions: entry.runtime.max_concurrent,
+        })
+    }
+
+    /// Clear a soft-timeout quarantine after every outstanding worker has exited.
+    pub fn reset_quarantine(&self, id: &str) -> Result<()> {
+        let entry = self
+            .plugins
+            .get(id)
+            .ok_or_else(|| plugin_error(format!("Plugin '{id}' not found")))?;
+        let outstanding = entry.runtime.outstanding.load(Ordering::Acquire);
+        if outstanding != 0 {
+            return Err(plugin_error(format!(
+                "Plugin '{id}' still has {outstanding} outstanding execution(s)"
+            )));
+        }
+        entry.runtime.quarantined.store(false, Ordering::Release);
         Ok(())
     }
 
@@ -241,12 +412,13 @@ impl PluginRegistry {
                 Ok(PluginExecution::Patch(patch)) => patch
                     .apply(&mut current.document)
                     .map(|_| None)
-                    .map_err(|error| PluginDiagnostic {
-                        plugin_id: id.clone(),
-                        code: "PLUGIN_PATCH_REJECTED",
-                        message: error.to_string(),
-                        panic_contained: false,
-                        disabled: false,
+                    .map_err(|error| {
+                        PluginDiagnostic::new(
+                            id.clone(),
+                            "PLUGIN_PATCH_REJECTED",
+                            error.to_string(),
+                            entry.execution_class,
+                        )
                     }),
                 Ok(PluginExecution::Response(response)) => Ok(Some(*response)),
                 Err(diagnostic) => Err(diagnostic),
@@ -503,50 +675,110 @@ fn invoke_plugin(
     entry: &PluginEntry,
     request: &PluginRequest,
 ) -> std::result::Result<PluginExecution, PluginDiagnostic> {
-    let Some(timeout_millis) = entry.manifest.permissions.timeout_millis else {
-        return invoke_locked(plugin_id, &entry.plugin, request);
+    let token = CancellationToken::default();
+    let guard = entry
+        .runtime
+        .begin(plugin_id, entry.execution_class, token.clone())?;
+    let Some(timeout_millis) = entry.permissions.timeout_millis else {
+        let context = PluginExecutionContext {
+            cancellation: token,
+            deadline: None,
+            permissions: entry.permissions.clone(),
+            diagnostics: DiagnosticSink::default(),
+        };
+        let result = invoke_locked(
+            plugin_id,
+            entry.execution_class,
+            &entry.plugin,
+            request,
+            &context,
+        );
+        drop(guard);
+        return result;
     };
 
+    let timeout = Duration::from_millis(timeout_millis.max(1));
+    let context = PluginExecutionContext {
+        cancellation: token.clone(),
+        deadline: Instant::now().checked_add(timeout),
+        permissions: entry.permissions.clone(),
+        diagnostics: DiagnosticSink::default(),
+    };
     let plugin = Arc::clone(&entry.plugin);
     let plugin_id_owned = plugin_id.to_string();
     let request = request.clone();
+    let execution_class = entry.execution_class;
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    std::thread::spawn(move || {
-        let result = invoke_locked(&plugin_id_owned, &plugin, &request);
-        let _ = sender.send(result);
-    });
-    match receiver.recv_timeout(std::time::Duration::from_millis(timeout_millis)) {
+    if let Err(error) = std::thread::Builder::new()
+        .name(format!("plugin-{plugin_id}"))
+        .spawn(move || {
+            let _guard = guard;
+            let result = invoke_locked(
+                &plugin_id_owned,
+                execution_class,
+                &plugin,
+                &request,
+                &context,
+            );
+            let _ = sender.send(result);
+        })
+    {
+        return Err(PluginDiagnostic::new(
+            plugin_id,
+            "PLUGIN_WORKER_START_FAILED",
+            format!("Plugin '{plugin_id}' worker could not start: {error}"),
+            entry.execution_class,
+        ));
+    }
+    match receiver.recv_timeout(timeout) {
+        Ok(Err(mut diagnostic)) if diagnostic.code == "PLUGIN_SOFT_TIMEOUT" => {
+            entry.runtime.quarantined.store(true, Ordering::Release);
+            diagnostic.soft_timeout = true;
+            diagnostic.execution_may_still_be_running =
+                entry.runtime.outstanding.load(Ordering::Acquire) != 0;
+            Err(diagnostic)
+        }
         Ok(result) => result,
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(PluginDiagnostic {
-            plugin_id: plugin_id.to_string(),
-            code: "PLUGIN_TIMEOUT",
-            message: format!("Plugin '{plugin_id}' exceeded its {timeout_millis}ms timeout"),
-            panic_contained: false,
-            disabled: false,
-        }),
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(PluginDiagnostic {
-            plugin_id: plugin_id.to_string(),
-            code: "PLUGIN_WORKER_DISCONNECTED",
-            message: format!("Plugin '{plugin_id}' worker disconnected"),
-            panic_contained: false,
-            disabled: false,
-        }),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            token.cancel();
+            entry.runtime.quarantined.store(true, Ordering::Release);
+            let mut diagnostic = PluginDiagnostic::new(
+                plugin_id,
+                "PLUGIN_SOFT_TIMEOUT",
+                format!(
+                    "Plugin '{plugin_id}' exceeded its {timeout_millis}ms soft timeout and was quarantined"
+                ),
+                entry.execution_class,
+            );
+            diagnostic.soft_timeout = true;
+            diagnostic.execution_may_still_be_running =
+                entry.runtime.outstanding.load(Ordering::Acquire) != 0;
+            Err(diagnostic)
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(PluginDiagnostic::new(
+            plugin_id,
+            "PLUGIN_WORKER_DISCONNECTED",
+            format!("Plugin '{plugin_id}' worker disconnected"),
+            entry.execution_class,
+        )),
     }
 }
 
 fn invoke_locked(
     plugin_id: &str,
+    execution_class: PluginExecutionClass,
     plugin: &RwLock<Box<dyn Plugin>>,
     request: &PluginRequest,
+    context: &PluginExecutionContext,
 ) -> std::result::Result<PluginExecution, PluginDiagnostic> {
-    catch_plugin_panic_diagnostic(plugin_id, || {
+    catch_plugin_panic_diagnostic(plugin_id, execution_class, || {
         let plugin = plugin
             .read()
             .map_err(|_| plugin_error(format!("Plugin '{plugin_id}' lock is poisoned")))?;
-        match plugin.document_patch(DocumentView::new(&request.document))? {
+        match plugin.document_patch_with_context(DocumentView::new(&request.document), context)? {
             Some(patch) => Ok(PluginExecution::Patch(patch)),
             None => plugin
-                .handle(request)
+                .handle_with_context(request, context)
                 .map(Box::new)
                 .map(PluginExecution::Response),
         }
@@ -569,24 +801,39 @@ fn catch_plugin_panic<T>(
 
 fn catch_plugin_panic_diagnostic<T>(
     plugin_id: &str,
+    execution_class: PluginExecutionClass,
     operation: impl FnOnce() -> Result<T>,
 ) -> std::result::Result<T, PluginDiagnostic> {
     match catch_unwind(AssertUnwindSafe(operation)) {
         Ok(Ok(value)) => Ok(value),
-        Ok(Err(error)) => Err(PluginDiagnostic {
-            plugin_id: plugin_id.to_string(),
-            code: "PLUGIN_ERROR",
-            message: error.to_string(),
-            panic_contained: false,
-            disabled: false,
-        }),
-        Err(payload) => Err(PluginDiagnostic {
-            plugin_id: plugin_id.to_string(),
-            code: "PLUGIN_PANIC_CONTAINED",
-            message: format!("Plugin '{plugin_id}' panicked: {}", panic_message(payload)),
-            panic_contained: true,
-            disabled: false,
-        }),
+        Ok(Err(error)) => {
+            let message = error.to_string();
+            let code = if message.contains("PLUGIN_PERMISSION_DENIED") {
+                "PLUGIN_PERMISSION_DENIED"
+            } else if message.contains("PLUGIN_SOFT_TIMEOUT") {
+                "PLUGIN_SOFT_TIMEOUT"
+            } else if message.contains("PLUGIN_CANCELLED") {
+                "PLUGIN_CANCELLED"
+            } else {
+                "PLUGIN_ERROR"
+            };
+            Err(PluginDiagnostic::new(
+                plugin_id,
+                code,
+                message,
+                execution_class,
+            ))
+        }
+        Err(payload) => {
+            let mut diagnostic = PluginDiagnostic::new(
+                plugin_id,
+                "PLUGIN_PANIC_CONTAINED",
+                format!("Plugin '{plugin_id}' panicked: {}", panic_message(payload)),
+                execution_class,
+            );
+            diagnostic.panic_contained = true;
+            Err(diagnostic)
+        }
     }
 }
 
@@ -844,14 +1091,17 @@ mod tests {
     }
 
     #[test]
-    fn configured_timeout_returns_without_waiting_for_plugin_completion() {
+    fn soft_timeout_quarantines_and_bounds_background_workers() {
         let mut manifest = PluginManifest::built_in("slow", "1.0.0");
         manifest.permissions.timeout_millis = Some(10);
+        let completed = Arc::new(AtomicBool::new(false));
+        let completed_by_worker = Arc::clone(&completed);
         let mut registry = PluginRegistry::new();
         registry
             .register(Box::new(
-                TransformPlugin::new("slow", "1.0.0", |_| {
-                    std::thread::sleep(std::time::Duration::from_millis(250));
+                TransformPlugin::new("slow", "1.0.0", move |_| {
+                    std::thread::sleep(std::time::Duration::from_millis(80));
+                    completed_by_worker.store(true, Ordering::Release);
                     Ok(())
                 })
                 .with_manifest(manifest),
@@ -866,7 +1116,117 @@ mod tests {
             )
             .unwrap();
         assert!(started.elapsed() < std::time::Duration::from_millis(200));
-        assert_eq!(result.diagnostics[0].code, "PLUGIN_TIMEOUT");
+        assert_eq!(result.diagnostics[0].code, "PLUGIN_SOFT_TIMEOUT");
+        assert!(result.diagnostics[0].soft_timeout);
+        assert!(result.diagnostics[0].execution_may_still_be_running);
+        let status = registry.execution_status("slow").unwrap();
+        assert!(status.quarantined);
+        assert_eq!(status.outstanding_executions, 1);
+
+        let rejected = registry
+            .handle_all_with_policy(
+                &PluginRequest::new("transform", Document::new()),
+                PluginFailurePolicy::Continue,
+            )
+            .unwrap();
+        assert_eq!(rejected.diagnostics[0].code, "PLUGIN_QUARANTINED");
+        assert_eq!(
+            registry
+                .execution_status("slow")
+                .unwrap()
+                .outstanding_executions,
+            1
+        );
+
+        let wait_started = Instant::now();
+        while !completed.load(Ordering::Acquire) && wait_started.elapsed() < Duration::from_secs(1)
+        {
+            std::thread::yield_now();
+        }
+        assert!(completed.load(Ordering::Acquire));
+        while registry
+            .execution_status("slow")
+            .unwrap()
+            .outstanding_executions
+            != 0
+        {
+            std::thread::yield_now();
+        }
+        registry.reset_quarantine("slow").unwrap();
+        assert!(!registry.execution_status("slow").unwrap().quarantined);
+    }
+
+    #[test]
+    fn cooperative_plugin_observes_cancellation_and_can_retry_after_reset() {
+        struct CooperativePlugin {
+            invocations: Arc<AtomicUsize>,
+            manifest: PluginManifest,
+        }
+
+        impl Plugin for CooperativePlugin {
+            fn name(&self) -> &str {
+                "cooperative"
+            }
+
+            fn version(&self) -> &str {
+                "1.0.0"
+            }
+
+            fn manifest(&self) -> PluginManifest {
+                self.manifest.clone()
+            }
+
+            fn handle(&self, request: &PluginRequest) -> Result<PluginResponse> {
+                Ok(PluginResponse::new(request.document.clone()))
+            }
+
+            fn handle_with_context(
+                &self,
+                request: &PluginRequest,
+                context: &PluginExecutionContext,
+            ) -> Result<PluginResponse> {
+                if self.invocations.fetch_add(1, AtomicOrdering::SeqCst) == 0 {
+                    loop {
+                        context.checkpoint()?;
+                        std::thread::yield_now();
+                    }
+                }
+                Ok(PluginResponse::new(request.document.clone()))
+            }
+        }
+
+        let mut manifest = PluginManifest::built_in("cooperative", "1.0.0");
+        manifest.permissions.timeout_millis = Some(10);
+        let invocations = Arc::new(AtomicUsize::new(0));
+        let mut registry = PluginRegistry::new();
+        registry
+            .register(Box::new(CooperativePlugin {
+                invocations: Arc::clone(&invocations),
+                manifest,
+            }))
+            .unwrap();
+        let request = PluginRequest::new("transform", Document::new());
+        let first = registry
+            .handle_all_with_policy(&request, PluginFailurePolicy::Continue)
+            .unwrap();
+        assert_eq!(first.diagnostics[0].code, "PLUGIN_SOFT_TIMEOUT");
+
+        let started = Instant::now();
+        while registry
+            .execution_status("cooperative")
+            .unwrap()
+            .outstanding_executions
+            != 0
+            && started.elapsed() < Duration::from_secs(1)
+        {
+            std::thread::yield_now();
+        }
+        registry.reset_quarantine("cooperative").unwrap();
+        let second = registry
+            .handle_all_with_policy(&request, PluginFailurePolicy::Stop)
+            .unwrap();
+        assert!(second.diagnostics.is_empty());
+        assert_eq!(invocations.load(AtomicOrdering::SeqCst), 2);
     }
 
     #[test]

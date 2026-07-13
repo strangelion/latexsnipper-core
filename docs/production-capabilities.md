@@ -67,11 +67,16 @@ Synchronous OCR SDK entry points execute work on a dedicated OS thread so caller
 inside an existing Tokio runtime do not trigger nested-runtime panics.
 
 WASM semantic conversion is stable. WASM recognition, progress/cancellation, and
-model-memory management remain experimental; hosted Chrome runs a complete tiny
-ONNX detector/recognizer inference through Tract and the document pipeline. Capability readiness follows loaded artifact
-profiles; table and handwriting remain unavailable. Native binary exporters are
-not linked into the browser target.
+model-memory management remain experimental. Hosted Chrome runs real ONNX execution
+through Tract and the document pipeline using deterministic synthetic detector and
+recognizer fixtures. This proves browser runtime and pipeline compatibility, not
+production-model accuracy. Capability readiness follows loaded artifact profiles;
+table and handwriting remain unavailable. Native binary exporters are not linked
+into the browser target.
 
-Built-in Rust plugin ordering, failure policies, transactional patches, and execution
-deadlines are stable. External Native ABI/WASI packages can be verified and installed
-disabled, but their execution hosts are not available or advertised in this release.
+Built-in Rust plugin ordering, failure policies, transactional patches, cooperative
+soft deadlines, quarantine, and bounded concurrency are stable. The versioned
+isolated-process host provides hard process termination and resource budgets for
+reviewed local process plugins. Native dynamic-library ABI and WASI Component hosts
+remain unavailable. Remote plugin installation remains disabled until its registry,
+signature, provenance, and update-channel trust model is complete.

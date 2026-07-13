@@ -2,6 +2,7 @@ use latexsnipper_ast::FormatCapability;
 use serde::{Deserialize, Serialize};
 
 pub const PLUGIN_API_VERSION: u32 = 1;
+pub const PLUGIN_ABI_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -25,23 +26,69 @@ pub enum PluginHook {
 #[serde(rename_all = "snake_case")]
 pub enum PluginClass {
     BuiltInRust,
+    IsolatedProcess,
     NativeAbi,
     WasiComponent,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginPermissions {
+    /// Legacy read-only filesystem grants. New manifests should use
+    /// `filesystemReadPaths` and `filesystemWritePaths` explicitly.
     #[serde(default)]
     pub filesystem_paths: Vec<String>,
+    #[serde(default)]
+    pub filesystem_read_paths: Vec<String>,
+    #[serde(default)]
+    pub filesystem_write_paths: Vec<String>,
     #[serde(default)]
     pub network_hosts: Vec<String>,
     #[serde(default)]
     pub environment_variables: Vec<String>,
     #[serde(default)]
     pub model_access: Vec<String>,
+    #[serde(default)]
+    pub temporary_directory: bool,
+    #[serde(default)]
+    pub capability_registration: bool,
+    #[serde(default)]
+    pub importer_registration: bool,
+    #[serde(default)]
+    pub exporter_registration: bool,
+    #[serde(default)]
+    pub runtime_registration: bool,
     pub memory_limit_bytes: Option<u64>,
+    pub output_limit_bytes: Option<u64>,
     pub timeout_millis: Option<u64>,
+    #[serde(default = "default_max_concurrent_executions")]
+    pub max_concurrent_executions: usize,
+}
+
+fn default_max_concurrent_executions() -> usize {
+    1
+}
+
+impl Default for PluginPermissions {
+    fn default() -> Self {
+        Self {
+            filesystem_paths: Vec::new(),
+            filesystem_read_paths: Vec::new(),
+            filesystem_write_paths: Vec::new(),
+            network_hosts: Vec::new(),
+            environment_variables: Vec::new(),
+            model_access: Vec::new(),
+            temporary_directory: false,
+            capability_registration: false,
+            importer_registration: false,
+            exporter_registration: false,
+            runtime_registration: false,
+            memory_limit_bytes: None,
+            output_limit_bytes: None,
+            timeout_millis: None,
+            max_concurrent_executions: 1,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,6 +105,8 @@ pub struct PluginManifest {
     pub name: String,
     pub version: String,
     pub plugin_api_version: u32,
+    /// Stable external ABI or IPC protocol version. Built-in plugins leave it unset.
+    pub abi_version: Option<u32>,
     pub core_version_requirement: String,
     #[serde(default)]
     pub capabilities: Vec<String>,
@@ -96,6 +145,7 @@ impl PluginManifest {
             id,
             version: version.into(),
             plugin_api_version: PLUGIN_API_VERSION,
+            abi_version: None,
             core_version_requirement: format!("^{}", env!("CARGO_PKG_VERSION")),
             capabilities: Vec::new(),
             format_capabilities: Vec::new(),

@@ -3,7 +3,7 @@ use latexsnipper_foundation::Result;
 
 use crate::request::PluginRequest;
 use crate::response::PluginResponse;
-use crate::{DocumentPatch, DocumentView, PluginManifest};
+use crate::{DocumentPatch, DocumentView, PluginExecutionContext, PluginManifest};
 
 /// Trait for extending Core capabilities with standard interfaces.
 ///
@@ -35,12 +35,39 @@ pub trait Plugin: Send + Sync {
     /// Handle a request and return a response.
     fn handle(&self, request: &PluginRequest) -> Result<PluginResponse>;
 
+    /// Handle a request with cooperative cancellation and enforced host permissions.
+    ///
+    /// The default preserves the version 1 plugin API. Long-running trusted plugins
+    /// should override this method and call `context.checkpoint()` regularly.
+    fn handle_with_context(
+        &self,
+        request: &PluginRequest,
+        context: &PluginExecutionContext,
+    ) -> Result<PluginResponse> {
+        context.checkpoint()?;
+        let response = self.handle(request)?;
+        context.checkpoint()?;
+        Ok(response)
+    }
+
     /// Produce a bounded patch without cloning the full document.
     ///
     /// Legacy plugins may keep implementing `handle`; patch-aware plugins can
     /// override this method and return `Some` to use the transactional path.
     fn document_patch(&self, _view: DocumentView<'_>) -> Result<Option<DocumentPatch>> {
         Ok(None)
+    }
+
+    /// Produce a patch with cooperative cancellation support.
+    fn document_patch_with_context(
+        &self,
+        view: DocumentView<'_>,
+        context: &PluginExecutionContext,
+    ) -> Result<Option<DocumentPatch>> {
+        context.checkpoint()?;
+        let patch = self.document_patch(view)?;
+        context.checkpoint()?;
+        Ok(patch)
     }
 
     /// Cleanup resources.

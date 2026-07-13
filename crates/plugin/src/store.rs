@@ -6,7 +6,11 @@ use latexsnipper_foundation::{Result, SnipperError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{PluginClass, PluginManifest, PLUGIN_API_VERSION};
+use crate::{
+    EffectivePermissionSummary, EffectivePluginPermissions, IsolatedProcessHost,
+    IsolatedProcessLimits, IsolatedProcessResult, PluginClass, PluginHook, PluginManifest,
+    PluginRequest, PLUGIN_ABI_VERSION, PLUGIN_API_VERSION,
+};
 
 const MAX_PACKAGE_FILES: usize = 256;
 const MAX_PACKAGE_BYTES: u64 = 128 * 1024 * 1024;
@@ -212,6 +216,59 @@ impl PluginStore {
         self.verify_package(&self.packages_dir().join(id))
     }
 
+    /// Execute an enabled process plugin through the versioned hard-isolation host.
+    pub fn execute_isolated(
+        &self,
+        id: &str,
+        request: &PluginRequest,
+    ) -> Result<IsolatedProcessResult> {
+        let installed = self
+            .get(id)?
+            .ok_or_else(|| plugin_error(format!("Plugin '{id}' is not installed")))?;
+        if !installed.enabled {
+            return Err(plugin_error(format!("Plugin '{id}' is disabled")));
+        }
+        if installed.manifest.class != PluginClass::IsolatedProcess {
+            return Err(plugin_error(format!(
+                "Plugin '{id}' is not an isolated-process plugin"
+            )));
+        }
+        let verified = self.verify_installed(id)?;
+        let permissions = EffectivePluginPermissions::from_manifest(
+            &installed.manifest.permissions,
+            &verified.package_root,
+        )?;
+        if let Some(hook) = request.hook() {
+            permissions.check_hook_registration(hook)?;
+        }
+        let limits = IsolatedProcessLimits {
+            timeout: std::time::Duration::from_millis(
+                permissions.timeout_millis.unwrap_or(30_000).max(1),
+            ),
+            memory_limit_bytes: permissions
+                .memory_limit_bytes
+                .unwrap_or(256 * 1024 * 1024)
+                .max(1),
+            output_limit_bytes: permissions
+                .output_limit_bytes
+                .unwrap_or(16 * 1024 * 1024)
+                .max(1),
+        };
+        IsolatedProcessHost::execute(&verified.entrypoint_path, &[], request, limits)
+    }
+
+    pub fn effective_permissions(&self, id: &str) -> Result<EffectivePermissionSummary> {
+        let installed = self
+            .get(id)?
+            .ok_or_else(|| plugin_error(format!("Plugin '{id}' is not installed")))?;
+        let verified = self.verify_installed(id)?;
+        EffectivePluginPermissions::from_manifest(
+            &installed.manifest.permissions,
+            &verified.package_root,
+        )
+        .map(|permissions| permissions.summary())
+    }
+
     fn packages_dir(&self) -> PathBuf {
         self.root.join("packages")
     }
@@ -276,6 +333,35 @@ fn validate_external_manifest(manifest: &PluginManifest) -> Result<()> {
         return Err(plugin_error(
             "Built-in Rust plugins cannot be installed from disk",
         ));
+    }
+    if manifest.abi_version != Some(PLUGIN_ABI_VERSION) {
+        return Err(plugin_error(format!(
+            "Plugin ABI {:?} is incompatible with host ABI {}",
+            manifest.abi_version, PLUGIN_ABI_VERSION
+        )));
+    }
+    for hook in &manifest.hooks {
+        let allowed = match hook {
+            PluginHook::RegisterImporter => manifest.permissions.importer_registration,
+            PluginHook::RegisterExporter => manifest.permissions.exporter_registration,
+            PluginHook::RegisterRuntime => manifest.permissions.runtime_registration,
+            PluginHook::RegisterModelAdapter => manifest.permissions.capability_registration,
+            _ => true,
+        };
+        if !allowed {
+            return Err(plugin_error(format!(
+                "PLUGIN_PERMISSION_DENIED: Plugin '{}' declares {:?} without the matching registration permission",
+                manifest.id, hook
+            )));
+        }
+    }
+    if (!manifest.capabilities.is_empty() || !manifest.format_capabilities.is_empty())
+        && !manifest.permissions.capability_registration
+    {
+        return Err(plugin_error(format!(
+            "PLUGIN_PERMISSION_DENIED: Plugin '{}' declares capabilities without capabilityRegistration",
+            manifest.id
+        )));
     }
     if !manifest.platforms.is_empty()
         && !manifest
@@ -492,6 +578,7 @@ mod tests {
         std::fs::write(path.join(entrypoint), bytes).unwrap();
         let mut manifest = PluginManifest::built_in(id, "1.0.0");
         manifest.class = PluginClass::WasiComponent;
+        manifest.abi_version = Some(PLUGIN_ABI_VERSION);
         manifest.entrypoint = Some(entrypoint.to_string());
         manifest.checksum_sha256 = Some(hex::encode(Sha256::digest(bytes)));
         std::fs::write(
@@ -537,6 +624,43 @@ mod tests {
         manifest.entrypoint = Some("../outside.wasm".to_string());
         std::fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
         assert!(store.verify_package(&traversal).is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn incompatible_abi_and_ungranted_capability_registration_are_rejected() {
+        let root = workspace();
+        let store = PluginStore::new(root.join("store"));
+
+        let incompatible = package(&root, "bad-abi", "plugin.wasm", b"fixture");
+        let manifest_path = incompatible.join("plugin.json");
+        let mut manifest: PluginManifest =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        manifest.abi_version = Some(PLUGIN_ABI_VERSION + 1);
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        assert!(store.verify_package(&incompatible).is_err());
+
+        let ungranted = package(&root, "ungranted", "plugin.wasm", b"fixture");
+        let manifest_path = ungranted.join("plugin.json");
+        let mut manifest: PluginManifest =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        manifest.hooks.push(PluginHook::RegisterExporter);
+        manifest.capabilities.push("export:fixture".to_string());
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        assert!(store
+            .verify_package(&ungranted)
+            .unwrap_err()
+            .to_string()
+            .contains("PLUGIN_PERMISSION_DENIED"));
 
         std::fs::remove_dir_all(root).unwrap();
     }

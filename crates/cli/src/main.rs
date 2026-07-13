@@ -1716,14 +1716,32 @@ fn doctor_plugin_state(store_dir: &std::path::Path) -> serde_json::Value {
         .iter()
         .filter(|plugin| store.verify_installed(&plugin.manifest.id).is_err())
         .count();
+    let plugin_details = plugins
+        .iter()
+        .map(|plugin| {
+            let process_host = matches!(
+                plugin.manifest.class,
+                latexsnipper_plugin::PluginClass::IsolatedProcess
+            );
+            serde_json::json!({
+                "id": plugin.manifest.id,
+                "class": plugin.manifest.class,
+                "enabled": plugin.enabled,
+                "executionHostAvailable": process_host,
+                "effectivePermissions": store.effective_permissions(&plugin.manifest.id).ok(),
+            })
+        })
+        .collect::<Vec<_>>();
     serde_json::json!({
         "storeDirectory": store_dir,
         "registryValid": true,
         "installed": plugins.len(),
         "enabled": enabled,
         "failedIntegrity": failed_integrity,
+        "isolatedProcessHostAvailable": true,
         "nativeAbiHostAvailable": false,
         "wasiComponentHostAvailable": false,
+        "plugins": plugin_details,
     })
 }
 
@@ -2187,10 +2205,15 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                 .map(|plugin| match store.verify_installed(&plugin.manifest.id) {
                     Ok(verification) => serde_json::json!({
                         "id": plugin.manifest.id,
+                        "class": plugin.manifest.class,
                         "enabled": plugin.enabled,
                         "verified": true,
                         "entrypointSha256": verification.entrypoint_sha256,
-                        "executionHostAvailable": false,
+                        "executionHostAvailable": matches!(
+                            plugin.manifest.class,
+                            latexsnipper_plugin::PluginClass::IsolatedProcess
+                        ),
+                        "effectivePermissions": store.effective_permissions(&plugin.manifest.id).ok(),
                     }),
                     Err(error) => serde_json::json!({
                         "id": plugin.manifest.id,
@@ -2198,6 +2221,7 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                         "verified": false,
                         "error": error.to_string(),
                         "executionHostAvailable": false,
+                        "effectivePermissions": serde_json::Value::Null,
                     }),
                 })
                 .collect::<Vec<_>>();
@@ -2211,6 +2235,7 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                     "storeDirectory": store.root(),
                     "installed": plugins.len(),
                     "packageIntegrityHealthy": healthy,
+                    "isolatedProcessHostAvailable": true,
                     "nativeAbiHostAvailable": false,
                     "wasiComponentHostAvailable": false,
                     "plugins": checks,
