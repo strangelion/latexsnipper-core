@@ -48,6 +48,28 @@ Native PDF extraction is inherently best effort because arbitrary font encodings
 missing `ToUnicode` maps, complex graphics-state transforms, and reading order can
 be ambiguous. Scanned pages require OCR models and a rendering dependency.
 
+## Format fidelity classification
+
+| Capability | Status | Validity and expected loss |
+|---|---|---|
+| LaTeX, Typst, Markdown math | stable for represented AST | Semantic math is editable; unsupported source macros/packages, custom fonts, and exact line breaking may be lost. |
+| MathML, OMML | stable/best effort | Formula structure is editable; application-specific properties and exact typography may be downgraded. |
+| JSON AST | stable for matching schema | Highest semantic round trip; foreign schema versions require migration. |
+| HTML | best effort | Text/math semantics retained; scripts, CSS layout, charts, and embedded application objects are not reproduced. |
+| SVG | experimental/best effort | Supported shapes remain vector; filters, animation, external resources, fonts, complex text layout, and unsupported elements may fall back to the opaque source asset. |
+| PNG | visual fallback | Pixels preserve appearance only; text, formulas, tables, fonts, and objects are not editable. Transparency/background depend on the selected renderer path. |
+| PDF | experimental/best effort | Structural validity is tested. Reading order, fonts, international text without mappings, charts, complex transforms, editability, layout, and round trip are not guaranteed. Embedded scans require OCR. |
+| DOCX | experimental/best effort | Package validity and core text/formula/table semantics are tested. Styles, fonts, pagination, floating layout, charts, SmartArt, OLE, and embedded objects may be retained opaquely or lost; visual and round-trip fidelity are not guaranteed. |
+| PPTX | experimental/best effort | Package validity and supported slide text/shapes are tested. Masters, animations, charts, SmartArt, fonts, OLE, complex layouts, and editability may degrade. |
+| XLSX | experimental/best effort | Package validity and supported cell/table content are tested. Formulas, charts, pivots, conditional formatting, macros, embedded objects, exact sizing, and round trip may degrade. |
+| Tables | best effort | Logical rows/cells are preserved where parsed; merged cells, borders, widths, styles, and nested layouts vary by format. |
+| Charts and SmartArt | unsupported semantically | They may survive only as opaque OOXML parts or visual assets; no editable AST conversion is promised. |
+| OLE and embedded objects | unsupported semantically | No OLE activation or editable object round trip is provided; strict workflows must reject diagnostics. |
+
+Package validity, semantic preservation, layout preservation, visual fidelity,
+editability, and round-trip fidelity are independent claims. Passing a ZIP/package
+reopen test proves only structural validity unless the relevant row states more.
+
 ## Export policy
 
 Binary artifacts use `GeneratedContent::Binary(Vec<u8>)`; no PDF, PNG, DOCX,
