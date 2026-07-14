@@ -65,6 +65,11 @@ jobs:
         run: >-
           wasm-pack build crates/wasm --target nodejs --release
           --out-dir ../../target/wasm-node
+      - name: Include license in generated npm packages
+        run: |
+          cp LICENSE target/wasm-web/LICENSE
+          cp LICENSE target/wasm-bundler/LICENSE
+          cp LICENSE target/wasm-node/LICENSE
       - name: Record package sizes
         run: |
           find target/wasm-web -maxdepth 1 -type f -printf '%f %s bytes\n' | sort | tee target/wasm-web/size-report.txt

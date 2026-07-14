@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../../../..");
+for (const packageName of ["wasm-web", "wasm-bundler", "wasm-node"]) {
+  assert.equal(existsSync(resolve(root, `target/${packageName}/LICENSE`)), true);
+}
 const web = await import(pathToFileURL(resolve(root, "target/wasm-web/latexsnipper_wasm.js")));
 assert.equal(typeof web.default, "function");
 assert.equal(typeof web.capabilities_v2, "function");

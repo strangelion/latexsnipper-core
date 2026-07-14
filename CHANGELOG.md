@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0-alpha.1] - Unreleased
+
+### Added
+
+- Independent v3 API-envelope, plugin-manifest, and model-manifest contract types.
+- Structured migration outcomes with machine-readable warnings and explicit manual-action status.
+- Strict v2 plugin migration that rejects native ABI and ambiguous reserved WASI contracts.
+- Strict v2 model migration that requires exact per-artifact SHA-256 values and leaves profiles unavailable until evidence is authored.
+- Core 3 public API inventory, schema plan, breaking-change guide, migration guide, and compatibility policy.
+- Fuzz coverage for v3 API envelopes, plugin/model manifests, and migration functions.
+
+### Changed
+
+- Workspace crates and the WASM npm package are staged at `3.0.0-alpha.1`.
+- The unchanged `Document` schema version `1.0.0` is now a shared constant.
+
+### Compatibility
+
+- Existing WASM API v2, capability v2, plugin/model runtime, process IPC v1, Worker protocol v1, CLI, and FFI behavior remain unchanged.
+- This alpha does not implement a WASI Component host, signed registry, callable v3 endpoint, or v3 model loader.
+
 ## [Unreleased]
 
 ### Added

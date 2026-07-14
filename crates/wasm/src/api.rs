@@ -1,3 +1,4 @@
+use latexsnipper_ast::DOCUMENT_SCHEMA_VERSION;
 use serde::Serialize;
 
 /// Version of the stable JavaScript response contract.
@@ -5,7 +6,7 @@ pub const WASM_API_VERSION: u32 = 2;
 /// Version of the capability document returned by this package.
 pub const CAPABILITY_VERSION: u32 = 2;
 /// Current document schema produced by recognition.
-pub const AST_SCHEMA_VERSION: &str = "1.0.0";
+pub const AST_SCHEMA_VERSION: &str = DOCUMENT_SCHEMA_VERSION;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

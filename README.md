@@ -7,7 +7,7 @@
 [![CI](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml)
 [![WASM](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88.0-orange?logo=rust)](Cargo.toml)
-[![Workspace](https://img.shields.io/badge/workspace-2.0.0-blue)](Cargo.toml)
+[![Workspace](https://img.shields.io/badge/workspace-3.0.0--alpha.1-blue)](Cargo.toml)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20WASM-lightgrey)]()
 
@@ -23,7 +23,7 @@
 
 ## Project status
 
-The `main` branch currently targets the **2.0.0 workspace codebase**. The core has undergone release-candidate hardening across native CI, browser/WASM packaging, real-model tests, fuzzing, dependency audits, plugin process isolation, capability reporting, and CLI behavior.
+The workspace is staged as **3.0.0-alpha.1** for the first stacked Core 3 change. This alpha implements versioned contract types, strict migration reports, and schema fuzz coverage only; the callable WASM, capability, plugin-host, model-loader, Worker, CLI, and FFI paths remain on their existing v2-era contracts. See the [Core 3 architecture and delivery status](docs/v3/architecture.md).
 
 This does **not** mean that every format, model, or plugin boundary has the same maturity.
 
@@ -510,7 +510,7 @@ These controls reduce risk but do not turn native process plugins into untrusted
 
 ## Known boundaries and GA work
 
-The 2.0.0 codebase is suitable for release-candidate evaluation, but the following remain explicit boundaries:
+The 3.0 alpha is a contract-feedback build, not a release candidate. The following remain explicit boundaries:
 
 - implement and validate a WASI Component host before advertising untrusted third-party plugin execution;
 - complete registry, signature, provenance, and update policy before remote plugin installation;
@@ -518,7 +518,7 @@ The 2.0.0 codebase is suitable for release-candidate evaluation, but the followi
 - define supported Office/PDF fidelity guarantees against representative corpora and platforms;
 - continue longer fuzzing, benchmark trend storage, browser coverage, and mobile memory profiling.
 
-See [v2.0.0-rc.1 release checklist](docs/release-checklist.md).
+See the [Core 3 release checklist](docs/release-checklist.md) and [schema version plan](docs/v3/schema-versions.md).
 
 ---
 
@@ -526,6 +526,8 @@ See [v2.0.0-rc.1 release checklist](docs/release-checklist.md).
 
 | Document | Purpose |
 |---|---|
+| [Core 3 architecture](docs/v3/architecture.md) | Stacked delivery status, version boundaries, and trust model |
+| [Core 3 migration](docs/v3/migration-from-v2.md) | Strict v2-to-v3 contract migration guidance |
 | [Production capabilities](docs/production-capabilities.md) | Stability, fidelity, and unsupported-feature policy |
 | [WASM adapter](docs/wasm.md) | Browser API, Worker runtime, cache, downloads, and model validation |
 | [Plugin system](docs/plugin.md) | Execution classes, package verification, permissions, and security boundaries |

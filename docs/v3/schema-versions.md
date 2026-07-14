@@ -1,0 +1,38 @@
+# Core 3.0 contract version plan
+
+Contract versions are intentionally independent. A crate release does not
+silently advance every serialized protocol.
+
+| Surface | Existing runtime | Core 3 contract target | PR 1 status |
+|---|---:|---:|---|
+| Workspace crates | `2.0.0` baseline | `3.0.0-alpha.1` | Implemented |
+| `Document` JSON schema | `1.0.0` | `1.0.0` | Preserved; constant centralized |
+| WASM API envelope | `2` | `3` | Contract only; exports remain v2 |
+| Capability schema | `2` | `3` | Version plan only; generator remains v2 |
+| Diagnostic schema | implicit/current | `1` | Version identified in v3 envelope contract |
+| Plugin manifest schema | legacy manifest | `3` | Types and migration implemented; host remains legacy |
+| Plugin API | `1` | `2` for manifest v3 | Contract only |
+| Native process IPC | `1` | `1` | Preserved |
+| Component WIT | unavailable | `1` | Reserved contract; no host or WIT package yet |
+| Model manifest/profile | legacy v2 shape | `3` | Types and migration implemented; loaders remain legacy |
+| Browser model cache | `2` | TBD by cache implementation | Unchanged |
+| Browser Worker protocol | `1` | `1` unless behavior requires change | Unchanged |
+| FFI response contract | current v2-era surface | TBD after inventory review | Unchanged |
+| Benchmark evidence | current ad hoc output | independent version required | Planned |
+| Registry metadata | unavailable | independent root/targets/snapshot/timestamp versions | Planned |
+
+`ApiContractVersionsV3` carries the relevant versions explicitly. Consumers
+must validate each field they depend on; they must not infer compatibility from
+the Core crate version alone.
+
+## Version-change rules
+
+- Change the `Document` schema only when its serialized shape or semantics
+  change.
+- Change the API envelope only when response framing changes.
+- Change capability, diagnostic, model, plugin, registry, cache, Worker, and
+  benchmark versions independently.
+- Reject an unsupported version with a structured error; never reinterpret a
+  field whose semantics changed.
+- Add compatibility readers only where they do not weaken the v3 security
+  model.

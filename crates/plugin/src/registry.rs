@@ -13,7 +13,9 @@ use crate::execution::{
     CancellationToken, DiagnosticSink, EffectivePluginPermissions, PluginExecutionClass,
     PluginExecutionContext,
 };
-use crate::manifest::{PluginClass, PluginHook, PluginManifest, PLUGIN_API_VERSION};
+use crate::manifest::{
+    legacy_core_requirement_matches, PluginClass, PluginHook, PluginManifest, PLUGIN_API_VERSION,
+};
 use crate::patch::{DocumentPatch, DocumentView};
 use crate::plugin::Plugin;
 use crate::request::PluginRequest;
@@ -528,7 +530,7 @@ fn validate_manifest(manifest: &PluginManifest, name: &str, version: &str) -> Re
         .map_err(|error| plugin_error(error.to_string()))?;
     let requirement = semver::VersionReq::parse(&manifest.core_version_requirement)
         .map_err(|error| plugin_error(format!("Invalid core version requirement: {error}")))?;
-    if !requirement.matches(&core) {
+    if !legacy_core_requirement_matches(&requirement, &core) {
         return Err(plugin_error(format!(
             "Plugin '{}' does not support core {}",
             manifest.id, core

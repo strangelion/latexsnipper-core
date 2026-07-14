@@ -6,6 +6,13 @@
 //! - [`RecognizeResponse`] — recognition result wrapper
 //! - [`StreamItem`] — streaming recognition events
 
+pub mod v3;
+
+pub use v3::{
+    ApiContractVersionsV3, ApiEnvelopeV3, ApiErrorV3, API_ENVELOPE_VERSION_V3,
+    CAPABILITY_SCHEMA_VERSION_V3, DIAGNOSTIC_SCHEMA_VERSION_V3,
+};
+
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
 

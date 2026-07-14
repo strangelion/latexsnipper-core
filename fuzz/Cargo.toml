@@ -10,6 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 serde_json = "1"
+latexsnipper-api-types = { path = "../crates/api-types" }
 latexsnipper-ast = { path = "../crates/ast" }
 latexsnipper-conversion = { path = "../crates/conversion" }
 latexsnipper-model = { path = "../crates/model", default-features = false, features = ["wasm"] }
@@ -96,6 +97,13 @@ bench = false
 [[bin]]
 name = "plugin_manifest_parser"
 path = "fuzz_targets/plugin_manifest_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "api_envelope_v3_parser"
+path = "fuzz_targets/api_envelope_v3_parser.rs"
 test = false
 doc = false
 bench = false

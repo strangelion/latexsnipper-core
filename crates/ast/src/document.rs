@@ -5,6 +5,10 @@ use crate::{
     NoteDefinition,
 };
 
+/// Current serialized Document schema. Core v3 preserves this schema until a
+/// concrete document-shape change justifies an independent schema revision.
+pub const DOCUMENT_SCHEMA_VERSION: &str = "1.0.0";
+
 /// Top-level document — the single source of truth.
 ///
 /// Provides asset management methods for working with media assets
@@ -38,7 +42,7 @@ pub struct Document {
 }
 
 fn default_schema_version() -> String {
-    "1.0.0".to_string()
+    DOCUMENT_SCHEMA_VERSION.to_string()
 }
 
 impl Clone for Document {
