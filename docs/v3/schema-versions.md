@@ -19,7 +19,8 @@ silently advance every serialized protocol.
 | Browser Worker protocol | `1` | `1` unless behavior requires change | Unchanged |
 | FFI response contract | current v2-era surface | TBD after inventory review | Unchanged |
 | Benchmark evidence | current ad hoc output | independent version required | Planned |
-| Registry metadata | unavailable | independent root/targets/snapshot/timestamp versions | Planned |
+| Registry metadata | unavailable | signed schema `1.0`; independent root/timestamp/snapshot/targets counters | Implemented |
+| Remote plugin store index | unavailable | `1` | Implemented; separate from the legacy local store |
 
 `ApiContractVersionsV3` carries the relevant versions explicitly. Consumers
 must validate each field they depend on; they must not infer compatibility from

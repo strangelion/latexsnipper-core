@@ -60,13 +60,15 @@ isolated-process 的 permissions 只约束 host broker 提供的文件、网络�
 进程仍可直接调用操作系统 API（例如 `std::fs` 或 `TcpStream`），因此这些 grant 不是 OS sandbox，不能
 阻止任意 filesystem/network 访问。`plugin doctor` 会明确报告
 `nativeProcessOsSandboxed: false` 和 `enforcementScope: brokered-host-operations`。需要处理不可信第三方
-代码时，应使用 WASI Component host，而不是把 process plugin 权限误当成 OS sandbox。远程安装仍需等待
-signed registry、cryptographic signature/provenance 校验和 public plugin CLI 集成。
+代码时，应使用 WASI Component host，而不是把 process plugin 权限误当成 OS sandbox。远程 WASI 安装已通过
+signed registry、Ed25519 threshold、signature/provenance、rollback/freeze 和受限 archive 校验，但安装后保持
+disabled；public execution 集成仍需使用 hardened WASI host 完成。
 
 WASI Component world 不链接 ambient CLI、stdio、environment、filesystem、socket 或 process WASI
 接口，只暴露 manifest grant 对应的 typed broker。每次调用使用新的 Store/instance，并受 fuel、独立
 epoch deadline/cancellation、memory/table/resource/input/output/diagnostic/model/temp 和 concurrency
-限制。完整边界与诊断见 [WASI Component host v1](v3/wasi-component-host.md)。
+限制。完整边界与诊断见 [WASI Component host v1](v3/wasi-component-host.md)，远程信任与存储边界见
+[signed plugin registry threat model](v3/plugin-registry-threat-model.md)。
 
 ## Manifest、顺序与 failure policy
 

@@ -1,8 +1,8 @@
 # Core 3.0 architecture and delivery status
 
 This document describes the target Core 3.0 architecture and the implemented
-boundaries of the first two stacked changes. The baseline audited for this work
-is `ee1aebf9c274c5a4389d28bee61059436126a855` on `main`.
+boundaries of the first three stacked changes. Each merged stage records its
+validated commit and CI evidence in the pull request.
 
 ## Status vocabulary
 
@@ -37,8 +37,8 @@ independent contracts.
 Native process permissions describe only operations brokered by the host. They
 do not prevent native executables from invoking operating-system APIs. The
 Component host forms a default-deny execution boundary by linking only typed
-WIT brokers granted by a verified manifest. Signed distribution and legacy
-registry/CLI integration remain separate work.
+WIT brokers granted by a verified manifest. Signed distribution and disabled
+installation are implemented separately from public execution integration.
 
 ## PR 1 implementation boundary
 
@@ -71,7 +71,7 @@ Implemented in this stacked change:
   lifecycle, transform, importer, exporter, diagnostics, capability,
   cancellation/deadline, filesystem, environment, network, model, temporary
   storage, clock, and randomness contracts;
-- the native-only `latexsnipper-plugin-wasi` host pinned to Wasmtime `38.0.4`,
+- the native-only `latexsnipper-plugin-wasi` host pinned to Wasmtime `36.0.12`,
   whose MSRV is the workspace MSRV of Rust `1.88.0`;
 - no ambient WASI CLI, stdio, environment, filesystem, socket, or process
   imports; authority is available only through exact typed brokers;
@@ -87,24 +87,48 @@ Implemented in this stacked change:
 
 Still planned after PR 2:
 
-- cryptographic signature and provenance verification against a signed remote
-  registry, including rollback/freeze protection and update transactions;
-- routing legacy plugin CLI/registry commands to the Component host;
+- routing verified remote packages to the Component host for public execution;
 - production network transport policy. PR 2 exposes an exact-destination
   broker contract and ships a deny-by-default implementation; trusted
   applications must supply the bounded transport;
-- archive installation. PR 2 accepts only already-unpacked directory packages
-  and rejects archives/compression rather than extracting attacker-controlled
-  data;
 - v3 WASM/CLI endpoints, a v3 model-runtime loader, OCR accuracy evidence,
   Office/PDF fidelity certification, and release artifacts.
 
+## PR 3 implementation boundary
+
+Implemented in this stacked change:
+
+- strict root/timestamp/snapshot/targets schemas with independent versions,
+  expiry, Ed25519 role thresholds, canonical signed bytes, sequential dual-
+  threshold root rotation, and rollback/freeze detection;
+- configured HTTPS origins, identity encoding, bounded same-origin redirects,
+  timeouts, MIME separation, exact length/SHA-256, and bounded response reads;
+- remote target policy that permits only `WasiComponent` and requires target,
+  manifest, artifact kind, compatibility, digest, and validated Component bytes
+  to agree;
+- bounded ZIP extraction with traversal, duplicate, symlink, special-file,
+  member-count, compressed-size, decompressed-size, and per-file rejection;
+- a separate locked remote store with staging, re-verification, immutable
+  version directories, durable index replacement, backup recovery, quarantine,
+  revocation, and last-known-good rollback;
+- plugin registry/search/install/update/rollback/verify/info/doctor/revoke CLI
+  commands. Remote install is disabled and never executes plugin code;
+- registry/package fuzz targets and the formal
+  [registry threat model](plugin-registry-threat-model.md).
+
+Still planned after PR 3:
+
+- public runtime execution integration for verified remote packages;
+- browser table and handwriting pipelines, production OCR evidence,
+  Office/PDF fidelity certification, v3 public runtime migration, and release
+  candidate/GA work.
+
 ## Stacked delivery sequence
 
-1. v3 contracts and migration foundation (PR 1).
-2. WASI Component host and WIT interfaces (this change).
-3. signed plugin registry and cryptographic package verification.
-4. browser model runtime/cache completion.
+1. v3 contracts and migration foundation (implemented).
+2. WASI Component host and WIT interfaces (implemented and hardened).
+3. signed plugin registry and cryptographic package verification (implemented).
+4. browser table and handwriting recognition.
 5. production OCR validation and benchmark evidence.
 6. Office/PDF fidelity framework.
 7. public API/CLI integration and compatibility adapters.

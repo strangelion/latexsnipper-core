@@ -63,9 +63,11 @@ normalized path uniqueness, file/link types, declared payload roots, and
 signature metadata shape. Archives and compression are rejected rather than
 extracted.
 
-Cryptographic signature/provenance verification and rollback/freeze protection
-belong to the signed registry workstream. Until that lands, the Component host
-is a local Rust API and must not be presented as remote plugin installation.
+Cryptographic signature/provenance verification, rollback/freeze protection,
+bounded archive extraction, and disabled remote installation are implemented by
+the signed registry layer. The Component host remains the only permitted execution
+boundary; remote packages are not enabled or executed during installation. See the
+[registry threat model](plugin-registry-threat-model.md).
 
 ## Stable diagnostics
 

@@ -20,7 +20,7 @@ latexsnipper-conversion = { workspace = true, features = ["native"] }
 latexsnipper-export.workspace = true
 latexsnipper-model = { workspace = true, features = ["native"] }
 latexsnipper-pipeline = { workspace = true, features = ["native"] }
-latexsnipper-plugin.workspace = true
+latexsnipper-plugin = { workspace = true, features = ["registry-network"] }
 latexsnipper-syntax.workspace = true
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"

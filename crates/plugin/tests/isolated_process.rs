@@ -151,9 +151,25 @@ fn verified_store_executes_enabled_process_plugin() {
     ));
     let package = root.join("package");
     std::fs::create_dir_all(&package).unwrap();
+    #[cfg(windows)]
     let file_name = fixture().file_name().unwrap();
+    #[cfg(unix)]
+    let file_name = std::ffi::OsStr::new("latexsnipper-plugin-fixture");
     let entrypoint = package.join(file_name);
+    #[cfg(windows)]
     std::fs::copy(fixture(), &entrypoint).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let escaped_fixture = fixture().to_string_lossy().replace("'", "'\\''");
+        std::fs::write(
+            &entrypoint,
+            format!("#!/bin/sh\nexec '{escaped_fixture}' \"$@\"\n"),
+        )
+        .unwrap();
+        std::fs::set_permissions(&entrypoint, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
     let bytes = std::fs::read(&entrypoint).unwrap();
     let mut manifest = PluginManifest::built_in("process.echo", "1.0.0");
     manifest.class = PluginClass::IsolatedProcess;

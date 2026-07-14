@@ -29,9 +29,10 @@ Alpha 1 is not an RC and must not satisfy later runtime/security items by checki
 
 ## GA blockers
 
-- [ ] Integrate the validated WASI Component host with signed registry metadata
-      and the public plugin CLI before advertising third-party distribution.
-- [ ] Complete registry/signature/provenance/update policy before remote plugin install.
+- [x] Integrate signed registry metadata, verified disabled remote installation,
+      signature/provenance/update policy, and the public management CLI.
+- [ ] Integrate verified remote packages with public WASI execution and obtain an
+      independent security review before advertising third-party execution.
 - [ ] Obtain production OCR-model compatibility and accuracy evidence beyond the
       document-orientation compatibility smoke.
 - [ ] Verify live GitHub ruleset/CODEOWNERS approval requirements.

@@ -441,22 +441,66 @@ snipper models verify --category formula-det"
 
 #[derive(Subcommand)]
 enum PluginCommand {
+    /// Manage signed remote plugin registries
+    Registry {
+        #[command(subcommand)]
+        command: PluginRegistryCommand,
+    },
     /// List installed plugin manifests and activation state
     List,
+    /// Search verified signed registry targets
+    Search { query: Option<String> },
     /// Show one installed plugin manifest
     Info { id: String },
     /// Verify a local package without installing or executing it
-    Verify { path: String },
-    /// Verify and install a local package in disabled state
-    Install { path: String },
+    Verify { source: String },
+    /// Install a local package or a verified registry plugin ID in disabled state
+    Install { source: String },
+    /// Update one verified remote plugin or all installed remote plugins
+    Update {
+        id: Option<String>,
+        #[arg(long, conflicts_with = "id")]
+        all: bool,
+    },
+    /// Activate the last-known-good verified remote version
+    Rollback { id: String },
     /// Remove an installed package
     Uninstall { id: String },
     /// Mark an installed package enabled for a compatible host
     Enable { id: String },
     /// Mark an installed package disabled
     Disable { id: String },
+    /// Mark a remote plugin revoked and disable it locally
+    Revoke { id: String },
     /// Verify every installed package and report execution-host readiness
     Doctor,
+}
+
+#[derive(Subcommand)]
+enum PluginRegistryCommand {
+    /// List configured registry origins and trust state
+    List,
+    /// Add an HTTPS registry origin without trusting it
+    Add { name: String, origin: String },
+    /// Remove a configured registry
+    Remove {
+        name: String,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Trust an initial or rotated signed root metadata file
+    Trust {
+        name: String,
+        root: String,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Refresh verified metadata, or validate the offline cache
+    Refresh {
+        name: Option<String>,
+        #[arg(long)]
+        offline: bool,
+    },
 }
 
 fn resolve_format(format: &str, output: Option<&str>) -> String {
@@ -2205,21 +2249,66 @@ fn handle_models_purge(
 }
 
 fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), String> {
-    let store = latexsnipper_plugin::PluginStore::new(std::path::PathBuf::from(store_dir));
+    let store_root = std::path::PathBuf::from(store_dir);
+    let store = latexsnipper_plugin::PluginStore::new(store_root.clone());
+    let registries =
+        latexsnipper_plugin::SignedRegistryManager::new(store_root.join("signed-registries"));
     match command {
+        PluginCommand::Registry { command } => {
+            handle_plugin_registry_command(&registries, command)?;
+        }
         PluginCommand::List => {
             let plugins = store.list().map_err(|error| error.to_string())?;
+            let local_plugins = plugins
+                .iter()
+                .map(|plugin| {
+                    serde_json::json!({
+                        "plugin": plugin,
+                        "trustState": local_plugin_trust_state(&plugin.manifest.class),
+                    })
+                })
+                .collect::<Vec<_>>();
+            let remote_plugins = registries
+                .remote_store()
+                .list()
+                .map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "schemaVersion": 2,
+                    "storeDirectory": store.root(),
+                    "plugins": &plugins,
+                    "localPlugins": local_plugins,
+                    "remotePlugins": remote_plugins,
+                }))
+                .map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Search { query } => {
+            let results = registries
+                .search(query.as_deref())
+                .map_err(|error| error.to_string())?;
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "schemaVersion": 1,
-                    "storeDirectory": store.root(),
-                    "plugins": plugins,
+                    "results": results,
                 }))
                 .map_err(|error| error.to_string())?
             );
         }
         PluginCommand::Info { id } => {
+            if let Some(plugin) = registries
+                .remote_store()
+                .get(&id)
+                .map_err(|error| error.to_string())?
+            {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&plugin).map_err(|error| error.to_string())?
+                );
+                return Ok(());
+            }
             let plugin = store
                 .get(&id)
                 .map_err(|error| error.to_string())?
@@ -2229,24 +2318,91 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                 serde_json::to_string_pretty(&plugin).map_err(|error| error.to_string())?
             );
         }
-        PluginCommand::Verify { path } => {
-            reject_remote_plugin_source(&path)?;
-            let verification = store
-                .verify_package(std::path::Path::new(&path))
-                .map_err(|error| error.to_string())?;
-            print_plugin_verification(&verification)?;
+        PluginCommand::Verify { source } => {
+            reject_remote_plugin_source(&source)?;
+            let path = std::path::Path::new(&source);
+            if path.exists() {
+                let verification = store
+                    .verify_package(path)
+                    .map_err(|error| error.to_string())?;
+                print_plugin_verification(&verification)?;
+            } else {
+                let plugin = registries
+                    .remote_store()
+                    .get(&source)
+                    .map_err(|error| error.to_string())?
+                    .ok_or_else(|| format!("Plugin '{source}' is not installed"))?;
+                let verification = registries
+                    .remote_store()
+                    .verify_installed(&source)
+                    .map_err(|error| error.to_string())?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "verified": true,
+                        "executed": false,
+                        "trustState": plugin.trust_state,
+                        "provenance": plugin.provenance,
+                        "package": verification,
+                    }))
+                    .map_err(|error| error.to_string())?
+                );
+            }
         }
-        PluginCommand::Install { path } => {
-            reject_remote_plugin_source(&path)?;
-            let installed = store
-                .install(std::path::Path::new(&path))
-                .map_err(|error| error.to_string())?;
+        PluginCommand::Install { source } => {
+            reject_remote_plugin_source(&source)?;
+            let path = std::path::Path::new(&source);
+            let installed = if path.exists() {
+                serde_json::to_value(store.install(path).map_err(|error| error.to_string())?)
+                    .map_err(|error| error.to_string())?
+            } else {
+                serde_json::to_value(
+                    registries
+                        .install(&source, env!("CARGO_PKG_VERSION"))
+                        .map_err(|error| error.to_string())?,
+                )
+                .map_err(|error| error.to_string())?
+            };
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "installed": installed,
                     "executed": false,
                     "message": "Package verified and installed disabled; no plugin code was executed",
+                }))
+                .map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Update { id, all } => {
+            let updated = if all {
+                registries
+                    .update_all(env!("CARGO_PKG_VERSION"))
+                    .map_err(|error| error.to_string())?
+            } else {
+                let id = id.ok_or_else(|| "plugin update requires <id> or --all".to_string())?;
+                vec![registries
+                    .install(&id, env!("CARGO_PKG_VERSION"))
+                    .map_err(|error| error.to_string())?]
+            };
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "updated": updated,
+                    "executed": false,
+                }))
+                .map_err(|error| error.to_string())?
+            );
+        }
+        PluginCommand::Rollback { id } => {
+            let plugin = registries
+                .remote_store()
+                .rollback(&id)
+                .map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "rolledBack": plugin,
+                    "executed": false,
                 }))
                 .map_err(|error| error.to_string())?
             );
@@ -2270,6 +2426,16 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                 .map_err(|error| error.to_string())?;
             println!("Plugin '{}' disabled", plugin.manifest.id);
         }
+        PluginCommand::Revoke { id } => {
+            let plugin = registries
+                .remote_store()
+                .revoke(&id)
+                .map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&plugin).map_err(|error| error.to_string())?
+            );
+        }
         PluginCommand::Doctor => {
             let plugins = store.list().map_err(|error| error.to_string())?;
             let checks = plugins
@@ -2279,6 +2445,7 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                         "id": plugin.manifest.id,
                         "class": plugin.manifest.class,
                         "enabled": plugin.enabled,
+                        "trustState": local_plugin_trust_state(&plugin.manifest.class),
                         "verified": true,
                         "entrypointSha256": verification.entrypoint_sha256,
                         "executionHostAvailable": matches!(
@@ -2290,6 +2457,7 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                     Err(error) => serde_json::json!({
                         "id": plugin.manifest.id,
                         "enabled": plugin.enabled,
+                        "trustState": "quarantined",
                         "verified": false,
                         "error": error.to_string(),
                         "executionHostAvailable": false,
@@ -2300,13 +2468,44 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
             let healthy = checks
                 .iter()
                 .all(|check| check["verified"].as_bool() == Some(true));
+            let remote_store = registries.remote_store();
+            let remote_plugins = remote_store.list().map_err(|error| error.to_string())?;
+            let remote_checks = remote_plugins
+                .iter()
+                .map(
+                    |plugin| match remote_store.verify_installed(&plugin.manifest.id) {
+                        Ok(verification) => serde_json::json!({
+                            "id": plugin.manifest.id,
+                            "class": plugin.manifest.execution_class,
+                            "trustState": plugin.trust_state,
+                            "enabled": plugin.enabled,
+                            "verified": true,
+                            "artifactSha256": verification.artifact_sha256,
+                            "executionHostAvailable": false,
+                        }),
+                        Err(error) => serde_json::json!({
+                            "id": plugin.manifest.id,
+                            "trustState": "quarantined",
+                            "enabled": false,
+                            "verified": false,
+                            "error": error.to_string(),
+                            "executionHostAvailable": false,
+                        }),
+                    },
+                )
+                .collect::<Vec<_>>();
+            let remote_consistency = remote_store.doctor().map_err(|error| error.to_string())?;
+            let remote_healthy = remote_consistency.healthy
+                && remote_checks
+                    .iter()
+                    .all(|check| check["verified"].as_bool() == Some(true));
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "schemaVersion": 1,
                     "storeDirectory": store.root(),
                     "installed": plugins.len(),
-                    "packageIntegrityHealthy": healthy,
+                    "packageIntegrityHealthy": healthy && remote_healthy,
                     "isolatedProcessHostAvailable": true,
                     "nativeAbiHostAvailable": false,
                     "wasiComponentHostAvailable": false,
@@ -2315,10 +2514,12 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                     "responseBudgetScope": "response-file-observation",
                     "processTreeContainment": if cfg!(unix) { "unix-process-group" } else { "windows-job-object-after-spawn" },
                     "plugins": checks,
+                    "remotePlugins": remote_checks,
+                    "remoteStoreConsistency": remote_consistency,
                 }))
                 .map_err(|error| error.to_string())?
             );
-            if !healthy {
+            if !healthy || !remote_healthy {
                 return Err("one or more installed plugin packages failed verification".to_string());
             }
         }
@@ -2326,10 +2527,91 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
     Ok(())
 }
 
+fn local_plugin_trust_state(class: &latexsnipper_plugin::PluginClass) -> &'static str {
+    match class {
+        latexsnipper_plugin::PluginClass::BuiltInRust => "trusted_built_in",
+        latexsnipper_plugin::PluginClass::IsolatedProcess => "reviewed_local_native_process",
+        latexsnipper_plugin::PluginClass::WasiComponent
+        | latexsnipper_plugin::PluginClass::NativeAbi => "unverified",
+    }
+}
+
+fn handle_plugin_registry_command(
+    manager: &latexsnipper_plugin::SignedRegistryManager,
+    command: PluginRegistryCommand,
+) -> Result<(), String> {
+    let value = match command {
+        PluginRegistryCommand::List => serde_json::json!({
+            "schemaVersion": 1,
+            "registries": manager.list().map_err(|error| error.to_string())?,
+        }),
+        PluginRegistryCommand::Add { name, origin } => serde_json::to_value(
+            manager
+                .add(&name, &origin)
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?,
+        PluginRegistryCommand::Remove { name, yes } => {
+            if !yes {
+                return Err("registry removal requires explicit --yes confirmation".to_string());
+            }
+            serde_json::to_value(manager.remove(&name).map_err(|error| error.to_string())?)
+                .map_err(|error| error.to_string())?
+        }
+        PluginRegistryCommand::Trust { name, root, yes } => {
+            if !yes {
+                return Err("trust-root changes require explicit --yes confirmation".to_string());
+            }
+            let path = std::path::Path::new(&root);
+            let metadata = std::fs::metadata(path).map_err(|error| error.to_string())?;
+            if !metadata.is_file() || metadata.len() > 8 * 1024 * 1024 {
+                return Err("trust-root file is invalid or exceeds 8 MiB".to_string());
+            }
+            let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|error| error.to_string())?
+                .as_secs();
+            serde_json::to_value(
+                manager
+                    .trust(&name, &bytes, now)
+                    .map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())?
+        }
+        PluginRegistryCommand::Refresh { name, offline } => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|error| error.to_string())?
+                .as_secs();
+            if let Some(name) = name {
+                serde_json::to_value(
+                    manager
+                        .refresh(&name, offline, now)
+                        .map_err(|error| error.to_string())?,
+                )
+                .map_err(|error| error.to_string())?
+            } else {
+                serde_json::to_value(
+                    manager
+                        .refresh_all(offline, now)
+                        .map_err(|error| error.to_string())?,
+                )
+                .map_err(|error| error.to_string())?
+            }
+        }
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?
+    );
+    Ok(())
+}
+
 fn reject_remote_plugin_source(source: &str) -> Result<(), String> {
     if source.contains("://") {
         return Err(
-            "remote plugin installation is unsupported; download the package and verify its local path"
+            "arbitrary URL plugin sources are forbidden; configure and trust a registry, then use a plugin ID"
                 .to_string(),
         );
     }

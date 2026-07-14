@@ -461,3 +461,92 @@ fn plugin_management_verifies_installs_disabled_and_reports_tampering() {
     assert!(!store.join("packages/example.plugin").exists());
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn signed_registry_cli_requires_https_ids_and_explicit_trust_confirmation() {
+    let directory = workspace();
+    let store = directory.join("store");
+
+    let insecure = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "registry",
+            "add",
+            "insecure",
+            "http://registry.example.invalid/",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(insecure.status.code(), Some(9));
+    assert!(String::from_utf8_lossy(&insecure.stderr).contains("HTTPS"));
+
+    let added = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "registry",
+            "add",
+            "official",
+            "https://registry.example.invalid/",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    assert!(String::from_utf8_lossy(&added.stdout).contains("unverified"));
+
+    let unconfirmed = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "registry",
+            "trust",
+            "official",
+            "missing-root.json",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(unconfirmed.status.code(), Some(9));
+    assert!(String::from_utf8_lossy(&unconfirmed.stderr).contains("explicit --yes"));
+
+    let arbitrary_url = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "install",
+            "https://attacker.invalid/plugin.zip",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(arbitrary_url.status.code(), Some(9));
+    assert!(String::from_utf8_lossy(&arbitrary_url.stderr).contains("arbitrary URL"));
+
+    let update_without_scope = snipper()
+        .args(["plugin", "--store-dir", store.to_str().unwrap(), "update"])
+        .output()
+        .unwrap();
+    assert_eq!(update_without_scope.status.code(), Some(9));
+
+    let removed = snipper()
+        .args([
+            "plugin",
+            "--store-dir",
+            store.to_str().unwrap(),
+            "registry",
+            "remove",
+            "official",
+            "--yes",
+        ])
+        .output()
+        .unwrap();
+    assert!(removed.status.success());
+    std::fs::remove_dir_all(directory).unwrap();
+}

@@ -23,7 +23,7 @@
 
 ## 项目状态
 
-workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的 stacked changes。契约基础和可独立使用的 default-deny WASI Component host 已实现；可调用的 WASM、能力文档、legacy plugin registry、模型 loader、Worker、CLI 与 FFI 路径仍使用现有 v2 时代契约。详见 [Core 3 架构与交付状态](docs/v3/architecture.md)。
+workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的 stacked changes。契约基础、default-deny WASI Component host、signed registry 以及安装后默认禁用的远程 WASI CLI 已实现；可调用的 WASM、能力文档、模型 loader、Worker 与 FFI 路径仍使用现有 v2 时代契约。详见 [Core 3 架构与交付状态](docs/v3/architecture.md)。
 
 这并不表示所有格式、模型和插件边界具有相同成熟度。
 
@@ -40,8 +40,9 @@ workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的 stacked changes。�
 | WASM Tract 识别 | **实验性** | 模型驱动、异步执行，并在 Chrome/Firefox 测试；浏览器表格和手写流水线尚不可用。 |
 | 内置 Rust 插件 | **Host 行为稳定** | 已实现确定性排序、typed hook、事务 patch、失败策略、soft deadline 和 quarantine。 |
 | 隔离 native process 插件 | **仅限经过审核的本地代码** | 支持 hard timeout 和资源控制，但不是操作系统文件/网络沙箱。 |
-| WASI Component host | **已实现为 Rust host crate** | WIT v1、manifest/digest 校验、typed broker、硬中断和资源限制已有真实组件测试；尚未接入 legacy plugin CLI/registry。 |
-| native 动态库 ABI、远程插件安装 | **不可用** | 不应将这些能力宣传为已可执行。 |
+| WASI Component host | **已实现为 Rust host crate** | WIT v1、manifest/digest 校验、typed broker、硬中断和资源限制已有真实组件测试；public execution 集成仍待完成。 |
+| signed 远程 WASI registry/install | **已实现，安装后禁用** | 已测试 Ed25519 threshold、过期/rollback/freeze、受限 HTTPS/ZIP、provenance、update、revoke 与 rollback；安装不会执行或启用代码。 |
+| native 动态库 ABI | **不可用** | 会拒绝远程 native 替换；经过审核的本地 process plugin 使用独立路径。 |
 
 可执行能力注册表是事实来源：
 
@@ -372,9 +373,8 @@ JavaScript 包还提供：
 
 仍不可用：
 
-- WASI Component 与 legacy plugin registry/CLI 的集成；
+- 远程安装 WASI Component 的 public execution；
 - 稳定 native 动态库插件 ABI；
-- 远程插件 registry/install/update 信任模型；
 - 完整 native 文件系统/网络沙箱。
 
 详见 [Plugin system](docs/plugin.md)。
@@ -513,8 +513,8 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 
 3.0 alpha 是契约反馈版本，不是 release candidate，仍有以下明确边界：
 
-- 在宣传不可信第三方插件分发前，将已验证的 WASI Component host 接入 signed registry 和 public plugin CLI；
-- 在启用远程插件安装前，完成 registry、signature、provenance 与 update policy；
+- 在宣传不可信第三方执行前，将已验证的远程 package 接入 public WASI execution runtime；
+- GA 前完成 registry/update policy 的独立安全审查和更长时间 fuzz；
 - 补充超出浏览器方向模型兼容性 smoke 的生产 OCR 兼容性和准确率证据；
 - 基于代表性 corpus 与平台定义 Office/PDF 保真保证；
 - 继续更长时间 fuzz、benchmark 趋势存储、更多浏览器覆盖和移动端内存 profile。

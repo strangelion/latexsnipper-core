@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fuzz coverage for v3 API envelopes, plugin/model manifests, and migration functions.
 - Default-deny WASI Component host with WIT v1 lifecycle, typed brokers, hard interruption,
   bounded package verification, and structured diagnostics.
+- Ed25519-threshold signed registries with rollback/freeze protection, HTTPS same-origin
+  downloads, bounded archive validation, atomic remote WASI installation, and rollback.
+- Registry and remote-plugin CLI commands with explicit trust-root confirmation and
+  machine-readable trust, revocation, expiry, quarantine, and compatibility states.
 
 ### Changed
 
@@ -29,7 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Compatibility
 
 - Existing WASM API v2, capability v2, plugin/model runtime, process IPC v1, Worker protocol v1, CLI, and FFI behavior remain unchanged.
-- This alpha does not implement a signed registry, callable v3 endpoint, or v3 model loader.
+- This alpha does not yet expose a callable v3 endpoint or v3 model loader; remotely installed
+  WASI packages remain disabled until public runtime integration.
 
 ## [Unreleased]
 
