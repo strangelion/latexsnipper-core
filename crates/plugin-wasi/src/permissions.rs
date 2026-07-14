@@ -1,15 +1,30 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
+use cap_fs_ext::{DirExt, FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
+use cap_std::ambient_authority;
+use cap_std::fs::{Dir, OpenOptions};
 use latexsnipper_plugin::{NetworkSchemeV3, PluginPathAccessV3, PluginPermissionsV3};
 
-use crate::{WasiDiagnostic, WasiDiagnosticCode, WasiResourceLimits};
+use crate::{WasiDiagnostic, WasiDiagnosticCode, WasiHostPolicy, WasiResourceLimits};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct FilesystemGrant {
     pub id: String,
     pub root: PathBuf,
     pub writable: bool,
+    directory: Arc<Dir>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilesystemOperationError {
+    PermissionDenied,
+    NotFound,
+    InvalidPath,
+    SizeLimit,
+    HostFailure,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -66,23 +81,46 @@ impl ComponentPermissions {
         value: &PluginPermissionsV3,
         package_root: &Path,
     ) -> Result<Self, WasiDiagnostic> {
+        Self::from_manifest_with_policy(value, package_root, &WasiHostPolicy::default())
+    }
+
+    pub fn from_manifest_with_policy(
+        value: &PluginPermissionsV3,
+        package_root: &Path,
+        policy: &WasiHostPolicy,
+    ) -> Result<Self, WasiDiagnostic> {
         let package_root = package_root.canonicalize().map_err(host_failure)?;
+        let package_directory =
+            Dir::open_ambient_dir(&package_root, ambient_authority()).map_err(host_failure)?;
+        Self::from_manifest_with_directory(value, &package_root, &package_directory, policy)
+    }
+
+    pub(crate) fn from_manifest_with_directory(
+        value: &PluginPermissionsV3,
+        package_root: &Path,
+        package_directory: &Dir,
+        policy: &WasiHostPolicy,
+    ) -> Result<Self, WasiDiagnostic> {
         let mut filesystem = BTreeMap::new();
         for (index, grant) in value.paths.iter().enumerate() {
             let raw = Path::new(&grant.path);
-            reject_unsafe_relative_path(raw)?;
-            let joined = package_root.join(raw);
-            let canonical = joined.canonicalize().map_err(host_failure)?;
-            if !canonical.starts_with(&package_root) {
-                return Err(permission_denied("filesystem grant escapes package root"));
-            }
+            reject_unsafe_relative_path(raw).map_err(|_| {
+                WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiPermissionDenied,
+                    "filesystem grant path is unsafe",
+                )
+            })?;
+            let directory = package_directory
+                .open_dir_nofollow(raw)
+                .map_err(|_| permission_denied("filesystem grant is not a safe directory"))?;
             let id = format!("path-{index}");
             filesystem.insert(
                 id.clone(),
                 FilesystemGrant {
                     id,
-                    root: canonical,
+                    root: package_root.join(raw),
                     writable: grant.access == PluginPathAccessV3::Write,
+                    directory: Arc::new(directory),
                 },
             );
         }
@@ -106,43 +144,81 @@ impl ComponentPermissions {
             temporary_storage: value.temporary_directory,
             clocks: value.clocks,
             randomness: value.randomness,
-            limits: WasiResourceLimits::from_manifest(&value.limits),
+            limits: policy.grant(&value.limits)?,
         })
     }
 
-    pub fn resolve_path(
+    pub fn read_file(
         &self,
         grant_id: &str,
         relative: &str,
-        write: bool,
-    ) -> Result<PathBuf, WasiDiagnostic> {
+        limit: usize,
+    ) -> Result<Vec<u8>, FilesystemOperationError> {
         let grant = self
             .filesystem
             .get(grant_id)
-            .ok_or_else(|| permission_denied("unknown filesystem grant"))?;
-        if write && !grant.writable {
-            return Err(permission_denied("filesystem grant is read-only"));
+            .ok_or(FilesystemOperationError::PermissionDenied)?;
+        let relative = Path::new(relative);
+        reject_unsafe_relative_path(relative)?;
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        let file = grant
+            .directory
+            .open_with(relative, &options)
+            .map_err(map_io_error)?;
+        let metadata = file.metadata().map_err(map_io_error)?;
+        if !metadata.is_file() || metadata.nlink() > 1 {
+            return Err(FilesystemOperationError::InvalidPath);
+        }
+        let length =
+            usize::try_from(metadata.len()).map_err(|_| FilesystemOperationError::SizeLimit)?;
+        if length > limit {
+            return Err(FilesystemOperationError::SizeLimit);
+        }
+        let read_limit = u64::try_from(limit).unwrap_or(u64::MAX).saturating_add(1);
+        let mut bytes = Vec::with_capacity(length);
+        file.take(read_limit)
+            .read_to_end(&mut bytes)
+            .map_err(map_io_error)?;
+        if bytes.len() > limit {
+            return Err(FilesystemOperationError::SizeLimit);
+        }
+        Ok(bytes)
+    }
+
+    pub fn write_file(
+        &self,
+        grant_id: &str,
+        relative: &str,
+        payload: &[u8],
+        limit: usize,
+    ) -> Result<(), FilesystemOperationError> {
+        let grant = self
+            .filesystem
+            .get(grant_id)
+            .ok_or(FilesystemOperationError::PermissionDenied)?;
+        if !grant.writable {
+            return Err(FilesystemOperationError::PermissionDenied);
+        }
+        if payload.len() > limit {
+            return Err(FilesystemOperationError::SizeLimit);
         }
         let relative = Path::new(relative);
         reject_unsafe_relative_path(relative)?;
-        let candidate = grant.root.join(relative);
-        let resolved = if candidate.exists() {
-            candidate.canonicalize().map_err(host_failure)?
-        } else {
-            let parent = candidate
-                .parent()
-                .ok_or_else(|| permission_denied("path has no parent"))?
-                .canonicalize()
-                .map_err(host_failure)?;
-            let name = candidate
-                .file_name()
-                .ok_or_else(|| permission_denied("path has no file name"))?;
-            parent.join(name)
-        };
-        if !resolved.starts_with(&grant.root) {
-            return Err(permission_denied("filesystem path escapes grant root"));
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).follow(FollowSymlinks::No);
+        let mut file = grant
+            .directory
+            .open_with(relative, &options)
+            .map_err(map_io_error)?;
+        let metadata = file.metadata().map_err(map_io_error)?;
+        if !metadata.is_file() || metadata.nlink() > 1 {
+            return Err(FilesystemOperationError::InvalidPath);
         }
-        Ok(resolved)
+        file.set_len(0).map_err(map_io_error)?;
+        file.write_all(payload).map_err(map_io_error)?;
+        file.sync_all().map_err(map_io_error)?;
+        Ok(())
     }
 
     pub fn permits_network(&self, grant: &NetworkGrant) -> bool {
@@ -154,7 +230,7 @@ impl ComponentPermissions {
     }
 }
 
-fn reject_unsafe_relative_path(path: &Path) -> Result<(), WasiDiagnostic> {
+fn reject_unsafe_relative_path(path: &Path) -> Result<(), FilesystemOperationError> {
     if path.as_os_str().is_empty()
         || path.is_absolute()
         || path.components().any(|component| {
@@ -164,9 +240,18 @@ fn reject_unsafe_relative_path(path: &Path) -> Result<(), WasiDiagnostic> {
             )
         })
     {
-        return Err(permission_denied("path must be a non-empty relative path"));
+        return Err(FilesystemOperationError::InvalidPath);
     }
     Ok(())
+}
+
+fn map_io_error(error: std::io::Error) -> FilesystemOperationError {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => FilesystemOperationError::NotFound,
+        std::io::ErrorKind::PermissionDenied => FilesystemOperationError::PermissionDenied,
+        std::io::ErrorKind::InvalidInput => FilesystemOperationError::InvalidPath,
+        _ => FilesystemOperationError::HostFailure,
+    }
 }
 
 fn normalize_host(host: &str) -> String {

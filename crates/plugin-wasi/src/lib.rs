@@ -7,17 +7,21 @@ pub mod limits;
 pub mod package;
 pub mod permissions;
 
-pub use diagnostic::{WasiDiagnostic, WasiDiagnosticCode};
+pub use diagnostic::{
+    WasiDiagnostic, WasiDiagnosticCode, WasiDiagnosticDetail, WasiDiagnosticSeverity,
+};
 pub use host::{
     CompiledWasiComponent, ComponentInvocation, ComponentInvocationResult, DenyNetworkBroker,
     NetworkBroker, NetworkRequest, NetworkResponse, WasiComponentHost,
 };
-pub use limits::WasiResourceLimits;
+pub use limits::{WasiHostPolicy, WasiResourceLimits, WasiResourceMinimums};
 pub use package::{
     verify_component_artifact_bytes, VerifiedComponentPackage, WasiComponentPackageVerifier,
+    WasiPackagePolicy,
 };
 pub use permissions::{
-    ComponentNetworkScheme, ComponentPermissions, FilesystemGrant, NetworkGrant,
+    ComponentNetworkScheme, ComponentPermissions, FilesystemGrant, FilesystemOperationError,
+    NetworkGrant,
 };
 
 /// Stable WIT package version consumed by this host.

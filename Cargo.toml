@@ -66,6 +66,8 @@ latexsnipper-wasm = { path = "crates/wasm", version = "3.0.0-alpha.1" }
 latexsnipper-cli = { path = "crates/cli", version = "3.0.0-alpha.1" }
 latexsnipper-tests = { path = "crates/tests", version = "3.0.0-alpha.1" }
 sha2 = "0.10"
+cap-std = "=4.0.2"
+cap-fs-ext = "=4.0.2"
 
 # Root package for examples and tests
 [package]
