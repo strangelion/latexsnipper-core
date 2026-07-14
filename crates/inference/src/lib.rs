@@ -40,8 +40,9 @@ pub use table_structure::{
     ColInfo, RowInfo, TableStructure,
 };
 pub use table_transformer::{
-    build_grid_from_detections, recognize_table_transformer, TableTransformerDetection,
-    TABLE_DETECTION_LABELS, TABLE_STRUCTURE_LABELS,
+    build_grid_from_detections, recognize_table_transformer,
+    recognize_table_transformer_with_max_edge, TableTransformerDetection, TABLE_DETECTION_LABELS,
+    TABLE_STRUCTURE_LABELS,
 };
 pub use text_detector::{detect_text, TextDetParams};
 pub use text_recognizer::{

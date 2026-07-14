@@ -2,7 +2,11 @@ use async_trait::async_trait;
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
-use latexsnipper_inference::{postprocess_handwriting, recognize_formula, RecognitionParams};
+use latexsnipper_inference::{
+    load_tokenizer_from_str, postprocess_handwriting, recognize_formula,
+    recognize_formula_with_tokenizer, RecognitionParams,
+};
+use latexsnipper_runtime::ModelId;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -80,6 +84,20 @@ impl HandwritingRecognizerNode {
         let tok_path = rec_config
             .pipeline_tokenizer_path(&rec_dir)
             .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
+        let tokenizer_name = tok_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("tokenizer.json");
+        let tokenizer = ctx
+            .model_resolver
+            .as_ref()
+            .and_then(|resolver| {
+                let variant = ctx.model_variants.get("formula-rec")?;
+                resolver
+                    .read_text_artifact(&ModelId::new("formula-rec", variant), tokenizer_name)
+                    .ok()
+            })
+            .and_then(|text| load_tokenizer_from_str(&text).ok());
 
         let backend = get_backend(ctx)?;
         let enc_handle = resolve_model_handle(ctx, "formula-rec/encoder", enc_path)?;
@@ -88,14 +106,16 @@ impl HandwritingRecognizerNode {
         let enc_session = get_or_create_session(ctx, "handwriting_encoder", &backend, &enc_handle)?;
         let dec_session = get_or_create_session(ctx, "handwriting_decoder", &backend, &dec_handle)?;
 
-        // Handwriting-optimized parameters
-        let params = RecognitionParams {
-            img_size: 384,
-            beam_width: 5,
-            top_k: 5,
-            max_tokens: 256,
-            ..RecognitionParams::default()
-        };
+        let mut params = RecognitionParams::from_config(&rec_config);
+        params.greedy = true;
+        #[cfg(target_arch = "wasm32")]
+        {
+            params.max_tokens = params.max_tokens.min(32);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            params.max_tokens = params.max_tokens.min(256);
+        }
 
         let mut blocks = Vec::new();
 
@@ -110,13 +130,24 @@ impl HandwritingRecognizerNode {
                     let cropped =
                         operations::crop(image, Rect::new(x as f32, y as f32, w as f32, h as f32));
 
-                    match recognize_formula(
-                        &cropped,
-                        &*enc_session,
-                        &*dec_session,
-                        &tok_path,
-                        &params,
-                    ) {
+                    let recognized = if let Some(tokenizer) = &tokenizer {
+                        recognize_formula_with_tokenizer(
+                            &cropped,
+                            &*enc_session,
+                            &*dec_session,
+                            tokenizer,
+                            &params,
+                        )
+                    } else {
+                        recognize_formula(
+                            &cropped,
+                            &*enc_session,
+                            &*dec_session,
+                            &tok_path,
+                            &params,
+                        )
+                    };
+                    match recognized {
                         Ok(result) => {
                             let processed_text = postprocess_handwriting(&result.text);
 

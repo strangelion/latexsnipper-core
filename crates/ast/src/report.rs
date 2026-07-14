@@ -440,6 +440,13 @@ impl DocumentReport {
                             if let crate::Inline::Formula(f) = &inline {
                                 confidences.push(f.confidence);
                             }
+                            if let crate::Inline::Text(text) = &inline {
+                                if let Some(confidence) =
+                                    text.source.as_ref().and_then(|source| source.confidence)
+                                {
+                                    confidences.push(confidence);
+                                }
+                            }
                         }
                     }
                 }

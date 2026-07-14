@@ -340,15 +340,24 @@ pub fn decode_slanet_output(
     img_width: f32,
     img_height: f32,
 ) -> Result<TableStructure> {
+    let vocab_size = SLANET_STRUCTURE_DICT.len();
+    if structure_logits.is_empty() || !structure_logits.len().is_multiple_of(vocab_size) {
+        return Err(SnipperError::Inference(
+            "Malformed SLANet structure logits".into(),
+        ));
+    }
+    let num_positions = structure_logits.len() / vocab_size;
+    if num_positions > 1_024 || cell_coords.len() < num_positions.saturating_mul(8) {
+        return Err(SnipperError::Inference(
+            "Malformed or oversized SLANet cell coordinates".into(),
+        ));
+    }
     let orig_h = shape_info[0];
     let orig_w = shape_info[1];
     let ratio = shape_info[2].max(1e-6);
     let max_side = orig_w.max(orig_h);
 
     // Get argmax of structure logits for each position
-    let num_positions = structure_logits.len() / SLANET_STRUCTURE_DICT.len();
-    let vocab_size = SLANET_STRUCTURE_DICT.len();
-
     let mut structure_tokens = Vec::new();
     let mut cell_bboxes = Vec::new();
 
@@ -363,7 +372,7 @@ pub fn decode_slanet_output(
         let (max_idx, max_val) = structure_logits[logits_start..logits_end]
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| a.1.total_cmp(b.1))
             .unwrap_or((0, &0.0));
 
         if max_idx >= SLANET_STRUCTURE_DICT.len() {
@@ -386,6 +395,11 @@ pub fn decode_slanet_output(
             let coords_end = coords_start + 8;
             if coords_end <= cell_coords.len() {
                 let bbox = &cell_coords[coords_start..coords_end];
+                if bbox.iter().any(|value| !value.is_finite()) {
+                    return Err(SnipperError::Inference(
+                        "SLANet returned non-finite cell coordinates".into(),
+                    ));
+                }
 
                 // Decode bbox from the padded 488x488 coordinate space back to the original crop.
                 let mut decoded = [0.0f32; 8];
@@ -458,11 +472,35 @@ fn parse_structure_to_cells(tokens: &[(&str, f32)], bboxes: &[Rect]) -> Vec<Cell
                 // Next token should be the colspan value
                 // For now, default to 1
             }
+            token if token.starts_with(" rowspan=\"") => {
+                if let Some(span) = parse_span(token, "rowspan") {
+                    if let Some(cell) = cells.last_mut() {
+                        cell.rowspan = span;
+                    }
+                }
+            }
+            token if token.starts_with(" colspan=\"") => {
+                if let Some(span) = parse_span(token, "colspan") {
+                    if let Some(cell) = cells.last_mut() {
+                        cell.colspan = span;
+                        current_col += span.saturating_sub(1) as usize;
+                    }
+                }
+            }
             _ => {}
         }
     }
 
     cells
+}
+
+fn parse_span(token: &str, name: &str) -> Option<u32> {
+    token
+        .strip_prefix(&format!(" {name}=\""))?
+        .strip_suffix('"')?
+        .parse::<u32>()
+        .ok()
+        .filter(|span| (2..=20).contains(span))
 }
 
 /// Build row information from cells.
@@ -815,6 +853,23 @@ fn to_grayscale(pixels: &[u8], width: usize, height: usize, format: PixelFormat)
 mod tests {
     use super::*;
 
+    fn slanet_outputs(tokens: &[usize]) -> (Vec<f32>, Vec<f32>) {
+        let mut coordinates = vec![0.0; tokens.len() * 8];
+        let mut logits = vec![-10.0; tokens.len() * SLANET_STRUCTURE_DICT.len()];
+        let mut cell = 0usize;
+        for (position, token) in tokens.iter().copied().enumerate() {
+            logits[position * SLANET_STRUCTURE_DICT.len() + token] = 10.0;
+            if matches!(token, 7 | 48) {
+                let x0 = 0.05 + cell as f32 * 0.2;
+                let x1 = x0 + 0.15;
+                coordinates[position * 8..position * 8 + 8]
+                    .copy_from_slice(&[x0, 0.1, x1, 0.1, x1, 0.4, x0, 0.4]);
+                cell += 1;
+            }
+        }
+        (coordinates, logits)
+    }
+
     #[test]
     fn test_lines_to_rows() {
         let lines = vec![0.0, 50.0, 100.0, 150.0];
@@ -868,5 +923,35 @@ mod tests {
         assert_eq!(cells[0].col, 0);
         assert_eq!(cells[3].row, 1);
         assert_eq!(cells[3].col, 1);
+    }
+
+    #[test]
+    fn slanet_decoder_preserves_merged_cell_geometry() {
+        let (coordinates, logits) = slanet_outputs(&[5, 7, 10, 8, 9, 7, 29, 8, 9, 6, 49]);
+        let decoded = decode_slanet_output(
+            &coordinates,
+            &logits,
+            &[100.0, 200.0, 2.44, 2.44],
+            200.0,
+            100.0,
+        )
+        .unwrap();
+        assert_eq!(decoded.cells.len(), 2);
+        assert_eq!(decoded.cells[0].colspan, 2);
+        assert_eq!(decoded.cells[0].col, 0);
+        assert_eq!(decoded.cells[1].rowspan, 2);
+        assert_eq!(decoded.cells[1].col, 2);
+        assert!(decoded.cells.iter().all(|cell| cell.rect.width > 0.0));
+    }
+
+    #[test]
+    fn malformed_slanet_output_is_rejected_without_panicking() {
+        assert!(decode_slanet_output(&[], &[f32::NAN], &[1.0; 4], 10.0, 10.0).is_err());
+        let (mut coordinates, logits) = slanet_outputs(&[5, 48, 6, 49]);
+        coordinates[8] = f32::NAN;
+        assert!(
+            decode_slanet_output(&coordinates, &logits, &[10.0, 10.0, 1.0, 1.0], 10.0, 10.0,)
+                .is_err()
+        );
     }
 }

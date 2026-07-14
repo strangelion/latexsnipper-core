@@ -53,6 +53,35 @@ fn load_text_profile() {
     }
 }
 
+fn load_handwriting_profile() {
+    let artifacts: [(&str, &[u8]); 4] = [
+        (
+            "formula-rec/tiny/config.json",
+            include_bytes!("fixtures/tiny-formula-rec.json"),
+        ),
+        (
+            "formula-rec/tiny/encoder.onnx",
+            include_bytes!("fixtures/tiny-formula-encoder.onnx"),
+        ),
+        (
+            "formula-rec/tiny/decoder.onnx",
+            include_bytes!("fixtures/tiny-formula-decoder.onnx"),
+        ),
+        (
+            "formula-rec/tiny/tokenizer.json",
+            include_bytes!("fixtures/tiny-formula-tokenizer.json"),
+        ),
+    ];
+    for (name, bytes) in artifacts {
+        let response = load_model_v2(name, bytes.to_vec(), None);
+        assert!(
+            field(&response, "ok").as_bool().unwrap(),
+            "failed to load {name}: {}",
+            json(&response)
+        );
+    }
+}
+
 #[wasm_bindgen_test]
 fn model_transactions_are_atomic_and_reversible() {
     clear_models_v2();
@@ -135,4 +164,50 @@ async fn tiny_models_run_through_tract_pipeline_ast_and_latex() {
         .as_string()
         .unwrap()
         .contains("AB"));
+}
+
+#[wasm_bindgen_test(async)]
+async fn table_profile_runs_projection_structure_and_cell_ocr() {
+    clear_models_v2();
+    load_text_profile();
+
+    let capabilities = json(&capabilities_v2());
+    assert!(
+        capabilities.contains(r#""profile":"table","ready":true"#),
+        "table capability did not become ready: {capabilities}"
+    );
+    assert!(capabilities.contains("table-struct/projection"));
+
+    let recognized = recognize_v2(16, 8, vec![255; 16 * 8 * 4], "table".to_string()).await;
+    assert!(
+        field(&recognized, "ok").as_bool().unwrap(),
+        "table recognition failed: {}",
+        json(&recognized)
+    );
+    let document_json = json(&field(&recognized, "data"));
+    assert!(document_json.to_ascii_lowercase().contains("table"));
+    assert!(document_json.contains("AB"));
+    assert!(document_json.contains("confidence"));
+}
+
+#[wasm_bindgen_test(async)]
+async fn handwriting_profile_runs_encoder_decoder_and_ast() {
+    clear_models_v2();
+    load_handwriting_profile();
+
+    let capabilities = json(&capabilities_v2());
+    assert!(
+        capabilities.contains(r#""profile":"handwriting","ready":true"#),
+        "handwriting capability did not become ready: {capabilities}"
+    );
+
+    let recognized = recognize_v2(8, 8, vec![255; 8 * 8 * 4], "handwriting".to_string()).await;
+    assert!(
+        field(&recognized, "ok").as_bool().unwrap(),
+        "handwriting recognition failed: {}",
+        json(&recognized)
+    );
+    let document_json = json(&field(&recognized, "data"));
+    assert!(document_json.to_ascii_lowercase().contains("handwriting"));
+    assert!(document_json.contains('A'));
 }

@@ -16,6 +16,7 @@ pub struct EngineConfig {
     pub text_rec_model: Option<String>,
     pub table_det_model: Option<String>,
     pub table_struct_model: Option<String>,
+    pub handwriting_det_model: Option<String>,
     pub doc_ori_model: Option<String>,
 
     /// Document parsing mode.
@@ -34,6 +35,7 @@ impl Default for EngineConfig {
             text_rec_model: None,
             table_det_model: None,
             table_struct_model: None,
+            handwriting_det_model: None,
             doc_ori_model: None,
             parse_mode: DocumentParseMode::default(),
         }
@@ -70,6 +72,12 @@ impl EngineConfig {
     /// Set table structure model variant.
     pub fn set_table_struct(mut self, variant: &str) -> Self {
         self.table_struct_model = Some(variant.to_string());
+        self
+    }
+
+    /// Set handwriting detection model variant.
+    pub fn set_handwriting_det(mut self, variant: &str) -> Self {
+        self.handwriting_det_model = Some(variant.to_string());
         self
     }
 
