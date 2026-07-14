@@ -90,7 +90,7 @@ $ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
 | **AST → MathML** | ✅ | Office compatible |
 | **AST → OMML** | ✅ | Word compatible |
 | **AST → SVG** | ✅ | Visual render via ExportService |
-| **AST → PDF** | ✅ | Visual render via printpdf |
+| **AST → PDF** | ✅ | Visual render via the audited lopdf writer |
 | **AST → XML** | ✅ | Fully typed JSON AST |
 | **Markdown → AST** | ✅ | Headings, bold/italic, code, lists, math |
 | **HTML → AST** | ✅ | Full tag support, MathJax compatible |
@@ -313,7 +313,7 @@ Engine
 | **FFI** | ✅ | Android JNI + iOS C FFI |
 | **WASM** | ⚠️ | Stable semantic conversion; experimental async Tract recognition with model-gated capabilities |
 | **CLI** | ✅ | Unified convert, stdin/stdout, atomic output, diagnostics, doctor, recognition, and model commands |
-| **Export** | ✅ | SVG/Text/PDF with printpdf, headings, tables, lists, code, formulas, page selection |
+| **Export** | ✅ | SVG/Text/PDF with lopdf, headings, tables, lists, code, formulas, page selection |
 | **Table Recognition** | ✅ | SLANet+ / TATR table structure + PP-DocLayout v3 layout detection |
 | **Handwriting** | ✅ | Handwriting detection + TrOCR recognition + postprocessing |
 | **Formula Layout** | ✅ | LaTeX AST parsing + symbol-level detection |
@@ -336,7 +336,7 @@ crates/
 ├── pipeline/       ✅ Node-based async pipeline + PipelineArtifacts + ReadingOrder
 ├── syntax/         ✅ LaTeX/Typst/Markdown Parser + Renderer
 ├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML + DOCX/PPTX/XLSX readers
-├── export/         ✅ RenderTree → SVG/Text/PDF (printpdf), page selection
+├── export/         ✅ RenderTree → SVG/Text/PDF (lopdf), page selection
 ├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
 ├── api-types/      ✅ Public API types (RecognizeMode, Request, Response, StreamItem)
 ├── tract/          ✅ Tract-based WASM RuntimeBackend

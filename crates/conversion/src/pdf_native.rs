@@ -152,10 +152,7 @@ fn extract_page_text(
     let mut text_rise = 0.0f32;
     let mut font_name: Option<Vec<u8>> = None;
 
-    let content = match pdf.get_page_content(object_id) {
-        Ok(data) => data,
-        Err(_) => return Ok(Vec::new()),
-    };
+    let content = pdf.get_page_content(object_id);
 
     let operations = lopdf::content::Content::decode(&content)
         .map_err(|e| SnipperError::Export(format!("Failed to decode PDF content: {}", e)))?;

@@ -1,0 +1,101 @@
+[package]
+name = "latexsnipper-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+latexsnipper-ast = { path = "../crates/ast" }
+latexsnipper-conversion = { path = "../crates/conversion" }
+latexsnipper-model = { path = "../crates/model", default-features = false, features = ["wasm"] }
+latexsnipper-plugin = { path = "../crates/plugin" }
+latexsnipper-syntax = { path = "../crates/syntax" }
+
+[[bin]]
+name = "format_signature"
+path = "fuzz_targets/format_signature.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "zip_package_importer"
+path = "fuzz_targets/zip_package_importer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ooxml_relationship_parser"
+path = "fuzz_targets/ooxml_relationship_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "xml_parser"
+path = "fuzz_targets/xml_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "svg_parser"
+path = "fuzz_targets/svg_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_importer"
+path = "fuzz_targets/pdf_importer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json_ast_deserializer"
+path = "fuzz_targets/json_ast_deserializer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "latex_parser"
+path = "fuzz_targets/latex_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "typst_parser"
+path = "fuzz_targets/typst_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown_math_parser"
+path = "fuzz_targets/markdown_math_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "model_manifest_parser"
+path = "fuzz_targets/model_manifest_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "plugin_manifest_parser"
+path = "fuzz_targets/plugin_manifest_parser.rs"
+test = false
+doc = false
+bench = false

@@ -26,3 +26,16 @@ It measures text recognition, formula detection, and formula recognition when th
 model packages and fixtures are present. Model load/session construction and first/warm
 inference diagnostics are also emitted by the runtime and real-model test paths; they are not
 fabricated when model assets are unavailable.
+
+The browser production-model job writes stable schema version 1 JSON with separate
+model byte size, Tract session creation, first inference, warm inference, estimated
+working set, input/output shapes, and scores. Package jobs separately record WASM
+binary and JavaScript glue size. Worker unit tests measure startup and restart
+semantics; timing thresholds are intentionally not enforced on pull requests.
+
+Archive download, verification, and extraction remain downloader metrics rather than
+inference metrics. Native recognition benchmarks distinguish session construction,
+first/warm inference, pipeline postprocessing, AST construction, and conversion where
+the relevant layer exposes timing. Scheduled artifacts are comparable by schema and
+commit, but regression decisions require repeated samples rather than one shared-runner
+observation.

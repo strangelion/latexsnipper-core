@@ -24,7 +24,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-targets --all-features
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
@@ -59,7 +59,7 @@ jobs:
           - name: Plugin lifecycle and package management
             command: cargo test -p latexsnipper-plugin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: ${{ matrix.command }}
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo bench -p latexsnipper-tests --bench core_bench
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -90,19 +90,55 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+  fuzz-build:
+    name: Compile all fuzz targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-fuzz --locked
+      - run: cargo +nightly fuzz build
+
+  diff-size-advisory:
+    name: Large diff review advisory
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Report unusually large pull requests
+        shell: bash
+        run: |
+          stats="$(git diff --numstat "origin/${GITHUB_BASE_REF}...HEAD")"
+          files="$(printf '%s\n' "$stats" | sed '/^$/d' | wc -l)"
+          lines="$(printf '%s\n' "$stats" | awk '$1 != "-" && $2 != "-" { total += $1 + $2 } END { print total + 0 }')"
+          {
+            echo '### Pull request diff size'
+            echo
+            echo "- Changed files: $files"
+            echo "- Added and removed lines: $lines"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$files" -gt 80 ] || [ "$lines" -gt 5000 ]; then
+            echo "::warning::Large subsystem change detected ($files files, $lines lines). Request explicit security, ABI, model, and platform review as applicable."
+          fi
+
   docs:
     name: Documentation tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --doc --workspace --all-features
@@ -112,7 +148,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo check -p latexsnipper-runtime --no-default-features
@@ -126,14 +162,14 @@ jobs:
     env:
       LATEXSNIPPER_REQUIRE_REAL_MODELS: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Test verified downloader
         shell: pwsh
         run: ./scripts/tests/VerifiedDownload.Tests.ps1
       - name: Cache verified model archives
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}/latexsnipper-model-cache
           key: real-models-${{ runner.os }}-${{ hashFiles('scripts/model-manifest.template.json', 'scripts/VerifiedDownload.psm1', 'scripts/setup-real-model-tests.ps1') }}
@@ -150,7 +186,7 @@ jobs:
         run: cargo test --test table_e2e -- --nocapture
       - name: Upload model setup diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: real-model-setup-diagnostics-${{ runner.os }}
           path: ${{ runner.temp }}/latexsnipper-model-diagnostics
@@ -162,7 +198,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace

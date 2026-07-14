@@ -113,7 +113,8 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                 text_buf.clear();
             }
             Ok(Event::Text(e)) => {
-                text_buf.push_str(&e.unescape().unwrap_or_default());
+                text_buf
+                    .push_str(&crate::xml_util::decode_and_unescape_text(&e).unwrap_or_default());
             }
             Ok(Event::Empty(e)) => {
                 let tag = local(e.name().as_ref());

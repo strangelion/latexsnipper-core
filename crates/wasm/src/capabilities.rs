@@ -1,4 +1,6 @@
-use latexsnipper_conversion::OutputFormat;
+use latexsnipper_conversion::{
+    semantic_mime_type, CapabilityRegistry, CapabilityTarget, OutputFormat,
+};
 use latexsnipper_runtime::MemoryModelResolver;
 use serde::Serialize;
 
@@ -28,9 +30,36 @@ pub struct CapabilityDocument {
     pub memory_usage: MemoryUsage,
     pub async_recognition: bool,
     pub progress_callbacks: bool,
-    pub cancellation: &'static str,
-    pub indexed_db_cache: bool,
-    pub incremental_downloads: bool,
+    pub cancellation: CancellationCapability,
+    pub worker_execution: WorkerExecutionCapability,
+    pub indexed_db_cache: BrowserFeatureCapability,
+    pub incremental_downloads: BrowserFeatureCapability,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancellationCapability {
+    pub supported: bool,
+    pub mode: &'static str,
+    pub can_interrupt_active_inference: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerExecutionCapability {
+    pub available_in_rust_package: bool,
+    pub official_wrapper: &'static str,
+    pub hard_cancellation_mode: &'static str,
+    pub discards_model_sessions_on_termination: bool,
+    pub max_concurrent_recognitions: u8,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserFeatureCapability {
+    pub available_in_rust_package: bool,
+    pub available_in_official_wrapper: bool,
+    pub runtime_detection_required: bool,
 }
 
 pub fn collect(
@@ -50,46 +79,17 @@ pub fn collect(
     .filter_map(|profile| validate_profile(resolver, profile).ok())
     .collect();
 
-    let mut exports: Vec<_> = OutputFormat::all()
-        .iter()
-        .map(|format| FormatCapability {
-            format: format.name().to_string(),
-            kind: "semantic",
-            mime_type: mime_type(format.name()),
-            available: true,
-            binary: false,
-            reason: None,
+    let exports = CapabilityRegistry::for_target(CapabilityTarget::Wasm32UnknownUnknown)
+        .into_iter()
+        .map(|entry| FormatCapability {
+            format: entry.format.to_string(),
+            kind: entry.kind,
+            mime_type: entry.mime_type,
+            available: entry.available,
+            binary: entry.binary,
+            reason: entry.unavailable_reason,
         })
         .collect();
-
-    exports.extend(
-        [
-            ("svg", "image/svg+xml"),
-            ("png", "image/png"),
-            ("pdf", "application/pdf"),
-            (
-                "docx",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ),
-            (
-                "pptx",
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            ),
-            (
-                "xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            ),
-        ]
-        .into_iter()
-        .map(|(format, mime_type)| FormatCapability {
-            format: format.to_string(),
-            kind: "visual-or-package",
-            mime_type,
-            available: false,
-            binary: format != "svg",
-            reason: Some("native exporter is intentionally excluded from the WASM build"),
-        }),
-    );
 
     CapabilityDocument {
         api: ApiInfo::current(),
@@ -99,20 +99,68 @@ pub fn collect(
         memory_usage: usage,
         async_recognition: true,
         progress_callbacks: true,
-        cancellation: "cooperative-stage-boundary",
-        indexed_db_cache: false,
-        incremental_downloads: false,
+        cancellation: CancellationCapability {
+            supported: true,
+            mode: "cooperative-stage-boundary",
+            can_interrupt_active_inference: false,
+        },
+        worker_execution: WorkerExecutionCapability {
+            available_in_rust_package: false,
+            official_wrapper: "@latexsnipper/wasm-runtime",
+            hard_cancellation_mode: "terminate-worker-and-restart",
+            discards_model_sessions_on_termination: true,
+            max_concurrent_recognitions: 1,
+        },
+        indexed_db_cache: BrowserFeatureCapability {
+            available_in_rust_package: false,
+            available_in_official_wrapper: true,
+            runtime_detection_required: true,
+        },
+        incremental_downloads: BrowserFeatureCapability {
+            available_in_rust_package: false,
+            available_in_official_wrapper: true,
+            runtime_detection_required: true,
+        },
     }
 }
 
 pub fn mime_type(format: &str) -> &'static str {
-    match format {
-        "latex" | "latex_display" | "latex_equation" => "application/x-latex",
-        "typst" => "text/x-typst",
-        "markdown_inline" | "markdown_block" => "text/markdown",
-        "mathml" => "application/mathml+xml",
-        "omml" => "application/xml",
-        "html" => "text/html",
-        _ => "application/octet-stream",
+    OutputFormat::all()
+        .iter()
+        .find(|candidate| candidate.name() == format)
+        .map(|candidate| semantic_mime_type(*candidate))
+        .unwrap_or("application/octet-stream")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use latexsnipper_runtime::MemoryModelResolver;
+
+    #[test]
+    fn wasm_metadata_matches_shared_registry_projection() {
+        let document = collect(
+            &MemoryModelResolver::new(),
+            MemoryLimits::default(),
+            MemoryUsage {
+                artifact_count: 0,
+                total_model_bytes: 0,
+                pending_bytes: 0,
+                session_bytes: None,
+            },
+        );
+        let projected = CapabilityRegistry::for_target(CapabilityTarget::Wasm32UnknownUnknown);
+        assert_eq!(document.exports.len(), projected.len());
+        for entry in projected {
+            let exported = document
+                .exports
+                .iter()
+                .find(|candidate| candidate.format == entry.format)
+                .unwrap();
+            assert_eq!(exported.available, entry.available);
+            assert_eq!(exported.binary, entry.binary);
+            assert_eq!(exported.mime_type, entry.mime_type);
+            assert_eq!(exported.reason, entry.unavailable_reason);
+        }
     }
 }

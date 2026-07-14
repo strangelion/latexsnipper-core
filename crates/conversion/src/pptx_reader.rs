@@ -327,7 +327,7 @@ fn parse_slide_body<R: Read + Seek>(
             }
             Ok(Event::Text(ref e)) => {
                 if in_t {
-                    if let Ok(text) = e.unescape() {
+                    if let Some(text) = crate::xml_util::decode_and_unescape_text(e) {
                         current_text.push_str(&text);
                     }
                 }

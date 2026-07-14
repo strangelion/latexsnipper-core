@@ -1,0 +1,23 @@
+# Default ownership. Replace or extend teams when the repository organization
+# creates dedicated security and release groups.
+* @strangelion
+
+# Runtime, models, inference, and browser execution
+/crates/runtime/ @strangelion
+/crates/tract/ @strangelion
+/crates/model/ @strangelion
+/crates/inference/ @strangelion
+/crates/wasm/ @strangelion
+
+# Plugin ABI, isolation, and security-sensitive importers
+/crates/plugin/ @strangelion
+/crates/conversion/src/importer.rs @strangelion
+/crates/conversion/src/docx_reader.rs @strangelion
+/crates/conversion/src/pptx_reader.rs @strangelion
+/crates/conversion/src/xlsx_reader.rs @strangelion
+
+# Release and security automation
+/.github/workflows/ @strangelion
+/scripts/model-manifest.template.json @strangelion
+/scripts/VerifiedDownload.psm1 @strangelion
+/SECURITY.md @strangelion

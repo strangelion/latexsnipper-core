@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-audit --locked
@@ -32,11 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run benchmark suite
-        run: cargo bench -p latexsnipper-tests --bench core_bench | tee target/benchmark-output.txt
+        run: |
+          mkdir -p target
+          cargo bench -p latexsnipper-tests --bench core_bench | tee target/benchmark-output.txt
       - name: Build comparable JSON
         run: |
           grep '^benchmark_json=' target/benchmark-output.txt \
@@ -44,7 +46,7 @@ jobs:
             | jq -s --arg commit "$GITHUB_SHA" \
               '{schemaVersion: 1, commit: $commit, benchmarks: .}' \
             > target/benchmark-results.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: benchmark-results-${{ github.run_id }}
           path: target/benchmark-results.json
@@ -52,14 +54,93 @@ jobs:
           retention-days: 90
 
   fuzz-smoke:
-    name: Deterministic parser fuzz smoke
+    name: Real libFuzzer smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p latexsnipper-conversion malformed_input_fuzz_smoke_never_panics -- --nocapture
+      - run: cargo install cargo-fuzz --locked
+      - name: Run bounded fuzz campaign for every target
+        shell: bash
+        run: |
+          targets=(
+            format_signature zip_package_importer ooxml_relationship_parser
+            xml_parser svg_parser pdf_importer json_ast_deserializer latex_parser
+            typst_parser markdown_math_parser model_manifest_parser plugin_manifest_parser
+          )
+          for target in "${targets[@]}"; do
+            mkdir -p "fuzz/artifacts/$target"
+            cargo +nightly fuzz run "$target" "fuzz/corpus/$target" -- \
+              -max_total_time=10 \
+              -max_len=1048576 \
+              -artifact_prefix="fuzz/artifacts/$target/"
+          done
+      - name: Upload fuzz crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crashes-${{ github.run_id }}
+          path: fuzz/artifacts
+          if-no-files-found: warn
+          retention-days: 30
+
+  production-model-wasm:
+    name: Production-derived model on Tract WASM
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      WASM_PACK_VERSION: 0.13.1
+      MODEL_SHA256: af9a0a4f317ff0709ce752067807f819cb15d883f8ecad89f28df1c6ee2d9c92
+      MODEL_URL: https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_doc_ori_onnx/resolve/7330ab7039123e46af2dc03154b9969aa412c61d/inference.onnx
+      MODEL_PATH: target/test-models/PP-LCNet_x1_0_doc_ori_inference.onnx
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: crates/wasm/js/package-lock.json
+      - name: Cache checksum-verified model
+        uses: actions/cache@v5
+        with:
+          path: target/test-models
+          key: pp-lcnet-doc-ori-${{ env.MODEL_SHA256 }}
+      - name: Download and verify official model
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "$MODEL_PATH")"
+          if [ ! -f "$MODEL_PATH" ]; then
+            curl --fail --location --retry 3 --max-redirs 5 \
+              --output "$MODEL_PATH.part" "$MODEL_URL"
+            mv "$MODEL_PATH.part" "$MODEL_PATH"
+          fi
+          echo "$MODEL_SHA256  $MODEL_PATH" | sha256sum --check --strict
+      - run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
+      - name: Build Node WASM package
+        run: >-
+          wasm-pack build crates/wasm --target nodejs --release
+          --out-dir ../../target/wasm-node
+      - run: npm ci
+        working-directory: crates/wasm/js
+      - name: Execute real model and write stable benchmark JSON
+        working-directory: crates/wasm/js
+        run: >-
+          node scripts/production-model-smoke.mjs
+          "$GITHUB_WORKSPACE/$MODEL_PATH"
+          "$GITHUB_WORKSPACE/tests/fixtures/openocr/text-en.png"
+          "$GITHUB_WORKSPACE/target/production-model-wasm.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: production-model-wasm-${{ github.run_id }}
+          path: target/production-model-wasm.json
+          if-no-files-found: error
+          retention-days: 90
 
   model-url-verification:
     name: Verified model URLs
@@ -68,9 +149,9 @@ jobs:
     env:
       LATEXSNIPPER_REQUIRE_REAL_MODELS: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Cache verified model archives
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}/latexsnipper-model-cache
           key: scheduled-models-${{ runner.os }}-${{ hashFiles('scripts/model-manifest.template.json', 'scripts/VerifiedDownload.psm1', 'scripts/setup-real-model-tests.ps1') }}

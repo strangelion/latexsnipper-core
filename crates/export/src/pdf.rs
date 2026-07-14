@@ -1,11 +1,13 @@
-use std::io::BufWriter;
+use std::cell::RefCell;
+use std::io::{BufWriter, Write};
 
 use crate::generator::Generator;
 use crate::math_visual::visual_math_text;
 use crate::render_tree::{RenderNode, RenderTree};
 use latexsnipper_ast::GeneratedContent;
 use latexsnipper_foundation::{Result, SnipperError};
-use printpdf::{BuiltinFont, IndirectFontRef, Mm, PdfDocument, PdfLayerIndex, PdfPageIndex};
+use lopdf::content::{Content, Operation};
+use lopdf::{dictionary, Document, Object, Stream};
 
 const PAGE_WIDTH: f32 = 595.0;
 const PAGE_HEIGHT: f32 = 842.0;
@@ -13,6 +15,183 @@ const MARGIN_LEFT: f32 = 50.0;
 const MARGIN_TOP: f32 = 50.0;
 const LINE_HEIGHT: f32 = 14.0;
 const FONT_SIZE: f32 = 11.0;
+
+#[derive(Clone, Copy)]
+enum BuiltinFont {
+    Helvetica,
+    HelveticaBold,
+    Courier,
+}
+
+type IndirectFontRef = BuiltinFont;
+type PdfPageIndex = usize;
+
+#[derive(Clone, Copy)]
+struct PdfLayerIndex;
+
+#[derive(Clone, Copy)]
+struct Mm(f32);
+
+struct PdfDocument {
+    pages: RefCell<Vec<Vec<Operation>>>,
+}
+
+impl PdfDocument {
+    fn new(
+        _title: &str,
+        _width: Mm,
+        _height: Mm,
+        _layer: &str,
+    ) -> (Self, PdfPageIndex, PdfLayerIndex) {
+        (
+            Self {
+                pages: RefCell::new(vec![Vec::new()]),
+            },
+            0,
+            PdfLayerIndex,
+        )
+    }
+
+    fn add_builtin_font(&self, font: BuiltinFont) -> std::result::Result<IndirectFontRef, String> {
+        Ok(font)
+    }
+
+    fn add_page(&self, _width: Mm, _height: Mm, _layer: &str) -> (PdfPageIndex, PdfLayerIndex) {
+        let mut pages = self.pages.borrow_mut();
+        pages.push(Vec::new());
+        (pages.len() - 1, PdfLayerIndex)
+    }
+
+    fn get_page(&self, page_idx: PdfPageIndex) -> PdfPageReference<'_> {
+        PdfPageReference {
+            doc: self,
+            page_idx,
+        }
+    }
+
+    fn save<W: Write>(&self, target: &mut W) -> std::io::Result<()> {
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+        let regular_font_id = add_type1_font(&mut doc, "Helvetica");
+        let bold_font_id = add_type1_font(&mut doc, "Helvetica-Bold");
+        let mono_font_id = add_type1_font(&mut doc, "Courier");
+        let resources_id = doc.add_object(dictionary! {
+            "Font" => dictionary! {
+                "F1" => regular_font_id,
+                "F2" => bold_font_id,
+                "F3" => mono_font_id,
+            },
+        });
+
+        let pages = self.pages.borrow();
+        let mut page_ids = Vec::with_capacity(pages.len());
+        for operations in pages.iter() {
+            let content = Content {
+                operations: operations.clone(),
+            };
+            let encoded = content
+                .encode()
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            let content_id = doc.add_object(Stream::new(dictionary! {}, encoded));
+            let page_id = doc.add_object(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "Contents" => content_id,
+                "MediaBox" => vec![0.into(), 0.into(), (PAGE_WIDTH as i64).into(), (PAGE_HEIGHT as i64).into()],
+            });
+            page_ids.push(page_id);
+        }
+
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => page_ids.into_iter().map(Object::Reference).collect::<Vec<_>>(),
+                "Count" => pages.len() as i64,
+                "Resources" => resources_id,
+                "MediaBox" => vec![0.into(), 0.into(), (PAGE_WIDTH as i64).into(), (PAGE_HEIGHT as i64).into()],
+            }),
+        );
+        let catalog_id = doc.add_object(dictionary! {
+            "Type" => "Catalog",
+            "Pages" => pages_id,
+        });
+        let info_id = doc.add_object(dictionary! {
+            "Title" => Object::string_literal("LaTeXSnipper"),
+            "Producer" => Object::string_literal("LaTeXSnipper Core"),
+        });
+        doc.trailer.set("Root", catalog_id);
+        doc.trailer.set("Info", info_id);
+        doc.compress();
+        doc.save_to(target)
+    }
+}
+
+fn add_type1_font(doc: &mut Document, base_font: &'static str) -> lopdf::ObjectId {
+    doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => base_font,
+        "Encoding" => "WinAnsiEncoding",
+    })
+}
+
+struct PdfPageReference<'a> {
+    doc: &'a PdfDocument,
+    page_idx: PdfPageIndex,
+}
+
+impl<'a> PdfPageReference<'a> {
+    fn get_layer(self, _layer_idx: PdfLayerIndex) -> PdfLayerReference<'a> {
+        PdfLayerReference {
+            doc: self.doc,
+            page_idx: self.page_idx,
+        }
+    }
+}
+
+struct PdfLayerReference<'a> {
+    doc: &'a PdfDocument,
+    page_idx: PdfPageIndex,
+}
+
+impl PdfLayerReference<'_> {
+    fn use_text(&self, text: &str, size: f32, x: Mm, y: Mm, font: &IndirectFontRef) {
+        let font_name = match font {
+            BuiltinFont::Helvetica => "F1",
+            BuiltinFont::HelveticaBold => "F2",
+            BuiltinFont::Courier => "F3",
+        };
+        let mut pages = self.doc.pages.borrow_mut();
+        let operations = &mut pages[self.page_idx];
+        operations.extend([
+            Operation::new("BT", vec![]),
+            Operation::new(
+                "Tf",
+                vec![
+                    Object::Name(font_name.as_bytes().to_vec()),
+                    Object::Real(size),
+                ],
+            ),
+            Operation::new(
+                "Td",
+                vec![Object::Real(x.0 / 0.3528), Object::Real(y.0 / 0.3528)],
+            ),
+            Operation::new("Tj", vec![Object::string_literal(pdf_text_bytes(text))]),
+            Operation::new("ET", vec![]),
+        ]);
+    }
+}
+
+fn pdf_text_bytes(text: &str) -> Vec<u8> {
+    text.chars()
+        .map(|ch| match ch {
+            '\u{2022}' => 0x95,
+            ch if ch.is_ascii() => ch as u8,
+            _ => b'?',
+        })
+        .collect()
+}
 
 pub struct PdfGenerator;
 
@@ -112,10 +291,10 @@ enum RenderResult {
 }
 
 fn get_layer(
-    doc: &printpdf::PdfDocumentReference,
+    doc: &PdfDocument,
     page_idx: PdfPageIndex,
     layer_idx: PdfLayerIndex,
-) -> printpdf::PdfLayerReference {
+) -> PdfLayerReference<'_> {
     let page_ref = doc.get_page(page_idx);
     page_ref.get_layer(layer_idx)
 }
@@ -123,7 +302,7 @@ fn get_layer(
 #[allow(clippy::too_many_arguments)]
 fn render_node(
     node: &RenderNode,
-    doc: &printpdf::PdfDocumentReference,
+    doc: &PdfDocument,
     page_idx: PdfPageIndex,
     layer_idx: PdfLayerIndex,
     font: &IndirectFontRef,

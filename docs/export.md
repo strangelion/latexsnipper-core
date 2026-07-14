@@ -26,7 +26,7 @@ SVG / PDF / Text
 | `generator` | generator.rs | Generator trait |
 | `svg` | svg.rs | SVG Generator |
 | `text` | text.rs | Plain Text Generator |
-| `pdf` | pdf.rs | PDF Generator (printpdf) |
+| `pdf` | pdf.rs | PDF Generator (lopdf) |
 
 ## 关键类型
 
@@ -74,7 +74,7 @@ pub trait Generator {
 
 ## PDF Generator
 
-使用 `printpdf 0.7` 生成 PDF 文件。
+使用 `lopdf 0.44` 直接生成并重新解析校验 PDF 文件。内置 Helvetica、Helvetica Bold 和 Courier Type 1 字体用于文本渲染；超出 WinAnsi 范围的字符当前会以 `?` 降级，因此完整 Unicode 字体嵌入仍属于 GA 前的格式保真工作。
 
 ### 支持的文档元素
 
@@ -137,6 +137,6 @@ impl DocumentConverter {
 
 ```
 Export
-↑ 依赖 AST, Syntax, printpdf
+↑ 依赖 AST, Syntax, lopdf
 ↓ 被 Engine 间接依赖
 ```

@@ -363,8 +363,9 @@ fn parse_inline_text(text: &str, assets: &mut Vec<MediaAsset>) -> Vec<Inline> {
         }
 
         // Bold: **text** or __text__
-        if i + 1 < len && (chars[i] == '*' && chars[i + 1] == '*')
-            || (chars[i] == '_' && chars[i + 1] == '_')
+        if i + 1 < len
+            && ((chars[i] == '*' && chars[i + 1] == '*')
+                || (chars[i] == '_' && chars[i + 1] == '_'))
         {
             let marker = chars[i];
             if let Some(end) = find_double_marker_end(&chars, i + 2, marker) {
@@ -612,5 +613,17 @@ mod tests {
         let md = "# Math\n\n$$ \\frac{a}{b} $$\n\nText with $x_i$ inline.";
         let doc = parse_markdown_to_document(md);
         assert!(doc.pages[0].blocks.len() >= 3);
+    }
+
+    #[test]
+    fn trailing_single_emphasis_marker_is_plain_text() {
+        let doc = parse_markdown_to_document("trailing_");
+        let Block::Paragraph(paragraph) = &doc.pages[0].blocks[0] else {
+            panic!("Expected paragraph block");
+        };
+        let Inline::Text(text) = &paragraph.inlines[0] else {
+            panic!("Expected text inline");
+        };
+        assert_eq!(text.text, "trailing_");
     }
 }

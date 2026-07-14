@@ -1,12 +1,16 @@
 use std::collections::BTreeMap;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
 use latexsnipper_foundation::{Result, SnipperError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{PluginClass, PluginManifest, PLUGIN_API_VERSION};
+use crate::{
+    EffectivePermissionSummary, EffectivePluginPermissions, IsolatedProcessHost,
+    IsolatedProcessLimits, IsolatedProcessResult, PluginClass, PluginHook, PluginManifest,
+    PluginRequest, PLUGIN_ABI_VERSION, PLUGIN_API_VERSION,
+};
 
 const MAX_PACKAGE_FILES: usize = 256;
 const MAX_PACKAGE_BYTES: u64 = 128 * 1024 * 1024;
@@ -102,6 +106,7 @@ impl PluginStore {
 
     pub fn install(&self, source: &Path) -> Result<InstalledPlugin> {
         let verified = self.verify_package(source)?;
+        let _lock = self.lock_exclusive()?;
         std::fs::create_dir_all(self.packages_dir())
             .map_err(|error| plugin_error(error.to_string()))?;
         let package_root = verified
@@ -155,11 +160,11 @@ impl PluginStore {
                 .as_secs(),
             verified_entrypoint_sha256: verified.entrypoint_sha256,
         };
-        let mut index = self.load_index()?;
+        let mut index = self.load_index_unlocked()?;
         index
             .plugins
             .insert(installed.manifest.id.clone(), installed.clone());
-        if let Err(error) = self.save_index(&index) {
+        if let Err(error) = self.save_index_unlocked(&index) {
             let _ = std::fs::remove_dir_all(&destination);
             return Err(error);
         }
@@ -167,30 +172,34 @@ impl PluginStore {
     }
 
     pub fn list(&self) -> Result<Vec<InstalledPlugin>> {
-        Ok(self.load_index()?.plugins.into_values().collect())
+        let _lock = self.lock_shared()?;
+        Ok(self.load_index_unlocked()?.plugins.into_values().collect())
     }
 
     pub fn get(&self, id: &str) -> Result<Option<InstalledPlugin>> {
         validate_id(id)?;
-        Ok(self.load_index()?.plugins.get(id).cloned())
+        let _lock = self.lock_shared()?;
+        Ok(self.load_index_unlocked()?.plugins.get(id).cloned())
     }
 
     pub fn set_enabled(&self, id: &str, enabled: bool) -> Result<InstalledPlugin> {
         validate_id(id)?;
-        let mut index = self.load_index()?;
+        let _lock = self.lock_exclusive()?;
+        let mut index = self.load_index_unlocked()?;
         let plugin = index
             .plugins
             .get_mut(id)
             .ok_or_else(|| plugin_error(format!("Plugin '{id}' is not installed")))?;
         plugin.enabled = enabled;
         let result = plugin.clone();
-        self.save_index(&index)?;
+        self.save_index_unlocked(&index)?;
         Ok(result)
     }
 
     pub fn uninstall(&self, id: &str) -> Result<()> {
         validate_id(id)?;
-        let mut index = self.load_index()?;
+        let _lock = self.lock_exclusive()?;
+        let mut index = self.load_index_unlocked()?;
         if !index.plugins.contains_key(id) {
             return Err(plugin_error(format!("Plugin '{id}' is not installed")));
         }
@@ -201,7 +210,7 @@ impl PluginStore {
                 .map_err(|error| plugin_error(format!("Could not remove plugin: {error}")))?;
         }
         index.plugins.remove(id);
-        self.save_index(&index)
+        self.save_index_unlocked(&index)
     }
 
     pub fn verify_installed(&self, id: &str) -> Result<PluginVerification> {
@@ -212,6 +221,59 @@ impl PluginStore {
         self.verify_package(&self.packages_dir().join(id))
     }
 
+    /// Execute an enabled process plugin through the versioned hard-isolation host.
+    pub fn execute_isolated(
+        &self,
+        id: &str,
+        request: &PluginRequest,
+    ) -> Result<IsolatedProcessResult> {
+        let installed = self
+            .get(id)?
+            .ok_or_else(|| plugin_error(format!("Plugin '{id}' is not installed")))?;
+        if !installed.enabled {
+            return Err(plugin_error(format!("Plugin '{id}' is disabled")));
+        }
+        if installed.manifest.class != PluginClass::IsolatedProcess {
+            return Err(plugin_error(format!(
+                "Plugin '{id}' is not an isolated-process plugin"
+            )));
+        }
+        let verified = self.verify_installed(id)?;
+        let permissions = EffectivePluginPermissions::from_manifest(
+            &installed.manifest.permissions,
+            &verified.package_root,
+        )?;
+        if let Some(hook) = request.hook() {
+            permissions.check_hook_registration(hook)?;
+        }
+        let limits = IsolatedProcessLimits {
+            timeout: std::time::Duration::from_millis(
+                permissions.timeout_millis.unwrap_or(30_000).max(1),
+            ),
+            memory_limit_bytes: permissions
+                .memory_limit_bytes
+                .unwrap_or(256 * 1024 * 1024)
+                .max(1),
+            output_limit_bytes: permissions
+                .output_limit_bytes
+                .unwrap_or(16 * 1024 * 1024)
+                .max(1),
+        };
+        IsolatedProcessHost::execute(&verified.entrypoint_path, &[], request, limits)
+    }
+
+    pub fn effective_permissions(&self, id: &str) -> Result<EffectivePermissionSummary> {
+        let installed = self
+            .get(id)?
+            .ok_or_else(|| plugin_error(format!("Plugin '{id}' is not installed")))?;
+        let verified = self.verify_installed(id)?;
+        EffectivePluginPermissions::from_manifest(
+            &installed.manifest.permissions,
+            &verified.package_root,
+        )
+        .map(|permissions| permissions.summary())
+    }
+
     fn packages_dir(&self) -> PathBuf {
         self.root.join("packages")
     }
@@ -220,7 +282,7 @@ impl PluginStore {
         self.root.join("registry.json")
     }
 
-    fn load_index(&self) -> Result<StoreIndex> {
+    fn load_index_unlocked(&self) -> Result<StoreIndex> {
         let path = self.index_path();
         if !path.exists() {
             return Ok(StoreIndex::default());
@@ -237,22 +299,118 @@ impl PluginStore {
         Ok(index)
     }
 
-    fn save_index(&self, index: &StoreIndex) -> Result<()> {
+    fn save_index_unlocked(&self, index: &StoreIndex) -> Result<()> {
         std::fs::create_dir_all(&self.root).map_err(|error| plugin_error(error.to_string()))?;
         let bytes =
             serde_json::to_vec_pretty(index).map_err(|error| plugin_error(error.to_string()))?;
-        let temporary = self.root.join(format!(
-            ".registry-{}-{}.tmp",
-            std::process::id(),
-            unique_suffix()
-        ));
-        std::fs::write(&temporary, bytes).map_err(|error| plugin_error(error.to_string()))?;
+        let mut temporary = tempfile::Builder::new()
+            .prefix(".registry-")
+            .suffix(".tmp")
+            .tempfile_in(&self.root)
+            .map_err(|error| plugin_error(error.to_string()))?;
+        temporary
+            .write_all(&bytes)
+            .map_err(|error| plugin_error(error.to_string()))?;
+        temporary
+            .flush()
+            .map_err(|error| plugin_error(error.to_string()))?;
+        temporary
+            .as_file()
+            .sync_all()
+            .map_err(|error| plugin_error(error.to_string()))?;
+        let (temporary_file, temporary_path) = temporary
+            .keep()
+            .map_err(|error| plugin_error(error.error.to_string()))?;
+        drop(temporary_file);
         let path = self.index_path();
-        if path.exists() {
-            std::fs::remove_file(&path).map_err(|error| plugin_error(error.to_string()))?;
+        if let Err(error) = atomic_replace(&temporary_path, &path) {
+            let _ = std::fs::remove_file(&temporary_path);
+            return Err(error);
         }
-        std::fs::rename(&temporary, path).map_err(|error| plugin_error(error.to_string()))
+        sync_parent_directory(&self.root)
     }
+
+    fn lock_shared(&self) -> Result<StoreLock> {
+        self.lock(false)
+    }
+
+    fn lock_exclusive(&self) -> Result<StoreLock> {
+        self.lock(true)
+    }
+
+    fn lock(&self, exclusive: bool) -> Result<StoreLock> {
+        std::fs::create_dir_all(&self.root).map_err(|error| plugin_error(error.to_string()))?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.root.join(".registry.lock"))
+            .map_err(|error| plugin_error(error.to_string()))?;
+        if exclusive {
+            fs2::FileExt::lock_exclusive(&file)
+        } else {
+            fs2::FileExt::lock_shared(&file)
+        }
+        .map_err(|error| plugin_error(format!("Could not lock plugin registry: {error}")))?;
+        Ok(StoreLock(file))
+    }
+}
+
+struct StoreLock(std::fs::File);
+
+impl Drop for StoreLock {
+    fn drop(&mut self) {
+        let _ = fs2::FileExt::unlock(&self.0);
+    }
+}
+
+#[cfg(not(windows))]
+fn atomic_replace(source: &Path, destination: &Path) -> Result<()> {
+    std::fs::rename(source, destination).map_err(|error| plugin_error(error.to_string()))
+}
+
+#[cfg(windows)]
+fn atomic_replace(source: &Path, destination: &Path) -> Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+
+    let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+    let destination: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    // SAFETY: Both UTF-16 path buffers are NUL-terminated and remain valid for the call.
+    let moved = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if moved == 0 {
+        Err(plugin_error(format!(
+            "Could not atomically replace plugin registry: {}",
+            std::io::Error::last_os_error()
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(path: &Path) -> Result<()> {
+    std::fs::File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| plugin_error(format!("Could not sync plugin registry directory: {error}")))
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_path: &Path) -> Result<()> {
+    Ok(())
 }
 
 fn validate_external_manifest(manifest: &PluginManifest) -> Result<()> {
@@ -276,6 +434,35 @@ fn validate_external_manifest(manifest: &PluginManifest) -> Result<()> {
         return Err(plugin_error(
             "Built-in Rust plugins cannot be installed from disk",
         ));
+    }
+    if manifest.abi_version != Some(PLUGIN_ABI_VERSION) {
+        return Err(plugin_error(format!(
+            "Plugin ABI {:?} is incompatible with host ABI {}",
+            manifest.abi_version, PLUGIN_ABI_VERSION
+        )));
+    }
+    for hook in &manifest.hooks {
+        let allowed = match hook {
+            PluginHook::RegisterImporter => manifest.permissions.importer_registration,
+            PluginHook::RegisterExporter => manifest.permissions.exporter_registration,
+            PluginHook::RegisterRuntime => manifest.permissions.runtime_registration,
+            PluginHook::RegisterModelAdapter => manifest.permissions.capability_registration,
+            _ => true,
+        };
+        if !allowed {
+            return Err(plugin_error(format!(
+                "PLUGIN_PERMISSION_DENIED: Plugin '{}' declares {:?} without the matching registration permission",
+                manifest.id, hook
+            )));
+        }
+    }
+    if (!manifest.capabilities.is_empty() || !manifest.format_capabilities.is_empty())
+        && !manifest.permissions.capability_registration
+    {
+        return Err(plugin_error(format!(
+            "PLUGIN_PERMISSION_DENIED: Plugin '{}' declares capabilities without capabilityRegistration",
+            manifest.id
+        )));
     }
     if !manifest.platforms.is_empty()
         && !manifest
@@ -492,6 +679,7 @@ mod tests {
         std::fs::write(path.join(entrypoint), bytes).unwrap();
         let mut manifest = PluginManifest::built_in(id, "1.0.0");
         manifest.class = PluginClass::WasiComponent;
+        manifest.abi_version = Some(PLUGIN_ABI_VERSION);
         manifest.entrypoint = Some(entrypoint.to_string());
         manifest.checksum_sha256 = Some(hex::encode(Sha256::digest(bytes)));
         std::fs::write(
@@ -537,6 +725,81 @@ mod tests {
         manifest.entrypoint = Some("../outside.wasm".to_string());
         std::fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
         assert!(store.verify_package(&traversal).is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn incompatible_abi_and_ungranted_capability_registration_are_rejected() {
+        let root = workspace();
+        let store = PluginStore::new(root.join("store"));
+
+        let incompatible = package(&root, "bad-abi", "plugin.wasm", b"fixture");
+        let manifest_path = incompatible.join("plugin.json");
+        let mut manifest: PluginManifest =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        manifest.abi_version = Some(PLUGIN_ABI_VERSION + 1);
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        assert!(store.verify_package(&incompatible).is_err());
+
+        let ungranted = package(&root, "ungranted", "plugin.wasm", b"fixture");
+        let manifest_path = ungranted.join("plugin.json");
+        let mut manifest: PluginManifest =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        manifest.hooks.push(PluginHook::RegisterExporter);
+        manifest.capabilities.push("export:fixture".to_string());
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        assert!(store
+            .verify_package(&ungranted)
+            .unwrap_err()
+            .to_string()
+            .contains("PLUGIN_PERMISSION_DENIED"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_registry_updates_remain_parseable_and_leave_no_temporary_gap() {
+        let root = workspace();
+        let source = package(&root, "concurrent.plugin", "plugin.wasm", b"fixture");
+        let store = PluginStore::new(root.join("store"));
+        store.install(&source).unwrap();
+
+        let mut workers = Vec::new();
+        for worker in 0..8 {
+            let store = store.clone();
+            workers.push(std::thread::spawn(move || {
+                for iteration in 0..20 {
+                    store
+                        .set_enabled("concurrent.plugin", (worker + iteration) % 2 == 0)
+                        .unwrap();
+                }
+            }));
+        }
+        for worker in workers {
+            worker.join().unwrap();
+        }
+
+        assert!(store.get("concurrent.plugin").unwrap().is_some());
+        let registry: StoreIndex =
+            serde_json::from_slice(&std::fs::read(store.index_path()).unwrap()).unwrap();
+        assert_eq!(registry.plugins.len(), 1);
+        assert!(std::fs::read_dir(store.root())
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .all(|entry| !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".registry-")
+                || entry.file_name() == ".registry.lock"));
 
         std::fs::remove_dir_all(root).unwrap();
     }

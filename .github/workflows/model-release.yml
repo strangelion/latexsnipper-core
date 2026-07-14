@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Determine tag
         id: tag
@@ -162,13 +162,13 @@ jobs:
           echo "Base URL: $(jq -r .baseUrl release_models/model-manifest.json)"
 
       - name: Upload model assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: model-zips
           path: release_models/*.zip
 
       - name: Upload release metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-metadata
           path: |
@@ -184,16 +184,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download model artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: model-zips
           path: test_models
 
       - name: Download release metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: release-metadata
           path: test_metadata
@@ -255,7 +255,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Determine tag
         id: tag
@@ -269,13 +269,13 @@ jobs:
           echo "Release tag: $TAG"
 
       - name: Download model assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: model-zips
           path: release_assets
 
       - name: Download release metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: release-metadata
           path: release_assets

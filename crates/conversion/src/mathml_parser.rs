@@ -30,7 +30,7 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                 current_text.clear();
             }
             Ok(Event::Text(e)) => {
-                let t = e.unescape().unwrap_or_default().to_string();
+                let t = crate::xml_util::decode_and_unescape_text(&e).unwrap_or_default();
                 current_text.push_str(&t);
             }
             Ok(Event::Empty(e)) => {

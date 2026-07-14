@@ -1,8 +1,10 @@
 use latexsnipper_ast::Document;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// A response from a plugin.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PluginResponse {
     /// The processed document.
     pub document: Document,

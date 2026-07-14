@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_runtime::{AccelerationMode, InferenceSession, ModelHandle, RuntimeBackend};
+use prost::Message;
 use tract_onnx::prelude::*;
 
 use crate::session::TractSession;
@@ -98,18 +98,25 @@ impl RuntimeBackend for TractBackend {
             return Err(SnipperError::Runtime("No model source available".into()));
         };
 
-        // Load with tract
+        // Decode first so exporter-generated symbolic dimensions can be
+        // normalized without changing concrete model shapes.
+        let mut proto = tract_onnx::pb::ModelProto::decode(&*model_bytes)
+            .map_err(|e| SnipperError::Runtime(format!("Tract model decode failed: {e}")))?;
+        let normalized_dimensions = normalize_symbolic_dimensions(&mut proto);
+        if normalized_dimensions > 0 {
+            log::warn!("Normalized {normalized_dimensions} ONNX symbolic dimension(s) for Tract");
+        }
         let model = onnx()
-            .model_for_read(&mut Cursor::new(&model_bytes))
-            .map_err(|e| SnipperError::Runtime(format!("Tract model load failed: {}", e)))?;
+            .model_for_proto_model(&proto)
+            .map_err(|e| SnipperError::Runtime(format!("Tract model load failed: {e:#}")))?;
 
         let model = model
             .into_optimized()
-            .map_err(|e| SnipperError::Runtime(format!("Tract model optimize failed: {}", e)))?;
+            .map_err(|e| SnipperError::Runtime(format!("Tract model optimize failed: {e:#}")))?;
 
         let model = model
             .into_runnable()
-            .map_err(|e| SnipperError::Runtime(format!("Tract model compile failed: {}", e)))?;
+            .map_err(|e| SnipperError::Runtime(format!("Tract model compile failed: {e:#}")))?;
 
         let session = std::sync::Arc::new(TractSession::new(model));
 
@@ -130,5 +137,114 @@ impl RuntimeBackend for TractBackend {
 
     fn is_available(&self) -> bool {
         true
+    }
+}
+
+fn normalize_symbolic_dimensions(model: &mut tract_onnx::pb::ModelProto) -> usize {
+    model.graph.as_mut().map_or(0, normalize_graph_dimensions)
+}
+
+fn normalize_graph_dimensions(graph: &mut tract_onnx::pb::GraphProto) -> usize {
+    let mut normalized = 0;
+    for value in graph
+        .input
+        .iter_mut()
+        .chain(graph.output.iter_mut())
+        .chain(graph.value_info.iter_mut())
+    {
+        if let Some(value_type) = value.r#type.as_mut() {
+            normalized += normalize_type_dimensions(value_type);
+        }
+    }
+    for node in &mut graph.node {
+        for attribute in &mut node.attribute {
+            if let Some(nested) = attribute.g.as_mut() {
+                normalized += normalize_graph_dimensions(nested);
+            }
+            for nested in &mut attribute.graphs {
+                normalized += normalize_graph_dimensions(nested);
+            }
+            for value_type in &mut attribute.type_protos {
+                normalized += normalize_type_dimensions(value_type);
+            }
+        }
+    }
+    normalized
+}
+
+fn normalize_type_dimensions(value_type: &mut tract_onnx::pb::TypeProto) -> usize {
+    use tract_onnx::pb::tensor_shape_proto::dimension::Value as DimensionValue;
+    use tract_onnx::pb::type_proto::Value as TypeValue;
+
+    let Some(TypeValue::TensorType(tensor)) = value_type.value.as_mut() else {
+        return 0;
+    };
+    let Some(shape) = tensor.shape.as_mut() else {
+        return 0;
+    };
+    let mut normalized = 0;
+    for dimension in &mut shape.dim {
+        let Some(DimensionValue::DimParam(parameter)) = dimension.value.as_mut() else {
+            continue;
+        };
+        if parameter.contains('.') {
+            *parameter = parameter.replace('.', "_");
+            normalized += 1;
+        }
+    }
+    normalized
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tract_onnx::pb::tensor_shape_proto::dimension::Value as DimensionValue;
+    use tract_onnx::pb::type_proto::{Tensor, Value as TypeValue};
+    use tract_onnx::pb::{TensorShapeProto, TypeProto, ValueInfoProto};
+
+    #[test]
+    fn normalizes_dot_in_symbolic_dimension_without_changing_concrete_shape() {
+        let mut model = tract_onnx::pb::ModelProto::default();
+        let graph = model.graph.get_or_insert_default();
+        graph.input.push(ValueInfoProto {
+            name: "x".to_string(),
+            r#type: Some(TypeProto {
+                denotation: String::new(),
+                value: Some(TypeValue::TensorType(Tensor {
+                    elem_type: 1,
+                    shape: Some(TensorShapeProto {
+                        dim: vec![
+                            tract_onnx::pb::tensor_shape_proto::Dimension {
+                                denotation: String::new(),
+                                value: Some(DimensionValue::DimParam(
+                                    "DynamicDimension.0".to_string(),
+                                )),
+                            },
+                            tract_onnx::pb::tensor_shape_proto::Dimension {
+                                denotation: String::new(),
+                                value: Some(DimensionValue::DimValue(3)),
+                            },
+                        ],
+                    }),
+                })),
+            }),
+            doc_string: String::new(),
+        });
+
+        assert_eq!(normalize_symbolic_dimensions(&mut model), 1);
+        let graph = model.graph.unwrap();
+        let shape = match graph.input[0]
+            .r#type
+            .as_ref()
+            .and_then(|value| value.value.as_ref())
+            .unwrap()
+        {
+            TypeValue::TensorType(tensor) => tensor.shape.as_ref().unwrap(),
+        };
+        assert_eq!(
+            shape.dim[0].value,
+            Some(DimensionValue::DimParam("DynamicDimension_0".to_string()))
+        );
+        assert_eq!(shape.dim[1].value, Some(DimensionValue::DimValue(3)));
     }
 }

@@ -15,9 +15,6 @@ use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use std::io::{self, Read, Write};
 
-const SUPPORTED_PARSE_MODES: &str = "specialized, openocr-text, opendoc-hybrid";
-const SUPPORTED_RECOGNIZE_MODES: &str = "formula, text, mixed, handwriting, table, formula-layout";
-
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum DiagnosticsFormat {
     Text,
@@ -118,6 +115,12 @@ enum Commands {
         /// Fail when any warning diagnostic is emitted
         #[arg(long)]
         fail_on_warning: bool,
+        /// Inclusive 1-based page range (START-END)
+        #[arg(long, value_name = "START-END")]
+        page_range: Option<String>,
+        /// Reject importer fidelity loss and preserve unknown Office package parts
+        #[arg(long)]
+        strict_preservation: bool,
         /// Suppress non-data status output
         #[arg(long, conflicts_with = "verbose")]
         quiet: bool,
@@ -169,21 +172,10 @@ enum Commands {
     },
 
     /// Recognize formulas in an image and export to a format
-    #[command(long_about = "Recognize mathematical formulas in an image.\n\n\
-        Detects formulas (and optionally text) in the input image,\n\
-        then exports the recognized content to the specified format.\n\n\
-        EXAMPLES:\n    \
-        snipper rec -i scan.png -f latex\n    \
-        snipper recognize -i photo.jpg -f mathml -o output.xml\n    \
-        snipper rec -i page.png -f markdown -o notes.md\n\n\
-        SUPPORTED FORMATS:\n    \
-        latex      - LaTeX source code (default)\n    \
-        markdown   - Markdown with inline math\n    \
-        typst      - Typst markup\n    \
-        html       - HTML with MathJax\n    \
-        mathml     - MathML XML\n    \
-        omml       - Office MathML (Word)\n    \
-        json       - Full AST as JSON")]
+    #[command(
+        long_about = "Recognize mathematical formulas and text in an image.\n\n\
+        The executable capability and mode registries are appended to this help at runtime."
+    )]
     Recognize {
         /// Input image path (png, jpg, pdf, bmp, tiff)
         #[arg(short = 'i', long)]
@@ -490,63 +482,33 @@ fn resolve_format(format: &str, output: Option<&str>) -> String {
 
 fn suggest_format(input: &str) -> Option<&'static str> {
     let lower = input.to_lowercase();
-    let suggestions: Vec<(&str, Vec<&str>)> = vec![
-        (
-            "latex_display",
-            vec!["latex_display", "display", "displaylatex", "texdisplay"],
-        ),
-        (
-            "latex_equation",
-            vec!["latex_equation", "equation", "equationlatex", "eqn"],
-        ),
-        ("latex", vec!["latex", "tex", "late", "ltx"]),
-        ("markdown", vec!["markdown", "md", "mark", "mard"]),
-        (
-            "markdown_inline",
-            vec!["markdown_inline", "md_inline", "inline_markdown"],
-        ),
-        ("typst", vec!["typst", "typ", "typs"]),
-        ("html", vec!["html", "htm"]),
-        ("json", vec!["json", "jsn"]),
-        ("mathml", vec!["mathml", "math", "mml"]),
-        ("omml", vec!["omml", "omm"]),
-    ];
-
-    for (correct, hints) in &suggestions {
-        for hint in hints {
-            if lower.contains(hint) || levenshtein_distance(&lower, hint) <= 2 {
-                return Some(correct);
-            }
-        }
-    }
-    None
+    latexsnipper_conversion::CapabilityRegistry::for_target(
+        latexsnipper_conversion::CapabilityTarget::Native,
+    )
+    .into_iter()
+    .filter(|entry| entry.available)
+    .flat_map(|entry| {
+        std::iter::once((entry.format, entry.format)).chain(
+            entry
+                .aliases
+                .iter()
+                .copied()
+                .map(move |alias| (entry.format, alias)),
+        )
+    })
+    .min_by_key(|(_, candidate)| levenshtein_distance(&lower, candidate))
+    .filter(|(_, candidate)| {
+        lower.contains(candidate) || levenshtein_distance(&lower, candidate) <= 3
+    })
+    .map(|(format, _)| format)
 }
 
 fn parse_document_parse_mode(input: &str) -> Option<DocumentParseMode> {
-    match input.to_ascii_lowercase().as_str() {
-        "specialized" | "specialized-stable" | "stable" | "default" => {
-            Some(DocumentParseMode::SpecializedStable)
-        }
-        "openocr" | "openocr-text" | "openocr_text" | "open-ocr-text" => {
-            Some(DocumentParseMode::OpenOcrText)
-        }
-        "opendoc" | "opendoc-hybrid" | "opendoc_hybrid" | "hybrid" => {
-            Some(DocumentParseMode::OpenDocHybrid)
-        }
-        _ => None,
-    }
+    DocumentParseMode::from_label(input)
 }
 
 fn parse_recognize_mode(input: &str) -> Option<RecognizeMode> {
-    match input.to_ascii_lowercase().as_str() {
-        "formula" | "math" => Some(RecognizeMode::Formula),
-        "text" | "ocr" => Some(RecognizeMode::Text),
-        "mixed" | "document" => Some(RecognizeMode::Mixed),
-        "handwriting" | "handwrite" => Some(RecognizeMode::Handwriting),
-        "table" => Some(RecognizeMode::Table),
-        "formula-layout" | "formula_layout" | "layout" => Some(RecognizeMode::FormulaLayout),
-        _ => None,
-    }
+    RecognizeMode::from_label(input)
 }
 
 fn levenshtein_distance(a: &str, b: &str) -> usize {
@@ -613,6 +575,8 @@ fn main() {
             diagnostics,
             strict,
             fail_on_warning,
+            page_range,
+            strict_preservation,
             quiet,
             verbose,
             recursive,
@@ -621,6 +585,16 @@ fn main() {
             continue_on_error,
             report,
         } => {
+            let advanced = AdvancedConversionOptions {
+                page_range: page_range
+                    .as_deref()
+                    .map(parse_page_range)
+                    .transpose()
+                    .unwrap_or_else(|error| {
+                        exit_with_code(error.code, "Invalid conversion options", error.message)
+                    }),
+                strict_preservation,
+            };
             let options = ConvertOptions {
                 output: output.as_deref(),
                 force_binary_stdout,
@@ -632,6 +606,7 @@ fn main() {
                 fail_on_warning,
                 quiet,
                 verbose,
+                advanced,
             };
             let batch = BatchOptions {
                 recursive,
@@ -729,7 +704,7 @@ fn main() {
                 Some(mode) => mode,
                 None => {
                     eprintln!("Unknown parse mode: '{}'", parse_mode);
-                    eprintln!("  Supported parse modes: {}", SUPPORTED_PARSE_MODES);
+                    eprintln!("  Supported parse modes: {}", supported_parse_modes());
                     std::process::exit(1);
                 }
             };
@@ -737,7 +712,10 @@ fn main() {
                 Some(mode) => mode,
                 None => {
                     eprintln!("Unknown recognize mode: '{}'", recognize_mode);
-                    eprintln!("  Supported recognize modes: {}", SUPPORTED_RECOGNIZE_MODES);
+                    eprintln!(
+                        "  Supported recognize modes: {}",
+                        supported_recognize_modes()
+                    );
                     std::process::exit(1);
                 }
             };
@@ -984,8 +962,19 @@ fn parse_cli() -> Cli {
         )
         .into_boxed_str(),
     );
+    let recognize: &'static str = Box::leak(
+        format!(
+            "Available formats: {}\nParse modes: {}\nRecognition modes: {}",
+            registered_format_names().join(", "),
+            supported_parse_modes(),
+            supported_recognize_modes(),
+        )
+        .into_boxed_str(),
+    );
     let matches = Cli::command()
         .mut_subcommand("convert", |command| command.after_help(formats))
+        .mut_subcommand("recognize", |command| command.after_help(recognize))
+        .mut_subcommand("rec", |command| command.after_help(recognize))
         .get_matches();
     Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit())
 }
@@ -1002,6 +991,40 @@ struct ConvertOptions<'a> {
     fail_on_warning: bool,
     quiet: bool,
     verbose: bool,
+    advanced: AdvancedConversionOptions,
+}
+
+#[derive(Clone, Copy, Default)]
+struct AdvancedConversionOptions {
+    page_range: Option<latexsnipper_ast::PageRange>,
+    strict_preservation: bool,
+}
+
+impl AdvancedConversionOptions {
+    fn import_options(self) -> ImportOptions {
+        ImportOptions {
+            page_range: self.page_range,
+            strict: self.strict_preservation,
+            preserve_unknown_parts: self.strict_preservation,
+            ..ImportOptions::default()
+        }
+    }
+
+    fn diagnostic(self) -> Option<Diagnostic> {
+        (self.page_range.is_some() || self.strict_preservation).then(|| {
+            Diagnostic::new(
+                DiagnosticLevel::Info,
+                "CLI_OPTIONS_APPLIED",
+                format!(
+                    "pageRange={}, strictPreservation={}",
+                    self.page_range
+                        .map(|range| format!("{}-{}", range.start, range.end))
+                        .unwrap_or_else(|| "all".to_string()),
+                    self.strict_preservation
+                ),
+            )
+        })
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1349,6 +1372,7 @@ fn write_batch_report(
         fail_on_warning: false,
         quiet: true,
         verbose: false,
+        advanced: AdvancedConversionOptions::default(),
     };
     write_output_file(report, &bytes, &report_options)
 }
@@ -1373,8 +1397,8 @@ fn convert_path(input: &str, target: &str, options: ConvertOptions<'_>) -> Resul
             ),
         )
     })?;
-    let document = read_document(input)?;
-    let artifact =
+    let document = read_document(input, options.advanced)?;
+    let mut artifact =
         match target {
             CliTarget::Semantic(format) => DocumentConverter::new(format)
                 .convert_artifact(&document)
@@ -1385,6 +1409,9 @@ fn convert_path(input: &str, target: &str, options: ConvertOptions<'_>) -> Resul
                 })?
             }
         };
+    if let Some(diagnostic) = options.advanced.diagnostic() {
+        artifact.diagnostics.push(diagnostic);
+    }
 
     if !options.quiet {
         emit_diagnostics(&artifact.diagnostics, options.diagnostics)?;
@@ -1442,32 +1469,42 @@ fn convert_path(input: &str, target: &str, options: ConvertOptions<'_>) -> Resul
 
 fn resolve_cli_target(label: &str) -> Option<CliTarget> {
     let lowercase = label.trim().to_ascii_lowercase();
-    let normalized = match lowercase.as_str() {
-        "display" => "latex_display",
-        "equation" | "eqn" => "latex_equation",
-        "md_inline" => "markdown_inline",
-        other => other,
-    };
-    if let Some(format) = OutputFormat::all()
-        .iter()
-        .copied()
-        .find(|format| format.name() == normalized)
-    {
+    if let Some(format) = OutputFormat::all().iter().copied().find(|format| {
+        format.name() == lowercase
+            || latexsnipper_conversion::semantic_aliases(*format).contains(&lowercase.as_str())
+    }) {
         return Some(CliTarget::Semantic(format));
     }
-    DocumentExportService::format_from_label(normalized).map(CliTarget::Export)
+    DocumentExportService::format_from_label(&lowercase).map(CliTarget::Export)
 }
 
 fn registered_format_names() -> Vec<&'static str> {
-    let mut names: Vec<_> = OutputFormat::all().iter().map(OutputFormat::name).collect();
-    names.extend(
-        DocumentExportService::supported_formats()
-            .iter()
-            .map(|format| DocumentExportService::format_label(*format)),
-    );
+    let mut names: Vec<_> = latexsnipper_conversion::CapabilityRegistry::for_target(
+        latexsnipper_conversion::CapabilityTarget::Native,
+    )
+    .into_iter()
+    .filter(|entry| entry.available)
+    .map(|entry| entry.format)
+    .collect();
     names.sort_unstable();
     names.dedup();
     names
+}
+
+fn supported_parse_modes() -> String {
+    DocumentParseMode::all()
+        .iter()
+        .map(|mode| mode.label())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn supported_recognize_modes() -> String {
+    RecognizeMode::all()
+        .iter()
+        .map(|mode| mode.label())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn suggest_registered_format(input: &str) -> Option<&'static str> {
@@ -1477,9 +1514,9 @@ fn suggest_registered_format(input: &str) -> Option<&'static str> {
         .filter(|candidate| levenshtein_distance(&input.to_ascii_lowercase(), candidate) <= 3)
 }
 
-fn read_document(input: &str) -> Result<Document, CliFailure> {
+fn read_document(input: &str, advanced: AdvancedConversionOptions) -> Result<Document, CliFailure> {
     if input != "-" {
-        return DocumentImporter::from_path(input, ImportOptions::default()).map_err(|error| {
+        return DocumentImporter::from_path(input, advanced.import_options()).map_err(|error| {
             CliFailure::new(CliExitCode::InvalidInput, format!("{input}: {error}"))
         });
     }
@@ -1494,8 +1531,36 @@ fn read_document(input: &str) -> Result<Document, CliFailure> {
             "stdin did not contain a document",
         ));
     }
-    DocumentImporter::from_bytes(&bytes, None, ImportOptions::default())
+    DocumentImporter::from_bytes(&bytes, None, advanced.import_options())
         .map_err(|error| CliFailure::new(CliExitCode::InvalidInput, format!("stdin: {error}")))
+}
+
+fn parse_page_range(value: &str) -> Result<latexsnipper_ast::PageRange, CliFailure> {
+    let (start, end) = value.split_once('-').ok_or_else(|| {
+        CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "--page-range must use START-END",
+        )
+    })?;
+    let start = start.parse::<u32>().map_err(|_| {
+        CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "page range start must be a positive integer",
+        )
+    })?;
+    let end = end.parse::<u32>().map_err(|_| {
+        CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "page range end must be a positive integer",
+        )
+    })?;
+    if start == 0 || end < start {
+        return Err(CliFailure::new(
+            CliExitCode::InvalidArguments,
+            "page range must be 1-based with END >= START",
+        ));
+    }
+    Ok(latexsnipper_ast::PageRange { start, end })
 }
 
 fn emit_diagnostics(
@@ -1708,6 +1773,9 @@ fn doctor_plugin_state(store_dir: &std::path::Path) -> serde_json::Value {
                 "error": error.to_string(),
                 "nativeAbiHostAvailable": false,
                 "wasiComponentHostAvailable": false,
+                "brokeredPermissionEnforcement": true,
+                "nativeProcessOsSandboxed": false,
+                "responseBudgetScope": "response-file-observation",
             });
         }
     };
@@ -1716,14 +1784,36 @@ fn doctor_plugin_state(store_dir: &std::path::Path) -> serde_json::Value {
         .iter()
         .filter(|plugin| store.verify_installed(&plugin.manifest.id).is_err())
         .count();
+    let plugin_details = plugins
+        .iter()
+        .map(|plugin| {
+            let process_host = matches!(
+                plugin.manifest.class,
+                latexsnipper_plugin::PluginClass::IsolatedProcess
+            );
+            serde_json::json!({
+                "id": plugin.manifest.id,
+                "class": plugin.manifest.class,
+                "enabled": plugin.enabled,
+                "executionHostAvailable": process_host,
+                "effectivePermissions": store.effective_permissions(&plugin.manifest.id).ok(),
+            })
+        })
+        .collect::<Vec<_>>();
     serde_json::json!({
         "storeDirectory": store_dir,
         "registryValid": true,
         "installed": plugins.len(),
         "enabled": enabled,
         "failedIntegrity": failed_integrity,
+        "isolatedProcessHostAvailable": true,
         "nativeAbiHostAvailable": false,
         "wasiComponentHostAvailable": false,
+        "brokeredPermissionEnforcement": true,
+        "nativeProcessOsSandboxed": false,
+        "responseBudgetScope": "response-file-observation",
+        "processTreeContainment": if cfg!(unix) { "unix-process-group" } else { "windows-job-object-after-spawn" },
+        "plugins": plugin_details,
     })
 }
 
@@ -2187,10 +2277,15 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                 .map(|plugin| match store.verify_installed(&plugin.manifest.id) {
                     Ok(verification) => serde_json::json!({
                         "id": plugin.manifest.id,
+                        "class": plugin.manifest.class,
                         "enabled": plugin.enabled,
                         "verified": true,
                         "entrypointSha256": verification.entrypoint_sha256,
-                        "executionHostAvailable": false,
+                        "executionHostAvailable": matches!(
+                            plugin.manifest.class,
+                            latexsnipper_plugin::PluginClass::IsolatedProcess
+                        ),
+                        "effectivePermissions": store.effective_permissions(&plugin.manifest.id).ok(),
                     }),
                     Err(error) => serde_json::json!({
                         "id": plugin.manifest.id,
@@ -2198,6 +2293,7 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                         "verified": false,
                         "error": error.to_string(),
                         "executionHostAvailable": false,
+                        "effectivePermissions": serde_json::Value::Null,
                     }),
                 })
                 .collect::<Vec<_>>();
@@ -2211,8 +2307,13 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                     "storeDirectory": store.root(),
                     "installed": plugins.len(),
                     "packageIntegrityHealthy": healthy,
+                    "isolatedProcessHostAvailable": true,
                     "nativeAbiHostAvailable": false,
                     "wasiComponentHostAvailable": false,
+                    "brokeredPermissionEnforcement": true,
+                    "nativeProcessOsSandboxed": false,
+                    "responseBudgetScope": "response-file-observation",
+                    "processTreeContainment": if cfg!(unix) { "unix-process-group" } else { "windows-job-object-after-spawn" },
                     "plugins": checks,
                 }))
                 .map_err(|error| error.to_string())?

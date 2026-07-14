@@ -1,0 +1,31 @@
+{
+  "name": "@latexsnipper/wasm-runtime",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "example"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./worker": "./dist/worker-entry.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/*.test.js",
+    "build:example": "vite build example",
+    "smoke:production-model": "node scripts/production-model-smoke.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "fake-indexeddb": "6.0.1",
+    "pngjs": "7.0.0",
+    "typescript": "5.8.3",
+    "vite": "6.4.3"
+  }
+}
