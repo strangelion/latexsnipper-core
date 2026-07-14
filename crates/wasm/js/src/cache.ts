@@ -34,6 +34,9 @@ export class IndexedDbModelCache {
   constructor(options: IndexedDbModelCacheOptions = {}) {
     this.namespace = options.namespace ?? "latexsnipper-model-cache-v2";
     this.totalBudgetBytes = options.totalBudgetBytes ?? 512 * 1024 * 1024;
+    if (!Number.isSafeInteger(this.totalBudgetBytes) || this.totalBudgetBytes <= 0) {
+      throw new RangeError("totalBudgetBytes must be a positive safe integer");
+    }
   }
 
   static available(): boolean {

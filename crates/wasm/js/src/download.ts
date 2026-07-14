@@ -38,6 +38,9 @@ export class ModelDownloadError extends Error {
 
 export async function downloadVerifiedModel(options: ModelDownloadOptions): Promise<Uint8Array> {
   if (options.urls.length === 0) throw new ModelDownloadError("DOWNLOAD_FAILED", "At least one model URL is required", []);
+  if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes <= 0) {
+    throw new ModelDownloadError("DOWNLOAD_TOO_LARGE", "maxBytes must be a positive safe integer", []);
+  }
   const attempts: string[] = [];
   for (const url of options.urls) {
     try {

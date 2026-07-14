@@ -4,6 +4,16 @@ import "fake-indexeddb/auto";
 
 import { IndexedDbModelCache, downloadVerifiedModel, sha256Hex } from "../src/index.js";
 
+test("cache and download budgets must be positive safe integers", async () => {
+  assert.throws(() => new IndexedDbModelCache({ totalBudgetBytes: 0 }), RangeError);
+  await assert.rejects(
+    downloadVerifiedModel({ urls: ["https://example.invalid/model"], expectedSha256: "00", maxBytes: 0 }),
+    (error: unknown) => error instanceof Error
+      && "code" in error
+      && error.code === "DOWNLOAD_TOO_LARGE",
+  );
+});
+
 test("IndexedDB cache verifies bytes and evicts least-recently-used artifacts", async () => {
   const cache = new IndexedDbModelCache({ namespace: `test-${Date.now()}`, totalBudgetBytes: 5 });
   const first = new Uint8Array([1, 2, 3]);

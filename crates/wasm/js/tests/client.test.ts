@@ -259,3 +259,83 @@ test("requests are ordered, queued cancellation works, and invalid IDs are rejec
   assert.equal(await one, 1);
   client.terminate();
 });
+
+test("browser budgets reject oversized models and images before worker allocation", async () => {
+  const worker = new FakeWorker();
+  const client = new WasmWorkerClient({
+    workerUrl: "worker.js",
+    moduleUrl: "wasm.js",
+    workerFactory: () => worker,
+    maxModelBytes: 2,
+    maxTotalModelBytes: 3,
+    maxImageWidth: 2,
+    maxImageHeight: 2,
+    maxImagePixels: 4,
+  });
+  await client.ready();
+  await assert.rejects(
+    client.loadModel({ name: "large.onnx", bytes: new Uint8Array(3), expectedSha256: "00" }),
+    (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "MODEL_ARTIFACT_LIMIT",
+  );
+  await client.loadModel({ name: "first.onnx", bytes: new Uint8Array(2), expectedSha256: "00" });
+  await assert.rejects(
+    client.loadModel({ name: "second.onnx", bytes: new Uint8Array(2), expectedSha256: "00" }),
+    (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "MODEL_TOTAL_LIMIT",
+  );
+  await assert.rejects(
+    client.recognize({ width: 3, height: 1, pixels: new Uint8Array(12), mode: "table" }),
+    (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "WORKER_IMAGE_LIMIT",
+  );
+  assert.equal(worker.requests.filter((request) => request.type === "recognize").length, 0);
+  client.terminate();
+});
+
+test("task duration and result budgets reject work and preserve recovery", async () => {
+  const workers: FakeWorker[] = [];
+  const client = new WasmWorkerClient({
+    workerUrl: "worker.js",
+    moduleUrl: "wasm.js",
+    workerFactory: () => {
+      const worker = new FakeWorker();
+      workers.push(worker);
+      return worker;
+    },
+    maxTaskDurationMillis: 20,
+    maxResultBytes: 4,
+  });
+  await client.ready();
+  await assert.rejects(
+    client.recognize({ width: 1, height: 1, pixels: new Uint8Array(4), mode: "handwriting" }),
+    (error: unknown) => error instanceof WorkerRuntimeError
+      && error.detail.code === "WORKER_TASK_TIMEOUT"
+      && error.detail.workerRestarted === true,
+  );
+  await client.ready();
+  assert.equal(workers[0]?.terminated, true);
+
+  const result = client.recognize({ width: 1, height: 1, pixels: new Uint8Array(4), mode: "table" });
+  await tick();
+  const request = workers[1]!.recognition();
+  workers[1]!.emit({ protocolVersion: 1, type: "result", requestId: request.requestId, data: "oversized" });
+  await assert.rejects(
+    result,
+    (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "WORKER_RESULT_LIMIT",
+  );
+  client.terminate();
+});
+
+test("invalid budget configuration is rejected synchronously", () => {
+  assert.throws(
+    () => new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", maxQueueLength: 0 }),
+    RangeError,
+  );
+  assert.throws(
+    () => new WasmWorkerClient({
+      workerUrl: "worker.js",
+      moduleUrl: "wasm.js",
+      maxModelBytes: 2,
+      maxTotalModelBytes: 1,
+    }),
+    RangeError,
+  );
+});
