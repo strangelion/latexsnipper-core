@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
-use std::fs;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use latexsnipper_plugin::{CancellationToken, PluginRegistrationGrantsV3};
+use latexsnipper_ast::DOCUMENT_SCHEMA_VERSION;
+use latexsnipper_plugin::{CancellationToken, PluginHook, PluginRegistrationGrantsV3};
 use sha2::{Digest, Sha256};
 use wasmtime::component::{Component, HasSelf, Linker, Resource, ResourceTable};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, UpdateDeadline};
@@ -16,8 +16,9 @@ use crate::bindings::latexsnipper::plugin::{
 };
 use crate::bindings::Plugin;
 use crate::{
-    ComponentNetworkScheme, ComponentPermissions, NetworkGrant, VerifiedComponentPackage,
-    WasiDiagnostic, WasiDiagnosticCode,
+    ComponentNetworkScheme, ComponentPermissions, FilesystemOperationError, NetworkGrant,
+    VerifiedComponentPackage, WasiDiagnostic, WasiDiagnosticCode, WasiDiagnosticDetail,
+    WasiDiagnosticSeverity, WasiResourceLimits,
 };
 
 const INTERRUPT_NONE: u8 = 0;
@@ -96,6 +97,7 @@ pub struct WasiComponentHost {
     _epoch_ticker: EpochTicker,
     package: VerifiedComponentPackage,
     environment: BTreeMap<String, String>,
+    configuration: Vec<u8>,
     model_artifacts: BTreeMap<String, Arc<Vec<u8>>>,
     network: Arc<dyn NetworkBroker>,
     concurrency: Arc<ConcurrencyGate>,
@@ -116,43 +118,87 @@ impl WasiComponentHost {
             _epoch_ticker: epoch_ticker,
             package,
             environment: BTreeMap::new(),
+            configuration: Vec::new(),
             model_artifacts: BTreeMap::new(),
             network: Arc::new(DenyNetworkBroker),
             concurrency,
         })
     }
 
-    pub fn with_environment(mut self, values: BTreeMap<String, String>) -> Self {
-        self.environment = values
-            .into_iter()
-            .filter(|(name, _)| {
-                self.package
-                    .permissions
-                    .environment
-                    .contains(&name.to_ascii_uppercase())
-            })
-            .map(|(name, value)| (name.to_ascii_uppercase(), value))
-            .collect();
-        self
+    pub fn with_environment<I>(mut self, values: I) -> Result<Self, WasiDiagnostic>
+    where
+        I: IntoIterator<Item = (String, String)>,
+    {
+        let mut total = 0usize;
+        let mut environment = BTreeMap::new();
+        for (name, value) in values {
+            let normalized = name.to_ascii_uppercase();
+            if !self.package.permissions.environment.contains(&normalized) {
+                return Err(WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiPermissionDenied,
+                    "environment value is not granted by the verified manifest",
+                ));
+            }
+            total = total
+                .checked_add(normalized.len())
+                .and_then(|bytes| bytes.checked_add(value.len()))
+                .ok_or_else(output_limit)?;
+            if total > self.package.permissions.limits.input_bytes {
+                return Err(output_limit());
+            }
+            if environment.insert(normalized, value).is_some() {
+                return Err(protocol_mismatch(
+                    "duplicate normalized environment variable name",
+                ));
+            }
+        }
+        self.environment = environment;
+        Ok(self)
     }
 
-    pub fn with_model_artifacts(mut self, values: BTreeMap<String, Vec<u8>>) -> Self {
+    pub fn with_configuration(mut self, value: Vec<u8>) -> Result<Self, WasiDiagnostic> {
+        if value.len() > self.package.permissions.limits.input_bytes {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiOutputLimit,
+                "component configuration exceeds the input limit",
+            ));
+        }
+        self.configuration = value;
+        Ok(self)
+    }
+
+    pub fn with_model_artifacts<I>(mut self, values: I) -> Result<Self, WasiDiagnostic>
+    where
+        I: IntoIterator<Item = (String, Vec<u8>)>,
+    {
         let mut total = 0usize;
-        self.model_artifacts = values
-            .into_iter()
-            .filter_map(|(name, bytes)| {
-                if !self.package.permissions.model_artifacts.contains(&name) {
-                    return None;
-                }
-                let next = total.checked_add(bytes.len())?;
-                if next > self.package.permissions.limits.model_artifact_bytes {
-                    return None;
-                }
-                total = next;
-                Some((name, Arc::new(bytes)))
-            })
-            .collect();
-        self
+        let mut artifacts = BTreeMap::new();
+        for (name, bytes) in values {
+            if !self.package.permissions.model_artifacts.contains(&name) {
+                return Err(WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiPermissionDenied,
+                    "model artifact is not granted by the verified manifest",
+                ));
+            }
+            let next = total.checked_add(bytes.len()).ok_or_else(|| {
+                WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiOutputLimit,
+                    "model artifact byte count overflow",
+                )
+            })?;
+            if next > self.package.permissions.limits.model_artifact_bytes {
+                return Err(WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiOutputLimit,
+                    "model artifacts exceed the configured limit",
+                ));
+            }
+            if artifacts.insert(name, Arc::new(bytes)).is_some() {
+                return Err(protocol_mismatch("duplicate model artifact name"));
+            }
+            total = next;
+        }
+        self.model_artifacts = artifacts;
+        Ok(self)
     }
 
     pub fn with_network_broker(mut self, broker: Arc<dyn NetworkBroker>) -> Self {
@@ -161,7 +207,7 @@ impl WasiComponentHost {
     }
 
     pub fn compile(&self) -> Result<CompiledWasiComponent, WasiDiagnostic> {
-        let bytes = fs::read(&self.package.component_path).map_err(host_failure)?;
+        let bytes = self.package.read_component_for_compilation()?;
         let digest = hex::encode(Sha256::digest(&bytes));
         if digest != self.package.component_sha256 {
             return Err(protocol_mismatch(
@@ -213,11 +259,11 @@ impl WasiComponentHost {
         store.epoch_deadline_callback(move |_| {
             if callback_cancellation.is_cancelled() {
                 callback_interrupt.store(INTERRUPT_CANCELLED, Ordering::Release);
-                return Ok(UpdateDeadline::Interrupt);
+                return Err(wasmtime::Error::msg("PLUGIN_WASI_CANCELLED"));
             }
             if Instant::now() >= deadline {
                 callback_interrupt.store(INTERRUPT_TIMEOUT, Ordering::Release);
-                return Ok(UpdateDeadline::Interrupt);
+                return Err(wasmtime::Error::msg("PLUGIN_WASI_TIMEOUT"));
             }
             Ok(UpdateDeadline::Continue(1))
         });
@@ -263,54 +309,78 @@ impl WasiComponentHost {
             .call_declared_capabilities(&mut *store)
             .map_err(classify_runtime_error)?;
         validate_capabilities(
+            &self.package.manifest.capabilities,
             &self.package.manifest.permissions.registrations,
             &capabilities,
         )?;
+        store.data_mut().set_declared_capabilities(&capabilities);
+        validate_invocation_declaration(&self.package, &capabilities, &invocation)?;
+        let limits = &self.package.permissions.limits;
         let init = types::InitContext {
             core_version: env!("CARGO_PKG_VERSION").to_string(),
-            granted_capabilities: granted_capabilities(&self.package.permissions),
-            configuration: Vec::new(),
+            granted_capabilities: granted_capabilities(&capabilities, &self.package.permissions),
+            configuration: self.configuration.clone(),
         };
         bindings
             .latexsnipper_plugin_lifecycle()
             .call_initialize(&mut *store, &init)
             .map_err(classify_runtime_error)?
-            .map_err(plugin_error)?;
+            .map_err(|error| plugin_error(error, limits))?;
         let expected_patch_schema = match &invocation {
             ComponentInvocation::Transform(document) => Some(document.schema_version.clone()),
             _ => None,
         };
-        let result = match invocation {
+        let expected_export_format = match &invocation {
+            ComponentInvocation::Export(request) => Some(request.format.clone()),
+            _ => None,
+        };
+        let invocation_result = match invocation {
             ComponentInvocation::Transform(document) => bindings
                 .latexsnipper_plugin_document_transformer()
                 .call_transform(&mut *store, &document)
-                .map_err(classify_runtime_error)?
-                .map(ComponentInvocationResult::Patch)
-                .map_err(plugin_error),
+                .map_err(classify_runtime_error)
+                .and_then(|result| {
+                    result
+                        .map(ComponentInvocationResult::Patch)
+                        .map_err(|error| plugin_error(error, limits))
+                }),
             ComponentInvocation::Import(request) => bindings
                 .latexsnipper_plugin_importer()
                 .call_import_document(&mut *store, &request)
-                .map_err(classify_runtime_error)?
-                .map(ComponentInvocationResult::Document)
-                .map_err(plugin_error),
+                .map_err(classify_runtime_error)
+                .and_then(|result| {
+                    result
+                        .map(ComponentInvocationResult::Document)
+                        .map_err(|error| plugin_error(error, limits))
+                }),
             ComponentInvocation::Export(request) => bindings
                 .latexsnipper_plugin_exporter()
                 .call_export_document(&mut *store, &request)
-                .map_err(classify_runtime_error)?
-                .map(ComponentInvocationResult::Export)
-                .map_err(plugin_error),
-        }?;
-        bindings
+                .map_err(classify_runtime_error)
+                .and_then(|result| {
+                    result
+                        .map(ComponentInvocationResult::Export)
+                        .map_err(|error| plugin_error(error, limits))
+                }),
+        };
+        let shutdown_result = bindings
             .latexsnipper_plugin_lifecycle()
             .call_shutdown(&mut *store)
-            .map_err(classify_runtime_error)?
-            .map_err(plugin_error)?;
+            .map_err(classify_runtime_error)
+            .and_then(|result| result.map_err(|error| plugin_error(error, limits)));
+        let result = match (invocation_result, shutdown_result) {
+            (Err(invocation), _) => return Err(invocation),
+            (Ok(_), Err(shutdown)) => return Err(shutdown),
+            (Ok(result), Ok(())) => result,
+        };
         validate_output_size(&result, self.package.permissions.limits.output_bytes)?;
         validate_result(
             &result,
             expected_patch_schema.as_deref(),
+            expected_export_format.as_deref(),
             self.package.permissions.limits.diagnostic_count,
             self.package.permissions.limits.diagnostic_bytes,
+            self.package.permissions.limits.resources,
         )?;
         Ok(result)
     }
@@ -325,6 +395,7 @@ struct HostState {
     environment: BTreeMap<String, String>,
     model_artifacts: BTreeMap<String, Arc<Vec<u8>>>,
     network: Arc<dyn NetworkBroker>,
+    declared_capabilities: BTreeSet<String>,
     temporary_bytes: usize,
     resource_count: usize,
     store_limits: StoreLimits,
@@ -342,9 +413,9 @@ impl HostState {
         let store_limits = StoreLimitsBuilder::new()
             .memory_size(permissions.limits.memory_bytes)
             .table_elements(permissions.limits.table_elements as usize)
-            .instances(permissions.limits.resources)
-            .tables(permissions.limits.resources)
-            .memories(permissions.limits.resources)
+            .instances(permissions.limits.instances)
+            .tables(permissions.limits.tables)
+            .memories(permissions.limits.memories)
             .trap_on_grow_failure(true)
             .build();
         Self {
@@ -356,6 +427,7 @@ impl HostState {
             environment,
             model_artifacts,
             network,
+            declared_capabilities: BTreeSet::new(),
             temporary_bytes: 0,
             resource_count: 0,
             store_limits,
@@ -370,6 +442,18 @@ impl HostState {
             return Err(wasmtime::Error::msg("PLUGIN_WASI_TIMEOUT"));
         }
         Ok(())
+    }
+
+    fn set_declared_capabilities(&mut self, capabilities: &[types::Capability]) {
+        self.declared_capabilities = capabilities
+            .iter()
+            .map(capability_name)
+            .map(str::to_string)
+            .collect();
+    }
+
+    fn declares(&self, capability: &str) -> bool {
+        self.declared_capabilities.contains(capability)
     }
 }
 
@@ -395,21 +479,17 @@ impl filesystem_broker::Host for HostState {
         relative_path: String,
     ) -> wasmtime::Result<Result<Vec<u8>, filesystem_broker::AccessError>> {
         self.checkpoint()?;
-        let path = match self
-            .permissions
-            .resolve_path(&grant_id, &relative_path, false)
-        {
-            Ok(path) => path,
-            Err(_) => return Ok(Err(filesystem_broker::AccessError::PermissionDenied)),
-        };
-        match fs::read(path) {
-            Ok(bytes) if bytes.len() <= self.permissions.limits.output_bytes => Ok(Ok(bytes)),
-            Ok(_) => Ok(Err(filesystem_broker::AccessError::SizeLimit)),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                Ok(Err(filesystem_broker::AccessError::NotFound))
-            }
-            Err(_) => Ok(Err(filesystem_broker::AccessError::HostFailure)),
+        if !self.declares("filesystem_read") {
+            return Ok(Err(filesystem_broker::AccessError::PermissionDenied));
         }
+        Ok(self
+            .permissions
+            .read_file(
+                &grant_id,
+                &relative_path,
+                self.permissions.limits.output_bytes,
+            )
+            .map_err(filesystem_access_error))
     }
 
     fn write(
@@ -419,17 +499,21 @@ impl filesystem_broker::Host for HostState {
         payload: Vec<u8>,
     ) -> wasmtime::Result<Result<(), filesystem_broker::AccessError>> {
         self.checkpoint()?;
+        if !self.declares("filesystem_write") {
+            return Ok(Err(filesystem_broker::AccessError::PermissionDenied));
+        }
         if payload.len() > self.permissions.limits.input_bytes {
             return Ok(Err(filesystem_broker::AccessError::SizeLimit));
         }
-        let path = match self
+        Ok(self
             .permissions
-            .resolve_path(&grant_id, &relative_path, true)
-        {
-            Ok(path) => path,
-            Err(_) => return Ok(Err(filesystem_broker::AccessError::PermissionDenied)),
-        };
-        Ok(fs::write(path, payload).map_err(|_| filesystem_broker::AccessError::HostFailure))
+            .write_file(
+                &grant_id,
+                &relative_path,
+                &payload,
+                self.permissions.limits.input_bytes,
+            )
+            .map_err(filesystem_access_error))
     }
 }
 
@@ -439,6 +523,11 @@ impl environment_broker::Host for HostState {
         name: String,
     ) -> wasmtime::Result<Result<Option<String>, types::PluginError>> {
         self.checkpoint()?;
+        if !self.declares("environment_read") {
+            return Ok(Err(permission_plugin_error(
+                "environment capability was not declared",
+            )));
+        }
         let normalized = name.to_ascii_uppercase();
         if !self.permissions.environment.contains(&normalized) {
             return Ok(Err(permission_plugin_error(
@@ -455,6 +544,11 @@ impl network_broker::Host for HostState {
         request: network_broker::Request,
     ) -> wasmtime::Result<Result<network_broker::Response, types::PluginError>> {
         self.checkpoint()?;
+        if !self.declares("network_request") {
+            return Ok(Err(permission_plugin_error(
+                "network capability was not declared",
+            )));
+        }
         let scheme = match request.destination.scheme {
             network_broker::Scheme::Https => ComponentNetworkScheme::Https,
             network_broker::Scheme::Http => ComponentNetworkScheme::Http,
@@ -495,7 +589,7 @@ impl network_broker::Host for HostState {
             Ok(_) => Ok(Err(invalid_input_plugin_error(
                 "network response exceeds output limit",
             ))),
-            Err(error) => Ok(Err(permission_plugin_error(error.to_string()))),
+            Err(error) => Ok(Err(broker_plugin_error(error, &self.permissions.limits))),
         }
     }
 }
@@ -519,7 +613,10 @@ impl model_artifact_broker::HostArtifact for HostState {
         if requested > self.permissions.limits.output_bytes || start > artifact.bytes.len() {
             return Ok(Err(invalid_input_plugin_error("invalid artifact range")));
         }
-        let end = start.saturating_add(requested).min(artifact.bytes.len());
+        let Some(end) = start.checked_add(requested) else {
+            return Ok(Err(invalid_input_plugin_error("invalid artifact range")));
+        };
+        let end = end.min(artifact.bytes.len());
         Ok(Ok(artifact.bytes[start..end].to_vec()))
     }
 
@@ -536,6 +633,11 @@ impl model_artifact_broker::Host for HostState {
         name: String,
     ) -> wasmtime::Result<Result<Resource<ModelArtifactResource>, types::PluginError>> {
         self.checkpoint()?;
+        if !self.declares("model_artifact_read") {
+            return Ok(Err(permission_plugin_error(
+                "model artifact capability was not declared",
+            )));
+        }
         if !self.permissions.model_artifacts.contains(&name) {
             return Ok(Err(permission_plugin_error(
                 "model artifact is not granted",
@@ -576,7 +678,12 @@ impl temporary_storage_broker::HostTemporaryFile for HostState {
                 "invalid temporary file range",
             )));
         }
-        let end = start.saturating_add(requested).min(file.bytes.len());
+        let Some(end) = start.checked_add(requested) else {
+            return Ok(Err(invalid_input_plugin_error(
+                "invalid temporary file range",
+            )));
+        };
+        let end = end.min(file.bytes.len());
         Ok(Ok(file.bytes[start..end].to_vec()))
     }
 
@@ -588,13 +695,22 @@ impl temporary_storage_broker::HostTemporaryFile for HostState {
     ) -> wasmtime::Result<Result<(), types::PluginError>> {
         self.checkpoint()?;
         let start = usize::try_from(offset).unwrap_or(usize::MAX);
-        let end = start.saturating_add(payload.len());
+        let Some(end) = start.checked_add(payload.len()) else {
+            return Ok(Err(invalid_input_plugin_error(
+                "temporary storage range overflow",
+            )));
+        };
         let old_len = self.table.get(&resource)?.bytes.len();
-        let new_total = self
+        let Some(new_total) = self
             .temporary_bytes
-            .saturating_sub(old_len)
-            .saturating_add(end);
-        if end < start || new_total > self.permissions.limits.temporary_storage_bytes {
+            .checked_sub(old_len)
+            .and_then(|total| total.checked_add(end))
+        else {
+            return Ok(Err(invalid_input_plugin_error(
+                "temporary storage accounting overflow",
+            )));
+        };
+        if new_total > self.permissions.limits.temporary_storage_bytes {
             return Ok(Err(invalid_input_plugin_error(
                 "temporary storage limit exceeded",
             )));
@@ -614,10 +730,15 @@ impl temporary_storage_broker::HostTemporaryFile for HostState {
         self.checkpoint()?;
         let length = usize::try_from(length).unwrap_or(usize::MAX);
         let old_len = self.table.get(&resource)?.bytes.len();
-        let new_total = self
+        let Some(new_total) = self
             .temporary_bytes
-            .saturating_sub(old_len)
-            .saturating_add(length);
+            .checked_sub(old_len)
+            .and_then(|total| total.checked_add(length))
+        else {
+            return Ok(Err(invalid_input_plugin_error(
+                "temporary storage accounting overflow",
+            )));
+        };
         if new_total > self.permissions.limits.temporary_storage_bytes {
             return Ok(Err(invalid_input_plugin_error(
                 "temporary storage limit exceeded",
@@ -641,6 +762,11 @@ impl temporary_storage_broker::Host for HostState {
         &mut self,
     ) -> wasmtime::Result<Result<Resource<TemporaryFileResource>, types::PluginError>> {
         self.checkpoint()?;
+        if !self.declares("temporary_storage") {
+            return Ok(Err(permission_plugin_error(
+                "temporary storage capability was not declared",
+            )));
+        }
         if !self.permissions.temporary_storage {
             return Ok(Err(permission_plugin_error(
                 "temporary storage is not granted",
@@ -658,6 +784,11 @@ impl temporary_storage_broker::Host for HostState {
 impl system_broker::Host for HostState {
     fn monotonic_millis(&mut self) -> wasmtime::Result<Result<u64, types::PluginError>> {
         self.checkpoint()?;
+        if !self.declares("clock_read") {
+            return Ok(Err(permission_plugin_error(
+                "clock capability was not declared",
+            )));
+        }
         if !self.permissions.clocks {
             return Ok(Err(permission_plugin_error("clock access is not granted")));
         }
@@ -671,6 +802,11 @@ impl system_broker::Host for HostState {
         length: u32,
     ) -> wasmtime::Result<Result<Vec<u8>, types::PluginError>> {
         self.checkpoint()?;
+        if !self.declares("random_read") {
+            return Ok(Err(permission_plugin_error(
+                "randomness capability was not declared",
+            )));
+        }
         if !self.permissions.randomness {
             return Ok(Err(permission_plugin_error("randomness is not granted")));
         }
@@ -709,10 +845,27 @@ fn validate_metadata(
 }
 
 fn validate_capabilities(
+    manifest_capabilities: &[String],
     registrations: &PluginRegistrationGrantsV3,
     capabilities: &[types::Capability],
 ) -> Result<(), WasiDiagnostic> {
+    let mut manifest_names = BTreeSet::new();
+    for capability in manifest_capabilities {
+        let normalized = capability.trim().to_ascii_lowercase();
+        if capability_from_name(&normalized).is_none() || !manifest_names.insert(normalized) {
+            return Err(capability_mismatch(
+                "manifest capabilities are unknown or duplicated",
+            ));
+        }
+    }
+    let mut runtime_names = BTreeSet::new();
     for capability in capabilities {
+        let name = capability_name(capability);
+        if !runtime_names.insert(name.to_string()) {
+            return Err(capability_mismatch(
+                "component returned duplicate runtime capabilities",
+            ));
+        }
         let allowed = match capability {
             types::Capability::DocumentTransform => registrations.capabilities,
             types::Capability::Importer => registrations.importers,
@@ -720,42 +873,131 @@ fn validate_capabilities(
             _ => true,
         };
         if !allowed {
-            return Err(WasiDiagnostic::new(
-                WasiDiagnosticCode::PluginWasiPermissionDenied,
+            return Err(capability_mismatch(
                 "component declared a capability without registration grant",
             ));
         }
     }
+    if manifest_names != runtime_names {
+        return Err(capability_mismatch(
+            "component capabilities do not exactly match the verified manifest",
+        ));
+    }
     Ok(())
 }
 
-fn granted_capabilities(permissions: &ComponentPermissions) -> Vec<types::Capability> {
-    let mut result = Vec::new();
-    if permissions.filesystem.values().any(|grant| !grant.writable) {
-        result.push(types::Capability::FilesystemRead);
+fn validate_invocation_declaration(
+    package: &VerifiedComponentPackage,
+    capabilities: &[types::Capability],
+    invocation: &ComponentInvocation,
+) -> Result<(), WasiDiagnostic> {
+    let manifest = &package.manifest;
+    let declared = match invocation {
+        ComponentInvocation::Transform(_) => {
+            capabilities.contains(&types::Capability::DocumentTransform)
+                && manifest.hooks.iter().any(|hook| {
+                    matches!(
+                        hook,
+                        PluginHook::BeforeConversion
+                            | PluginHook::AfterConversion
+                            | PluginHook::Validate
+                    )
+                })
+        }
+        ComponentInvocation::Import(request) => {
+            capabilities.contains(&types::Capability::Importer)
+                && manifest.hooks.contains(&PluginHook::RegisterImporter)
+                && manifest.format_capabilities.iter().any(|capability| {
+                    capability.available
+                        && capability
+                            .input
+                            .as_deref()
+                            .is_some_and(|format| format.eq_ignore_ascii_case(&request.format))
+                })
+        }
+        ComponentInvocation::Export(request) => {
+            capabilities.contains(&types::Capability::Exporter)
+                && manifest.hooks.contains(&PluginHook::RegisterExporter)
+                && manifest.format_capabilities.iter().any(|capability| {
+                    capability.available
+                        && capability
+                            .output
+                            .as_deref()
+                            .is_some_and(|format| format.eq_ignore_ascii_case(&request.format))
+                })
+        }
+    };
+    if !declared {
+        return Err(WasiDiagnostic::new(
+            WasiDiagnosticCode::PluginWasiInvocationNotDeclared,
+            "component invocation is not declared by its hooks and format capabilities",
+        ));
     }
-    if permissions.filesystem.values().any(|grant| grant.writable) {
-        result.push(types::Capability::FilesystemWrite);
+    Ok(())
+}
+
+fn capability_name(capability: &types::Capability) -> &'static str {
+    match capability {
+        types::Capability::DocumentTransform => "document_transform",
+        types::Capability::Importer => "importer",
+        types::Capability::Exporter => "exporter",
+        types::Capability::FilesystemRead => "filesystem_read",
+        types::Capability::FilesystemWrite => "filesystem_write",
+        types::Capability::EnvironmentRead => "environment_read",
+        types::Capability::NetworkRequest => "network_request",
+        types::Capability::ModelArtifactRead => "model_artifact_read",
+        types::Capability::TemporaryStorage => "temporary_storage",
+        types::Capability::ClockRead => "clock_read",
+        types::Capability::RandomRead => "random_read",
     }
-    if !permissions.environment.is_empty() {
-        result.push(types::Capability::EnvironmentRead);
-    }
-    if !permissions.network.is_empty() {
-        result.push(types::Capability::NetworkRequest);
-    }
-    if !permissions.model_artifacts.is_empty() {
-        result.push(types::Capability::ModelArtifactRead);
-    }
-    if permissions.temporary_storage {
-        result.push(types::Capability::TemporaryStorage);
-    }
-    if permissions.clocks {
-        result.push(types::Capability::ClockRead);
-    }
-    if permissions.randomness {
-        result.push(types::Capability::RandomRead);
-    }
-    result
+}
+
+fn capability_from_name(name: &str) -> Option<types::Capability> {
+    Some(match name {
+        "document_transform" => types::Capability::DocumentTransform,
+        "importer" => types::Capability::Importer,
+        "exporter" => types::Capability::Exporter,
+        "filesystem_read" => types::Capability::FilesystemRead,
+        "filesystem_write" => types::Capability::FilesystemWrite,
+        "environment_read" => types::Capability::EnvironmentRead,
+        "network_request" => types::Capability::NetworkRequest,
+        "model_artifact_read" => types::Capability::ModelArtifactRead,
+        "temporary_storage" => types::Capability::TemporaryStorage,
+        "clock_read" => types::Capability::ClockRead,
+        "random_read" => types::Capability::RandomRead,
+        _ => return None,
+    })
+}
+
+fn capability_mismatch(message: impl Into<String>) -> WasiDiagnostic {
+    WasiDiagnostic::new(WasiDiagnosticCode::PluginWasiCapabilityMismatch, message)
+}
+
+fn granted_capabilities(
+    declared: &[types::Capability],
+    permissions: &ComponentPermissions,
+) -> Vec<types::Capability> {
+    declared
+        .iter()
+        .filter(|capability| match capability {
+            types::Capability::DocumentTransform
+            | types::Capability::Importer
+            | types::Capability::Exporter => true,
+            types::Capability::FilesystemRead => {
+                permissions.filesystem.values().any(|grant| !grant.writable)
+            }
+            types::Capability::FilesystemWrite => {
+                permissions.filesystem.values().any(|grant| grant.writable)
+            }
+            types::Capability::EnvironmentRead => !permissions.environment.is_empty(),
+            types::Capability::NetworkRequest => !permissions.network.is_empty(),
+            types::Capability::ModelArtifactRead => !permissions.model_artifacts.is_empty(),
+            types::Capability::TemporaryStorage => permissions.temporary_storage,
+            types::Capability::ClockRead => permissions.clocks,
+            types::Capability::RandomRead => permissions.randomness,
+        })
+        .cloned()
+        .collect()
 }
 
 fn validate_input_size(
@@ -763,9 +1005,26 @@ fn validate_input_size(
     limit: usize,
 ) -> Result<(), WasiDiagnostic> {
     let size = match invocation {
-        ComponentInvocation::Transform(document) => document.payload.len(),
-        ComponentInvocation::Import(request) => request.payload.len(),
-        ComponentInvocation::Export(request) => request.document.payload.len(),
+        ComponentInvocation::Transform(document) => {
+            validate_document(document, WasiDiagnosticCode::PluginWasiInvalidInput)?;
+            document.payload.len()
+        }
+        ComponentInvocation::Import(request) => {
+            if request.format.trim().is_empty() {
+                return Err(invalid_input("import format cannot be empty"));
+            }
+            request.payload.len()
+        }
+        ComponentInvocation::Export(request) => {
+            if request.format.trim().is_empty() {
+                return Err(invalid_input("export format cannot be empty"));
+            }
+            validate_document(
+                &request.document,
+                WasiDiagnosticCode::PluginWasiInvalidInput,
+            )?;
+            request.document.payload.len()
+        }
     };
     if size > limit {
         return Err(WasiDiagnostic::new(
@@ -781,15 +1040,23 @@ fn validate_output_size(
     limit: usize,
 ) -> Result<(), WasiDiagnostic> {
     let size = match result {
-        ComponentInvocationResult::Patch(patch) => patch
-            .operations
-            .iter()
-            .map(|operation| match operation {
-                types::PatchOperation::ReplaceDocument(value) => value.payload.len(),
-                types::PatchOperation::SetMetadata(value) => value.key.len() + value.value.len(),
-                types::PatchOperation::RemoveMetadata(value) => value.len(),
-            })
-            .sum(),
+        ComponentInvocationResult::Patch(patch) => {
+            patch
+                .operations
+                .iter()
+                .try_fold(0usize, |total, operation| {
+                    let operation_size = match operation {
+                        types::PatchOperation::ReplaceDocument(value) => value.payload.len(),
+                        types::PatchOperation::SetMetadata(value) => value
+                            .key
+                            .len()
+                            .checked_add(value.value.len())
+                            .ok_or_else(output_limit)?,
+                        types::PatchOperation::RemoveMetadata(value) => value.len(),
+                    };
+                    total.checked_add(operation_size).ok_or_else(output_limit)
+                })?
+        }
         ComponentInvocationResult::Document(document) => document.payload.len(),
         ComponentInvocationResult::Export(result) => result.payload.len(),
     };
@@ -805,53 +1072,272 @@ fn validate_output_size(
 fn validate_result(
     result: &ComponentInvocationResult,
     expected_patch_schema: Option<&str>,
+    expected_export_format: Option<&str>,
     diagnostic_count_limit: usize,
     diagnostic_bytes_limit: usize,
+    operation_limit: usize,
 ) -> Result<(), WasiDiagnostic> {
     let diagnostics = match result {
         ComponentInvocationResult::Patch(patch) => {
             if expected_patch_schema != Some(patch.base_schema_version.as_str())
-                || patch.operations.iter().any(|operation| match operation {
-                    types::PatchOperation::ReplaceDocument(value) => value.media_type.is_empty(),
-                    types::PatchOperation::SetMetadata(value) => value.key.is_empty(),
-                    types::PatchOperation::RemoveMetadata(value) => value.is_empty(),
-                })
+                || patch.operations.len() > operation_limit
             {
-                return Err(WasiDiagnostic::new(
-                    WasiDiagnosticCode::PluginWasiInvalidPatch,
-                    "component returned an invalid document patch",
-                ));
+                return Err(invalid_patch());
             }
+            validate_patch_operations(&patch.operations, diagnostic_bytes_limit)?;
             &patch.diagnostics
         }
-        ComponentInvocationResult::Document(_) => return Ok(()),
-        ComponentInvocationResult::Export(result) => &result.diagnostics,
+        ComponentInvocationResult::Document(document) => {
+            validate_document(document, WasiDiagnosticCode::PluginWasiProtocolMismatch)?;
+            return Ok(());
+        }
+        ComponentInvocationResult::Export(result) => {
+            if result.media_type.trim().is_empty()
+                || !expected_export_format
+                    .is_some_and(|format| format.eq_ignore_ascii_case(&result.media_type))
+            {
+                return Err(protocol_mismatch(
+                    "component export result does not match the requested format",
+                ));
+            }
+            &result.diagnostics
+        }
     };
-    let diagnostic_bytes = diagnostics
-        .iter()
-        .map(|diagnostic| {
-            diagnostic.message.len() + diagnostic.field.as_ref().map_or(0, String::len)
-        })
-        .sum::<usize>();
-    if diagnostics.len() > diagnostic_count_limit || diagnostic_bytes > diagnostic_bytes_limit {
+    validate_guest_diagnostics(diagnostics, diagnostic_count_limit, diagnostic_bytes_limit)
+}
+
+fn validate_document(
+    document: &types::Document,
+    code: WasiDiagnosticCode,
+) -> Result<(), WasiDiagnostic> {
+    if document.schema_version != DOCUMENT_SCHEMA_VERSION || document.media_type.trim().is_empty() {
         return Err(WasiDiagnostic::new(
-            WasiDiagnosticCode::PluginWasiOutputLimit,
-            "component diagnostics exceed configured limits",
+            code,
+            "document has an unsupported schema version or empty media type",
         ));
     }
     Ok(())
 }
 
-fn plugin_error(error: types::PluginError) -> WasiDiagnostic {
+fn validate_patch_operations(
+    operations: &[types::PatchOperation],
+    field_limit: usize,
+) -> Result<(), WasiDiagnostic> {
+    let mut replacement_seen = false;
+    let mut metadata_keys = BTreeSet::new();
+    for operation in operations {
+        let valid = match operation {
+            types::PatchOperation::ReplaceDocument(value) => {
+                let first = !replacement_seen;
+                replacement_seen = true;
+                first && !value.media_type.trim().is_empty()
+            }
+            types::PatchOperation::SetMetadata(value) => {
+                !value.key.trim().is_empty()
+                    && value.key.len() <= field_limit
+                    && value.value.len() <= field_limit
+                    && metadata_keys.insert(value.key.clone())
+            }
+            types::PatchOperation::RemoveMetadata(value) => {
+                !value.trim().is_empty()
+                    && value.len() <= field_limit
+                    && metadata_keys.insert(value.clone())
+            }
+        };
+        if !valid {
+            return Err(invalid_patch());
+        }
+    }
+    Ok(())
+}
+
+fn validate_guest_diagnostics(
+    diagnostics: &[types::Diagnostic],
+    count_limit: usize,
+    bytes_limit: usize,
+) -> Result<(), WasiDiagnostic> {
+    if diagnostics.len() > count_limit {
+        return Err(output_limit());
+    }
+    let mut total = 0usize;
+    for diagnostic in diagnostics {
+        let field_bytes = diagnostic.field.as_ref().map_or(0, String::len);
+        if diagnostic.message.len() > bytes_limit || field_bytes > bytes_limit {
+            return Err(output_limit());
+        }
+        total = total
+            .checked_add(diagnostic.message.len())
+            .and_then(|value| value.checked_add(field_bytes))
+            .ok_or_else(output_limit)?;
+        if total > bytes_limit {
+            return Err(output_limit());
+        }
+    }
+    Ok(())
+}
+
+fn invalid_input(message: impl Into<String>) -> WasiDiagnostic {
+    WasiDiagnostic::new(WasiDiagnosticCode::PluginWasiInvalidInput, message)
+}
+
+fn invalid_patch() -> WasiDiagnostic {
+    WasiDiagnostic::new(
+        WasiDiagnosticCode::PluginWasiInvalidPatch,
+        "component returned an invalid document patch",
+    )
+}
+
+fn output_limit() -> WasiDiagnostic {
+    WasiDiagnostic::new(
+        WasiDiagnosticCode::PluginWasiOutputLimit,
+        "component output exceeds configured limits",
+    )
+}
+
+fn plugin_error(error: types::PluginError, limits: &WasiResourceLimits) -> WasiDiagnostic {
+    if error.message.len() > limits.diagnostic_bytes
+        || validate_guest_diagnostics(
+            &error.diagnostics,
+            limits.diagnostic_count,
+            limits.diagnostic_bytes,
+        )
+        .is_err()
+    {
+        return output_limit();
+    }
     let code = match error.code {
         types::PluginErrorCode::PermissionDenied => WasiDiagnosticCode::PluginWasiPermissionDenied,
         types::PluginErrorCode::Cancelled => WasiDiagnosticCode::PluginWasiCancelled,
-        types::PluginErrorCode::InvalidInput => WasiDiagnosticCode::PluginWasiInvalidPatch,
-        types::PluginErrorCode::Unsupported | types::PluginErrorCode::Internal => {
-            WasiDiagnosticCode::PluginWasiTrap
-        }
+        types::PluginErrorCode::InvalidInput => WasiDiagnosticCode::PluginWasiInvalidInput,
+        types::PluginErrorCode::Unsupported => WasiDiagnosticCode::PluginWasiProtocolMismatch,
+        types::PluginErrorCode::Internal => WasiDiagnosticCode::PluginWasiTrap,
     };
-    WasiDiagnostic::new(code, error.message)
+    let details = error
+        .diagnostics
+        .into_iter()
+        .map(|diagnostic| WasiDiagnosticDetail {
+            code: diagnostic_code(diagnostic.code),
+            severity: match diagnostic.severity {
+                types::DiagnosticSeverity::Info => WasiDiagnosticSeverity::Info,
+                types::DiagnosticSeverity::Warning => WasiDiagnosticSeverity::Warning,
+                types::DiagnosticSeverity::Error => WasiDiagnosticSeverity::Error,
+            },
+            message: diagnostic.message,
+            field: diagnostic.field,
+        })
+        .collect();
+    WasiDiagnostic::new(code, error.message).with_details(details)
+}
+
+fn diagnostic_code(code: types::DiagnosticCode) -> WasiDiagnosticCode {
+    match code {
+        types::DiagnosticCode::PluginWasiTrap => WasiDiagnosticCode::PluginWasiTrap,
+        types::DiagnosticCode::PluginWasiTimeout => WasiDiagnosticCode::PluginWasiTimeout,
+        types::DiagnosticCode::PluginWasiCancelled => WasiDiagnosticCode::PluginWasiCancelled,
+        types::DiagnosticCode::PluginWasiMemoryLimit => WasiDiagnosticCode::PluginWasiMemoryLimit,
+        types::DiagnosticCode::PluginWasiOutputLimit => WasiDiagnosticCode::PluginWasiOutputLimit,
+        types::DiagnosticCode::PluginWasiPermissionDenied => {
+            WasiDiagnosticCode::PluginWasiPermissionDenied
+        }
+        types::DiagnosticCode::PluginWasiProtocolMismatch => {
+            WasiDiagnosticCode::PluginWasiProtocolMismatch
+        }
+        types::DiagnosticCode::PluginWasiInvalidPatch => WasiDiagnosticCode::PluginWasiInvalidPatch,
+        types::DiagnosticCode::PluginWasiHostFailure => WasiDiagnosticCode::PluginWasiHostFailure,
+    }
+}
+
+fn broker_plugin_error(error: WasiDiagnostic, limits: &WasiResourceLimits) -> types::PluginError {
+    let code = match error.code {
+        WasiDiagnosticCode::PluginWasiPermissionDenied => types::PluginErrorCode::PermissionDenied,
+        WasiDiagnosticCode::PluginWasiCancelled => types::PluginErrorCode::Cancelled,
+        WasiDiagnosticCode::PluginWasiProtocolMismatch
+        | WasiDiagnosticCode::PluginWasiCapabilityMismatch
+        | WasiDiagnosticCode::PluginWasiInvocationNotDeclared => {
+            types::PluginErrorCode::Unsupported
+        }
+        WasiDiagnosticCode::PluginWasiInvalidInput
+        | WasiDiagnosticCode::PluginWasiInvalidPatch
+        | WasiDiagnosticCode::PluginWasiOutputLimit
+        | WasiDiagnosticCode::PluginWasiResourcePolicy => types::PluginErrorCode::InvalidInput,
+        WasiDiagnosticCode::PluginWasiTrap
+        | WasiDiagnosticCode::PluginWasiTimeout
+        | WasiDiagnosticCode::PluginWasiMemoryLimit
+        | WasiDiagnosticCode::PluginWasiHostFailure => types::PluginErrorCode::Internal,
+    };
+    let diagnostic_code = wit_diagnostic_code(error.code);
+    let mut diagnostics = error
+        .details
+        .into_iter()
+        .map(|detail| types::Diagnostic {
+            code: wit_diagnostic_code(detail.code),
+            severity: match detail.severity {
+                WasiDiagnosticSeverity::Info => types::DiagnosticSeverity::Info,
+                WasiDiagnosticSeverity::Warning => types::DiagnosticSeverity::Warning,
+                WasiDiagnosticSeverity::Error => types::DiagnosticSeverity::Error,
+            },
+            message: detail.message,
+            field: detail.field,
+        })
+        .collect::<Vec<_>>();
+    diagnostics.insert(
+        0,
+        types::Diagnostic {
+            code: diagnostic_code,
+            severity: types::DiagnosticSeverity::Error,
+            message: error.message.clone(),
+            field: None,
+        },
+    );
+    if error.message.len() > limits.diagnostic_bytes
+        || validate_guest_diagnostics(
+            &diagnostics,
+            limits.diagnostic_count,
+            limits.diagnostic_bytes,
+        )
+        .is_err()
+    {
+        return types::PluginError {
+            code: types::PluginErrorCode::InvalidInput,
+            message: "broker diagnostic exceeds configured limits".to_string(),
+            diagnostics: vec![types::Diagnostic {
+                code: types::DiagnosticCode::PluginWasiOutputLimit,
+                severity: types::DiagnosticSeverity::Error,
+                message: "broker diagnostic exceeds configured limits".to_string(),
+                field: None,
+            }],
+        };
+    }
+    types::PluginError {
+        code,
+        message: error.message,
+        diagnostics,
+    }
+}
+
+fn wit_diagnostic_code(code: WasiDiagnosticCode) -> types::DiagnosticCode {
+    match code {
+        WasiDiagnosticCode::PluginWasiTimeout => types::DiagnosticCode::PluginWasiTimeout,
+        WasiDiagnosticCode::PluginWasiCancelled => types::DiagnosticCode::PluginWasiCancelled,
+        WasiDiagnosticCode::PluginWasiMemoryLimit => types::DiagnosticCode::PluginWasiMemoryLimit,
+        WasiDiagnosticCode::PluginWasiOutputLimit
+        | WasiDiagnosticCode::PluginWasiResourcePolicy => {
+            types::DiagnosticCode::PluginWasiOutputLimit
+        }
+        WasiDiagnosticCode::PluginWasiPermissionDenied => {
+            types::DiagnosticCode::PluginWasiPermissionDenied
+        }
+        WasiDiagnosticCode::PluginWasiProtocolMismatch
+        | WasiDiagnosticCode::PluginWasiCapabilityMismatch
+        | WasiDiagnosticCode::PluginWasiInvocationNotDeclared => {
+            types::DiagnosticCode::PluginWasiProtocolMismatch
+        }
+        WasiDiagnosticCode::PluginWasiInvalidInput | WasiDiagnosticCode::PluginWasiInvalidPatch => {
+            types::DiagnosticCode::PluginWasiInvalidPatch
+        }
+        WasiDiagnosticCode::PluginWasiHostFailure => types::DiagnosticCode::PluginWasiHostFailure,
+        WasiDiagnosticCode::PluginWasiTrap => types::DiagnosticCode::PluginWasiTrap,
+    }
 }
 
 fn permission_plugin_error(message: impl Into<String>) -> types::PluginError {
@@ -870,6 +1356,18 @@ fn invalid_input_plugin_error(message: impl Into<String>) -> types::PluginError 
     }
 }
 
+fn filesystem_access_error(error: FilesystemOperationError) -> filesystem_broker::AccessError {
+    match error {
+        FilesystemOperationError::PermissionDenied => {
+            filesystem_broker::AccessError::PermissionDenied
+        }
+        FilesystemOperationError::NotFound => filesystem_broker::AccessError::NotFound,
+        FilesystemOperationError::InvalidPath => filesystem_broker::AccessError::InvalidPath,
+        FilesystemOperationError::SizeLimit => filesystem_broker::AccessError::SizeLimit,
+        FilesystemOperationError::HostFailure => filesystem_broker::AccessError::HostFailure,
+    }
+}
+
 fn classify_runtime_error(error: wasmtime::Error) -> WasiDiagnostic {
     let message = error.to_string();
     let lower = message.to_ascii_lowercase();
@@ -882,15 +1380,35 @@ fn classify_runtime_error(error: wasmtime::Error) -> WasiDiagnostic {
     } else {
         WasiDiagnosticCode::PluginWasiTrap
     };
-    WasiDiagnostic::new(code, message)
+    WasiDiagnostic::new(code, bounded_host_message(message))
 }
 
 fn protocol_mismatch(message: impl Into<String>) -> WasiDiagnostic {
-    WasiDiagnostic::new(WasiDiagnosticCode::PluginWasiProtocolMismatch, message)
+    WasiDiagnostic::new(
+        WasiDiagnosticCode::PluginWasiProtocolMismatch,
+        bounded_host_message(message.into()),
+    )
 }
 
 fn host_failure(error: impl std::fmt::Display) -> WasiDiagnostic {
-    WasiDiagnostic::new(WasiDiagnosticCode::PluginWasiHostFailure, error.to_string())
+    WasiDiagnostic::new(
+        WasiDiagnosticCode::PluginWasiHostFailure,
+        bounded_host_message(error.to_string()),
+    )
+}
+
+fn bounded_host_message(message: String) -> String {
+    const MAX_BYTES: usize = 4 * 1024;
+    if message.len() <= MAX_BYTES {
+        return message;
+    }
+    let boundary = message
+        .char_indices()
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= MAX_BYTES - 3)
+        .last()
+        .unwrap_or(0);
+    format!("{}...", &message[..boundary])
 }
 
 struct ConcurrencyGate {
@@ -1048,11 +1566,11 @@ mod tests {
         store.epoch_deadline_callback(move |_| {
             if cancellation.is_cancelled() {
                 interrupt.store(INTERRUPT_CANCELLED, Ordering::Release);
-                return Ok(UpdateDeadline::Interrupt);
+                return Err(wasmtime::Error::msg("PLUGIN_WASI_CANCELLED"));
             }
             if Instant::now() >= deadline {
                 interrupt.store(INTERRUPT_TIMEOUT, Ordering::Release);
-                return Ok(UpdateDeadline::Interrupt);
+                return Err(wasmtime::Error::msg("PLUGIN_WASI_TIMEOUT"));
             }
             Ok(UpdateDeadline::Continue(1))
         });

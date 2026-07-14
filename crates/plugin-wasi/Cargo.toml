@@ -8,13 +8,16 @@ publish = false
 
 [dependencies]
 latexsnipper-plugin.workspace = true
+latexsnipper-ast.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 semver = "1"
 sha2.workspace = true
 hex = "0.4"
-wasmtime = { version = "=38.0.4", default-features = false, features = [
+cap-std.workspace = true
+cap-fs-ext.workspace = true
+wasmtime = { version = "=36.0.12", default-features = false, features = [
     "component-model",
     "cranelift",
     "runtime",

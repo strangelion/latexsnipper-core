@@ -6,6 +6,7 @@ use latexsnipper_plugin::PluginManifestV3;
 use latexsnipper_plugin_wasi::{
     wit_types, ComponentInvocation, ComponentNetworkScheme, NetworkBroker, NetworkRequest,
     NetworkResponse, WasiComponentHost, WasiComponentPackageVerifier, WasiDiagnosticCode,
+    WasiDiagnosticDetail, WasiDiagnosticSeverity, WasiHostPolicy, WasiPackagePolicy,
 };
 use semver::Version;
 use serde_json::{json, Value};
@@ -26,9 +27,60 @@ fn manifest(component: &[u8]) -> Value {
             "processIpc": null,
             "componentWit": 1
         },
-        "capabilities": [],
-        "formatCapabilities": [],
-        "hooks": [],
+        "capabilities": [
+            "document_transform",
+            "importer",
+            "exporter",
+            "filesystem_read",
+            "filesystem_write",
+            "environment_read",
+            "network_request",
+            "model_artifact_read",
+            "temporary_storage",
+            "clock_read",
+            "random_read"
+        ],
+        "formatCapabilities": [
+            {
+                "input": "text/plain",
+                "output": "AST",
+                "available": true,
+                "supports_formula": true,
+                "supports_table": true,
+                "supports_image": true,
+                "supports_svg": true,
+                "supports_style": true,
+                "supports_layout": true,
+                "supports_office_objects": false,
+                "fidelity": "Lossless",
+                "known_loss": [],
+                "notes": [],
+                "required_features": [],
+                "external_dependencies": [],
+                "platform_restrictions": [],
+                "experimental": false
+            },
+            {
+                "input": "AST",
+                "output": "application/octet-stream",
+                "available": true,
+                "supports_formula": true,
+                "supports_table": true,
+                "supports_image": true,
+                "supports_svg": true,
+                "supports_style": true,
+                "supports_layout": true,
+                "supports_office_objects": false,
+                "fidelity": "Lossless",
+                "known_loss": [],
+                "notes": [],
+                "required_features": [],
+                "external_dependencies": [],
+                "platform_restrictions": [],
+                "experimental": false
+            }
+        ],
+        "hooks": ["before_conversion", "register_importer", "register_exporter"],
         "priority": 0,
         "dependencies": [],
         "before": [],
@@ -168,6 +220,26 @@ impl NetworkBroker for FixtureNetworkBroker {
             status: 200,
             body: b"network".to_vec(),
         })
+    }
+}
+
+struct TimeoutNetworkBroker;
+
+impl NetworkBroker for TimeoutNetworkBroker {
+    fn send(
+        &self,
+        _request: &NetworkRequest,
+    ) -> Result<NetworkResponse, latexsnipper_plugin_wasi::WasiDiagnostic> {
+        Err(latexsnipper_plugin_wasi::WasiDiagnostic::new(
+            WasiDiagnosticCode::PluginWasiTimeout,
+            "upstream timeout",
+        )
+        .with_details(vec![WasiDiagnosticDetail {
+            code: WasiDiagnosticCode::PluginWasiHostFailure,
+            severity: WasiDiagnosticSeverity::Warning,
+            message: "upstream detail".to_string(),
+            field: Some("network".to_string()),
+        }]))
     }
 }
 
@@ -388,10 +460,12 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
             "FIXTURE_ENV".to_string(),
             "environment".to_string(),
         )]))
+        .unwrap()
         .with_model_artifacts(BTreeMap::from([(
             "fixture-model".to_string(),
             b"model".to_vec(),
         )]))
+        .unwrap()
         .with_network_broker(Arc::new(FixtureNetworkBroker));
     let compiled = host.compile().unwrap();
     assert_eq!(
@@ -429,6 +503,31 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
 }
 
 #[test]
+fn broker_failures_preserve_their_original_diagnostic_category() {
+    let component = typed_success_component();
+    let package = tempfile::tempdir().unwrap();
+    let mut value = manifest(&component);
+    value["permissions"]["network"] = json!([{
+        "scheme": "https",
+        "host": "models.example.invalid",
+        "port": 443
+    }]);
+    write_package(&package, &component, value);
+    let verified = verifier().verify_path(package.path()).unwrap();
+    let host = WasiComponentHost::new(verified)
+        .unwrap()
+        .with_network_broker(Arc::new(TimeoutNetworkBroker));
+    let compiled = host.compile().unwrap();
+    let error = transform(&host, &compiled, b"broker:network").unwrap_err();
+    assert_eq!(error.code, WasiDiagnosticCode::PluginWasiTrap);
+    assert_eq!(error.details[0].code, WasiDiagnosticCode::PluginWasiTimeout);
+    assert_eq!(
+        error.details[1].code,
+        WasiDiagnosticCode::PluginWasiHostFailure
+    );
+}
+
+#[test]
 fn invalid_patch_and_oversize_output_have_stable_diagnostics() {
     let component = typed_success_component();
     let package = package(&component);
@@ -445,11 +544,11 @@ fn invalid_patch_and_oversize_output_have_stable_diagnostics() {
 #[test]
 fn memory_limit_is_enforced_before_component_execution() {
     let component = typed_success_component();
-    let package = tempfile::tempdir().unwrap();
+    let memory_package = tempfile::tempdir().unwrap();
     let mut value = manifest(&component);
     value["permissions"]["limits"]["memoryBytes"] = json!(1024 * 1024);
-    write_package(&package, &component, value);
-    let verified = verifier().verify_path(package.path()).unwrap();
+    write_package(&memory_package, &component, value);
+    let verified = verifier().verify_path(memory_package.path()).unwrap();
     let host = WasiComponentHost::new(verified).unwrap();
     let compiled = host.compile().unwrap();
     let error = transform(&host, &compiled, b"ordinary").unwrap_err();
@@ -498,4 +597,228 @@ fn timeout_and_running_cancellation_leave_host_reusable() {
     canceller.join().unwrap();
     assert_eq!(cancelled.code, WasiDiagnosticCode::PluginWasiCancelled);
     assert_eq!(transform(&host, &compiled, b"reused").unwrap(), b"reused");
+}
+
+#[test]
+fn guest_errors_preserve_details_and_shutdown_failures_are_not_discarded() {
+    let component = typed_success_component();
+    let package = package(&component);
+    let verified = verifier().verify_path(package.path()).unwrap();
+    let host = WasiComponentHost::new(verified).unwrap();
+    let compiled = host.compile().unwrap();
+
+    let invocation = transform(&host, &compiled, b"control:guest-error").unwrap_err();
+    assert_eq!(invocation.code, WasiDiagnosticCode::PluginWasiTrap);
+    assert_eq!(invocation.message, "fixture invocation failed");
+    assert_eq!(invocation.details.len(), 1);
+    assert_eq!(
+        invocation.details[0].code,
+        WasiDiagnosticCode::PluginWasiHostFailure
+    );
+    assert_eq!(
+        invocation.details[0].field.as_deref(),
+        Some("fixture.field")
+    );
+
+    let shutdown = transform(&host, &compiled, b"control:shutdown-error").unwrap_err();
+    assert_eq!(shutdown.code, WasiDiagnosticCode::PluginWasiTrap);
+    assert_eq!(shutdown.message, "fixture shutdown failed");
+    assert_eq!(transform(&host, &compiled, b"reused").unwrap(), b"reused");
+}
+
+#[test]
+fn initialization_errors_preserve_structured_diagnostics() {
+    let component = typed_success_component();
+    let package = package(&component);
+    let verified = verifier().verify_path(package.path()).unwrap();
+    let host = WasiComponentHost::new(verified)
+        .unwrap()
+        .with_configuration(b"control:init-error".to_vec())
+        .unwrap();
+    let compiled = host.compile().unwrap();
+    let error = transform(&host, &compiled, b"unused").unwrap_err();
+    assert_eq!(error.message, "fixture initialize failed");
+    assert_eq!(error.details.len(), 1);
+}
+
+#[test]
+fn runtime_capabilities_must_exactly_match_the_manifest() {
+    let component = typed_success_component();
+    let package = tempfile::tempdir().unwrap();
+    let mut value = manifest(&component);
+    value["capabilities"] = json!(["document_transform", "importer"]);
+    write_package(&package, &component, value);
+    let verified = verifier().verify_path(package.path()).unwrap();
+    let host = WasiComponentHost::new(verified).unwrap();
+    let compiled = host.compile().unwrap();
+    let error = transform(&host, &compiled, b"unused").unwrap_err();
+    assert_eq!(error.code, WasiDiagnosticCode::PluginWasiCapabilityMismatch);
+}
+
+#[test]
+fn invocation_requires_declared_hook_and_compatible_format() {
+    let component = typed_success_component();
+    let package_without_hook = tempfile::tempdir().unwrap();
+    let mut value = manifest(&component);
+    value["hooks"] = json!(["register_importer", "register_exporter"]);
+    write_package(&package_without_hook, &component, value);
+    let verified = verifier().verify_path(package_without_hook.path()).unwrap();
+    let host = WasiComponentHost::new(verified).unwrap();
+    let compiled = host.compile().unwrap();
+    let hook_error = transform(&host, &compiled, b"unused").unwrap_err();
+    assert_eq!(
+        hook_error.code,
+        WasiDiagnosticCode::PluginWasiInvocationNotDeclared
+    );
+
+    let format_package = package(&component);
+    let verified = verifier().verify_path(format_package.path()).unwrap();
+    let host = WasiComponentHost::new(verified).unwrap();
+    let compiled = host.compile().unwrap();
+    let format_error = host
+        .execute(
+            &compiled,
+            ComponentInvocation::Import(wit_types::ImportRequest {
+                format: "application/pdf".to_string(),
+                payload: b"unused".to_vec(),
+            }),
+            latexsnipper_plugin::CancellationToken::default(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        format_error.code,
+        WasiDiagnosticCode::PluginWasiInvocationNotDeclared
+    );
+}
+
+#[test]
+fn model_artifact_injection_fails_explicitly() {
+    let component = typed_success_component();
+    let environment_package = package(&component);
+    let verified = verifier().verify_path(environment_package.path()).unwrap();
+    let environment_error = WasiComponentHost::new(verified)
+        .unwrap()
+        .with_environment(vec![("UNDECLARED".to_string(), "value".to_string())])
+        .err()
+        .expect("undeclared environment injection must fail");
+    assert_eq!(
+        environment_error.code,
+        WasiDiagnosticCode::PluginWasiPermissionDenied
+    );
+
+    let denied_package = package(&component);
+    let verified = verifier().verify_path(denied_package.path()).unwrap();
+    let denied = WasiComponentHost::new(verified)
+        .unwrap()
+        .with_model_artifacts(vec![("undeclared".to_string(), vec![1])])
+        .err()
+        .expect("undeclared artifact must fail");
+    assert_eq!(denied.code, WasiDiagnosticCode::PluginWasiPermissionDenied);
+
+    let package = tempfile::tempdir().unwrap();
+    let mut value = manifest(&component);
+    value["permissions"]["modelArtifacts"] = json!(["fixture-model"]);
+    value["permissions"]["limits"]["modelArtifactBytes"] = json!(4);
+    write_package(&package, &component, value);
+    let verified = verifier().verify_path(package.path()).unwrap();
+    let oversized = WasiComponentHost::new(verified)
+        .unwrap()
+        .with_model_artifacts(vec![("fixture-model".to_string(), vec![0; 5])])
+        .err()
+        .expect("oversized artifact must fail");
+    assert_eq!(oversized.code, WasiDiagnosticCode::PluginWasiOutputLimit);
+}
+
+#[test]
+fn custom_host_policy_is_authoritative_during_directory_verification() {
+    let component = typed_success_component();
+    let package = tempfile::tempdir().unwrap();
+    let mut value = manifest(&component);
+    value["permissions"]["limits"]["memoryBytes"] = json!(1024);
+    write_package(&package, &component, value);
+
+    let default_error = verifier().verify_path(package.path()).unwrap_err();
+    assert_eq!(
+        default_error.code,
+        WasiDiagnosticCode::PluginWasiResourcePolicy
+    );
+
+    let mut policy = WasiHostPolicy::default();
+    policy.minimums.memory_bytes = 1;
+    let verified = verifier()
+        .with_host_policy(policy)
+        .verify_path(package.path())
+        .unwrap();
+    assert_eq!(verified.permissions.limits.memory_bytes, 1024);
+}
+
+#[test]
+fn duplicate_authority_and_cross_platform_ambiguous_paths_are_rejected() {
+    let component = wat::parse_str("(component)").unwrap();
+    let duplicate_package = tempfile::tempdir().unwrap();
+    let mut duplicate = manifest(&component);
+    duplicate["capabilities"] = json!(["document_transform", "document_transform"]);
+    write_package(&duplicate_package, &component, duplicate);
+    let duplicate_error = verifier()
+        .verify_path(duplicate_package.path())
+        .unwrap_err();
+    assert_eq!(
+        duplicate_error.code,
+        WasiDiagnosticCode::PluginWasiProtocolMismatch
+    );
+
+    let ambiguous_package = tempfile::tempdir().unwrap();
+    let mut ambiguous = manifest(&component);
+    ambiguous["artifact"]["path"] = json!("nested\\plugin.wasm");
+    write_package(&ambiguous_package, &component, ambiguous);
+    let path_error = verifier()
+        .verify_path(ambiguous_package.path())
+        .unwrap_err();
+    assert_eq!(
+        path_error.code,
+        WasiDiagnosticCode::PluginWasiProtocolMismatch
+    );
+}
+
+#[test]
+fn package_policy_rejects_unbounded_or_undeclared_payloads() {
+    let component = wat::parse_str("(component)").unwrap();
+    let undeclared_package = package(&component);
+    fs::write(undeclared_package.path().join("unexpected.bin"), b"payload").unwrap();
+    let error = verifier()
+        .verify_path(undeclared_package.path())
+        .unwrap_err();
+    assert_eq!(error.code, WasiDiagnosticCode::PluginWasiProtocolMismatch);
+    assert!(error.message.contains("undeclared payload"));
+
+    let bounded_package = package(&component);
+    let policy = WasiPackagePolicy {
+        max_entries: 1,
+        ..WasiPackagePolicy::default()
+    };
+    let error = verifier()
+        .with_package_policy(policy)
+        .verify_path(bounded_package.path())
+        .unwrap_err();
+    assert_eq!(error.code, WasiDiagnosticCode::PluginWasiProtocolMismatch);
+    assert!(error.message.contains("too many entries"));
+}
+
+#[test]
+fn package_and_broker_reject_hard_link_aliases() {
+    let component = typed_success_component();
+    let package = tempfile::tempdir().unwrap();
+    fs::create_dir(package.path().join("read")).unwrap();
+    fs::write(package.path().join("source.txt"), b"linked").unwrap();
+    fs::hard_link(
+        package.path().join("source.txt"),
+        package.path().join("read").join("input.txt"),
+    )
+    .unwrap();
+    let mut value = manifest(&component);
+    value["permissions"]["paths"] = json!([{"path": "read", "access": "read"}]);
+    write_package(&package, &component, value);
+    let error = verifier().verify_path(package.path()).unwrap_err();
+    assert_eq!(error.code, WasiDiagnosticCode::PluginWasiProtocolMismatch);
+    assert!(error.message.contains("single link"));
 }

@@ -10,8 +10,12 @@ pub enum WasiDiagnosticCode {
     PluginWasiCancelled,
     PluginWasiMemoryLimit,
     PluginWasiOutputLimit,
+    PluginWasiResourcePolicy,
     PluginWasiPermissionDenied,
+    PluginWasiCapabilityMismatch,
+    PluginWasiInvocationNotDeclared,
     PluginWasiProtocolMismatch,
+    PluginWasiInvalidInput,
     PluginWasiInvalidPatch,
     PluginWasiHostFailure,
 }
@@ -24,8 +28,12 @@ impl WasiDiagnosticCode {
             Self::PluginWasiCancelled => "PLUGIN_WASI_CANCELLED",
             Self::PluginWasiMemoryLimit => "PLUGIN_WASI_MEMORY_LIMIT",
             Self::PluginWasiOutputLimit => "PLUGIN_WASI_OUTPUT_LIMIT",
+            Self::PluginWasiResourcePolicy => "PLUGIN_WASI_RESOURCE_POLICY",
             Self::PluginWasiPermissionDenied => "PLUGIN_WASI_PERMISSION_DENIED",
+            Self::PluginWasiCapabilityMismatch => "PLUGIN_WASI_CAPABILITY_MISMATCH",
+            Self::PluginWasiInvocationNotDeclared => "PLUGIN_WASI_INVOCATION_NOT_DECLARED",
             Self::PluginWasiProtocolMismatch => "PLUGIN_WASI_PROTOCOL_MISMATCH",
+            Self::PluginWasiInvalidInput => "PLUGIN_WASI_INVALID_INPUT",
             Self::PluginWasiInvalidPatch => "PLUGIN_WASI_INVALID_PATCH",
             Self::PluginWasiHostFailure => "PLUGIN_WASI_HOST_FAILURE",
         }
@@ -42,6 +50,24 @@ impl fmt::Display for WasiDiagnosticCode {
 pub struct WasiDiagnostic {
     pub code: WasiDiagnosticCode,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<WasiDiagnosticDetail>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WasiDiagnosticSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WasiDiagnosticDetail {
+    pub code: WasiDiagnosticCode,
+    pub severity: WasiDiagnosticSeverity,
+    pub message: String,
+    pub field: Option<String>,
 }
 
 impl WasiDiagnostic {
@@ -49,7 +75,13 @@ impl WasiDiagnostic {
         Self {
             code,
             message: message.into(),
+            details: Vec::new(),
         }
+    }
+
+    pub fn with_details(mut self, details: Vec<WasiDiagnosticDetail>) -> Self {
+        self.details = details;
+        self
     }
 }
 

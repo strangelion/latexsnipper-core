@@ -3,10 +3,13 @@ wit_bindgen::generate!({
     world: "plugin",
 });
 
+use core::sync::atomic::{AtomicBool, Ordering};
+
 use exports::latexsnipper::plugin::{document_transformer, exporter, importer, lifecycle};
 use latexsnipper::plugin::types::{
-    Capability, Document, DocumentPatch, ExportRequest, ExportResult, ImportRequest, InitContext,
-    PatchOperation, PluginError, PluginErrorCode, PluginMetadata, ReplaceDocument,
+    Capability, Diagnostic, DiagnosticCode, DiagnosticSeverity, Document, DocumentPatch,
+    ExportRequest, ExportResult, ImportRequest, InitContext, PatchOperation, PluginError,
+    PluginErrorCode, PluginMetadata, ReplaceDocument,
 };
 use latexsnipper::plugin::{
     environment_broker, filesystem_broker, model_artifact_broker, network_broker, system_broker,
@@ -14,6 +17,8 @@ use latexsnipper::plugin::{
 };
 
 struct Fixture;
+
+static FAIL_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 impl lifecycle::Guest for Fixture {
     fn metadata() -> PluginMetadata {
@@ -31,14 +36,28 @@ impl lifecycle::Guest for Fixture {
             Capability::DocumentTransform,
             Capability::Importer,
             Capability::Exporter,
+            Capability::FilesystemRead,
+            Capability::FilesystemWrite,
+            Capability::EnvironmentRead,
+            Capability::NetworkRequest,
+            Capability::ModelArtifactRead,
+            Capability::TemporaryStorage,
+            Capability::ClockRead,
+            Capability::RandomRead,
         ]
     }
 
-    fn initialize(_context: InitContext) -> Result<(), PluginError> {
+    fn initialize(context: InitContext) -> Result<(), PluginError> {
+        if context.configuration == b"control:init-error" {
+            return Err(fixture_error("fixture initialize failed"));
+        }
         Ok(())
     }
 
     fn shutdown() -> Result<(), PluginError> {
+        if FAIL_SHUTDOWN.swap(false, Ordering::SeqCst) {
+            return Err(fixture_error("fixture shutdown failed"));
+        }
         Ok(())
     }
 }
@@ -49,6 +68,12 @@ impl document_transformer::Guest for Fixture {
             loop {
                 core::hint::spin_loop();
             }
+        }
+        if document.payload == b"control:guest-error" {
+            return Err(fixture_error("fixture invocation failed"));
+        }
+        if document.payload == b"control:shutdown-error" {
+            FAIL_SHUTDOWN.store(true, Ordering::SeqCst);
         }
         let invalid_patch = document.payload == b"control:invalid-patch";
         let payload = match document.payload.as_slice() {
@@ -110,7 +135,12 @@ fn fixture_error(message: &str) -> PluginError {
     PluginError {
         code: PluginErrorCode::Internal,
         message: message.to_string(),
-        diagnostics: Vec::new(),
+        diagnostics: vec![Diagnostic {
+            code: DiagnosticCode::PluginWasiHostFailure,
+            severity: DiagnosticSeverity::Error,
+            message: "fixture detail".to_string(),
+            field: Some("fixture.field".to_string()),
+        }],
     }
 }
 
