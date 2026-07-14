@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+#[cfg(windows)]
+use std::io;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -534,6 +536,16 @@ fn replace_file(source: &Path, destination: &Path) -> Result<(), RegistryError> 
     Ok(())
 }
 
+#[cfg(not(windows))]
+fn replace_file(source: &Path, destination: &Path) -> Result<(), RegistryError> {
+    fs::rename(source, destination)?;
+    File::open(destination.parent().ok_or_else(|| {
+        RegistryError::InvalidMetadata("registry state has no parent".to_string())
+    })?)?
+    .sync_all()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -694,14 +706,4 @@ mod tests {
         assert_eq!(recovered.len(), 1);
         assert_eq!(recovered[0].name, "official");
     }
-}
-
-#[cfg(not(windows))]
-fn replace_file(source: &Path, destination: &Path) -> Result<(), RegistryError> {
-    fs::rename(source, destination)?;
-    File::open(destination.parent().ok_or_else(|| {
-        RegistryError::InvalidMetadata("registry state has no parent".to_string())
-    })?)?
-    .sync_all()?;
-    Ok(())
 }
