@@ -23,7 +23,7 @@
 
 ## Project status
 
-The workspace is staged as **3.0.0-alpha.1** for the first stacked Core 3 change. This alpha implements versioned contract types, strict migration reports, and schema fuzz coverage only; the callable WASM, capability, plugin-host, model-loader, Worker, CLI, and FFI paths remain on their existing v2-era contracts. See the [Core 3 architecture and delivery status](docs/v3/architecture.md).
+The workspace is staged as **3.0.0-alpha.1** for the stacked Core 3 changes. The contract foundation and a separately consumable, default-deny WASI Component host are implemented; callable WASM, capability, legacy plugin-registry, model-loader, Worker, CLI, and FFI paths remain on their existing v2-era contracts. See the [Core 3 architecture and delivery status](docs/v3/architecture.md).
 
 This does **not** mean that every format, model, or plugin boundary has the same maturity.
 
@@ -40,7 +40,8 @@ This does **not** mean that every format, model, or plugin boundary has the same
 | WASM Tract recognition | **Experimental** | Model-gated, asynchronous, and tested in Chrome and Firefox; browser table and handwriting pipelines remain unavailable. |
 | Built-in Rust plugins | **Stable host behavior** | Deterministic ordering, typed hooks, transactional patches, failure policies, soft deadlines, and quarantine are implemented. |
 | Isolated native process plugins | **Reviewed local code only** | Hard timeout and resource controls exist, but this is not an OS filesystem/network sandbox. |
-| WASI Component host, native dynamic-library ABI, remote plugin installation | **Unavailable** | These capabilities must not be advertised as executable. |
+| WASI Component host | **Implemented as a Rust host crate** | WIT v1, manifest/digest verification, typed brokers, hard interruption, and resource limits are tested. It is not yet wired into the legacy plugin CLI/registry. |
+| Native dynamic-library ABI and remote plugin installation | **Unavailable** | These capabilities must not be advertised as executable. |
 
 The executable source of truth is the capability registry:
 
@@ -371,7 +372,7 @@ The versioned process host provides:
 
 Still unavailable:
 
-- WASI Component execution host;
+- legacy plugin-registry and CLI integration for WASI Components;
 - stable native dynamic-library plugin ABI;
 - remote plugin registry/install/update trust model;
 - complete native filesystem/network sandboxing.
@@ -512,7 +513,7 @@ These controls reduce risk but do not turn native process plugins into untrusted
 
 The 3.0 alpha is a contract-feedback build, not a release candidate. The following remain explicit boundaries:
 
-- implement and validate a WASI Component host before advertising untrusted third-party plugin execution;
+- integrate the validated WASI Component host with the signed registry and public plugin CLI before advertising untrusted third-party plugin distribution;
 - complete registry, signature, provenance, and update policy before remote plugin installation;
 - collect production OCR compatibility and accuracy evidence beyond browser orientation-model compatibility smoke tests;
 - define supported Office/PDF fidelity guarantees against representative corpora and platforms;
@@ -527,6 +528,7 @@ See the [Core 3 release checklist](docs/release-checklist.md) and [schema versio
 | Document | Purpose |
 |---|---|
 | [Core 3 architecture](docs/v3/architecture.md) | Stacked delivery status, version boundaries, and trust model |
+| [WASI Component host](docs/v3/wasi-component-host.md) | WIT v1 authority, limits, package boundary, and diagnostics |
 | [Core 3 migration](docs/v3/migration-from-v2.md) | Strict v2-to-v3 contract migration guidance |
 | [Production capabilities](docs/production-capabilities.md) | Stability, fidelity, and unsupported-feature policy |
 | [WASM adapter](docs/wasm.md) | Browser API, Worker runtime, cache, downloads, and model validation |

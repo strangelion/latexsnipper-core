@@ -1,0 +1,29 @@
+[package]
+name = "latexsnipper-plugin-wasi"
+description = "Default-deny WASI Component host for LaTeXSnipper plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+latexsnipper-plugin.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+semver = "1"
+sha2.workspace = true
+hex = "0.4"
+wasmtime = { version = "=38.0.4", default-features = false, features = [
+    "component-model",
+    "cranelift",
+    "runtime",
+    "std",
+] }
+getrandom = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+wat = "1.239.0"
+wit-component = { version = "0.239.0", features = ["dummy-module"] }
+wit-parser = "0.239.0"

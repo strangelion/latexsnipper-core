@@ -1,0 +1,241 @@
+package latexsnipper:plugin@1.0.0;
+
+interface types {
+    enum diagnostic-code {
+        plugin-wasi-trap,
+        plugin-wasi-timeout,
+        plugin-wasi-cancelled,
+        plugin-wasi-memory-limit,
+        plugin-wasi-output-limit,
+        plugin-wasi-permission-denied,
+        plugin-wasi-protocol-mismatch,
+        plugin-wasi-invalid-patch,
+        plugin-wasi-host-failure,
+    }
+
+    enum diagnostic-severity {
+        info,
+        warning,
+        error,
+    }
+
+    record diagnostic {
+        code: diagnostic-code,
+        severity: diagnostic-severity,
+        message: string,
+        field: option<string>,
+    }
+
+    enum capability {
+        document-transform,
+        importer,
+        exporter,
+        filesystem-read,
+        filesystem-write,
+        environment-read,
+        network-request,
+        model-artifact-read,
+        temporary-storage,
+        clock-read,
+        random-read,
+    }
+
+    record plugin-metadata {
+        id: string,
+        name: string,
+        version: string,
+        plugin-api-version: u32,
+        wit-version: u32,
+    }
+
+    record init-context {
+        core-version: string,
+        granted-capabilities: list<capability>,
+        configuration: list<u8>,
+    }
+
+    record document {
+        schema-version: string,
+        media-type: string,
+        payload: list<u8>,
+    }
+
+    record replace-document {
+        media-type: string,
+        payload: list<u8>,
+    }
+
+    record set-metadata {
+        key: string,
+        value: string,
+    }
+
+    variant patch-operation {
+        replace-document(replace-document),
+        set-metadata(set-metadata),
+        remove-metadata(string),
+    }
+
+    record document-patch {
+        base-schema-version: string,
+        operations: list<patch-operation>,
+        diagnostics: list<diagnostic>,
+    }
+
+    record import-request {
+        format: string,
+        payload: list<u8>,
+    }
+
+    record export-request {
+        format: string,
+        document: document,
+    }
+
+    record export-result {
+        media-type: string,
+        payload: list<u8>,
+        diagnostics: list<diagnostic>,
+    }
+
+    enum plugin-error-code {
+        invalid-input,
+        unsupported,
+        permission-denied,
+        cancelled,
+        internal,
+    }
+
+    record plugin-error {
+        code: plugin-error-code,
+        message: string,
+        diagnostics: list<diagnostic>,
+    }
+}
+
+interface execution-broker {
+    is-cancelled: func() -> bool;
+    remaining-millis: func() -> option<u64>;
+}
+
+interface filesystem-broker {
+    enum access-error {
+        permission-denied,
+        not-found,
+        invalid-path,
+        size-limit,
+        host-failure,
+    }
+
+    read: func(grant-id: string, relative-path: string) -> result<list<u8>, access-error>;
+    write: func(grant-id: string, relative-path: string, payload: list<u8>) -> result<_, access-error>;
+}
+
+interface environment-broker {
+    use types.{plugin-error};
+
+    get: func(name: string) -> result<option<string>, plugin-error>;
+}
+
+interface network-broker {
+    use types.{plugin-error};
+
+    enum scheme {
+        https,
+        http,
+        tcp,
+    }
+
+    record destination {
+        scheme: scheme,
+        host: string,
+        port: u16,
+    }
+
+    record request {
+        destination: destination,
+        method: string,
+        path-and-query: string,
+        body: list<u8>,
+    }
+
+    record response {
+        status: u16,
+        body: list<u8>,
+    }
+
+    send: func(request: request) -> result<response, plugin-error>;
+}
+
+interface model-artifact-broker {
+    use types.{plugin-error};
+
+    resource artifact {
+        size: func() -> u64;
+        read: func(offset: u64, length: u32) -> result<list<u8>, plugin-error>;
+    }
+
+    open: func(name: string) -> result<artifact, plugin-error>;
+}
+
+interface temporary-storage-broker {
+    use types.{plugin-error};
+
+    resource temporary-file {
+        size: func() -> u64;
+        read: func(offset: u64, length: u32) -> result<list<u8>, plugin-error>;
+        write: func(offset: u64, payload: list<u8>) -> result<_, plugin-error>;
+        truncate: func(length: u64) -> result<_, plugin-error>;
+    }
+
+    create: func() -> result<temporary-file, plugin-error>;
+}
+
+interface system-broker {
+    use types.{plugin-error};
+
+    monotonic-millis: func() -> result<u64, plugin-error>;
+    random-bytes: func(length: u32) -> result<list<u8>, plugin-error>;
+}
+
+interface lifecycle {
+    use types.{capability, init-context, plugin-error, plugin-metadata};
+
+    metadata: func() -> plugin-metadata;
+    declared-capabilities: func() -> list<capability>;
+    initialize: func(context: init-context) -> result<_, plugin-error>;
+    shutdown: func() -> result<_, plugin-error>;
+}
+
+interface document-transformer {
+    use types.{document, document-patch, plugin-error};
+
+    transform: func(document: document) -> result<document-patch, plugin-error>;
+}
+
+interface importer {
+    use types.{document, import-request, plugin-error};
+
+    import-document: func(request: import-request) -> result<document, plugin-error>;
+}
+
+interface exporter {
+    use types.{export-request, export-result, plugin-error};
+
+    export-document: func(request: export-request) -> result<export-result, plugin-error>;
+}
+
+world plugin {
+    import execution-broker;
+    import filesystem-broker;
+    import environment-broker;
+    import network-broker;
+    import model-artifact-broker;
+    import temporary-storage-broker;
+    import system-broker;
+
+    export lifecycle;
+    export document-transformer;
+    export importer;
+    export exporter;
+}

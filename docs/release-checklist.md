@@ -18,6 +18,8 @@ Alpha 1 is not an RC and must not satisfy later runtime/security items by checki
 - [ ] PR CI and manually dispatched Scheduled hardening workflow pass.
 - [ ] Chrome and Firefox browser tests pass and diagnostics artifacts are inspected.
 - [ ] Trusted plugin soft timeout/quarantine and isolated-process hard timeout pass.
+- [x] WASI Component real fixtures cover hard timeout, in-flight cancellation,
+      default-deny brokers, memory/output limits, cleanup, and host reuse.
 - [ ] Capability projection and drift tests pass.
 - [ ] Official production-derived model executes in Tract/WASM with verified origin,
       license, checksum, shape, timing, and memory report.
@@ -27,8 +29,8 @@ Alpha 1 is not an RC and must not satisfy later runtime/security items by checki
 
 ## GA blockers
 
-- [ ] Implement and validate a WASI Component host before advertising execution of
-      untrusted third-party plugins.
+- [ ] Integrate the validated WASI Component host with signed registry metadata
+      and the public plugin CLI before advertising third-party distribution.
 - [ ] Complete registry/signature/provenance/update policy before remote plugin install.
 - [ ] Obtain production OCR-model compatibility and accuracy evidence beyond the
       document-orientation compatibility smoke.
