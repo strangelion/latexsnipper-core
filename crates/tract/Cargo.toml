@@ -15,3 +15,4 @@ tract-onnx = "0.21"
 tract-core = "0.21"
 ndarray = "0.16"
 log.workspace = true
+prost = "0.11"

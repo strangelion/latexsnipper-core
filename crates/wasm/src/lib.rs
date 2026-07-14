@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::sync::Arc;
 
 use js_sys::{Function, Reflect, Uint8Array};
@@ -10,6 +11,7 @@ use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::markdown::MarkdownRenderer;
 use latexsnipper_syntax::typst::TypstRenderer;
 use latexsnipper_syntax::{Parser as _, Renderer as _};
+use latexsnipper_tensor::Tensor;
 use latexsnipper_tract::TractBackend;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -168,6 +170,7 @@ async fn recognize_internal(
     mode: String,
     progress: Option<Function>,
 ) -> JsValue {
+    warn_if_main_thread();
     if let Err(error) = emit_progress(progress.as_ref(), "validating", 0.05) {
         return error_to_js(error);
     }
@@ -224,6 +227,180 @@ async fn recognize_internal(
 
     let diagnostics = document.diagnostics.iter().map(api_diagnostic).collect();
     response_to_js(WasmResponse::success(document, diagnostics))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductionModelSmoke {
+    model: &'static str,
+    runtime: &'static str,
+    model_bytes: u64,
+    input_name: String,
+    input_shape: Vec<usize>,
+    output_shape: Vec<usize>,
+    scores: Vec<f32>,
+    predicted_degrees: u16,
+    cold_session_ms: f64,
+    cold_inference_ms: f64,
+    warm_inference_ms: f64,
+    estimated_working_set_bytes: u64,
+}
+
+/// Execute a verified production-derived document-orientation model in the
+/// compiled WASM runtime. This is a compatibility and performance smoke test,
+/// not an OCR accuracy benchmark.
+#[wasm_bindgen]
+pub fn production_orientation_smoke_v2(
+    model_bytes: Vec<u8>,
+    width: u32,
+    height: u32,
+    rgba_pixels: Vec<u8>,
+) -> JsValue {
+    let image = match validate_image(width, height, rgba_pixels) {
+        Ok(image) => image,
+        Err(error) => return error_to_js(error),
+    };
+    if model_bytes.is_empty() {
+        return error_to_js(
+            WasmError::new(WasmErrorCode::ModelArtifactInvalid, "Model bytes are empty")
+                .at_stage("production-model"),
+        );
+    }
+
+    let resized = latexsnipper_image::operations::resize(&image, 224, 224);
+    let input_data = latexsnipper_image::operations::normalize(
+        &resized,
+        &[0.485, 0.456, 0.406],
+        &[0.229, 0.224, 0.225],
+    );
+    let model_size = model_bytes.len() as u64;
+    let backend = TractBackend::new(None);
+    let session_started = now_ms();
+    let session = match backend.create_session(
+        &ModelHandle::with_bytes("PP-LCNet_x1_0_doc_ori_inference.onnx", model_bytes),
+        AccelerationMode::Cpu,
+    ) {
+        Ok(session) => session,
+        Err(error) => {
+            return error_to_js(
+                WasmError::new(WasmErrorCode::ModelArtifactInvalid, error.to_string())
+                    .at_stage("production-model-session"),
+            );
+        }
+    };
+    let cold_session_ms = now_ms() - session_started;
+    let input_name = session
+        .input_names()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "input".to_string());
+    let input_shape = vec![1, 3, 224, 224];
+    let input = Tensor::float32(&input_name, input_shape.clone(), input_data);
+
+    let cold_started = now_ms();
+    let cold_output = match session.run(std::slice::from_ref(&input)) {
+        Ok(output) => output,
+        Err(error) => {
+            return error_to_js(
+                WasmError::new(WasmErrorCode::InferenceFailed, error.to_string())
+                    .at_stage("production-model-cold-inference"),
+            );
+        }
+    };
+    let cold_inference_ms = now_ms() - cold_started;
+
+    let warm_started = now_ms();
+    let warm_output = match session.run(&[input]) {
+        Ok(output) => output,
+        Err(error) => {
+            return error_to_js(
+                WasmError::new(WasmErrorCode::InferenceFailed, error.to_string())
+                    .at_stage("production-model-warm-inference"),
+            );
+        }
+    };
+    let warm_inference_ms = now_ms() - warm_started;
+
+    let output = warm_output.first().or_else(|| cold_output.first());
+    let Some(output) = output else {
+        return error_to_js(
+            WasmError::new(
+                WasmErrorCode::InferenceFailed,
+                "Model returned no output tensors",
+            )
+            .at_stage("production-model-output"),
+        );
+    };
+    let Some(scores) = output.as_f32_slice() else {
+        return error_to_js(
+            WasmError::new(
+                WasmErrorCode::InferenceFailed,
+                "Document-orientation output is not float32",
+            )
+            .at_stage("production-model-output"),
+        );
+    };
+    if scores.len() < 4 || scores.iter().any(|score| !score.is_finite()) {
+        return error_to_js(
+            WasmError::new(
+                WasmErrorCode::InferenceFailed,
+                "Document-orientation output must contain at least four finite scores",
+            )
+            .at_stage("production-model-output")
+            .with_details(serde_json::json!({ "shape": output.shape() })),
+        );
+    }
+    let predicted_index = scores
+        .iter()
+        .take(4)
+        .enumerate()
+        .max_by(|left, right| left.1.total_cmp(right.1))
+        .map_or(0, |(index, _)| index);
+    const INPUT_TENSOR_BYTES: u64 = 3 * 224 * 224 * 4;
+    let estimated_working_set_bytes = model_size
+        .saturating_add(INPUT_TENSOR_BYTES)
+        .saturating_add(std::mem::size_of_val(scores) as u64);
+
+    response_to_js(WasmResponse::success(
+        ProductionModelSmoke {
+            model: "PP-LCNet_x1_0_doc_ori",
+            runtime: "tract-wasm",
+            model_bytes: model_size,
+            input_name,
+            input_shape,
+            output_shape: output.shape().to_vec(),
+            scores: scores.to_vec(),
+            predicted_degrees: [0, 90, 180, 270][predicted_index],
+            cold_session_ms,
+            cold_inference_ms,
+            warm_inference_ms,
+            estimated_working_set_bytes,
+        },
+        Vec::new(),
+    ))
+}
+
+fn now_ms() -> f64 {
+    js_sys::Date::now()
+}
+
+thread_local! {
+    static MAIN_THREAD_WARNING_EMITTED: Cell<bool> = const { Cell::new(false) };
+}
+
+fn warn_if_main_thread() {
+    MAIN_THREAD_WARNING_EMITTED.with(|emitted| {
+        if emitted.get() {
+            return;
+        }
+        let global = js_sys::global();
+        if Reflect::has(&global, &JsValue::from_str("document")).unwrap_or(false) {
+            web_sys::console::warn_1(&JsValue::from_str(
+                "LaTeXSnipper: heavy WASM inference on the main thread can block the UI; use the official WasmWorkerClient.",
+            ));
+            emitted.set(true);
+        }
+    });
 }
 
 fn prepare_profile(

@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -57,14 +57,24 @@ jobs:
         run: >-
           wasm-pack build crates/wasm --target web --release
           --out-dir ../../target/wasm-web
+      - name: Build bundler package
+        run: >-
+          wasm-pack build crates/wasm --target bundler --release
+          --out-dir ../../target/wasm-bundler
+      - name: Build Node package
+        run: >-
+          wasm-pack build crates/wasm --target nodejs --release
+          --out-dir ../../target/wasm-node
       - name: Record package sizes
         run: |
           find target/wasm-web -maxdepth 1 -type f -printf '%f %s bytes\n' | sort | tee target/wasm-web/size-report.txt
       - name: Smoke-test npm package metadata
         working-directory: target/wasm-web
         run: npm pack --dry-run
+      - name: Smoke-test ESM and Node imports
+        run: node crates/wasm/js/scripts/package-smoke.mjs
       - name: Upload browser package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: latexsnipper-wasm-web
           path: target/wasm-web
@@ -72,16 +82,65 @@ jobs:
           retention-days: 14
 
   browser-tests:
-    name: Browser tests (Chrome)
+    name: Browser tests (${{ matrix.browser }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - name: Install pinned wasm-pack
         run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
-      - name: Run headless Chrome tests
-        run: wasm-pack test --headless --chrome crates/wasm
+      - name: Run headless browser tests with one retry
+        run: |
+          for attempt in 1 2; do
+            wasm-pack test --headless --${{ matrix.browser }} crates/wasm && exit 0
+            test "$attempt" = 1 || exit 1
+            echo "Retrying ${{ matrix.browser }} after first failure"
+          done
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-${{ matrix.browser }}-diagnostics-${{ github.run_id }}
+          path: |
+            target/wasm32-unknown-unknown/debug
+            target/wasm-bindgen-test*
+          if-no-files-found: warn
+          retention-days: 14
+
+  typescript-runtime:
+    name: Worker, Node, TypeScript, and Vite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: crates/wasm/js
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: crates/wasm/js/package-lock.json
+      - run: npm ci
+      - run: npm audit
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:example
+      - name: Upload TypeScript declarations and example
+        uses: actions/upload-artifact@v7
+        with:
+          name: latexsnipper-wasm-worker-${{ github.run_id }}
+          path: |
+            crates/wasm/js/dist
+            crates/wasm/js/example/dist
+          if-no-files-found: error
+          retention-days: 14

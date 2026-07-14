@@ -14,6 +14,7 @@ latexsnipper-ast.workspace = true
 latexsnipper-image.workspace = true
 latexsnipper-model.workspace = true
 latexsnipper-runtime.workspace = true
+latexsnipper-tensor.workspace = true
 latexsnipper-engine = { workspace = true, default-features = false, features = ["wasm"] }
 latexsnipper-syntax.workspace = true
 latexsnipper-conversion = { workspace = true, default-features = false, features = ["wasm"] }
@@ -22,6 +23,7 @@ serde_json.workspace = true
 log.workspace = true
 wasm-bindgen = "0.2"
 js-sys = "0.3"
+web-sys = { version = "0.3", features = ["console"] }
 wasm-bindgen-futures = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
