@@ -37,7 +37,7 @@ This does **not** mean that every format, model, or plugin boundary has the same
 | SVG, PNG, PDF | **Experimental / best effort** | Structural or visual output is tested, but full layout, font, editability, and round-trip fidelity are not guaranteed. |
 | DOCX, PPTX, XLSX | **Experimental / best effort** | Package validity and supported semantics are tested; Microsoft Office visual parity is not guaranteed. |
 | WASM semantic conversion | **Stable** | Native binary exporters are intentionally excluded from the browser target. |
-| WASM Tract recognition | **Experimental** | Model-gated, asynchronous, and tested in Chrome and Firefox; browser table and handwriting pipelines remain unavailable. |
+| WASM Tract recognition | **Experimental** | Model-gated and asynchronous. Text, projection-structured tables, and TrOCR handwriting execute through the browser pipeline; readiness follows validated loaded artifacts. |
 | Built-in Rust plugins | **Stable host behavior** | Deterministic ordering, typed hooks, transactional patches, failure policies, soft deadlines, and quarantine are implemented. |
 | Isolated native process plugins | **Reviewed local code only** | Hard timeout and resource controls exist, but this is not an OS filesystem/network sandbox. |
 | WASI Component host | **Implemented as a Rust host crate** | WIT v1, manifest/digest verification, typed brokers, hard interruption, and resource limits are tested. Public execution integration remains pending. |
@@ -331,7 +331,7 @@ The JavaScript package also provides:
 - mirror fallback;
 - best-effort or required cache policy.
 
-Browser table and handwriting pipelines remain unavailable. Production-derived WASM model tests prove model/runtime compatibility, not OCR accuracy.
+Browser table mode uses a bounded built-in projection structure backend plus a loaded text recognizer; merged-cell metadata from compatible structure models is preserved. Handwriting mode uses a loaded TrOCR encoder, decoder, tokenizer, and preprocessing/output metadata, with a browser decode cap. Production-model tests prove Tract/runtime compatibility and execution, not OCR accuracy. TATR and SLANet remain opt-in experimental structure backends because current upstream exports do not meet the default browser runtime budget.
 
 See [WASM adapter](docs/wasm.md).
 
