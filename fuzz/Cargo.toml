@@ -10,6 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 serde_json = "1"
+serde = "1"
 latexsnipper-api-types = { path = "../crates/api-types" }
 latexsnipper-ast = { path = "../crates/ast" }
 latexsnipper-conversion = { path = "../crates/conversion" }
@@ -18,6 +19,9 @@ latexsnipper-plugin = { path = "../crates/plugin" }
 latexsnipper-plugin-wasi = { path = "../crates/plugin-wasi" }
 latexsnipper-syntax = { path = "../crates/syntax" }
 semver = "1"
+sha2 = "0.10"
+hex = "0.4"
+tempfile = "3"
 
 [[bin]]
 name = "format_signature"
@@ -113,6 +117,20 @@ bench = false
 [[bin]]
 name = "wasi_component_package"
 path = "fuzz_targets/wasi_component_package.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "signed_registry_metadata"
+path = "fuzz_targets/signed_registry_metadata.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "signed_remote_package"
+path = "fuzz_targets/signed_remote_package.rs"
 test = false
 doc = false
 bench = false
