@@ -12,9 +12,10 @@ timeout. Windows assigns the child to a kill-on-close Job Object after spawn;
 the small pre-assignment race remains a documented limitation.
 
 Native Rust trait-object ABI is rejected because compiler layout is not stable.
-The process IPC protocol is the current stable external interface. A WASI Component
-host remains the preferred future boundary for untrusted third-party code. Process
-plugin permission grants cover brokered host operations only: arbitrary native
+The process IPC protocol remains the reviewed-local-code interface. The
+separate WASI Component host is the default-deny boundary for untrusted code:
+it links no ambient WASI world and exposes only typed, manifest-granted brokers.
+Process plugin permission grants cover brokered host operations only: arbitrary native
 filesystem and network calls are not OS-sandboxed. Descendants that deliberately
 escape the Unix session, the Windows pre-assignment race, and total workspace disk
 usage also remain outside the current containment contract.

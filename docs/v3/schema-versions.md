@@ -3,17 +3,17 @@
 Contract versions are intentionally independent. A crate release does not
 silently advance every serialized protocol.
 
-| Surface | Existing runtime | Core 3 contract target | PR 1 status |
+| Surface | Existing runtime | Core 3 contract target | Stacked status |
 |---|---:|---:|---|
 | Workspace crates | `2.0.0` baseline | `3.0.0-alpha.1` | Implemented |
 | `Document` JSON schema | `1.0.0` | `1.0.0` | Preserved; constant centralized |
 | WASM API envelope | `2` | `3` | Contract only; exports remain v2 |
 | Capability schema | `2` | `3` | Version plan only; generator remains v2 |
 | Diagnostic schema | implicit/current | `1` | Version identified in v3 envelope contract |
-| Plugin manifest schema | legacy manifest | `3` | Types and migration implemented; host remains legacy |
-| Plugin API | `1` | `2` for manifest v3 | Contract only |
+| Plugin manifest schema | legacy manifest | `3` | Types/migration implemented; consumed by the Component host |
+| Plugin API | `1` | `2` for manifest v3 | Component host validates v2; legacy host remains API 1 |
 | Native process IPC | `1` | `1` | Preserved |
-| Component WIT | unavailable | `1` | Reserved contract; no host or WIT package yet |
+| Component WIT | unavailable | `1` (`latexsnipper:plugin@1.0.0`) | WIT package, typed host, and real fixtures implemented |
 | Model manifest/profile | legacy v2 shape | `3` | Types and migration implemented; loaders remain legacy |
 | Browser model cache | `2` | TBD by cache implementation | Unchanged |
 | Browser Worker protocol | `1` | `1` unless behavior requires change | Unchanged |

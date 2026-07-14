@@ -60,6 +60,8 @@ jobs:
             command: cargo test -p latexsnipper-plugin
           - name: V3 contracts and migrations
             command: cargo test -p latexsnipper-foundation -p latexsnipper-api-types -p latexsnipper-plugin -p latexsnipper-model
+          - name: WASI Component isolation
+            command: cargo test -p latexsnipper-plugin-wasi
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
