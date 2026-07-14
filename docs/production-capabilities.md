@@ -98,7 +98,11 @@ into the browser target.
 
 Built-in Rust plugin ordering, failure policies, transactional patches, cooperative
 soft deadlines, quarantine, and bounded concurrency are stable. The versioned
-isolated-process host provides hard process termination and resource budgets for
-reviewed local process plugins. Native dynamic-library ABI and WASI Component hosts
-remain unavailable. Remote plugin installation remains disabled until its registry,
-signature, provenance, and update-channel trust model is complete.
+isolated-process host provides process-group or Job Object termination, memory
+limits, and a response-file observation limit for reviewed local process plugins.
+Its permission model governs brokered host operations and is not a native OS
+filesystem/network sandbox. Windows still has a pre-Job-assignment race, and total
+workspace disk use is not quota-enforced. Native dynamic-library ABI and WASI
+Component hosts remain unavailable. Remote plugin installation remains disabled
+until its registry, signature, provenance, and update-channel trust model is
+complete.

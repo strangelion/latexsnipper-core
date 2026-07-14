@@ -81,7 +81,10 @@ impl DiagnosticSink {
     }
 }
 
-/// Canonical, host-enforced view of a plugin's granted permissions.
+/// Canonical policy for host-brokered plugin operations.
+///
+/// These checks do not OS-sandbox arbitrary filesystem or network calls made by
+/// a native isolated-process plugin.
 #[derive(Debug, Clone)]
 pub struct EffectivePluginPermissions {
     read_roots: Vec<PathBuf>,
@@ -103,6 +106,8 @@ pub struct EffectivePluginPermissions {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectivePermissionSummary {
+    pub enforcement_scope: &'static str,
+    pub native_process_os_sandboxed: bool,
     pub filesystem_read_root_count: usize,
     pub filesystem_write_root_count: usize,
     pub network_host_count: usize,
@@ -162,6 +167,8 @@ impl EffectivePluginPermissions {
 
     pub fn summary(&self) -> EffectivePermissionSummary {
         EffectivePermissionSummary {
+            enforcement_scope: "brokered-host-operations",
+            native_process_os_sandboxed: false,
             filesystem_read_root_count: self.read_roots.len(),
             filesystem_write_root_count: self.write_roots.len(),
             network_host_count: self.network_hosts.len(),

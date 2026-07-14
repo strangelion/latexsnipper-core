@@ -1773,6 +1773,9 @@ fn doctor_plugin_state(store_dir: &std::path::Path) -> serde_json::Value {
                 "error": error.to_string(),
                 "nativeAbiHostAvailable": false,
                 "wasiComponentHostAvailable": false,
+                "brokeredPermissionEnforcement": true,
+                "nativeProcessOsSandboxed": false,
+                "responseBudgetScope": "response-file-observation",
             });
         }
     };
@@ -1806,6 +1809,10 @@ fn doctor_plugin_state(store_dir: &std::path::Path) -> serde_json::Value {
         "isolatedProcessHostAvailable": true,
         "nativeAbiHostAvailable": false,
         "wasiComponentHostAvailable": false,
+        "brokeredPermissionEnforcement": true,
+        "nativeProcessOsSandboxed": false,
+        "responseBudgetScope": "response-file-observation",
+        "processTreeContainment": if cfg!(unix) { "unix-process-group" } else { "windows-job-object-after-spawn" },
         "plugins": plugin_details,
     })
 }
@@ -2303,6 +2310,10 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
                     "isolatedProcessHostAvailable": true,
                     "nativeAbiHostAvailable": false,
                     "wasiComponentHostAvailable": false,
+                    "brokeredPermissionEnforcement": true,
+                    "nativeProcessOsSandboxed": false,
+                    "responseBudgetScope": "response-file-observation",
+                    "processTreeContainment": if cfg!(unix) { "unix-process-group" } else { "windows-job-object-after-spawn" },
                     "plugins": checks,
                 }))
                 .map_err(|error| error.to_string())?

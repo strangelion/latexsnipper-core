@@ -35,7 +35,7 @@ pub trait Plugin: Send + Sync {
     /// Handle a request and return a response.
     fn handle(&self, request: &PluginRequest) -> Result<PluginResponse>;
 
-    /// Handle a request with cooperative cancellation and enforced host permissions.
+    /// Handle a request with cooperative cancellation and host-brokered permissions.
     ///
     /// The default preserves the version 1 plugin API. Long-running trusted plugins
     /// should override this method and call `context.checkpoint()` regularly.

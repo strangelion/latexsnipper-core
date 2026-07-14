@@ -1,4 +1,4 @@
-import { type IndexedDbModelCache, sha256Hex } from "./cache.js";
+import { ModelCacheError, type IndexedDbModelCache, sha256Hex } from "./cache.js";
 
 export interface DownloadProgress {
   receivedBytes: number;
@@ -15,11 +15,19 @@ export interface ModelDownloadOptions {
   cache?: IndexedDbModelCache;
   cacheKey?: string;
   profile?: string;
+  cachePolicy?: "best-effort" | "required";
+  onCacheWarning?: (warning: ModelCacheWarning) => void;
+}
+
+export interface ModelCacheWarning {
+  code: "CACHE_UNAVAILABLE" | "CACHE_QUOTA" | "CACHE_OPERATION_FAILED";
+  message: string;
+  sourceUrl: string;
 }
 
 export class ModelDownloadError extends Error {
   constructor(
-    public readonly code: "DOWNLOAD_ABORTED" | "DOWNLOAD_HTTP" | "DOWNLOAD_TOO_LARGE" | "DOWNLOAD_CHECKSUM" | "DOWNLOAD_FAILED",
+    public readonly code: "DOWNLOAD_ABORTED" | "DOWNLOAD_HTTP" | "DOWNLOAD_TOO_LARGE" | "DOWNLOAD_CHECKSUM" | "DOWNLOAD_CACHE_REQUIRED" | "DOWNLOAD_FAILED",
     message: string,
     public readonly attempts: string[],
   ) {
@@ -38,11 +46,26 @@ export async function downloadVerifiedModel(options: ModelDownloadOptions): Prom
       const expected = options.expectedSha256.replace(/^sha256:/i, "").toLowerCase();
       if (actual !== expected) throw new ModelDownloadError("DOWNLOAD_CHECKSUM", `Checksum mismatch for ${url}`, attempts);
       if (options.cache && options.cacheKey) {
-        await options.cache.put({ key: options.cacheKey, profile: options.profile ?? "unknown", bytes, sha256: actual, sourceUrl: url });
+        try {
+          await options.cache.put({ key: options.cacheKey, profile: options.profile ?? "unknown", bytes, sha256: actual, sourceUrl: url });
+        } catch (cause) {
+          const cacheError = cause instanceof ModelCacheError
+            ? cause
+            : new ModelCacheError("CACHE_OPERATION_FAILED", cause instanceof Error ? cause.message : String(cause));
+          if (options.cachePolicy === "required") {
+            throw new ModelDownloadError(
+              "DOWNLOAD_CACHE_REQUIRED",
+              `Verified model could not be stored in the required cache: ${cacheError.message}`,
+              attempts,
+            );
+          }
+          options.onCacheWarning?.({ code: cacheError.code, message: cacheError.message, sourceUrl: url });
+        }
       }
       return bytes;
     } catch (cause) {
       if (options.signal?.aborted) throw new ModelDownloadError("DOWNLOAD_ABORTED", "Model download was aborted", attempts);
+      if (cause instanceof ModelDownloadError && cause.code === "DOWNLOAD_CACHE_REQUIRED") throw cause;
       attempts.push(`${url}: ${cause instanceof Error ? cause.message : String(cause)}`);
     }
   }

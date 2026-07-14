@@ -33,6 +33,20 @@ fn execute(
     .unwrap()
 }
 
+#[cfg(unix)]
+fn execute_with_arguments(
+    arguments: Vec<String>,
+    limits: IsolatedProcessLimits,
+) -> latexsnipper_plugin::IsolatedProcessResult {
+    IsolatedProcessHost::execute(
+        fixture(),
+        &arguments,
+        &PluginRequest::new("transform", Document::new()),
+        limits,
+    )
+    .unwrap()
+}
+
 #[test]
 fn hard_timeout_terminates_infinite_process_and_host_recovers() {
     let timed_out = execute("infinite", limits(50, 64 * 1024));
@@ -71,6 +85,58 @@ fn output_budget_terminates_or_rejects_oversized_response() {
     let result = execute("oversize", limits(1_000, 1024));
     assert_eq!(result.status, IsolatedProcessStatus::OutputLimitExceeded);
     assert!(result.output_bytes > 1024);
+}
+
+#[test]
+fn incomplete_or_ambiguous_protocol_responses_are_rejected() {
+    for mode in ["empty-response", "mixed-response", "code-only-response"] {
+        let result = execute(mode, limits(1_000, 64 * 1024));
+        assert_eq!(result.status, IsolatedProcessStatus::ProtocolFailed);
+        assert_eq!(
+            result.diagnostic_code.as_deref(),
+            Some("PLUGIN_PROTOCOL_SHAPE")
+        );
+        assert!(result.response.is_none());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn hard_timeout_terminates_parent_and_spawned_descendant() {
+    let pid_file = std::env::temp_dir().join(format!(
+        "latexsnipper-plugin-descendant-{}-{}.pid",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let result = execute_with_arguments(
+        vec![
+            "--mode".to_string(),
+            "spawn-descendant".to_string(),
+            "--pid-file".to_string(),
+            pid_file.to_string_lossy().to_string(),
+        ],
+        limits(500, 64 * 1024),
+    );
+    assert_eq!(result.status, IsolatedProcessStatus::TimedOut);
+    let descendant_pid: libc::pid_t = std::fs::read_to_string(&pid_file).unwrap().parse().unwrap();
+    let mut gone = false;
+    for _ in 0..50 {
+        // SAFETY: Signal zero only probes whether the recorded process still exists.
+        let probe = unsafe { libc::kill(descendant_pid, 0) };
+        if probe == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
+            gone = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let _ = std::fs::remove_file(pid_file);
+    assert!(
+        gone,
+        "spawned descendant survived process-group termination"
+    );
 }
 
 #[test]

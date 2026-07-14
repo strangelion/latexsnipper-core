@@ -79,7 +79,9 @@ pub struct IsolatedProcessResult {
 /// Versioned child-process plugin host with hard timeout and resource cleanup.
 ///
 /// The process receives only request/response file paths and an empty environment.
-/// Closing or timing out always kills and waits for the child before returning.
+/// Closing or timing out kills the isolated process tree and waits for the direct
+/// child before returning. Unix uses a dedicated process group; Windows uses a
+/// kill-on-close Job Object after the child has been assigned to it.
 pub struct IsolatedProcessHost;
 
 impl IsolatedProcessHost {
@@ -114,8 +116,7 @@ impl IsolatedProcessHost {
         if request_bytes.len() as u64 > limits.output_limit_bytes {
             return Err(plugin_error("Plugin request exceeds the IPC byte budget"));
         }
-        std::fs::write(&request_path, request_bytes)
-            .map_err(|error| plugin_error(error.to_string()))?;
+        write_private_file(&request_path, &request_bytes)?;
 
         let mut command = Command::new(entrypoint);
         command
@@ -145,6 +146,7 @@ impl IsolatedProcessHost {
                 .try_wait()
                 .map_err(|error| plugin_error(format!("Could not poll plugin process: {error}")))?
             {
+                terminate_remaining_descendants(child.id())?;
                 let elapsed = started.elapsed().as_millis();
                 let output_bytes = file_size(&response_path);
                 if !status.success() {
@@ -208,13 +210,34 @@ fn read_response(
     elapsed_millis: u128,
     output_bytes: u64,
 ) -> Result<IsolatedProcessResult> {
-    let bytes = std::fs::read(path).map_err(|error| {
-        plugin_error(format!(
-            "Isolated plugin did not produce a response: {error}"
-        ))
-    })?;
-    let response: ProcessPluginResponse = serde_json::from_slice(&bytes)
-        .map_err(|error| plugin_error(format!("Invalid isolated plugin response: {error}")))?;
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Ok(runtime_result(
+                IsolatedProcessStatus::ProtocolFailed,
+                exit_code,
+                false,
+                elapsed_millis,
+                output_bytes,
+                "PLUGIN_PROTOCOL_MISSING_RESPONSE",
+                &format!("Isolated plugin did not produce a response: {error}"),
+            ));
+        }
+    };
+    let response: ProcessPluginResponse = match serde_json::from_slice(&bytes) {
+        Ok(response) => response,
+        Err(error) => {
+            return Ok(runtime_result(
+                IsolatedProcessStatus::ProtocolFailed,
+                exit_code,
+                false,
+                elapsed_millis,
+                output_bytes,
+                "PLUGIN_PROTOCOL_INVALID_JSON",
+                &format!("Invalid isolated plugin response: {error}"),
+            ));
+        }
+    };
     if response.protocol_version != PROCESS_PLUGIN_PROTOCOL_VERSION {
         return Ok(runtime_result(
             IsolatedProcessStatus::ProtocolFailed,
@@ -226,30 +249,41 @@ fn read_response(
             "Isolated plugin returned an incompatible protocol version",
         ));
     }
-    if let Some(message) = response.error_message {
-        return Ok(IsolatedProcessResult {
+    match (
+        response.response,
+        response.error_code,
+        response.error_message,
+    ) {
+        (Some(response), None, None) => Ok(IsolatedProcessResult {
+            status: IsolatedProcessStatus::Completed,
+            response: Some(response),
+            exit_code,
+            terminated: false,
+            elapsed_millis,
+            output_bytes,
+            diagnostic_code: None,
+            diagnostic_message: None,
+        }),
+        (None, Some(code), Some(message)) => Ok(IsolatedProcessResult {
             status: IsolatedProcessStatus::ProtocolFailed,
             response: None,
             exit_code,
             terminated: false,
             elapsed_millis,
             output_bytes,
-            diagnostic_code: response
-                .error_code
-                .or_else(|| Some("PLUGIN_ERROR".to_string())),
+            diagnostic_code: Some(code),
             diagnostic_message: Some(message),
-        });
+        }),
+        _ => Ok(runtime_result(
+            IsolatedProcessStatus::ProtocolFailed,
+            exit_code,
+            false,
+            elapsed_millis,
+            output_bytes,
+            "PLUGIN_PROTOCOL_SHAPE",
+            "Isolated plugin response must contain exactly one complete response or error",
+        )),
     }
-    Ok(IsolatedProcessResult {
-        status: IsolatedProcessStatus::Completed,
-        response: response.response,
-        exit_code,
-        terminated: false,
-        elapsed_millis,
-        output_bytes,
-        diagnostic_code: None,
-        diagnostic_message: None,
-    })
 }
 
 fn runtime_result(
@@ -273,6 +307,16 @@ fn runtime_result(
     }
 }
 
+#[cfg(unix)]
+fn terminate_and_wait(child: &mut std::process::Child) -> Result<()> {
+    terminate_process_group(child.id())?;
+    child
+        .wait()
+        .map_err(|error| plugin_error(format!("Could not reap plugin process: {error}")))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
 fn terminate_and_wait(child: &mut std::process::Child) -> Result<()> {
     match child.kill() {
         Ok(()) => {}
@@ -285,6 +329,33 @@ fn terminate_and_wait(child: &mut std::process::Child) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+fn terminate_remaining_descendants(child_id: u32) -> Result<()> {
+    terminate_process_group(child_id)
+}
+
+#[cfg(not(unix))]
+fn terminate_remaining_descendants(_child_id: u32) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn terminate_process_group(child_id: u32) -> Result<()> {
+    // SAFETY: killpg is called with the process group created by setsid in pre_exec.
+    let result = unsafe { libc::killpg(child_id as libc::pid_t, libc::SIGKILL) };
+    if result == 0 {
+        return Ok(());
+    }
+    let error = std::io::Error::last_os_error();
+    if error.raw_os_error() == Some(libc::ESRCH) {
+        Ok(())
+    } else {
+        Err(plugin_error(format!(
+            "Could not terminate plugin process group: {error}"
+        )))
+    }
+}
+
 fn file_size(path: &Path) -> u64 {
     std::fs::metadata(path)
         .map(|metadata| metadata.len())
@@ -293,31 +364,52 @@ fn file_size(path: &Path) -> u64 {
 
 struct ProcessWorkspace {
     path: PathBuf,
+    _directory: tempfile::TempDir,
 }
 
 impl ProcessWorkspace {
     fn create() -> Result<Self> {
-        let path = std::env::temp_dir().join(format!(
-            "latexsnipper-plugin-host-{}-{}",
-            std::process::id(),
-            unique_suffix()
-        ));
-        std::fs::create_dir(&path).map_err(|error| plugin_error(error.to_string()))?;
-        Ok(Self { path })
+        let directory = tempfile::Builder::new()
+            .prefix("latexsnipper-plugin-host-")
+            .tempdir()
+            .map_err(|error| plugin_error(error.to_string()))?;
+        let path = directory.path().to_path_buf();
+        set_private_directory_permissions(&path)?;
+        Ok(Self {
+            path,
+            _directory: directory,
+        })
     }
 }
 
-impl Drop for ProcessWorkspace {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.path);
+fn write_private_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
     }
+    let mut file = options
+        .open(path)
+        .map_err(|error| plugin_error(error.to_string()))?;
+    use std::io::Write;
+    file.write_all(bytes)
+        .map_err(|error| plugin_error(error.to_string()))?;
+    file.sync_all()
+        .map_err(|error| plugin_error(error.to_string()))
 }
 
-fn unique_suffix() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos()
+#[cfg(unix)]
+fn set_private_directory_permissions(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+        .map_err(|error| plugin_error(error.to_string()))
+}
+
+#[cfg(not(unix))]
+fn set_private_directory_permissions(_path: &Path) -> Result<()> {
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -328,10 +420,13 @@ fn configure_command_memory_limit(command: &mut Command, limit: u64) -> Result<(
         rlim_cur: limit as libc::rlim_t,
         rlim_max: limit as libc::rlim_t,
     };
-    // SAFETY: pre_exec only calls the async-signal-safe setrlimit function and
-    // captures a Copy value. No allocation or locking occurs in the child hook.
+    // SAFETY: pre_exec only calls async-signal-safe libc functions and captures a
+    // Copy value. No allocation or locking occurs in the child hook.
     unsafe {
         command.pre_exec(move || {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
             if libc::setrlimit(libc::RLIMIT_AS, &resource_limit) != 0 {
                 return Err(std::io::Error::last_os_error());
             }

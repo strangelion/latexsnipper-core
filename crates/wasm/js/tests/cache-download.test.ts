@@ -19,6 +19,27 @@ test("IndexedDB cache verifies bytes and evicts least-recently-used artifacts", 
   await cache.clear();
 });
 
+test("IndexedDB operations close their database connections", async () => {
+  const originalClose = IDBDatabase.prototype.close;
+  let closeCount = 0;
+  IDBDatabase.prototype.close = function close(): void {
+    closeCount += 1;
+    originalClose.call(this);
+  };
+  try {
+    const cache = new IndexedDbModelCache({ namespace: `close-${Date.now()}` });
+    const bytes = new Uint8Array([1, 2, 3]);
+    const sha = await sha256Hex(bytes);
+    await cache.put({ key: "model", profile: "text", bytes, sha256: sha });
+    await cache.get("model", sha);
+    await cache.delete("model");
+    await cache.clear();
+    assert.equal(closeCount, 4);
+  } finally {
+    IDBDatabase.prototype.close = originalClose;
+  }
+});
+
 test("streaming download reports progress, falls back to a mirror, and caches only verified bytes", async () => {
   const expected = new Uint8Array([7, 8, 9, 10]);
   const expectedSha = await sha256Hex(expected);
@@ -58,6 +79,43 @@ test("download abort and maximum size produce structured errors without partial 
     await assert.rejects(
       downloadVerifiedModel({ urls: ["https://example.invalid/model"], expectedSha256: "00", maxBytes: 4 }),
       (error: unknown) => error instanceof Error && error.message.includes("Every model mirror failed"),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("verified downloads survive best-effort cache failure and required cache fails explicitly", async () => {
+  const expected = new Uint8Array([7, 8, 9, 10]);
+  const expectedSha = await sha256Hex(expected);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(expected)) as typeof fetch;
+  try {
+    const cache = new IndexedDbModelCache({ namespace: `quota-${Date.now()}`, totalBudgetBytes: 1 });
+    const warnings: string[] = [];
+    const bytes = await downloadVerifiedModel({
+      urls: ["https://example.invalid/model"],
+      expectedSha256: expectedSha,
+      maxBytes: 16,
+      cache,
+      cacheKey: "model",
+      onCacheWarning: (warning) => warnings.push(warning.code),
+    });
+    assert.deepEqual(bytes, expected);
+    assert.deepEqual(warnings, ["CACHE_QUOTA"]);
+
+    await assert.rejects(
+      downloadVerifiedModel({
+        urls: ["https://example.invalid/model"],
+        expectedSha256: expectedSha,
+        maxBytes: 16,
+        cache,
+        cacheKey: "model",
+        cachePolicy: "required",
+      }),
+      (error: unknown) => error instanceof Error
+        && "code" in error
+        && error.code === "DOWNLOAD_CACHE_REQUIRED",
     );
   } finally {
     globalThis.fetch = originalFetch;

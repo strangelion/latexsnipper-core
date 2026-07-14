@@ -46,6 +46,7 @@ export type WorkerRequest =
     }
   | {
       protocolVersion: typeof WORKER_PROTOCOL_VERSION;
+      /** Stage-boundary only; this message cannot preempt a running serialized handler. */
       type: "cooperative-cancel";
       requestId: string;
     }
@@ -90,6 +91,7 @@ export interface WorkerLike {
   terminate(): void;
   onmessage: ((event: MessageEvent<WorkerResponse>) => void) | null;
   onerror: ((event: ErrorEvent) => void) | null;
+  onmessageerror: ((event: MessageEvent<unknown>) => void) | null;
 }
 
 export type WorkerFactory = () => WorkerLike;

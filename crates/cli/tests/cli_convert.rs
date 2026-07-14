@@ -431,6 +431,9 @@ fn plugin_management_verifies_installs_disabled_and_reports_tampering() {
     assert!(
         String::from_utf8_lossy(&doctor.stdout).contains("\"wasiComponentHostAvailable\": false")
     );
+    assert!(String::from_utf8_lossy(&doctor.stdout).contains("\"nativeProcessOsSandboxed\": false"));
+    assert!(String::from_utf8_lossy(&doctor.stdout)
+        .contains("\"enforcementScope\": \"brokered-host-operations\""));
 
     std::fs::write(
         store.join("packages/example.plugin/plugin.wasm"),

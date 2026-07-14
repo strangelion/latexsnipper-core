@@ -42,17 +42,21 @@ export class IndexedDbModelCache {
 
   async get(key: string, expectedSha256: string): Promise<CachedModelArtifact | undefined> {
     const db = await this.open();
-    const stored = await request<StoredArtifact | undefined>(db.transaction("artifacts").objectStore("artifacts").get(key));
-    if (!stored) return undefined;
-    const bytes = new Uint8Array(stored.bytes);
-    const actual = await sha256Hex(bytes);
-    if (actual !== normalizeSha(expectedSha256) || stored.sha256 !== actual || stored.byteLength !== bytes.byteLength) {
-      await this.delete(key);
-      return undefined;
+    try {
+      const stored = await request<StoredArtifact | undefined>(db.transaction("artifacts").objectStore("artifacts").get(key));
+      if (!stored) return undefined;
+      const bytes = new Uint8Array(stored.bytes);
+      const actual = await sha256Hex(bytes);
+      if (actual !== normalizeSha(expectedSha256) || stored.sha256 !== actual || stored.byteLength !== bytes.byteLength) {
+        await transactionDone(db.transaction("artifacts", "readwrite"), (store) => store.delete(key));
+        return undefined;
+      }
+      stored.lastUsed = Date.now();
+      await this.putStored(db, stored);
+      return { ...stored, bytes };
+    } finally {
+      db.close();
     }
-    stored.lastUsed = Date.now();
-    await this.putStored(db, stored);
-    return { ...stored, bytes };
   }
 
   async put(artifact: Omit<CachedModelArtifact, "byteLength" | "lastUsed" | "schemaVersion">): Promise<void> {
@@ -60,30 +64,43 @@ export class IndexedDbModelCache {
     if (actual !== normalizeSha(artifact.sha256)) throw new ModelCacheError("CACHE_OPERATION_FAILED", "Refusing to cache unverified model bytes");
     if (artifact.bytes.byteLength > this.totalBudgetBytes) throw new ModelCacheError("CACHE_QUOTA", "Artifact exceeds total cache budget");
     const db = await this.open();
-    await this.putStored(db, {
-      ...artifact,
-      bytes: artifact.bytes.slice().buffer,
-      sha256: actual,
-      byteLength: artifact.bytes.byteLength,
-      lastUsed: Date.now(),
-      schemaVersion: MODEL_CACHE_SCHEMA_VERSION,
-    });
-    await this.evictToBudget(db);
+    try {
+      await this.putStored(db, {
+        ...artifact,
+        bytes: artifact.bytes.slice().buffer,
+        sha256: actual,
+        byteLength: artifact.bytes.byteLength,
+        lastUsed: Date.now(),
+        schemaVersion: MODEL_CACHE_SCHEMA_VERSION,
+      });
+      await this.evictToBudget(db);
+    } finally {
+      db.close();
+    }
   }
 
   async delete(key: string): Promise<void> {
     const db = await this.open();
-    await transactionDone(db.transaction("artifacts", "readwrite"), (store) => store.delete(key));
+    try {
+      await transactionDone(db.transaction("artifacts", "readwrite"), (store) => store.delete(key));
+    } finally {
+      db.close();
+    }
   }
 
   async clear(): Promise<void> {
     const db = await this.open();
-    await transactionDone(db.transaction("artifacts", "readwrite"), (store) => store.clear());
+    try {
+      await transactionDone(db.transaction("artifacts", "readwrite"), (store) => store.clear());
+    } finally {
+      db.close();
+    }
   }
 
   private open(): Promise<IDBDatabase> {
     if (!IndexedDbModelCache.available()) return Promise.reject(new ModelCacheError("CACHE_UNAVAILABLE", "IndexedDB is unavailable"));
     return new Promise((resolve, reject) => {
+      let settled = false;
       const opening = indexedDB.open(this.namespace, MODEL_CACHE_SCHEMA_VERSION);
       opening.onupgradeneeded = () => {
         const db = opening.result;
@@ -93,9 +110,23 @@ export class IndexedDbModelCache {
         if (!store.indexNames.contains("lastUsed")) store.createIndex("lastUsed", "lastUsed");
         if (!store.indexNames.contains("profile")) store.createIndex("profile", "profile");
       };
-      opening.onerror = () => reject(cacheFailure(opening.error));
-      opening.onsuccess = () => resolve(opening.result);
-      opening.onblocked = () => reject(new ModelCacheError("CACHE_OPERATION_FAILED", "IndexedDB schema migration is blocked"));
+      opening.onerror = () => {
+        settled = true;
+        reject(cacheFailure(opening.error));
+      };
+      opening.onsuccess = () => {
+        if (settled) {
+          opening.result.close();
+          return;
+        }
+        settled = true;
+        opening.result.onversionchange = () => opening.result.close();
+        resolve(opening.result);
+      };
+      opening.onblocked = () => {
+        settled = true;
+        reject(new ModelCacheError("CACHE_OPERATION_FAILED", "IndexedDB schema migration is blocked"));
+      };
     });
   }
 

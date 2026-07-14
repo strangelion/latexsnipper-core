@@ -18,6 +18,7 @@ interface PendingCall {
 
 interface RecognitionTask extends PendingCall {
   requestId: string;
+  wireRequestId: string;
   input: Omit<RecognitionInput, "requestId">;
   onProgress?: (event: ProgressEvent) => void;
   generation: number;
@@ -34,6 +35,12 @@ export interface WasmWorkerClientOptions extends WorkerInitOptions {
   workerUrl: string | URL;
   workerFactory?: WorkerFactory;
   maxQueueLength?: number;
+  rpcTimeoutMillis?: number;
+}
+
+export interface WorkerCallOptions {
+  timeoutMillis?: number;
+  signal?: AbortSignal;
 }
 
 export class WasmWorkerClient {
@@ -47,9 +54,15 @@ export class WasmWorkerClient {
   private initialized: Promise<void>;
   private terminated = false;
   private readonly maxQueueLength: number;
+  private readonly rpcTimeoutMillis: number;
+  private restarting?: Promise<void>;
 
   constructor(private readonly options: WasmWorkerClientOptions) {
     this.maxQueueLength = options.maxQueueLength ?? 32;
+    this.rpcTimeoutMillis = options.rpcTimeoutMillis ?? 30_000;
+    if (!Number.isFinite(this.rpcTimeoutMillis) || this.rpcTimeoutMillis <= 0) {
+      throw new RangeError("rpcTimeoutMillis must be a positive finite number");
+    }
     this.initialized = this.startWorker();
   }
 
@@ -57,7 +70,7 @@ export class WasmWorkerClient {
     return this.initialized;
   }
 
-  async loadModel(artifact: ModelArtifact): Promise<unknown> {
+  async loadModel(artifact: ModelArtifact, callOptions: WorkerCallOptions = {}): Promise<unknown> {
     await this.initialized;
     const owned = { ...artifact, bytes: artifact.bytes.slice() };
     const result = await this.call({
@@ -65,7 +78,7 @@ export class WasmWorkerClient {
       type: "load-model",
       requestId: this.nextId("model"),
       artifact: owned,
-    });
+    }, callOptions);
     this.models.set(owned.name, owned);
     return result;
   }
@@ -82,6 +95,7 @@ export class WasmWorkerClient {
     return new Promise((resolve, reject) => {
       this.queue.push({
         requestId,
+        wireRequestId: this.nextId("recognize"),
         input: { width: input.width, height: input.height, pixels: input.pixels.slice(), mode: input.mode },
         onProgress,
         resolve,
@@ -94,17 +108,14 @@ export class WasmWorkerClient {
 
   cancel(requestId: string): boolean {
     if (this.active?.requestId === requestId) {
-      const cancelled = this.active;
-      this.active = undefined;
-      this.generation += 1;
-      this.worker.terminate();
-      this.rejectAllCalls("WORKER_RESTARTED", "Worker restarted after hard cancellation");
-      cancelled.reject(this.runtimeError("CANCELLED", `Request '${requestId}' was cancelled`, {
-        hardCancellation: true,
-        workerRestarted: true,
-      }));
-      this.initialized = this.startWorker().then(() => this.reloadModels());
-      void this.initialized.then(() => this.pump());
+      this.restartWorker(
+        "WORKER_RESTARTED",
+        "Worker restarted after hard cancellation",
+        this.runtimeError("CANCELLED", `Request '${requestId}' was cancelled`, {
+          hardCancellation: true,
+          workerRestarted: true,
+        }),
+      );
       return true;
     }
     const index = this.queue.findIndex((task) => task.requestId === requestId);
@@ -134,6 +145,7 @@ export class WasmWorkerClient {
     const workerGeneration = this.generation;
     worker.onmessage = (event) => this.onMessage(event.data, workerGeneration);
     worker.onerror = (event) => this.onWorkerError(event.message || "Worker failed", workerGeneration);
+    worker.onmessageerror = () => this.onWorkerError("Worker message deserialization failed", workerGeneration);
     await this.call({
       protocolVersion: WORKER_PROTOCOL_VERSION,
       type: "initialize",
@@ -154,25 +166,45 @@ export class WasmWorkerClient {
   }
 
   private async pump(): Promise<void> {
-    await this.initialized;
+    try {
+      await this.initialized;
+    } catch {
+      return;
+    }
     if (this.active || this.terminated) return;
     const task = this.queue.shift();
     if (!task) return;
     task.generation = this.generation;
     this.active = task;
-    this.worker.postMessage({
-      protocolVersion: WORKER_PROTOCOL_VERSION,
-      type: "recognize",
-      requestId: task.requestId,
-      input: task.input,
-    });
+    try {
+      this.worker.postMessage({
+        protocolVersion: WORKER_PROTOCOL_VERSION,
+        type: "recognize",
+        requestId: task.wireRequestId,
+        input: task.input,
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      this.restartWorker(
+        "WORKER_POST_MESSAGE_FAILED",
+        message,
+        this.runtimeError("WORKER_POST_MESSAGE_FAILED", message, { workerRestarted: true }),
+      );
+    }
   }
 
   private onMessage(response: WorkerResponse, workerGeneration: number): void {
-    if (workerGeneration !== this.generation || response.protocolVersion !== WORKER_PROTOCOL_VERSION) return;
+    if (workerGeneration !== this.generation) return;
+    if (response.protocolVersion !== WORKER_PROTOCOL_VERSION) {
+      this.restartWorker(
+        "WORKER_PROTOCOL_MISMATCH",
+        "Worker returned an unsupported protocol version",
+      );
+      return;
+    }
     if (response.type === "progress") {
-      if (this.active?.requestId === response.requestId) {
-        this.active.onProgress?.({ requestId: response.requestId, stage: response.stage, progress: response.progress });
+      if (this.active?.wireRequestId === response.requestId) {
+        this.active.onProgress?.({ requestId: this.active.requestId, stage: response.stage, progress: response.progress });
       }
       return;
     }
@@ -182,7 +214,10 @@ export class WasmWorkerClient {
       response.type === "result" ? call.resolve(response.data) : call.reject(new WorkerRuntimeError(response.error));
       return;
     }
-    if (this.active?.requestId !== response.requestId) return;
+    if (this.active?.wireRequestId !== response.requestId) {
+      this.restartWorker("WORKER_PROTOCOL_CORRUPTION", `Worker returned unknown response ID '${response.requestId}'`);
+      return;
+    }
     const task = this.active;
     this.active = undefined;
     response.type === "result" ? task.resolve(response.data) : task.reject(new WorkerRuntimeError(response.error));
@@ -191,21 +226,99 @@ export class WasmWorkerClient {
 
   private onWorkerError(message: string, workerGeneration: number): void {
     if (workerGeneration !== this.generation || this.terminated) return;
-    this.active?.reject(this.runtimeError("WORKER_CRASHED", message));
-    this.active = undefined;
-    this.rejectAllCalls("WORKER_CRASHED", message);
+    this.restartWorker("WORKER_CRASHED", message, this.runtimeError("WORKER_CRASHED", message, {
+      workerRestarted: true,
+    }));
   }
 
-  private call(request: WorkerRequest): Promise<unknown> {
+  private call(request: WorkerRequest, options: WorkerCallOptions = {}): Promise<unknown> {
+    if (options.signal?.aborted) {
+      return Promise.reject(this.runtimeError("WORKER_RPC_ABORTED", `Worker RPC '${request.type}' was aborted`));
+    }
+    const timeoutMillis = options.timeoutMillis ?? this.rpcTimeoutMillis;
+    if (!Number.isFinite(timeoutMillis) || timeoutMillis <= 0) {
+      return Promise.reject(this.runtimeError("WORKER_RPC_INVALID_TIMEOUT", "Worker RPC timeout must be positive"));
+    }
     return new Promise((resolve, reject) => {
-      this.calls.set(request.requestId, { resolve, reject });
-      this.worker.postMessage(request);
+      let settled = false;
+      const cleanup = (): void => {
+        clearTimeout(timer);
+        options.signal?.removeEventListener("abort", abort);
+      };
+      const pending: PendingCall = {
+        resolve: (value) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve(value);
+        },
+        reject: (error) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error);
+        },
+      };
+      const failAndRestart = (code: string, message: string): void => {
+        if (!this.calls.delete(request.requestId)) return;
+        pending.reject(this.runtimeError(code, message, { workerRestarted: true }));
+        this.restartWorker(code, message);
+      };
+      const timer = setTimeout(() => {
+        failAndRestart("WORKER_RPC_TIMEOUT", `Worker RPC '${request.type}' exceeded ${timeoutMillis} ms`);
+      }, timeoutMillis);
+      const abort = (): void => {
+        failAndRestart("WORKER_RPC_ABORTED", `Worker RPC '${request.type}' was aborted`);
+      };
+      options.signal?.addEventListener("abort", abort, { once: true });
+      this.calls.set(request.requestId, pending);
+      try {
+        this.worker.postMessage(request);
+      } catch (cause) {
+        failAndRestart(
+          "WORKER_POST_MESSAGE_FAILED",
+          cause instanceof Error ? cause.message : String(cause),
+        );
+      }
     });
+  }
+
+  private restartWorker(code: string, message: string, activeError?: WorkerRuntimeError): void {
+    if (this.terminated) return;
+    const active = this.active;
+    this.active = undefined;
+    this.generation += 1;
+    this.worker.terminate();
+    this.rejectAllCalls(code, message);
+    active?.reject(activeError ?? this.runtimeError(code, message, { workerRestarted: true }));
+
+    if (this.restarting) {
+      this.rejectQueue("WORKER_RECOVERY_FAILED", "Worker failed again during recovery");
+      return;
+    }
+    const recovery = this.startWorker().then(() => this.reloadModels());
+    this.restarting = recovery;
+    this.initialized = recovery;
+    void recovery
+      .then(() => this.pump())
+      .catch((cause: unknown) => {
+        this.rejectQueue(
+          "WORKER_RECOVERY_FAILED",
+          cause instanceof Error ? cause.message : String(cause),
+        );
+      })
+      .finally(() => {
+        if (this.restarting === recovery) this.restarting = undefined;
+      });
   }
 
   private rejectAllCalls(code: string, message: string): void {
     for (const call of this.calls.values()) call.reject(this.runtimeError(code, message));
     this.calls.clear();
+  }
+
+  private rejectQueue(code: string, message: string): void {
+    for (const task of this.queue.splice(0)) task.reject(this.runtimeError(code, message));
   }
 
   private hasRequest(requestId: string): boolean {
@@ -214,7 +327,7 @@ export class WasmWorkerClient {
 
   private nextId(prefix: string): string {
     this.sequence += 1;
-    return `${prefix}-${this.sequence}`;
+    return `internal:${prefix}:${this.sequence}`;
   }
 
   private runtimeError(code: string, message: string, extra: Partial<WorkerError> = {}): WorkerRuntimeError {

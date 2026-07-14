@@ -27,9 +27,16 @@ plugin 会被 quarantine，立即重入被拒绝；每个 plugin 的 outstanding
 `maxConcurrentExecutions` 限制。后台执行结束后，host 必须显式调用 `reset_quarantine()` 才能重试。
 这可以阻止无界线程累积，但不会伪装成 hard termination。
 
-isolated-process host 使用 ABI/IPC version 1、空环境、独立临时工作目录、同一次执行的 request/response
-文件、输出大小预算和 deadline。Windows 使用 Job Object 的 process-memory 与 kill-on-close 限制；Unix
-在 `exec` 前设置 address-space limit。超时路径始终执行 `kill` 和 `wait`，不会留下 orphan process。
+isolated-process host 使用 ABI/IPC version 1、空环境、安全随机命名的独立临时工作目录、同一次执行的
+request/response 文件、response 文件观察预算和 deadline。Unix 在 `exec` 前创建独立 session/process
+group 并设置 address-space limit；超时会向整个 process group 发送 `SIGKILL`，再回收直接子进程。该路径
+覆盖没有主动逃离 session 的普通后代进程；自行调用 `setsid` 等方式逃离的进程仍需要真正的 OS sandbox
+约束。Windows 使用 Job Object 的 process-memory 与 kill-on-close 限制，但当前在 `spawn` 后才完成
+assignment，仍存在极短的启动竞态，因此只适合经过审核的本地 plugin。
+
+Unix 工作目录权限显式设为 `0700`，request 文件使用 `0600` 和 `create_new`。Windows 依赖当前用户临时
+目录继承的 ACL，尚未创建显式的仅当前用户 ACL。`outputLimitBytes` 只限制 host 观察到的 response 文件，
+不是整个工作目录的磁盘配额，也不是进程级总 I/O 配额。
 
 ## Permissions
 
@@ -48,9 +55,11 @@ isolated-process host 使用 ABI/IPC version 1、空环境、独立临时工作�
 会返回 `PLUGIN_PERMISSION_DENIED`。`plugin doctor` 只报告 effective grant 数量和预算，不输出可能敏感
 的完整路径、host 或环境值。
 
-isolated-process 的 host-mediated permissions 已强制执行，但普通操作系统子进程仍不是完整的 filesystem/
-network sandbox。需要处理不可信第三方代码时，GA 目标仍是 WASI Component host；在此之前只应运行经过
-审核的本地 process plugin。
+isolated-process 的 permissions 只约束 host broker 提供的文件、网络、模型和注册操作。外部 native
+进程仍可直接调用操作系统 API（例如 `std::fs` 或 `TcpStream`），因此这些 grant 不是 OS sandbox，不能
+阻止任意 filesystem/network 访问。`plugin doctor` 会明确报告
+`nativeProcessOsSandboxed: false` 和 `enforcementScope: brokered-host-operations`。需要处理不可信第三方
+代码时，GA 目标仍是 WASI Component host；在此之前只应运行经过审核的本地 process plugin。
 
 ## Manifest、顺序与 failure policy
 
@@ -71,7 +80,9 @@ diagnostic，不会击穿 host。
 
 package 必须提供有界 relative entrypoint、匹配 SHA-256 和 ABI version。校验拒绝 symlink、路径穿越、
 超过 256 个文件、总量超过 128 MiB 或 entrypoint 超过 64 MiB。安装使用 staging、二次校验和原子 rename，
-初始状态始终 disabled，安装过程不执行代码。
+初始状态始终 disabled，安装过程不执行代码。registry 更新由跨进程文件锁串行化，并在同目录临时文件
+flush/fsync 后执行原子替换；Unix 还会 fsync 父目录，Windows 使用 write-through replace。该保证针对
+registry 文件本身，不把 package 目录与 registry 声明为跨资源事务。
 
 ```bash
 snipper plugin verify ./plugin-package
