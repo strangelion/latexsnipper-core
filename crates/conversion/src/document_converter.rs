@@ -146,7 +146,7 @@ impl DocumentConverter {
             text: Some(text),
             assets: Vec::new(),
             diagnostics,
-            mime_type: Some(output_mime_type(self.format).to_string()),
+            mime_type: Some(crate::semantic_mime_type(self.format).to_string()),
             checksum_sha256: Some(checksum),
             size_bytes: Some(size_bytes),
         })
@@ -222,19 +222,6 @@ impl DocumentConverter {
     pub fn convert_markdown_string(md: &str, format: OutputFormat) -> Result<String> {
         let doc = crate::markdown_parser::parse_markdown_to_document(md);
         DocumentConverter::new(format).convert(&doc)
-    }
-}
-
-fn output_mime_type(format: OutputFormat) -> &'static str {
-    match format {
-        OutputFormat::Latex | OutputFormat::LatexDisplay | OutputFormat::LatexEquation => {
-            "application/x-tex"
-        }
-        OutputFormat::Typst => "text/x-typst",
-        OutputFormat::MarkdownInline | OutputFormat::MarkdownBlock => "text/markdown",
-        OutputFormat::MathML => "application/mathml+xml",
-        OutputFormat::OMML => "application/xml",
-        OutputFormat::Html => "text/html",
     }
 }
 

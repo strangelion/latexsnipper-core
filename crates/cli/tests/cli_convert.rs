@@ -63,6 +63,50 @@ fn convert_supports_file_and_stdin_to_stdout() {
 }
 
 #[test]
+fn advanced_page_range_and_strict_preservation_are_typed_and_reported() {
+    let directory = workspace();
+    let input = directory.join("formula.tex");
+    std::fs::write(&input, "a+b").unwrap();
+    let applied = snipper()
+        .args([
+            "convert",
+            input.to_str().unwrap(),
+            "--to",
+            "json",
+            "-o",
+            "-",
+            "--page-range",
+            "1-1",
+            "--strict-preservation",
+            "--diagnostics",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        applied.status.success(),
+        "{}",
+        String::from_utf8_lossy(&applied.stderr)
+    );
+    assert!(String::from_utf8_lossy(&applied.stderr).contains("CLI_OPTIONS_APPLIED"));
+
+    let invalid = snipper()
+        .args([
+            "convert",
+            input.to_str().unwrap(),
+            "--to",
+            "json",
+            "--page-range",
+            "2-1",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("END >= START"));
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn binary_stdout_requires_explicit_opt_in() {
     let directory = workspace();
     let input = directory.join("formula.tex");
@@ -310,6 +354,7 @@ fn plugin_management_verifies_installs_disabled_and_reports_tampering() {
         "name": "Example Plugin",
         "version": "1.0.0",
         "pluginApiVersion": 1,
+        "abiVersion": 1,
         "coreVersionRequirement": "^2.0.0",
         "capabilities": [],
         "hooks": [],

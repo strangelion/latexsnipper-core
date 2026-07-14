@@ -60,74 +60,22 @@ impl DocumentExportService {
     }
 
     pub fn supported_formats() -> &'static [ExportFormat] {
-        &[
-            ExportFormat::AstJson,
-            ExportFormat::PlainText,
-            ExportFormat::Markdown,
-            ExportFormat::Latex,
-            ExportFormat::Typst,
-            ExportFormat::Html,
-            ExportFormat::MathML,
-            ExportFormat::OMML,
-            ExportFormat::Svg,
-            ExportFormat::Pdf,
-            ExportFormat::Png,
-            ExportFormat::Docx,
-            ExportFormat::Pptx,
-            ExportFormat::Xlsx,
-        ]
+        crate::REGISTERED_EXPORT_FORMATS
     }
 
     /// Resolve a user-facing label through the executable export registry.
     pub fn format_from_label(label: &str) -> Option<ExportFormat> {
-        let normalized = label.trim().to_ascii_lowercase();
-        Self::supported_formats()
-            .iter()
-            .copied()
-            .find(|format| Self::format_label(*format) == normalized)
-            .or(match normalized.as_str() {
-                "ast" => Some(ExportFormat::AstJson),
-                "txt" => Some(ExportFormat::PlainText),
-                "md" => Some(ExportFormat::Markdown),
-                "tex" => Some(ExportFormat::Latex),
-                "typ" => Some(ExportFormat::Typst),
-                "htm" => Some(ExportFormat::Html),
-                "mml" => Some(ExportFormat::MathML),
-                _ => None,
-            })
+        crate::CapabilityRegistry::resolve_export(label)
     }
 
     /// Return the canonical CLI/API label for a registered export format.
     pub const fn format_label(format: ExportFormat) -> &'static str {
-        match format {
-            ExportFormat::AstJson => "json",
-            ExportFormat::PlainText => "text",
-            ExportFormat::Markdown => "markdown",
-            ExportFormat::Latex => "latex",
-            ExportFormat::Typst => "typst",
-            ExportFormat::Html => "html",
-            ExportFormat::MathML => "mathml",
-            ExportFormat::OMML => "omml",
-            ExportFormat::Svg => "svg",
-            ExportFormat::Pdf => "pdf",
-            ExportFormat::Png => "png",
-            ExportFormat::Docx => "docx",
-            ExportFormat::Pptx => "pptx",
-            ExportFormat::Xlsx => "xlsx",
-            _ => "unregistered",
-        }
+        crate::export_format_label(format)
     }
 
     /// Return whether a registered format emits opaque binary bytes.
     pub const fn is_binary(format: ExportFormat) -> bool {
-        matches!(
-            format,
-            ExportFormat::Pdf
-                | ExportFormat::Png
-                | ExportFormat::Docx
-                | ExportFormat::Pptx
-                | ExportFormat::Xlsx
-        )
+        crate::export_format_is_binary(format)
     }
 
     /// Generate capabilities directly from the callable importer/exporter registries.

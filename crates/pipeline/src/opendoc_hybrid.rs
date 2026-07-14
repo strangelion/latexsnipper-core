@@ -34,6 +34,37 @@ pub enum DocumentParseMode {
 }
 
 impl DocumentParseMode {
+    pub const fn all() -> &'static [Self] {
+        &[
+            Self::SpecializedStable,
+            Self::OpenOcrText,
+            Self::OpenDocHybrid,
+        ]
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::SpecializedStable => "specialized",
+            Self::OpenOcrText => "openocr-text",
+            Self::OpenDocHybrid => "opendoc-hybrid",
+        }
+    }
+
+    pub const fn aliases(self) -> &'static [&'static str] {
+        match self {
+            Self::SpecializedStable => &["specialized-stable", "stable", "default"],
+            Self::OpenOcrText => &["openocr", "openocr_text", "open-ocr-text"],
+            Self::OpenDocHybrid => &["opendoc", "opendoc_hybrid", "hybrid"],
+        }
+    }
+
+    pub fn from_label(label: &str) -> Option<Self> {
+        let normalized = label.trim().to_ascii_lowercase();
+        Self::all().iter().copied().find(|mode| {
+            mode.label() == normalized || mode.aliases().contains(&normalized.as_str())
+        })
+    }
+
     /// Run the OpenDocHybrid pipeline: layout → resolve → specialized recognizers.
     ///
     /// This is called in place of the standard detector/crop/recognizer chain.

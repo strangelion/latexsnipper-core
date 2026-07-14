@@ -64,6 +64,15 @@ fn model_transactions_are_atomic_and_reversible() {
 
     let capabilities = capabilities_v2();
     assert!(field(&capabilities, "ok").as_bool().unwrap());
+    let cancellation = field(&field(&capabilities, "data"), "cancellation");
+    assert!(field(&cancellation, "supported").as_bool().unwrap());
+    assert_eq!(
+        field(&cancellation, "mode").as_string().unwrap(),
+        "cooperative-stage-boundary"
+    );
+    assert!(!field(&cancellation, "canInterruptActiveInference")
+        .as_bool()
+        .unwrap());
 
     assert!(field(&begin_model_update_v2(), "ok").as_bool().unwrap());
     load_model_v2("text-det/test/config.json", b"{}".to_vec(), None);

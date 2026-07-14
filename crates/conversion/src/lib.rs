@@ -1,5 +1,6 @@
 pub mod asset_helper;
 pub mod asset_resolver;
+pub mod capability_registry;
 #[cfg(feature = "native")]
 pub mod clipboard;
 pub mod converter;
@@ -46,6 +47,11 @@ pub mod xlsx_reader;
 pub use asset_helper::{
     resolve_asset_ref, resolve_image_html, resolve_image_latex, resolve_image_markdown,
     resolve_image_typst,
+};
+pub use capability_registry::{
+    export_format_aliases, export_format_is_binary, export_format_label, export_mime_type,
+    semantic_aliases, semantic_mime_type, CapabilityRegistry, CapabilityTarget,
+    TargetFormatCapability, REGISTERED_EXPORT_FORMATS,
 };
 #[cfg(feature = "native")]
 pub use clipboard::ClipboardBundle;
