@@ -36,7 +36,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run benchmark suite
-        run: cargo bench -p latexsnipper-tests --bench core_bench | tee target/benchmark-output.txt
+        run: |
+          mkdir -p target
+          cargo bench -p latexsnipper-tests --bench core_bench | tee target/benchmark-output.txt
       - name: Build comparable JSON
         run: |
           grep '^benchmark_json=' target/benchmark-output.txt \

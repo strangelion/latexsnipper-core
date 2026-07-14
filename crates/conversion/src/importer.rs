@@ -477,7 +477,7 @@ fn validate_relationship_attributes(
         })?;
         let key = attribute.key.as_ref();
         let value = attribute
-            .decode_and_unescape_value(reader.decoder())
+            .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())
             .map_err(|error| SnipperError::InvalidFormat(error.to_string()))?;
         if key.eq_ignore_ascii_case(b"TargetMode") && value.eq_ignore_ascii_case("External") {
             return Err(SnipperError::InvalidFormat(format!(

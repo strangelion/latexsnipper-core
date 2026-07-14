@@ -422,7 +422,7 @@ mod tests {
             .unwrap()
             .get(b"F_LatexSnipper")
             .is_ok());
-        let combined = overlaid.get_page_content(page_id).unwrap();
+        let combined = overlaid.get_page_content(page_id);
         assert!(combined.windows(3).any(|window| window == b"q\nQ"));
         assert!(combined
             .windows(b"Hello PDF Overlay".len())
@@ -457,7 +457,7 @@ mod tests {
             .unwrap();
         let pdf = lopdf::Document::load(&out).unwrap();
         let page_id = *pdf.get_pages().values().next().unwrap();
-        let content = pdf.get_page_content(page_id).unwrap();
+        let content = pdf.get_page_content(page_id);
         assert!(content.windows(4).any(|window| window == b"3 Tr"));
         assert!(content
             .windows(b"Selectable OCR".len())

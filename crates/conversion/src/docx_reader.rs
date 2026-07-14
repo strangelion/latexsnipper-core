@@ -480,7 +480,7 @@ fn parse_document_body<R: Read + Seek>(
             }
             Ok(Event::Text(ref e)) => {
                 if in_text {
-                    if let Ok(text) = e.unescape() {
+                    if let Some(text) = crate::xml_util::decode_and_unescape_text(e) {
                         let run = Inline::Text(
                             TextRun::new(text.to_string())
                                 .with_bold(run_bold)
@@ -495,7 +495,7 @@ fn parse_document_body<R: Read + Seek>(
                     }
                 }
                 if in_pstyle {
-                    if let Ok(text) = e.unescape() {
+                    if let Some(text) = crate::xml_util::decode_and_unescape_text(e) {
                         paragraph_style = text.to_string();
                     }
                 }

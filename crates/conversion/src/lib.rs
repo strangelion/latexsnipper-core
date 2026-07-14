@@ -43,6 +43,7 @@ pub mod word_ooxml_table_parser;
 pub mod word_ooxml_table_writer;
 #[cfg(feature = "native")]
 pub mod xlsx_reader;
+mod xml_util;
 
 pub use asset_helper::{
     resolve_asset_ref, resolve_image_html, resolve_image_latex, resolve_image_markdown,

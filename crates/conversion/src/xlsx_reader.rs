@@ -163,7 +163,7 @@ fn read_shared_strings<R: Read + Seek>(archive: &mut zip::ZipArchive<R>) -> Vec<
             }
             Ok(Event::Text(ref e)) => {
                 if in_t {
-                    if let Ok(t) = e.unescape() {
+                    if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
                         current.push_str(&t);
                     }
                 }
@@ -420,17 +420,17 @@ fn parse_sheet_table(
             }
             Ok(Event::Text(ref e)) => {
                 if in_v {
-                    if let Ok(t) = e.unescape() {
+                    if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
                         current_cell_value.push_str(&t);
                     }
                 }
                 if in_f {
-                    if let Ok(t) = e.unescape() {
+                    if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
                         current_cell_formula.push_str(&t);
                     }
                 }
                 if in_is_t {
-                    if let Ok(t) = e.unescape() {
+                    if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
                         current_is_text.push_str(&t);
                     }
                 }

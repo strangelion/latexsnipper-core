@@ -411,7 +411,7 @@ fn read_text_content(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> String {
     loop {
         match reader.read_event_into(buf) {
             Ok(Event::Text(ref e)) => {
-                if let Ok(t) = e.unescape() {
+                if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
                     text.push_str(&t);
                 }
             }

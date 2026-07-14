@@ -424,11 +424,11 @@ fn convert_typst_expr(s: &str) -> String {
         return "\\sqrt".to_string();
     }
 
-    if s.starts_with('"') && s.ends_with('"') {
+    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
         return format!("\\text{{{}}}", &s[1..s.len() - 1]);
     }
 
-    if s.starts_with('\'') && s.ends_with('\'') {
+    if s.len() >= 2 && s.starts_with('\'') && s.ends_with('\'') {
         return format!("\\text{{{}}}", &s[1..s.len() - 1]);
     }
 
@@ -558,6 +558,12 @@ mod tests {
     #[test]
     fn text_string() {
         assert_eq!(parse_typst_to_latex(r#""hello""#), "\\text{hello}");
+    }
+
+    #[test]
+    fn lone_quote_is_not_sliced_as_a_string() {
+        assert_eq!(parse_typst_to_latex("\"  "), "\"");
+        assert_eq!(parse_typst_to_latex("'  "), "'");
     }
 
     #[test]
