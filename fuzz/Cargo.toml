@@ -15,7 +15,9 @@ latexsnipper-ast = { path = "../crates/ast" }
 latexsnipper-conversion = { path = "../crates/conversion" }
 latexsnipper-model = { path = "../crates/model", default-features = false, features = ["wasm"] }
 latexsnipper-plugin = { path = "../crates/plugin" }
+latexsnipper-plugin-wasi = { path = "../crates/plugin-wasi" }
 latexsnipper-syntax = { path = "../crates/syntax" }
+semver = "1"
 
 [[bin]]
 name = "format_signature"
@@ -104,6 +106,13 @@ bench = false
 [[bin]]
 name = "api_envelope_v3_parser"
 path = "fuzz_targets/api_envelope_v3_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "wasi_component_package"
+path = "fuzz_targets/wasi_component_package.rs"
 test = false
 doc = false
 bench = false

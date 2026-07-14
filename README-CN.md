@@ -23,7 +23,7 @@
 
 ## 项目状态
 
-workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的第一个 stacked change。本 alpha 只实现版本化契约类型、严格迁移报告和 schema fuzz 覆盖；可调用的 WASM、能力文档、插件 host、模型 loader、Worker、CLI 与 FFI 路径仍使用现有 v2 时代契约。详见 [Core 3 架构与交付状态](docs/v3/architecture.md)。
+workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的 stacked changes。契约基础和可独立使用的 default-deny WASI Component host 已实现；可调用的 WASM、能力文档、legacy plugin registry、模型 loader、Worker、CLI 与 FFI 路径仍使用现有 v2 时代契约。详见 [Core 3 架构与交付状态](docs/v3/architecture.md)。
 
 这并不表示所有格式、模型和插件边界具有相同成熟度。
 
@@ -40,7 +40,8 @@ workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的第一个 stacked ch
 | WASM Tract 识别 | **实验性** | 模型驱动、异步执行，并在 Chrome/Firefox 测试；浏览器表格和手写流水线尚不可用。 |
 | 内置 Rust 插件 | **Host 行为稳定** | 已实现确定性排序、typed hook、事务 patch、失败策略、soft deadline 和 quarantine。 |
 | 隔离 native process 插件 | **仅限经过审核的本地代码** | 支持 hard timeout 和资源控制，但不是操作系统文件/网络沙箱。 |
-| WASI Component host、native 动态库 ABI、远程插件安装 | **不可用** | 不应将这些能力宣传为已可执行。 |
+| WASI Component host | **已实现为 Rust host crate** | WIT v1、manifest/digest 校验、typed broker、硬中断和资源限制已有真实组件测试；尚未接入 legacy plugin CLI/registry。 |
+| native 动态库 ABI、远程插件安装 | **不可用** | 不应将这些能力宣传为已可执行。 |
 
 可执行能力注册表是事实来源：
 
@@ -371,7 +372,7 @@ JavaScript 包还提供：
 
 仍不可用：
 
-- WASI Component 执行 host；
+- WASI Component 与 legacy plugin registry/CLI 的集成；
 - 稳定 native 动态库插件 ABI；
 - 远程插件 registry/install/update 信任模型；
 - 完整 native 文件系统/网络沙箱。
@@ -512,7 +513,7 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 
 3.0 alpha 是契约反馈版本，不是 release candidate，仍有以下明确边界：
 
-- 在宣传执行不可信第三方插件前，实现并验证 WASI Component host；
+- 在宣传不可信第三方插件分发前，将已验证的 WASI Component host 接入 signed registry 和 public plugin CLI；
 - 在启用远程插件安装前，完成 registry、signature、provenance 与 update policy；
 - 补充超出浏览器方向模型兼容性 smoke 的生产 OCR 兼容性和准确率证据；
 - 基于代表性 corpus 与平台定义 Office/PDF 保真保证；
@@ -527,6 +528,7 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 | 文档 | 用途 |
 |---|---|
 | [Core 3 架构](docs/v3/architecture.md) | Stacked 交付状态、版本边界与信任模型 |
+| [WASI Component host](docs/v3/wasi-component-host.md) | WIT v1 权限、资源限制、package 边界与诊断 |
 | [Core 3 迁移](docs/v3/migration-from-v2.md) | 严格的 v2 到 v3 契约迁移指南 |
 | [生产能力](docs/production-capabilities.md) | 稳定性、保真和不支持能力策略 |
 | [WASM adapter](docs/wasm.md) | 浏览器 API、Worker、cache、下载与模型验证 |
