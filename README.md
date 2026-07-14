@@ -2,20 +2,18 @@
 
 # LaTeXSnipper Core
 
-**One-stop solution from images to multi-format documents**
+**A Rust document-understanding core for OCR, a unified document AST, and multi-format conversion.**
 
-[![Rust](https://img.shields.io/badge/MSRV-1.88.0-orange?logo=rust)]()
-[![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
-[![Status](https://img.shields.io/badge/Status-Core%20Pipeline%20Working-brightgreen)]()
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
-[![Clippy](https://img.shields.io/badge/Clippy-0%20warnings-brightgreen)]()
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue)]()
+[![CI](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml)
+[![WASM](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88.0-orange?logo=rust)](Cargo.toml)
+[![Workspace](https://img.shields.io/badge/workspace-2.0.0-blue)](Cargo.toml)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20WASM-lightgrey)]()
 
-**Version 2.0.0 — Platform AST release with StageSpec pipeline, MediaAsset model, ArtifactManifest, and Office/PDF object types.**
+**Native ONNX inference · Tract/WASM · CLI · Rust SDK · verified local plugins**
 
-**One line of code, images to LaTeX/Markdown/Typst**
-
-[![About](assets/About.png)]()
+[![About](assets/About.png)](assets/About.png)
 
 [English](README.md) · [中文](README-CN.md)
 
@@ -23,601 +21,544 @@
 
 ---
 
-## Quick Start
+## Project status
 
-> Production status: semantic text conversion is stable. PDF/SVG/PNG and
-> DOCX/PPTX/XLSX package export are experimental/best-effort and emit
-> structured diagnostics for downgraded content. Opaque OOXML parts are
-> retained only when `ImportOptions::preserve_unknown_parts` is enabled.
-> Query the executable registry with `snipper capabilities --format json`.
+The `main` branch currently targets the **2.0.0 workspace codebase**. The core has undergone release-candidate hardening across native CI, browser/WASM packaging, real-model tests, fuzzing, dependency audits, plugin process isolation, capability reporting, and CLI behavior.
+
+This does **not** mean that every format, model, or plugin boundary has the same maturity.
+
+| Area | Status | Contract |
+|---|---|---|
+| Unified `Document` AST and JSON schema | **Stable** | The AST is the source of truth shared by import, recognition, conversion, and export. |
+| LaTeX, Markdown, Typst, plain text, JSON AST | **Stable for represented AST** | Semantic content is editable; source-specific macros, typography, and exact line breaking may be lost. |
+| MathML and OMML | **Stable / best effort** | Formula structure is editable; application-specific properties and exact typography may be downgraded. |
+| Native OCR pipelines | **Implemented and CI-validated** | Requires compatible local model profiles. Accuracy and readiness depend on the selected models and mode. |
+| HTML | **Best effort** | Text and math semantics are retained; arbitrary scripts, CSS layout, and application objects are not reproduced. |
+| SVG, PNG, PDF | **Experimental / best effort** | Structural or visual output is tested, but full layout, font, editability, and round-trip fidelity are not guaranteed. |
+| DOCX, PPTX, XLSX | **Experimental / best effort** | Package validity and supported semantics are tested; Microsoft Office visual parity is not guaranteed. |
+| WASM semantic conversion | **Stable** | Native binary exporters are intentionally excluded from the browser target. |
+| WASM Tract recognition | **Experimental** | Model-gated, asynchronous, and tested in Chrome and Firefox; browser table and handwriting pipelines remain unavailable. |
+| Built-in Rust plugins | **Stable host behavior** | Deterministic ordering, typed hooks, transactional patches, failure policies, soft deadlines, and quarantine are implemented. |
+| Isolated native process plugins | **Reviewed local code only** | Hard timeout and resource controls exist, but this is not an OS filesystem/network sandbox. |
+| WASI Component host, native dynamic-library ABI, remote plugin installation | **Unavailable** | These capabilities must not be advertised as executable. |
+
+The executable source of truth is the capability registry:
+
+```bash
+snipper capabilities --format json
+snipper capabilities --format json --input docx --output png
+```
+
+See [Production capability and fidelity policy](docs/production-capabilities.md) for the precise stability definitions and loss model.
 
 <!-- capability-inputs: PNG,JPEG,WebP,BMP,TIFF,GIF,SVG,PDF,DOCX,PPTX,XLSX,HTML,Markdown,LaTeX,Typst,MathML,OMML,JSON AST,Plain text -->
 <!-- capability-outputs: JSON AST,Plain text,Markdown,LaTeX,Typst,HTML,MathML,OMML,SVG,PDF,PNG,DOCX,PPTX,XLSX -->
 
-See [Production capability and fidelity policy](docs/production-capabilities.md)
-for the exact stability definitions and inherent limitations.
-
-```rust
-use latexsnipper_engine::sdk::Snipper;
-
-// One line: image → detect → recognize → AST → export
-let snipper = Snipper::from_file("input.png")?;
-
-// Export to any format
-let latex = snipper.to_latex()?;
-let markdown = snipper.to_markdown()?;
-let typst = snipper.to_typst()?;
-let html = snipper.to_html()?;
-let json = snipper.to_json()?;
-```
-
-### Output Examples
-
-**Input**: Image containing formulas
-
-**Output (LaTeX)**:
-```latex
-$$ E = m c ^ { 2 } $$
-
-$$ \int _ { 0 } ^ { \infty } e ^ { - x ^ { 2 } } d x = \frac { \sqrt { \pi } } { 2 } $$
-```
-
-**Output (Markdown)**:
-```markdown
-$$ E = m c ^ { 2 } $$
-
-$$ \int _ { 0 } ^ { \infty } e ^ { - x ^ { 2 } } d x = \frac { \sqrt { \pi } } { 2 } $$
-```
-
-**Output (Typst)**:
-```typst
-$ E = m c ^ { 2 } $
-
-$ integral _ 0 ^ infinity e ^ - x ^ 2 d x = frac sqrt pi 2 $
-```
-
 ---
 
-## Core Capabilities
+## What LaTeXSnipper Core provides
 
-| Capability | Status | Details |
-|------------|--------|---------|
-| **Image → AST** | ✅ | YOLOv8 detection + TrOCR recognition |
-| **AST → LaTeX** | ✅ | Full formula, table, list support |
-| **AST → Markdown** | ✅ | MathJax compatible, image asset support |
-| **AST → Typst** | ✅ | Native Typst syntax |
-| **AST → HTML** | ✅ | MathJax rendering |
-| **AST → MathML** | ✅ | Office compatible |
-| **AST → OMML** | ✅ | Word compatible |
-| **AST → SVG** | ✅ | Visual render via ExportService |
-| **AST → PDF** | ✅ | Visual render via the audited lopdf writer |
-| **AST → XML** | ✅ | Fully typed JSON AST |
-| **Markdown → AST** | ✅ | Headings, bold/italic, code, lists, math |
-| **HTML → AST** | ✅ | Full tag support, MathJax compatible |
-| **DOCX → AST** | ✅ | Word paragraphs, runs, images, tables |
-| **PPTX → AST** | ✅ | PowerPoint slides, text, shapes, images |
-| **XLSX → AST** | ✅ | Excel sheets, tables, strings |
-| **PDF native → AST** | ✅ | Native text extraction via lopdf |
-| **PDF overlay** | ✅ | Overlay AST text onto source PDF |
-| **SVG → ShapeBlock** | ✅ | Parse SVG primitives to AST shapes |
-| **Chart → ChartBlock** | ⚡ | Experimental VLM-backed chart data extraction (requires remote-api feature) |
-| **Diagram → Shape/Graph** | ⚡ | Experimental VLM-backed diagram understanding (requires remote-api feature) |
-| **Document→Report** | ✅ | `DocumentReport::from_document()` with block/confidence/asset summaries |
-| **Capability query** | ✅ | `CapabilityMatrix::query()` / `explain_loss()` |
-| **Asset normalization** | ✅ | `migrate_legacy_image_data()` promotes legacy data, `validate_asset_refs()` |
-| **StageRunner trait** | ✅ | `DecodeStage`/`RecognizeStage`/`ConvertStage`/`ExportStage` implementations |
-| **Job persistence** | ✅ | `JobRoot::ensure_dirs()` creates 11-directory job tree |
-| **OOXML fragment** | ✅ | `write_ooxml_fragment()` — AST → Word body XML |
-| **Clipboard bundle** | ✅ | HTML+RTF+PlainText+PNG multi-format |
-| **Office insertion** | ✅ | Auto-select OMath/SVG/HTML per app |
-| **FigureBlock caption** | ✅ | `caption_inlines_or_legacy()` / `caption_plain_text()` accessors |
-| **Upload policy** | ✅ | `UploadScope` granular control via `UploadPolicy::allows()` |
-| **Diagnostic codes** | ✅ | 12 standardized codes (SmartArt/OLE/Chart/media/API warnings) |
-| **API error codes** | ✅ | 8 codes (auth, timeout, rate limit, schema, etc.) |
-| **Schema validation** | ✅ | Two-stage (lightweight + feature-gated full) |
-| **Pipeline diagnostics** | ✅ | `From<DiagnosticEvent> for ast::Diagnostic` mapping |
-| **Capability matrix** | ✅ | `snipper capabilities` |
-| **TextRun.style** | ✅ | `Option<TextStyle>` alongside legacy bold/italic/underline |
-| **TextDirection/UnderlineStyle** | ✅ | Style enums for LTR/RTL/underline variants |
-| **Transform2D/LayerInfo** | ✅ | 2D transforms and z-order for blocks |
-| **NoteDefinition** | ✅ | Structured footnote/endnote with multi-block content |
-| **PageLayout/PageMargin/PageOrientation** | ✅ | Page layout descriptors |
-| **ListStyle/BulletStyle/NumberingStyle** | ✅ | Structured list styling |
-| **ListItem.content: Vec\<Block\>** | ✅ | Multi-block list items |
-| **TableRow/TableColumn/TableStyle** | ✅ | Enhanced table model |
-| **TableCell.content: Vec\<Block\>** | ✅ | Block-level cell content |
-| **Anchor/CrossReference Inline** | ✅ | Bookmark and cross-reference inlines |
-| **FormFieldBlock** | ✅ | Form field support (text/checkbox/dropdown) |
-| **BibliographyBlock** | ✅ | Structured bibliography entries |
-| **Revision/TrackedChange** | ✅ | Revision tracking support |
-| **ChemicalFormula/QrCode/Graph Block** | ✅ | Domain-specific block types |
-| **DocumentOutline** | ✅ | Table-of-contents hierarchy |
-| **Length/LengthUnit** | ✅ | Typed measurement (Pt/Px/Emu/Mm/Cm/Inch/Percent) |
-| **TableStyle/TableCellStyle** | ✅ | Border/alignment/banding/background table styling |
-| **Asset normalization** | ✅ | `normalize_assets()` 5-stage: migrate/infer/dedup/checksum/validate |
-| **StageOrchestrator** | ✅ | `run_stage()` writes reports/events/manifest files |
-| **DocumentConverter artifacts** | ✅ | `convert_artifact()` returns `ExportArtifact` |
-| **Visual object fields** | ✅ | `transform`/`layer`/`accessibility` on 8+ block types |
-| **Asset ref rewriting** | ✅ | `rewrite_asset_refs()` after dedup — no dangling asset IDs |
-| **ConversionOutput** | ✅ | Structured converter result with text + diagnostics + assets |
-| **TextBoxBlock accessors** | ✅ | `effective_transform()`/`effective_layer()` legacy-to-new bridge |
-| **AnnotationBlock accessibility** | ✅ | Field consistency across all visual blocks |
-| **StageRunner diagnostics** | ✅ | `ConvertStage`/`ExportStage` record real elapsed + source diagnostics |
-| **ArtifactKind mapping** | ✅ | `from_stage_kind()` — Decode→DecodedImage, Export→ExportedFile |
-| **Asset ref visitor** | ✅ | `visit_asset_refs()`/`visit_asset_refs_mut()` unified walk for validate/rewrite/collect |
-| **ExportService diagnostics** | ✅ | `tree.diagnostics` + `doc.diagnostics` in all SVG/PDF/Text exports |
-| **Real ConvertStage** | ✅ | Reads Document JSON, calls `DocumentConverter`, writes output file |
-| **Real ExportStage** | ✅ | Reads Document JSON, calls `ExportService`, writes output file |
-| **Real DecodeStage** | ✅ | Reads source → writes decoded artifact to JobRoot directory |
-| **Real RecognizeStage** | ⚡ | MVP runner: Document JSON passthrough is stable; image recognition requires configured local models via `spec.options.model_dir` |
-| **Converter placeholder diagnostics** | ✅ | `collect_converter_diagnostics()` flags 10 downgraded block types |
-| **DOCX heading/list detection** | ✅ | `w:pStyle` → Heading levels 1–6, `w:numPr` → ListBlock items |
-| **PPTX table import** | ✅ | `a:tbl` → TableBlock with cell text extraction |
-| **XLSX data type/formula/columns** | ✅ | CellDataType (Boolean/Date/Text/Formula), formula extraction, column width |
-| **StageProducedArtifact** | ✅ | Structured artifact metadata (kind/path/mime/format/checksum/size) |
-| **AssetRef visitor full coverage** | ✅ | Table/List/HeaderFooter/Shape/Chart/Annotation/FormField all covered |
-| **InlineBase64 content hash** | ✅ | Decoded before SHA-256, fixed in both ast and SimpleAssetResolver |
-| **ProducedArtifact real fill** | ✅ | All 4 StageRunners return structured kind/path/mime/checksum/size |
-| **Stage status semantics** | ✅ | No output = Failed, spec.output.artifact_kind takes priority |
-| **Inline visitor recursive** | ✅ | Span/Link/Footnote/Sup/Sub recursively visited for asset refs |
-| **Base64 decoder stabilized** | ✅ | Data URI strip, URL-safe, whitespace, invalid char → Err |
+LaTeXSnipper Core is more than an image-to-LaTeX wrapper. It provides a shared document model and execution layer for desktop applications, browser applications, Office integrations, mobile adapters, and command-line workflows.
 
----
-
-## LaTeX Syntax Support
-
-| Feature | LaTeX | OMML | HTML | Typst | Markdown |
-|---------|-------|------|------|-------|----------|
-| Bold `\textbf{}` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Italic `\textit{}` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Underline `\underline{}` | ✅ | ✅ | ✅ | ✅ | — |
-| Footnote `\footnote{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
-| Cross-ref `\ref{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
-| Citation `\cite{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
-| Description list | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Theorem/proof | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Minipage | ✅ | ✅ | ✅ | ✅ | — |
-| Float (figure/table) | ✅ | ✅ | ✅ | ✅ | — |
-
-⚡ = 占位符输出，需要 Word API 插入实际内容
-
----
-
-## Why LaTeXSnipper Core?
-
-**Not just another OCR engine.**
-
-The core value of LaTeXSnipper Core is a **unified document AST**:
-
-1. **Any input** → Images, clipboard, Office, PDF
-2. **Unified AST** → Document / Block / Inline / Formula
-3. **Any output** → LaTeX, Typst, Markdown, Office, Web
-
-OCR is just one input source. Future Office plugins, clipboard listeners, and PDF parsers will all connect to the same AST.
-
-> Take a photo of a math problem, and simultaneously output LaTeX, Typst, Markdown, and Word-compatible formats — all from the same API.
+- **Unified document AST** — pages, blocks, inlines, formulas, tables, assets, geometry, styles, diagnostics, notes, revisions, references, and accessibility metadata.
+- **Model-driven recognition** — formula, text, mixed-document, layout, orientation, table, and handwriting building blocks selected through model profiles and pipeline modes.
+- **Multi-format import and conversion** — semantic formats, raster assets, PDF, SVG, and Office Open XML packages.
+- **Binary-safe export** — text and binary artifacts use distinct representations with MIME type, SHA-256, byte length, assets, and diagnostics.
+- **Native and browser execution** — ONNX Runtime on supported desktop targets and Tract in WebAssembly.
+- **Operational tooling** — CLI, SDK, capability inspection, model management, plugin package management, diagnostics, batch reports, shell completions, and man pages.
+- **Security-oriented parsing** — signature-first detection, bounded archive/XML processing, safe package paths, checksum verification, and structured failures.
 
 ---
 
 ## Architecture
 
-LaTeXSnipper Core follows a strict **four-layer architecture**:
+```text
+Applications and adapters
+├── Desktop / Office / mobile integrations
+├── CLI
+├── Rust SDK / FFI
+└── Browser Worker + WASM
+                │
+                ▼
+Engine and pipeline
+Input bytes or pixels
+→ decode / import / PDF render
+→ layout and region proposal
+→ mode-specific recognition
+→ region resolution and reading order
+→ unified Document AST
+                │
+                ▼
+Conversion and export
+├── semantic text: LaTeX / Markdown / Typst / HTML / MathML / OMML
+├── structured data: JSON AST / plain text
+├── visual output: SVG / PNG / PDF
+└── packages: DOCX / PPTX / XLSX
+```
 
-| Layer | Responsibility |
-|-------|---------------|
-| **Platform** | UI, Camera, Permissions — belongs to each app |
-| **Adapter** | JNI, WASM, Office.js, CLI — translates platform types to Core types |
-| **Core** | AST, Inference, Pipeline, Conversion, Export — all business logic |
-| **Runtime** | ONNX Runtime, Stub — interchangeable inference backends |
-
-> Core never knows which platform is calling it. It only cares about input, processing, and output.
+Core business logic is platform-independent. UI, camera access, browser APIs, Office automation, and operating-system integration belong in adapters or applications.
 
 ---
 
-## Module Dependencies
+## Input, recognition, and conversion behavior
 
-```
-Engine
-  ├── Conversion (LaTeX/OMML/MathML/Typst/Markdown/HTML)
-  ├── Export (SVG/Text/PDF)
-  ├── Syntax (Parser + Renderer)
-  ├── Pipeline (Node Graph)
-  │     ├── Inference (Detection + Recognition)
-  │     │     ├── Runtime (ONNX/Stub)
-  │     │     └── Image (Decode/Resize/Normalize)
-  │     └── AST (Document Data Model)
-  └── Model (Manifest + Config)
-        └── Foundation (Error/Log/Event/Config)
-```
+### Raster images
 
----
+Raster import and OCR are deliberately separate concepts:
 
-## Recognition Pipeline
+- `snipper import image.png` preserves the scan as an AST asset.
+- `snipper recognize -i image.png ...` runs the configured OCR pipeline.
+- Direct raster-to-semantic conversion is reported unavailable unless recognition is explicitly invoked.
 
-![Pipeline](assets/pipeline.svg)
+This prevents a plain importer from silently performing model inference.
 
-```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                         Recognition Pipeline                              │
-├───────────────────────────────────────────────────────────────────────────┤
-│                                                                           │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐             │
-│  │  Decode  │──> │Normalize │──> │  Layout  │──> │  Region  │             │
-│  │          │    │          │    │Detection │    │ Proposal │             │
-│  └──────────┘    └──────────┘    └──────────┘    └──────────┘             │
-│        │                                             │                    │
-│        │            ┌────────────────────────────────┘                    │
-│        │            │                                                     │
-│        │            v                                                     │
-│        │         ┌─────────────────────────────────────┐                  │
-│        │         │                                     │                  │
-│        │         │  ┌─────────────┐  ┌─────────────┐   │                  │
-│        │         │  │   Formula   │  │    Text     │   │                  │
-│        │         │  │ Recognition │  │ Recognition │   │                  │
-│        │         │  │  (TrOCR)    │  │  (CRNN)     │   │                  │
-│        │         │  └──────┬──────┘  └──────┬──────┘   │                  │
-│        │         │         │                │          │                  │
-│        │         │         └────────┬───────┘          │                  │
-│        │         │                  │                  │                  │
-│        │         └──────────────────┼──────────────────┘                  │
-│        │                            │                                     │
-│        │                            v                                     │
-│        │                     ┌──────────┐                                 │
-│        │                     │  Merge   │                                 │
-│        │                     └────┬─────┘                                 │
-│        │                          │                                       │
-│        │                          v                                       │
-│        │                  ┌──────────────┐                                │
-│        └────────────────> │ Document AST │                                │
-│                           └──────┬───────┘                                │
-│                                  │                                        │
-│                                  v                                        │
-│                           ┌──────────┐    ┌──────────┐                    │
-│                           │Conversion│──> │  Export  │                    │
-│                           └──────────┘    └──────────┘                    │
-│                                 │              │                          │
-│                          LaTeX/OMML        SVG/Text/PDF                   │
-│                          MathML/Typst                                     │
-│                          Markdown/HTML                                    │
-│                                                                           │
-└───────────────────────────────────────────────────────────────────────────┘
-```
+### PDF
+
+Two distinct paths exist:
+
+1. **Native PDF extraction** — best-effort extraction from content streams.
+2. **Rendered-page OCR** — renders pages through `pdftoppm` or `mutool`, then runs recognition.
+
+Arbitrary PDF font encodings, missing `ToUnicode` maps, reading order, complex graphics-state transforms, and scanned pages can reduce fidelity.
+
+### Office packages
+
+DOCX, PPTX, and XLSX readers and writers preserve supported text, formulas, tables, assets, and package structure. Unsupported objects may be downgraded, retained as opaque parts when preservation is enabled, or reported through diagnostics.
+
+A package reopening successfully proves **structural validity**, not exact Microsoft Office visual parity.
+
+### Fidelity dimensions
+
+The project treats these as separate claims:
+
+- package validity;
+- semantic preservation;
+- layout preservation;
+- visual fidelity;
+- editability;
+- round-trip fidelity.
+
+Do not infer one from another.
 
 ---
 
-## Features
+## CLI
 
-### Stable
-
-| Capability | Status | Details |
-|-----------|--------|---------|
-| **AST** | ✅ | Document → Page → Block → Inline → Formula |
-| **Image** | ✅ | SnipperImage, ImageView, decode, resize, normalize |
-| **Conversion** | ✅ | 6 formats: LaTeX, OMML, MathML, Typst, Markdown, HTML |
-| **Syntax** | ✅ | LaTeX/Typst/Markdown Parser + Renderer |
-| **Pipeline** | ✅ | DAG Node Graph, YAML/JSON Manifest, async with cancellation |
-| **Region Graph** | ✅ | Conflict resolution, ArtifactRef routing, layout→recognition routing |
-| **CJK/Latin Normalization** | ✅ | Recursive text normalization across all block types |
-
-### Experimental
-
-| Capability | Status | Details |
-|-----------|--------|---------|
-| **Inference** | ✅ | YOLOv8 detection + TrOCR formula recognition + CRNN+CTC text recognition |
-| **Runtime** | ✅ | ONNX Runtime (session caching, GPU auto-detect) + Tract (WASM) + Stub |
-| **Engine** | ✅ | SnipperEngine + JobQueue + Model hot-reload + SHA-256 validation + Metrics + ModelPackage |
-| **Model** | ✅ | Manifest (TOML), Config, SHA256 verification, ModelRegistry |
-| **ModelPackage** | ✅ | `ModelPackage`/`ModelExecutor` traits, lazy session loading, pipeline integration |
-| **Pipeline** | ✅ | Node-based async pipeline with ModelTask abstraction + ReadingOrder + ModelPackage fallback |
-| **Plugin** | ✅ | Plugin trait, Registry, TransformPlugin |
-| **FFI** | ✅ | Android JNI + iOS C FFI |
-| **WASM** | ⚠️ | Stable semantic conversion; experimental async Tract recognition with model-gated capabilities |
-| **CLI** | ✅ | Unified convert, stdin/stdout, atomic output, diagnostics, doctor, recognition, and model commands |
-| **Export** | ✅ | SVG/Text/PDF with lopdf, headings, tables, lists, code, formulas, page selection |
-| **Table Recognition** | ✅ | SLANet+ / TATR table structure + PP-DocLayout v3 layout detection |
-| **Handwriting** | ✅ | Handwriting detection + TrOCR recognition + postprocessing |
-| **Formula Layout** | ✅ | LaTeX AST parsing + symbol-level detection |
-| **Multi-page** | ✅ | PDF decoding + multi-page pipeline; PDF rendering via pdftoppm/mutool |
-| **PDF Rendering** | ✅ | Page rendering via pdftoppm (poppler) or mutool (MuPDF) |
-
----
-
-## Workspace
-
-```
-crates/
-├── foundation/     ✅ Error, Result, Logger, Config, EventBus
-├── ast/            ✅ Document AST — single source of truth (incl. report, format, traits)
-├── tensor/         ✅ Inference I/O tensors
-├── image/          ✅ Platform-independent image processing + PDF rendering
-├── runtime/        ✅ RuntimeBackend + InferenceSession + ModelResolver + ModelPackage + ModelRegistry + Validation
-├── model/          ✅ Model manifest, config, SHA256 verification
-├── inference/      ✅ Detection + Recognition pipelines + ModelPackage adapters
-├── pipeline/       ✅ Node-based async pipeline + PipelineArtifacts + ReadingOrder
-├── syntax/         ✅ LaTeX/Typst/Markdown Parser + Renderer
-├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML + DOCX/PPTX/XLSX readers
-├── export/         ✅ RenderTree → SVG/Text/PDF (lopdf), page selection
-├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
-├── api-types/      ✅ Public API types (RecognizeMode, Request, Response, StreamItem)
-├── tract/          ✅ Tract-based WASM RuntimeBackend
-├── plugin/         ⚠️ Deterministic registry and verified package store; external ABI/WASI hosts are not implemented
-├── mock/           ✅ Fake implementations for testing
-├── ffi/            ✅ Android JNI + iOS C FFI
-├── wasm/           ✅ WebAssembly bindings with Tract backend
-├── cli/            ✅ CLI tool (recognize/parse/render/version/play) with job management
-└── tests/          ✅ Integration tests (15+ tests with real models)
-```
-
----
-
-## Getting Started
-
-### Install CLI
-
-CLI is not published to crates.io for 2.0.0. Recommended installation from pre-built binaries or source:
+### Build
 
 ```bash
-# Build from source
-git clone https://github.com/strangelion/latexsnipper-core
+git clone https://github.com/strangelion/latexsnipper-core.git
 cd latexsnipper-core
+
 cargo build --release -p latexsnipper-cli
-# Binary at: target/release/snipper.exe (Windows) or target/release/snipper (Linux/macOS)
 ```
 
-### PDF Support
+The binary is written to:
 
-PDF page rendering requires one of these external tools:
+```text
+target/release/snipper       # Linux/macOS
+target/release/snipper.exe   # Windows
+```
+
+Check [GitHub Releases](https://github.com/strangelion/latexsnipper-core/releases) for published binaries and model packages.
+
+### Inspect the environment first
 
 ```bash
-# Linux
-sudo apt install poppler-utils    # provides pdftoppm
-# or
-sudo apt install mupdf-tools      # provides mutool
-
-# macOS
-brew install poppler
-# or
-brew install mupdf
-
-# Windows
-choco install poppler
-# or
-choco install mupdf
+snipper version
+snipper doctor
+snipper capabilities
+snipper capabilities --format json
 ```
 
-### Use as Library
+### Models and recognition
+
+```bash
+snipper models download
+snipper models verify
+
+snipper recognize -i scan.png -f latex -o result.tex
+snipper recognize -i page.png -f markdown --recognize-mode mixed -o page.md
+```
+
+Recognition requires compatible local model artifacts. `snipper doctor` and `snipper capabilities` report readiness rather than assuming that model files exist.
+
+### Import, convert, and export
+
+```bash
+# Import to the unified JSON AST
+snipper import report.docx -o report.ast.json
+
+# Convert through the unified AST
+snipper convert report.docx --to markdown -o report.md
+snipper convert notes.md --to typst -o notes.typ
+
+# Render/export an AST or supported document
+snipper export report.ast.json --to pdf -o report.pdf
+
+# Inspect or validate an input
+snipper inspect report.pdf --json
+snipper validate report.docx
+```
+
+### Batch conversion
+
+```bash
+snipper convert documents \
+  --to markdown \
+  --recursive \
+  --output-dir converted \
+  --jobs 4 \
+  --continue-on-error \
+  --report conversion-report.json
+```
+
+The CLI also supports atomic output, no-clobber/force policies, strict diagnostics, warning failures, page ranges, JSON/SARIF diagnostics, stable exit codes, shell completions, and roff man pages.
+
+### Plugin packages
+
+```bash
+snipper plugin verify ./plugin-package
+snipper plugin install ./plugin-package
+snipper plugin list
+snipper plugin info example.plugin
+snipper plugin enable example.plugin
+snipper plugin disable example.plugin
+snipper plugin doctor
+snipper plugin uninstall example.plugin
+```
+
+Remote URL installation remains disabled.
+
+---
+
+## Rust SDK
+
+Inside this workspace, enable the native engine feature:
 
 ```toml
 [dependencies]
-latexsnipper-engine = "2"
+latexsnipper-engine = { path = "crates/engine", features = ["native"] }
 ```
+
+### One-line image recognition
 
 ```rust
 use latexsnipper_engine::sdk::Snipper;
 
-let snipper = Snipper::from_file("input.png")?;
-let latex = snipper.to_latex()?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let snipper = Snipper::from_file("input.png")?;
+
+    println!("{}", snipper.to_latex()?);
+    println!("{}", snipper.to_markdown()?);
+    println!("{}", snipper.to_typst()?);
+
+    Ok(())
+}
 ```
 
-### Custom Model Integration
+For raster images, `Snipper::from_file` invokes OCR for backwards compatibility. Compatible model files must be available through the configured model directory.
+
+### Import without OCR
 
 ```rust
-use latexsnipper_engine::{SnipperEngine, EngineConfig, RecognizeMode};
-use latexsnipper_inference::adapters::YoloV8DetectorPackage;
-use latexsnipper_runtime::{ModelId, ModelTask};
-use std::sync::Arc;
+use latexsnipper_ast::ImportOptions;
+use latexsnipper_engine::sdk::Snipper;
 
-// Create engine
-let config = EngineConfig::with_models_dir("models".into());
-let backend = OnnxRuntimeBackend::new("models".into())?;
-let mut engine = SnipperEngine::new(config, Box::new(backend));
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let snipper = Snipper::import_path(
+        "document.docx",
+        ImportOptions::default(),
+    )?;
 
-// Register custom model package (optional — falls back to built-in inference)
-let package = YoloV8DetectorPackage::from_config(&config, ModelId::new("formula-det", "yolov8"))
-    .with_model_path("models/formula-det/yolov8-mfd/mathcraft-mfd.onnx".into());
-engine.register_model_package(ModelTask::FormulaDetection, Arc::new(package));
-
-// Recognize — will use ModelPackage if registered, otherwise direct function calls
-let doc = engine.recognize(image, RecognizeMode::Formula).await?;
+    println!("{}", snipper.to_markdown()?);
+    Ok(())
+}
 ```
 
-### Run Examples
+Use `Snipper::from_bytes` for in-memory import and `Snipper::from_document` when an application already owns a `Document` AST.
+
+---
+
+## WebAssembly and browser execution
+
+The WASM build uses **Tract** and does not link ONNX Runtime, native PDF/PNG/Office exporters, native filesystem downloaders, or a native Tokio runtime.
 
 ```bash
-# Parse LaTeX
-snipper parse --latex '$\frac{a+b}{c}$'
+rustup target add wasm32-unknown-unknown
 
-# Recognize from image
-snipper recognize -i image.png -f latex -o output.tex
+wasm-pack build crates/wasm \
+  --target web \
+  --release \
+  --out-dir ../../target/wasm-web
 
-# Run all tests
-cargo test --workspace
+cd crates/wasm/js
+npm ci
+npm audit
+npm run typecheck
+npm test
+npm run build
+npm run build:example
 ```
 
-See [docs/getting-started.md](docs/getting-started.md) for details.
+The v2 browser API includes:
+
+- `api_info_v2()` and `capabilities_v2()`;
+- verified model load, unload, clear, and transactional update APIs;
+- asynchronous `recognize_v2()` and progress reporting;
+- stage-boundary cooperative cancellation for direct calls;
+- binary-safe `convert_v2()` envelopes.
+
+`WasmWorkerClient` is the recommended browser entrypoint:
+
+- one active recognition request with a bounded queue;
+- public request IDs separated from internal wire IDs;
+- progress events and stale-response suppression;
+- hard cancellation by terminating the Worker;
+- Worker restart and verified-model reload;
+- RPC timeout and `AbortSignal`;
+- structured recovery failure instead of infinite restart loops.
+
+The JavaScript package also provides:
+
+- SHA-256-verified IndexedDB model caching;
+- schema migration and LRU budget eviction;
+- abortable streaming downloads;
+- maximum-size enforcement;
+- progress reporting;
+- mirror fallback;
+- best-effort or required cache policy.
+
+Browser table and handwriting pipelines remain unavailable. Production-derived WASM model tests prove model/runtime compatibility, not OCR accuracy.
+
+See [WASM adapter](docs/wasm.md).
 
 ---
 
-## Documentation
+## Plugin system and security boundary
 
-### Architecture
+### Trusted in-process plugins
 
-| Document | Description |
-|----------|-------------|
-| [architecture.md](docs/architecture.md) | Four-layer architecture overview |
-| [pipeline.md](docs/pipeline.md) | Recognition pipeline design |
-| [runtime.md](docs/runtime.md) | Runtime backend system |
-| [engine.md](docs/engine.md) | Engine and job queue |
+Trusted Rust plugins support:
 
-### Developer Guide
+- typed hooks;
+- deterministic ordering and dependency checks;
+- transactional `DocumentPatch`;
+- `Stop`, `Continue`, `DisablePlugin`, and `Rollback` policies;
+- panic containment;
+- cooperative cancellation and deadlines;
+- per-plugin concurrency limits;
+- quarantine after soft timeout.
 
-| Document | Description |
-|----------|-------------|
-| [getting-started.md](docs/getting-started.md) | Developer guide |
-| [plugin.md](docs/plugin.md) | Plugin system |
-| [testing.md](docs/testing.md) | Testing strategies |
+An in-process Rust thread cannot be safely force-killed. A soft timeout may return while plugin code is still unwinding or running cooperatively.
 
-### Reference
+### Isolated-process plugins
 
-| Document | Description |
-|----------|-------------|
-| [ast.md](docs/ast.md) | Document AST specification |
-| [syntax.md](docs/syntax.md) | LaTeX/Typst/Markdown parser |
-| [conversion.md](docs/conversion.md) | 12 output formats |
-| [conversion_guide.md](docs/conversion_guide.md) | Conversion guide with examples |
+The versioned process host provides:
 
-### Roadmap
+- JSON request/response IPC;
+- ABI/protocol compatibility checks;
+- SHA-256-verified local packages;
+- hard deadline termination;
+- Unix session/process-group containment;
+- Windows Job Object containment;
+- memory and response-file observation limits;
+- private temporary workspaces;
+- strict success/error response validation;
+- cross-process registry locking and crash-resistant atomic replacement.
 
-| Document | Description |
-|----------|-------------|
-| [dual-track.md](docs/dual-track.md) | Development roadmap |
+> **Security boundary:** a native process plugin is not an operating-system filesystem/network sandbox. Manifest permissions govern brokered host operations; arbitrary native code can still call operating-system APIs directly. Only run reviewed local process plugins.
 
----
+Still unavailable:
 
-## Design Principles
+- WASI Component execution host;
+- stable native dynamic-library plugin ABI;
+- remote plugin registry/install/update trust model;
+- complete native filesystem/network sandboxing.
 
-- **Document First** — The document is the source of truth, not LaTeX or OCR
-- **Composable** — Everything is a Node, everything is a Pipeline
-- **Platform Independent** — Business logic in Rust, UI outside
-- **Pluggable Runtime** — ONNX, TensorRT, NCNN — all interchangeable
-- **Pluggable Models** — `ModelPackage` trait allows custom model integrations without changing pipeline code
+See [Plugin system](docs/plugin.md).
 
 ---
 
 ## Models
 
-LaTeXSnipper Core uses ONNX models for formula detection/recognition and text detection/recognition.
+Model readiness is profile-driven. The manifest, checksum, configuration, tokenizer, key files, and runtime compatibility must all be present before a capability is reported ready.
 
-### Supported Models
+| Model family | Primary role | Status |
+|---|---|---|
+| YOLOv8-MFD | Formula detection | Default native profile |
+| TrOCR-DeiT | Formula recognition | Default native profile |
+| PP-OCRv6 Det / Rec | Multilingual text detection and recognition | Default native profile |
+| OpenOCR Mobile Det / Rec | Alternative DBNet/CTC text pipeline | Experimental |
+| PP-DocLayout v3 | Document layout analysis | Experimental |
+| TATR Detection / Structure | Table detection and structure | Experimental |
+| SLANet Plus | Alternative table structure backend | Experimental |
+| PP-LCNet orientation models | Document/text-line orientation and compatibility testing | Experimental / test profile |
 
-| Model | Size | Purpose | Source | License |
-|-------|------|---------|--------|---------|
-| YOLOv8-MFD | ~66 MB | Formula detection | [Mathcraft](https://github.com/SakuraMathcraft/LaTeXSnipper) | MIT |
-| TrOCR-DeiT | ~104 MB | Formula recognition (encoder+decoder) | [Microsoft TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT |
-| PP-OCRv6 Det | ~10 MB | Text detection | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
-| PP-OCRv6 Rec | ~21 MB | Text recognition (18709 chars: CN/EN/math/greek) | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
-| OpenOCR Mobile Det | ~9 MB | Text detection (OpenOCR mobile DBNet) | [OpenOCR](https://github.com/Topdu/OpenOCR) | Apache-2.0 |
-| OpenOCR Mobile Rec | ~21 MB | Text recognition (OpenOCR mobile CTC) | [OpenOCR](https://github.com/Topdu/OpenOCR) | Apache-2.0 |
-| PP-DocLayout v3 | ~13 MB | Document layout analysis (10 categories) | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 |
-| TATR Detection | ~34 MB | Table region detection (DETR-based) | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
-| TATR Structure | ~34 MB | Table structure recognition (rows/cols/cells) | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
-| SLANet Plus | ~7 MB | Table structure recognition (alternative backend) | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 |
-
-### Model Directory Structure
-
-```
+```text
 models/
-├── formula-det/yolov8-mfd/     # Formula detection (YOLOv8) — Stable
-├── formula-rec/trocr-deit/     # Formula recognition (TrOCR) — Stable
-├── text-det/v6-small/          # Text detection (PP-OCRv6) — Stable
-├── text-det/openocr-mobile/    # Text detection (OpenOCR mobile) — Experimental
-├── text-rec/v6-small/          # Text recognition (PP-OCRv6) — Stable
-├── text-rec/openocr-mobile/    # Text recognition (OpenOCR mobile) — Experimental
+├── formula-det/
+├── formula-rec/
+├── text-det/
+├── text-rec/
 ├── layout/
-│   └── pp-layout-cdla/         # Document layout analysis (CDLA) — Stable
 ├── table-det/
-│   ├── tatr-detection/         # Table detection (TATR) — Experimental
-│   └── doclayout-v3/           # Document layout analysis (PP-DocLayout) — Experimental
 ├── table-struct/
-│   ├── tatr-structure/         # Table structure (TATR) — Experimental
-│   └── slanet-plus/            # Table structure (SLANet) — Experimental
-└── doc-ori/                    # Document orientation classification — Experimental
+└── doc-ori/
 ```
 
-### Model Support Status
+Use the verified downloader rather than copying unverified model files:
 
-| Model | Status | Default | Release |
-|---|---|---|---|
-| YOLOv8-MFD | Stable | Yes | models-v2.0.0 |
-| TrOCR-DeiT | Stable | Yes | models-v2.0.0 |
-| PP-OCRv6 Det (v6-small) | Stable | Yes | models-v2.0.0 |
-| PP-OCRv6 Rec (v6-small) | Stable | Yes | models-v2.0.0 |
-| OpenOCR Mobile Det | Experimental | No | models-v2.0.0 |
-| OpenOCR Mobile Rec | Experimental | No | models-v2.0.0 |
-| PP-DocLayout v3 | Experimental | No | models-v2.0.0 |
-| TATR Detection | Experimental | No | models-v2.0.0 |
-| TATR Structure | Experimental | No | models-v2.0.0 |
-| SLANet Plus | Experimental | No | models-v2.0.0 |
-| PP-LCNet (doc/textline ori) | Experimental | No | test-models only |
+```bash
+snipper models download
+snipper models list
+snipper models verify
+```
 
-> Note: `test-models/` directory contains models under active testing and should not be modified.
+Model packages remain subject to their upstream licenses. See the model manifests and release assets for exact source revisions and checksums.
 
 ---
 
-## Benchmark
+## Workspace
 
-See [docs/benchmark.md](docs/benchmark.md) for detailed comparison with LaTeXSnipper Desktop.
+```text
+crates/
+├── foundation/   errors, diagnostics, configuration, events
+├── ast/          unified Document AST and public document types
+├── tensor/       runtime-independent tensor types
+├── image/        decoding, transforms, normalization, PDF page rendering
+├── runtime/      RuntimeBackend, ONNX Runtime provider, model resolution
+├── model/        manifests, profiles, validation, downloader metadata
+├── inference/    detector and recognizer adapters
+├── pipeline/     stage graph, region resolution, reading order
+├── syntax/       LaTeX, Typst, and Markdown parsers/renderers
+├── conversion/   importers, semantic conversion, Office package handling
+├── export/       SVG, PNG, PDF, and text rendering
+├── engine/       orchestration, SDK, jobs, metrics
+├── api-types/    versioned public request/response types
+├── tract/        Tract-based WASM runtime backend
+├── plugin/       built-in and isolated-process plugin infrastructure
+├── ffi/          Android JNI and iOS C-facing adapters
+├── wasm/         wasm-bindgen API
+├── cli/          `snipper` command-line application
+├── mock/         deterministic test doubles
+└── tests/        integration tests and benchmarks
 
-| Metric | LaTeXSnipper (Python) | Core (Rust) | Winner |
-|--------|----------------------|-------------|--------|
-| Text Recognition | ~50 ms | **8.8 ms** | Core 5.7x faster |
-| Formula Detection | ~300 ms | **293.9 ms** | Core 1.0x faster |
-| Formula Recognition | ~400 ms | **213.3 ms** | Core 1.9x faster |
-| Formula Output | `$$ E = m c ^ { 2 } $$` | `$$ E = m c ^ { 2 } $$` | Same |
-| Text Accuracy | 100% | ~95% | LaTeXSnipper (v5 vs v6 model) |
+fuzz/             cargo-fuzz targets and seed corpora
+docs/             architecture, capability, security, and release documents
+```
 
 ---
 
-## Related Projects
+## Verification and CI
 
-- [LaTeXSnipper Mobile](https://github.com/strangelion/LaTeXSnipper_mobile) — Android app
-- LaTeXSnipper Office — Office Add-in
-- [LaTeXSnipper Desktop](https://github.com/SakuraMathcraft/LaTeXSnipper) — Desktop app
-- LaTeXSnipper Web — Web app (planned)
+### Native checks
 
-All share the same Rust Core.
+```bash
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo test --doc --workspace --all-features
+```
+
+### Fuzzing
+
+The repository includes real `cargo-fuzz` targets for format detection, ZIP/OOXML packages, XML, SVG, PDF, JSON AST, LaTeX, Typst, Markdown math, model manifests, and plugin manifests.
+
+```bash
+cargo install cargo-fuzz
+cargo +nightly fuzz list
+cargo +nightly fuzz run format_signature
+```
+
+Pull-request CI compiles fuzz targets. Scheduled hardening runs bounded libFuzzer campaigns and uploads crash artifacts on failure.
+
+### Continuous integration coverage
+
+CI covers:
+
+- Windows, Linux, and macOS workspace checks;
+- formatting, strict Clippy, MSRV, tests, doc tests, and feature matrices;
+- real native model pipelines;
+- parser security and round-trip corpora;
+- Chrome and Firefox browser tests;
+- web, bundler, and Node WASM packages;
+- TypeScript, Worker, IndexedDB, download, ESM, and Vite tests;
+- dependency audits, model URL verification, benchmarks, and scheduled fuzzing.
+
+Benchmark smoke tests validate execution but do not enforce fragile timing thresholds on shared runners. See [Benchmarks](docs/benchmark.md).
 
 ---
 
-## Acknowledgements
+## Security and trust model
 
-This project builds on the work of these open-source projects:
+Important controls include:
 
-### Models & Algorithms
+- signature/package-first format detection;
+- typed errors for mismatched hints and encrypted packages;
+- bounded archive entry count, decompressed size, compression ratio, and path traversal checks;
+- XML depth/element, DTD/entity, and external relationship restrictions;
+- raster dimension and total-pixel checks before allocation;
+- verified model archive SHA-256 and extraction limits;
+- plugin package checksum, ABI, path, symlink, count, and size validation;
+- structured diagnostics instead of silent fidelity loss.
 
-| Project | Usage |
-|---------|-------|
-| [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | PP-OCRv6 text detection & recognition models |
-| [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) | YOLOv8-MFD formula detection model |
-| [TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | Transformer-based formula recognition |
-| [LaTeXSnipper Desktop](https://github.com/SakuraMathcraft/LaTeXSnipper) | Original Python implementation, post-processing algorithms |
+These controls reduce risk but do not turn native process plugins into untrusted-code sandboxes.
 
-### Rust Ecosystem
+---
 
-| Crate | Usage |
-|-------|-------|
-| [ort](https://github.com/pyke/ort) | ONNX Runtime Rust bindings |
-| [image](https://github.com/image-rs/image) | Image decoding and processing |
-| [imageproc](https://github.com/image-rs/imageproc) | Image processing primitives |
-| [tokio](https://github.com/tokio-rs/tokio) | Async runtime |
-| [clap](https://github.com/clap-rs/clap) | CLI argument parsing |
-| [serde](https://github.com/serde-rs/serde) | Serialization framework |
-| [ndarray](https://github.com/rust-ndarray/ndarray) | N-dimensional array operations |
-| [wasm-bindgen](https://github.com/wasm-bindgen/wasm-bindgen) | WebAssembly bindings |
-| [jni](https://github.com/jni-rs/jni) | Android JNI bindings |
+## Known boundaries and GA work
+
+The 2.0.0 codebase is suitable for release-candidate evaluation, but the following remain explicit boundaries:
+
+- implement and validate a WASI Component host before advertising untrusted third-party plugin execution;
+- complete registry, signature, provenance, and update policy before remote plugin installation;
+- collect production OCR compatibility and accuracy evidence beyond browser orientation-model compatibility smoke tests;
+- define supported Office/PDF fidelity guarantees against representative corpora and platforms;
+- continue longer fuzzing, benchmark trend storage, browser coverage, and mobile memory profiling.
+
+See [v2.0.0-rc.1 release checklist](docs/release-checklist.md).
+
+---
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [Production capabilities](docs/production-capabilities.md) | Stability, fidelity, and unsupported-feature policy |
+| [WASM adapter](docs/wasm.md) | Browser API, Worker runtime, cache, downloads, and model validation |
+| [Plugin system](docs/plugin.md) | Execution classes, package verification, permissions, and security boundaries |
+| [CLI option matrix](docs/cli-option-matrix.md) | Option propagation and supported combinations |
+| [Export](docs/export.md) | Visual and package export behavior |
+| [Benchmarks](docs/benchmark.md) | Native and browser benchmark methodology |
+| [Release checklist](docs/release-checklist.md) | RC requirements, GA blockers, and future work |
+| [Architecture](docs/architecture.md) | Core architecture overview |
+| [Pipeline](docs/pipeline.md) | Recognition and processing pipeline |
+| [Testing](docs/testing.md) | Test strategy and fixtures |
+
+---
+
+## Related projects
+
+- [LaTeXSnipper Office](https://github.com/strangelion/LaTeXSnipper-Office) — desktop application and Office/WPS integrations.
+- [LaTeXSnipper Mobile](https://github.com/strangelion/LaTeXSnipper_mobile) — mobile integration work.
+- [SakuraMathcraft/LaTeXSnipper](https://github.com/SakuraMathcraft/LaTeXSnipper) — the original Python desktop project and an important source of models and post-processing ideas.
 
 ---
 
 ## License
 
-GNU AGPL-3.0. Allowed for learning and personal use. Closed-source commercial distribution is prohibited.
+LaTeXSnipper Core is licensed under the **GNU Affero General Public License v3.0**.
+
+Commercial use is not categorically prohibited by the license. Distribution of covered works, and operation of modified versions for users over a network, can require providing the corresponding source code under AGPL-3.0. This paragraph is a practical summary, not legal advice; the license text is authoritative.
+
+Third-party models and dependencies retain their own licenses. Review model manifests and release metadata before redistribution.
 
 ---
 
-## Model Sources & Licenses
+## Acknowledgements
 
-This project uses third-party models. Their licenses are listed below for compliance.
+LaTeXSnipper Core builds on work from the Rust, ONNX, OCR, document-processing, and browser ecosystems, including PaddleOCR, OpenOCR, Microsoft TrOCR, Table Transformer, RapidAI, Ultralytics, ONNX Runtime, Tract, `image`, `tokio`, `serde`, `clap`, `wasm-bindgen`, and many other open-source projects.
 
-| Model | Source Repository | License | Notes |
-|-------|-------------------|---------|-------|
-| YOLOv8-MFD | [SakuraMathcraft/LaTeXSnipper](https://github.com/SakuraMathcraft/LaTeXSnipper) | MIT | Formula detection model, trained on Mathcraft dataset |
-| TrOCR-DeiT | [microsoft/trocr-base-handwritten](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT | Transformer OCR encoder+decoder |
-| PP-OCRv6 | [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 | Text detection & recognition (v6-small variant) |
-| PP-DocLayout v3 | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 | PicoDet-based document layout analysis, 10 categories |
-| TATR Detection | [microsoft/table-transformer](https://github.com/microsoft/table-transformer) | MIT | DETR-based table region detection |
-| TATR Structure | [microsoft/table-transformer](https://github.com/microsoft/table-transformer) | MIT | DETR-based table structure recognition |
-| SLANet Plus | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 | Table structure recognition, 95.89% TEDS |
-
-**PaddleOCR / PP-Structure** models are developed by [Baidu PaddlePaddle](https://github.com/PaddlePaddle/PaddleOCR) under the Apache-2.0 license.
-
-**RapidAI** models ([RapidLayout](https://github.com/RapidAI/RapidLayout), [RapidTable](https://github.com/RapidAI/RapidTable)) are converted from PaddleOCR to ONNX format and distributed under the Apache-2.0 license. ONNX models are downloaded from [ModelScope](https://www.modelscope.cn/models/RapidAI).
+Contributions should preserve capability accuracy: do not mark a feature stable merely because a code path exists, and do not equate package validity with semantic, visual, editable, or round-trip fidelity.

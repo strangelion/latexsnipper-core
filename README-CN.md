@@ -2,20 +2,18 @@
 
 # LaTeXSnipper Core
 
-**可组合的 Rust 数学 OCR 引擎，支持文档理解和多格式处理。**
+**面向 OCR、统一文档 AST 与多格式转换的 Rust 文档理解核心。**
 
-[![Rust](https://img.shields.io/badge/Rust-1.96+-orange?logo=rust)]()
-[![License](https://img.shields.io/badge/License-AGPL--3.0-blue)]()
-[![Status](https://img.shields.io/badge/Status-架构稳定-yellow)]()
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20WASM-lightgrey)]()
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue)]()
-[![Clippy](https://img.shields.io/badge/Clippy-0%20warnings-brightgreen)]()
+[![CI](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml)
+[![WASM](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88.0-orange?logo=rust)](Cargo.toml)
+[![Workspace](https://img.shields.io/badge/workspace-2.0.0-blue)](Cargo.toml)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20WASM-lightgrey)]()
 
-**一次构建，处处运行。**
+**原生 ONNX 推理 · Tract/WASM · CLI · Rust SDK · 已校验本地插件**
 
-单一 Rust 核心驱动桌面端、移动端、Office 插件和 Web 应用。
-
-[![About](assets/About.png)]()
+[![About](assets/About.png)](assets/About.png)
 
 [English](README.md) · [中文](README-CN.md)
 
@@ -23,384 +21,544 @@
 
 ---
 
-## 为什么选择 LaTeXSnipper Core？
+## 项目状态
 
-> 当前生产状态：语义文本转换为稳定能力；PDF/SVG/PNG 以及
-> DOCX/PPTX/XLSX 包导出属于实验性或 best-effort 能力。发生样式、版式或对象降级时，
-> API 会返回结构化诊断。只有启用 `ImportOptions::preserve_unknown_parts` 时，
-> 才会为 Office round-trip 保留未知 OOXML parts。请以
-> `snipper capabilities --format json` 的可执行注册表为准。
+`main` 分支当前面向 **2.0.0 workspace 代码基线**。核心已经完成发布候选级硬化，覆盖原生多平台 CI、浏览器/WASM 打包、真实模型测试、fuzz、依赖审计、插件进程隔离、能力注册表和 CLI 行为。
 
-完整边界见 [生产能力与保真策略](docs/production-capabilities.md)。
+这并不表示所有格式、模型和插件边界具有相同成熟度。
 
-| 特性 | 说明 |
-|------|------|
-| **平台无关** | 纯 Rust 架构，无 UI 依赖 — 可在桌面、移动端、Office 或 Web 上运行 |
-| **统一文档 AST** | 文档结构的唯一数据源，独立于任何输出格式 |
-| **多 OCR 运行时** | 可互换后端：ONNX Runtime、TensorRT、NCNN — 选择适合你平台的方案 |
-| **多格式转换** | 从一个 AST 生成 12 种输出格式：LaTeX、OMML、MathML、Typst、Markdown、HTML |
-| **流式流水线** | 异步节点图，支持取消、进度跟踪和并行执行 |
-| **为各平台设计** | 桌面端（Windows/macOS/Linux）、移动端（Android/iOS）、Office 插件、Web（WASM） |
+| 领域 | 状态 | 能力约定 |
+|---|---|---|
+| 统一 `Document` AST 与 JSON schema | **稳定** | AST 是导入、识别、转换和导出的共同事实来源。 |
+| LaTeX、Markdown、Typst、纯文本、JSON AST | **对已表示 AST 稳定** | 语义内容可编辑；源格式专属宏、字体和精确换行可能丢失。 |
+| MathML 与 OMML | **稳定 / best effort** | 公式结构可编辑；应用专属属性与精确排版可能降级。 |
+| 原生 OCR 流水线 | **已实现并通过 CI 验证** | 需要兼容的本地模型 profile；准确率和 readiness 取决于模型与模式。 |
+| HTML | **Best effort** | 保留文本与数学语义；不会复现任意脚本、CSS 布局和应用对象。 |
+| SVG、PNG、PDF | **实验性 / best effort** | 已测试结构或视觉输出，但不保证完整布局、字体、可编辑性和 round-trip。 |
+| DOCX、PPTX、XLSX | **实验性 / best effort** | 已测试包结构与受支持语义，但不保证 Microsoft Office 视觉一致性。 |
+| WASM 语义转换 | **稳定** | 浏览器 target 有意排除原生二进制 exporter。 |
+| WASM Tract 识别 | **实验性** | 模型驱动、异步执行，并在 Chrome/Firefox 测试；浏览器表格和手写流水线尚不可用。 |
+| 内置 Rust 插件 | **Host 行为稳定** | 已实现确定性排序、typed hook、事务 patch、失败策略、soft deadline 和 quarantine。 |
+| 隔离 native process 插件 | **仅限经过审核的本地代码** | 支持 hard timeout 和资源控制，但不是操作系统文件/网络沙箱。 |
+| WASI Component host、native 动态库 ABI、远程插件安装 | **不可用** | 不应将这些能力宣传为已可执行。 |
 
-> 架构和 crate 边界已稳定。大部分实现仍在积极开发中。
+可执行能力注册表是事实来源：
+
+```bash
+snipper capabilities --format json
+snipper capabilities --format json --input docx --output png
+```
+
+精确稳定性定义与损失模型见[生产能力与保真策略](docs/production-capabilities.md)。
+
+<!-- capability-inputs: PNG,JPEG,WebP,BMP,TIFF,GIF,SVG,PDF,DOCX,PPTX,XLSX,HTML,Markdown,LaTeX,Typst,MathML,OMML,JSON AST,Plain text -->
+<!-- capability-outputs: JSON AST,Plain text,Markdown,LaTeX,Typst,HTML,MathML,OMML,SVG,PDF,PNG,DOCX,PPTX,XLSX -->
+
+---
+
+## LaTeXSnipper Core 提供什么
+
+LaTeXSnipper Core 不只是一个“图片转 LaTeX”封装。它为桌面应用、浏览器应用、Office 集成、移动端适配器和命令行工作流提供共同的文档模型与执行层。
+
+- **统一文档 AST** — 页面、块、inline、公式、表格、资产、几何、样式、诊断、脚注、修订、引用和无障碍元数据。
+- **模型驱动识别** — 通过模型 profile 和流水线模式组合公式、文本、混合文档、版式、方向、表格和手写组件。
+- **多格式导入与转换** — 语义格式、栅格资产、PDF、SVG 与 Office Open XML 包。
+- **二进制安全导出** — 文本与二进制产物使用不同表示，并携带 MIME、SHA-256、字节长度、资产和诊断。
+- **原生与浏览器执行** — 支持桌面 target 的 ONNX Runtime，以及 WebAssembly 中的 Tract。
+- **完整操作工具** — CLI、SDK、能力查询、模型管理、插件包管理、诊断、批处理报告、shell 补全和 man page。
+- **安全导向解析** — 签名优先检测、有界 archive/XML 处理、安全包路径、checksum 校验和结构化失败。
 
 ---
 
 ## 架构
 
-LaTeXSnipper Core 采用严格的**四层架构**：
+```text
+应用与适配器
+├── Desktop / Office / 移动端集成
+├── CLI
+├── Rust SDK / FFI
+└── Browser Worker + WASM
+                │
+                ▼
+引擎与流水线
+输入字节或像素
+→ 解码 / 导入 / PDF 渲染
+→ 版式与区域候选
+→ 按模式选择识别器
+→ 区域消解与阅读顺序
+→ 统一 Document AST
+                │
+                ▼
+转换与导出
+├── 语义文本：LaTeX / Markdown / Typst / HTML / MathML / OMML
+├── 结构化数据：JSON AST / 纯文本
+├── 视觉输出：SVG / PNG / PDF
+└── 文档包：DOCX / PPTX / XLSX
+```
 
-| 层级 | 职责 |
-|------|------|
-| **Platform** | UI、相机、权限 — 属于各平台应用 |
-| **Adapter** | JNI、WASM、Office.js、CLI — 将平台类型转换为 Core 类型 |
-| **Core** | AST、推理、流水线、转换、导出 — 全部业务逻辑 |
-| **Runtime** | ONNX Runtime、Stub — 可替换的推理后端 |
-
-> Core 永远不知道是谁在调用它。它只关心输入、处理和输出。
+核心业务逻辑与平台无关。UI、相机、浏览器 API、Office 自动化和操作系统集成应位于 adapter 或具体应用中。
 
 ---
 
-## LaTeX 语法支持
+## 输入、识别与转换行为
 
-| 特性 | LaTeX | OMML | HTML | Typst | Markdown |
-|------|-------|------|------|-------|----------|
-| 粗体 `\textbf{}` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 斜体 `\textit{}` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 下划线 `\underline{}` | ✅ | ✅ | ✅ | ✅ | — |
-| 脚注 `\footnote{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
-| 交叉引用 `\ref{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
-| 参考文献 `\cite{}` | ✅ | ⚡ | ✅ | ✅ | ✅ |
-| 定义列表 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 定理/证明 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 小页 minipage | ✅ | ✅ | ✅ | ✅ | — |
-| 浮动体 figure/table | ✅ | ✅ | ✅ | ✅ | — |
+### 栅格图片
 
-⚡ = 占位符输出，需要 Word API 插入实际内容
+栅格导入与 OCR 是两个明确分离的概念：
 
-### 多格式输入解析器
+- `snipper import image.png`：将原始扫描图作为 AST 资产保留。
+- `snipper recognize -i image.png ...`：运行已配置的 OCR 流水线。
+- 未显式执行 recognition 时，栅格图到语义文本的直接转换会报告不可用。
 
-| 输入格式 | 解析器 | 说明 |
-|----------|--------|------|
-| LaTeX | `latex_parser.rs` | 完整 LaTeX 命令和环境解析 |
-| OMML | `omml_parser.rs` | Office Math ML 反向解析 |
-| MathML | `mathml_parser.rs` | MathML → LaTeX 转换 |
-| Markdown | `markdown_parser.rs` | 标题/粗体/斜体/代码/列表/引用/公式 |
-| HTML | `html_parser.rs` | 完整 HTML 标签解析 |
-| Typst | `typst_parser.rs` | Typst 数学语法转换 |
-| **DOCX** | `docx_reader.rs` | Word 段落/文本/图片/表格 |
-| **PPTX** | `pptx_reader.rs` | PowerPoint 幻灯片/文本/形状/图片 |
-| **XLSX** | `xlsx_reader.rs` | Excel 工作表/表格/共享字符串 |
-| **PDF native** | `pdf_native.rs` | lopdf 内容流原生文本提取 |
+这样可以避免普通 importer 在未声明的情况下静默执行模型推理。
 
-### 多格式输出导出
+### PDF
 
-| 输出格式 | 模块 | 说明 |
-|----------|------|------|
-| LaTeX | `latex.rs` | 完整 LaTeX 文档 |
-| OMML | `omml.rs` | Office Math ML (Word 可编辑公式) |
-| MathML | `mathml.rs` | W3C MathML |
-| Markdown | `markdown.rs` | MathJax 兼容 |
-| HTML | `html.rs` | MathJax 渲染 |
-| Typst | `typst.rs` | 原生 Typst 语法 |
-| **SVG** | `ExportService` | 视觉渲染输出 |
-| **PDF** | `ExportService` | 视觉渲染输出 (printpdf) |
-| **Clipboard** | `ClipboardBundle` | HTML+RTF+PlainText 多格式剪贴板 |
-| **OOXML 片段** | `ooxml_fragment` | Word 正文 XML（含文本/公式/图片/表格） |
-| **Office** | `OfficeInsertService` | 按应用自动选择 OMath/SVG/HTML |
-| **PDF overlay** | `pdf_overlay.rs` | 在源 PDF 上叠加文本 |
-| **作业报告** | `Job::persist_to_root` | artifacts/events/stages/diagnostics 持久化 |
+PDF 有两条不同路径：
+
+1. **原生 PDF 提取** — 从内容流进行 best-effort 文本提取。
+2. **页面渲染 OCR** — 通过 `pdftoppm` 或 `mutool` 渲染页面，再运行识别。
+
+任意字体编码、缺失 `ToUnicode` 映射、阅读顺序、复杂图形状态变换与扫描页都会影响保真度。
+
+### Office 文档包
+
+DOCX、PPTX 和 XLSX reader/writer 会保留受支持的文本、公式、表格、资产和包结构。不支持的对象可能降级、在启用 preservation 时作为 opaque part 保留，或通过诊断报告。
+
+文档包能够重新打开，只能证明**结构有效**，不能证明与 Microsoft Office 完全视觉一致。
+
+### 保真维度
+
+项目将以下能力视为相互独立：
+
+- 包结构有效性；
+- 语义保留；
+- 布局保留；
+- 视觉保真；
+- 可编辑性；
+- round-trip 保真。
+
+不能由其中一项推导另一项。
 
 ---
 
-## 模块依赖关系
+## CLI
 
-```
-Engine
-  ├── Conversion (LaTeX/OMML/MathML/Typst/Markdown/HTML)
-  ├── Export (SVG/Text/PDF)
-  ├── Syntax (解析器 + 渲染器)
-  ├── Pipeline (节点图)
-  │     ├── Inference (检测 + 识别)
-  │     │     ├── Runtime (ONNX/Stub)
-  │     │     └── Image (解码/缩放/归一化)
-  │     └── AST (文档数据模型)
-  └── Model (清单 + 配置)
-        └── Foundation (错误/日志/事件/配置)
-```
-
----
-
-## 识别流水线
-
-![流水线](assets/pipeline.svg)
-
-```
-图像 → 预处理 → 检测 → 裁切 → 识别 → 文档 AST → 输出
-         │          │          │          │
-     letterbox    YOLOv8    TrOCR     LaTeX/OMML
-      normalize    DBNet    Beam Search MathML/Typst
-```
-
----
-
-## 功能列表
-
-### 稳定版
-
-| 能力 | 状态 | 说明 |
-|------|------|------|
-| **AST** | ✅ | Document → Page → Block → Inline → Formula |
-| **图像** | ✅ | SnipperImage、ImageView、解码、缩放、归一化 |
-| **转换** | ✅ | 6 种格式：LaTeX、OMML、MathML、Typst、Markdown、HTML |
-| **语法** | ✅ | LaTeX/Typst/Markdown 解析器 + 渲染器 |
-| **流水线** | ✅ | 异步节点流水线，支持取消 |
-| **区域图** | ✅ | 冲突消解、ArtifactRef 路由、layout→识别器路由 |
-| **CJK/Latin 归一化** | ✅ | 跨所有块类型的递归文本规范化 |
-| **PageLayout/PageBreak/SectionBreak** | ✅ | 页面版式、分页符/分节符、页眉页脚 Block |
-| **ListStyle/ListItem.content** | ✅ | 结构化列表样式 + 多段落列表项 |
-| **TableRow/TableColumn/CellDataType** | ✅ | 行/列表结构 + 单元格数据类型支持 |
-| **TableCell.content: Vec\<Block\>** | ✅ | 单元格支持块级内容（公式/列表/图片） |
-| **TextRun.style** | ✅ | 结构化文本样式与 legacy 字段共存 |
-| **TextDirection/UnderlineStyle** | ✅ | 文本方向、下划线样式枚举 |
-| **Transform2D/LayerInfo** | ✅ | 2D 变换和 Z 层级，8 种 Block 统一支持 |
-| **Anchor/CrossReference/CitationGroup** | ✅ | Office/LaTeX 交叉引用和分组引用 |
-| **FormFieldBlock/BibliographyBlock** | ✅ | 表单字段和结构化参考文献 |
-| **NoteDefinition/Document.notes** | ✅ | 结构化脚注/尾注系统 |
-| **ConversionOutput** | ✅ | 结构化转换结果（text + diagnostics + assets） |
-| **资产引用重写** | ✅ | dedup 后 `rewrite_asset_refs()` 无悬挂引用 |
-| **Visual 字段统一** | ✅ | 8 种 Block 统一 transform/layer/accessibility |
-| **TextBoxBlock accessor** | ✅ | `effective_transform()`/`effective_layer()` |
-| **StageOrchestrator** | ✅ | `run_stage()` 写入 reports/events/manifest |
-| **Asset ref visitor** | ✅ | 统一 visitor 覆盖 validate/rewrite/collect |
-| **ExportService 诊断** | ✅ | SVG/PDF/Text 导出携带所有降级诊断 |
-| **真实 ConvertStage** | ✅ | 读 Document JSON → 调 converter → 写文件 |
-| **真实 ExportStage** | ✅ | 读 Document JSON → 调 ExportService → 写文件 |
-| **Converter 降级诊断** | ✅ | 10 种高级块自动发射 W_BLOCK_DOWNGRADED |
-| **DOCX 标题/列表解析** | ✅ | w:pStyle → Heading 1-6, w:numPr → ListBlock |
-| **PPTX 表格导入** | ✅ | a:tbl → TableBlock 单元格文本提取 |
-| **XLSX 数据类型/公式/列宽** | ✅ | CellDataType(Boolean/Date/Text/Formula), 公式提取, 列宽解析 |
-| **真实 DecodeStage** | ✅ | 读 source → 写 decoded 产物到 JobRoot 目录 |
-| **真实 RecognizeStage** | ⚡ | MVP: Document JSON passthrough 稳定；图像识别需配置本地模型 (spec.options.model_dir) |
-| **StageProducedArtifact** | ✅ | 结构化产物元数据 (kind/path/mime/format/checksum/size) |
-| **AssetRef visitor 全覆盖** | ✅ | Table/List/HeaderFooter/Shape/Chart/Annotation/FormField 全覆盖 |
-| **InlineBase64 内容 hash** | ✅ | 先 base64 decode 再 SHA-256, ast 和 SimpleAssetResolver 同步修复 |
-| **ProducedArtifact 真填充** | ✅ | 4 个 StageRunner 返回结构化 kind/path/mime/checksum/size |
-| **Stage 状态语义** | ✅ | 无输出=Failed, spec.output.artifact_kind 优先 |
-| **Inline visitor 递归** | ✅ | Span/Link/Footnote/Sup/Sub 递归访问资产引用 |
-| **Base64 解码器稳定化** | ✅ | Data URI 剥离, URL-safe, 空白符, 非法字符→Err |
-
-### 实验版
-
-| 能力 | 状态 | 说明 |
-|------|------|------|
-| **推理** | ✅ | YOLOv8 检测、TrOCR 识别、CRNN+CTC |
-| **运行时** | ✅ | ONNX Runtime（会话缓存）+ Stub |
-| **引擎** | ✅ | JobQueue、Service trait、Request/Response Builder、Streaming API、ModelPackage |
-| **模型** | ✅ | 清单、配置、SHA256 校验 |
-| **ModelPackage** | ✅ | `ModelPackage`/`ModelExecutor` trait、惰性会话加载、流水线集成 |
-| **流水线** | ✅ | 异步节点流水线 + ModelTask 抽象 + ReadingOrder + ModelPackage 回退 |
-| **插件** | ✅ | Plugin trait、Registry |
-| **FFI** | ✅ | Android JNI、iOS C FFI |
-| **WASM** | ✅ | parse/render/convert/recognize 绑定 |
-| **CLI** | ✅ | recognize/parse/render/version，文件导出 (`-o output.tex`)，格式提示，隐藏小游戏 (`snipper play`) |
-| **导出** | ✅ | SVG/Text/PDF（printpdf），标题/表格/列表/代码/公式/页面选择 |
-| **资产归一化** | ✅ | `normalize_assets()` 5 阶段：迁移/推断/dedup/校验/验证 |
-| **StageOrchestrator** | ✅ | `run_stage()` 写入 reports/events/manifest 文件 |
-| **表格识别** | ✅ | SLANet+ / TATR 表格结构 + PP-DocLayout v3 版式检测 |
-| **手写识别** | ✅ | 手写检测 + TrOCR 识别 + 后处理（数字/字母混淆修复 + 标点归一化） |
-| **公式布局** | ✅ | LaTeX AST 解析 + 符号级检测 |
-| **多页处理** | ✅ | PDF 解码 + 多页流水线；PDF 渲染通过 pdftoppm/mutool |
-| **PDF 渲染** | ✅ | 通过 pdftoppm（poppler）或 mutool（MuPDF）渲染页面 |
-
----
-
-## 工作空间
-
-```
-crates/
-├── foundation/     ✅ 错误、Result、日志、配置、事件总线
-├── ast/            ✅ 文档 AST — 唯一数据源（含报告、格式、trait 定义）
-├── tensor/         ✅ 推理 I/O 张量
-├── image/          ✅ 平台无关图像处理 + PDF 渲染
-├── runtime/        ✅ RuntimeBackend + InferenceSession + ModelResolver + ModelPackage + ModelRegistry + Validation
-├── model/          ✅ 模型清单、配置、SHA256 校验
-├── inference/      ✅ 检测 + 识别管线 + ModelPackage 适配器
-├── pipeline/       ✅ 节点化异步流水线 + PipelineArtifacts + ReadingOrder
-├── syntax/         ✅ LaTeX/Typst/Markdown 解析器 + 渲染器
-├── conversion/     ✅ AST → LaTeX/OMML/MathML/Typst/Markdown/HTML + DOCX/PPTX/XLSX 读取
-├── export/         ✅ RenderTree → SVG/Text/PDF（printpdf），页面选择
-├── engine/         ✅ SnipperEngine + JobQueue + Metrics + Hot-reload + SDK
-├── api-types/      ✅ 公共 API 类型（RecognizeMode、Request、Response、StreamItem）
-├── tract/          ✅ Tract-based WASM RuntimeBackend
-├── plugin/         ✅ Plugin trait、Registry
-├── mock/           ✅ 测试用 Fake 实现
-├── ffi/            ✅ Android JNI + iOS C FFI
-├── wasm/           ✅ WebAssembly 绑定
-├── cli/            ✅ 命令行工具（recognize/parse/render/version/play）含作业管理
-└── tests/          ✅ 集成测试
-```
-
----
-
-## 快速开始
-
-### 安装 CLI
-
-CLI 暂不发布到 crates.io。推荐从 [GitHub Releases](https://github.com/strangelion/latexsnipper-core/releases) 下载预编译二进制，或从源码构建：
+### 构建
 
 ```bash
-git clone https://github.com/strangelion/latexsnipper-core
+git clone https://github.com/strangelion/latexsnipper-core.git
 cd latexsnipper-core
+
 cargo build --release -p latexsnipper-cli
 ```
 
-### 作为库使用
+二进制输出位置：
+
+```text
+target/release/snipper       # Linux/macOS
+target/release/snipper.exe   # Windows
+```
+
+已发布的二进制和模型包请查看 [GitHub Releases](https://github.com/strangelion/latexsnipper-core/releases)。
+
+### 先检查环境
+
+```bash
+snipper version
+snipper doctor
+snipper capabilities
+snipper capabilities --format json
+```
+
+### 模型与识别
+
+```bash
+snipper models download
+snipper models verify
+
+snipper recognize -i scan.png -f latex -o result.tex
+snipper recognize -i page.png -f markdown --recognize-mode mixed -o page.md
+```
+
+识别需要兼容的本地模型资产。`snipper doctor` 和 `snipper capabilities` 会报告真实 readiness，而不是假设模型已经存在。
+
+### 导入、转换与导出
+
+```bash
+# 导入为统一 JSON AST
+snipper import report.docx -o report.ast.json
+
+# 通过统一 AST 转换
+snipper convert report.docx --to markdown -o report.md
+snipper convert notes.md --to typst -o notes.typ
+
+# 渲染/导出 AST 或受支持文档
+snipper export report.ast.json --to pdf -o report.pdf
+
+# 检查或验证输入
+snipper inspect report.pdf --json
+snipper validate report.docx
+```
+
+### 批量转换
+
+```bash
+snipper convert documents \
+  --to markdown \
+  --recursive \
+  --output-dir converted \
+  --jobs 4 \
+  --continue-on-error \
+  --report conversion-report.json
+```
+
+CLI 还支持原子写入、no-clobber/force 策略、strict diagnostics、warning 失败、页码范围、JSON/SARIF 诊断、稳定退出码、shell 补全和 roff man page。
+
+### 插件包
+
+```bash
+snipper plugin verify ./plugin-package
+snipper plugin install ./plugin-package
+snipper plugin list
+snipper plugin info example.plugin
+snipper plugin enable example.plugin
+snipper plugin disable example.plugin
+snipper plugin doctor
+snipper plugin uninstall example.plugin
+```
+
+远程 URL 安装仍保持禁用。
+
+---
+
+## Rust SDK
+
+在本 workspace 中使用 native engine feature：
 
 ```toml
 [dependencies]
-latexsnipper-engine = "2"
+latexsnipper-engine = { path = "crates/engine", features = ["native"] }
 ```
+
+### 一行完成图片识别
 
 ```rust
 use latexsnipper_engine::sdk::Snipper;
 
-let snipper = Snipper::from_file("input.png")?;
-let latex = snipper.to_latex()?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let snipper = Snipper::from_file("input.png")?;
+
+    println!("{}", snipper.to_latex()?);
+    println!("{}", snipper.to_markdown()?);
+    println!("{}", snipper.to_typst()?);
+
+    Ok(())
+}
 ```
 
-### 运行示例
+为保持向后兼容，栅格图片传入 `Snipper::from_file` 时会执行 OCR。配置的模型目录中必须存在兼容模型。
+
+### 不执行 OCR 的文档导入
+
+```rust
+use latexsnipper_ast::ImportOptions;
+use latexsnipper_engine::sdk::Snipper;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let snipper = Snipper::import_path(
+        "document.docx",
+        ImportOptions::default(),
+    )?;
+
+    println!("{}", snipper.to_markdown()?);
+    Ok(())
+}
+```
+
+内存字节导入使用 `Snipper::from_bytes`；应用已经持有 `Document` AST 时使用 `Snipper::from_document`。
+
+---
+
+## WebAssembly 与浏览器执行
+
+WASM 构建使用 **Tract**，不会链接 ONNX Runtime、原生 PDF/PNG/Office exporter、原生文件系统 downloader 或 native Tokio runtime。
 
 ```bash
-# 解析 LaTeX
-snipper parse --latex '$\frac{a+b}{c}$'
+rustup target add wasm32-unknown-unknown
 
-# 从图片识别
-snipper recognize -i image.png -f latex -o output.tex
+wasm-pack build crates/wasm \
+  --target web \
+  --release \
+  --out-dir ../../target/wasm-web
 
-# 运行全部测试
-cargo test --workspace
+cd crates/wasm/js
+npm ci
+npm audit
+npm run typecheck
+npm test
+npm run build
+npm run build:example
 ```
 
-详见 [docs/getting-started.md](docs/getting-started.md)。
+v2 浏览器 API 包括：
+
+- `api_info_v2()` 与 `capabilities_v2()`；
+- 带校验的模型加载、卸载、清空和事务更新；
+- 异步 `recognize_v2()` 与进度报告；
+- 直接调用的 stage-boundary cooperative cancellation；
+- binary-safe `convert_v2()` envelope。
+
+推荐使用 `WasmWorkerClient` 作为浏览器入口：
+
+- 单个 active recognition + 有界队列；
+- public request ID 与 internal wire ID 分离；
+- progress event 与 stale-response suppression；
+- 通过 terminate Worker 实现 hard cancellation；
+- Worker 重启并重新加载已校验模型；
+- RPC timeout 与 `AbortSignal`；
+- recovery 失败时返回结构化错误，不会无限重启。
+
+JavaScript 包还提供：
+
+- 仅存储 SHA-256 已校验模型的 IndexedDB cache；
+- schema migration 与 LRU budget eviction；
+- 可中止流式下载；
+- 最大体积限制；
+- 下载进度；
+- mirror fallback；
+- best-effort 或 required cache policy。
+
+浏览器表格和手写流水线尚不可用。Production-derived WASM 模型测试证明模型/运行时兼容性，不证明 OCR 准确率。
+
+详见 [WASM adapter](docs/wasm.md)。
 
 ---
 
-## 文档
+## 插件系统与安全边界
 
-### 架构
+### 可信进程内插件
 
-| 文档 | 说明 |
-|------|------|
-| [architecture.md](docs/architecture.md) | 四层架构总览 |
-| [pipeline.md](docs/pipeline.md) | 识别流水线设计 |
-| [runtime.md](docs/runtime.md) | 运行时后端系统 |
-| [engine.md](docs/engine.md) | 引擎和任务队列 |
+可信 Rust 插件支持：
 
-### 开发者指南
+- typed hook；
+- 确定性排序与依赖检查；
+- 事务 `DocumentPatch`；
+- `Stop`、`Continue`、`DisablePlugin`、`Rollback` 策略；
+- panic containment；
+- cooperative cancellation 与 deadline；
+- 单插件并发上限；
+- soft timeout 后 quarantine。
 
-| 文档 | 说明 |
-|------|------|
-| [getting-started.md](docs/getting-started.md) | 开发者入门指南 |
-| [plugin.md](docs/plugin.md) | 插件系统 |
-| [testing.md](docs/testing.md) | 测试策略 |
+任意进程内 Rust 线程无法安全强杀。Soft timeout 返回后，插件代码可能仍在协作退出或继续运行。
 
-### 参考
+### 隔离进程插件
 
-| 文档 | 说明 |
-|------|------|
-| [ast.md](docs/ast.md) | 文档 AST 规范 |
-| [syntax.md](docs/syntax.md) | LaTeX/Typst/Markdown 解析器 |
-| [conversion.md](docs/conversion.md) | 12 种输出格式 |
+版本化 process host 提供：
 
-### 路线图
+- JSON request/response IPC；
+- ABI/protocol 兼容性检查；
+- SHA-256 已校验本地包；
+- hard deadline termination；
+- Unix session/process-group containment；
+- Windows Job Object containment；
+- memory 与 response-file observation limit；
+- 私有临时工作目录；
+- 严格 success/error 响应验证；
+- 跨进程 registry lock 与抗崩溃原子替换。
 
-| 文档 | 说明 |
-|------|------|
-| [dual-track.md](docs/dual-track.md) | 开发路线图 |
+> **安全边界：** native process plugin 不是操作系统文件/网络沙箱。Manifest permission 只约束 brokered host operation；任意 native 代码仍可直接调用操作系统 API。仅运行经过审核的本地 process plugin。
 
----
+仍不可用：
 
-## 设计原则
+- WASI Component 执行 host；
+- 稳定 native 动态库插件 ABI；
+- 远程插件 registry/install/update 信任模型；
+- 完整 native 文件系统/网络沙箱。
 
-- **文档优先** — 文档是数据源，不是 LaTeX 或 OCR
-- **可组合** — 一切都是节点，一切都是流水线
-- **平台无关** — 业务逻辑在 Rust，UI 在外部
-- **运行时可插拔** — ONNX、TensorRT、NCNN 全部可替换
+详见 [Plugin system](docs/plugin.md)。
 
 ---
 
 ## 模型
 
-LaTeXSnipper Core 使用 ONNX 模型进行公式检测/识别和文本检测/识别。
+模型 readiness 由 profile 驱动。Manifest、checksum、配置、tokenizer、key 文件和 runtime compatibility 必须完整，能力才会报告 ready。
 
-### 支持的模型
+| 模型系列 | 主要用途 | 状态 |
+|---|---|---|
+| YOLOv8-MFD | 公式检测 | 默认原生 profile |
+| TrOCR-DeiT | 公式识别 | 默认原生 profile |
+| PP-OCRv6 Det / Rec | 多语言文本检测与识别 | 默认原生 profile |
+| OpenOCR Mobile Det / Rec | 替代 DBNet/CTC 文本流水线 | 实验性 |
+| PP-DocLayout v3 | 文档版式分析 | 实验性 |
+| TATR Detection / Structure | 表格检测与结构识别 | 实验性 |
+| SLANet Plus | 替代表格结构后端 | 实验性 |
+| PP-LCNet 方向模型 | 文档/文本行方向和兼容性测试 | 实验性 / test profile |
 
-| 模型 | 大小 | 用途 | 来源 | 许可 |
-|------|------|------|------|------|
-| YOLOv8-MFD | ~66 MB | 公式检测 | [Mathcraft](https://github.com/SakuraMathcraft/LaTeXSnipper) | MIT |
-| TrOCR-DeiT | ~104 MB | 公式识别（编码器+解码器） | [Microsoft TrOCR](https://huggingface.co/microsoft/trocr-base-handwritten) | MIT |
-| PP-OCRv6 Det | ~10 MB | 文本检测 | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
-| PP-OCRv6 Rec | ~21 MB | 文本识别（18709 字符：中/英/数学/希腊） | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
-| OpenOCR Mobile Det | ~9 MB | 文本检测（OpenOCR mobile DBNet） | [OpenOCR](https://github.com/Topdu/OpenOCR) | Apache-2.0 |
-| OpenOCR Mobile Rec | ~21 MB | 文本识别（OpenOCR mobile CTC） | [OpenOCR](https://github.com/Topdu/OpenOCR) | Apache-2.0 |
-| PP-DocLayout v3 | ~13 MB | 文档版式分析（10 类） | [RapidAI/RapidLayout](https://github.com/RapidAI/RapidLayout) | Apache-2.0 |
-| TATR Detection | ~34 MB | 表格区域检测（DETR 架构） | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
-| TATR Structure | ~34 MB | 表格结构识别（行列单元格） | [Microsoft Table Transformer](https://github.com/microsoft/table-transformer) | MIT |
-| SLANet Plus | ~7 MB | 表格结构识别（替代后端） | [RapidAI/RapidTable](https://github.com/RapidAI/RapidTable) | Apache-2.0 |
-
-### 模型目录结构
-
-```
+```text
 models/
-├── formula-det/yolov8-mfd/     # 公式检测 — 稳定
-├── formula-rec/trocr-deit/     # 公式识别 — 稳定
-├── text-det/v6-small/          # 文本检测 — 稳定
-├── text-det/openocr-mobile/    # 文本检测（OpenOCR mobile）— 实验
-├── text-rec/v6-small/          # 文本识别 — 稳定
-├── text-rec/openocr-mobile/    # 文本识别（OpenOCR mobile）— 实验
+├── formula-det/
+├── formula-rec/
+├── text-det/
+├── text-rec/
 ├── layout/
-│   └── pp-layout-cdla/         # 文档版式分析（CDLA）— 稳定
 ├── table-det/
-│   ├── tatr-detection/         # 表格检测 — 实验
-│   └── doclayout-v3/           # 文档版式分析 — 实验
 ├── table-struct/
-│   ├── tatr-structure/         # 表格结构 — 实验
-│   └── slanet-plus/            # 表格结构（替代后端）— 实验
-└── doc-ori/                    # 文档方向分类 — 实验
+└── doc-ori/
 ```
 
-### 模型支持状态
+请使用已校验 downloader，不要直接复制未经验证的模型文件：
 
-| 模型 | 状态 | 默认 | Release |
-|---|---|---|---|
-| YOLOv8-MFD | 稳定 | 是 | models-v2.0.0 |
-| TrOCR-DeiT | 稳定 | 是 | models-v2.0.0 |
-| PP-OCRv6 Det (v6-small) | 稳定 | 是 | models-v2.0.0 |
-| PP-OCRv6 Rec (v6-small) | 稳定 | 是 | models-v2.0.0 |
-| OpenOCR Mobile Det | 实验 | 否 | models-v2.0.0 |
-| OpenOCR Mobile Rec | 实验 | 否 | models-v2.0.0 |
-| PP-DocLayout v3 | 实验 | 否 | models-v2.0.0 |
-| TATR Detection | 实验 | 否 | models-v2.0.0 |
-| TATR Structure | 实验 | 否 | models-v2.0.0 |
-| SLANet Plus | 实验 | 否 | models-v2.0.0 |
-| PP-LCNet（doc/textline ori） | 实验 | 否 | 仅 test-models |
+```bash
+snipper models download
+snipper models list
+snipper models verify
+```
 
-> 注意：`test-models/` 目录包含正在测试的模型，请勿修改。
+模型包仍受各自上游许可证约束。精确 source revision 和 checksum 请以模型 manifest 与 release asset 为准。
+
+---
+
+## Workspace
+
+```text
+crates/
+├── foundation/   错误、诊断、配置、事件
+├── ast/          统一 Document AST 与公开文档类型
+├── tensor/       与运行时无关的张量类型
+├── image/        解码、变换、归一化、PDF 页面渲染
+├── runtime/      RuntimeBackend、ONNX Runtime provider、模型解析
+├── model/        manifest、profile、校验、downloader 元数据
+├── inference/    detector 与 recognizer adapter
+├── pipeline/     stage graph、区域消解、阅读顺序
+├── syntax/       LaTeX、Typst、Markdown parser/renderer
+├── conversion/   importer、语义转换、Office package 处理
+├── export/       SVG、PNG、PDF 与文本渲染
+├── engine/       编排、SDK、job、metrics
+├── api-types/    版本化公开 request/response 类型
+├── tract/        基于 Tract 的 WASM runtime backend
+├── plugin/       内置与 isolated-process 插件基础设施
+├── ffi/          Android JNI 与 iOS C-facing adapter
+├── wasm/         wasm-bindgen API
+├── cli/          `snipper` 命令行应用
+├── mock/         确定性测试替身
+└── tests/        集成测试与 benchmark
+
+fuzz/             cargo-fuzz target 与 seed corpus
+docs/             架构、能力、安全与发布文档
+```
+
+---
+
+## 验证与 CI
+
+### 原生检查
+
+```bash
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo test --doc --workspace --all-features
+```
+
+### Fuzz
+
+仓库包含真实 `cargo-fuzz` target，覆盖格式检测、ZIP/OOXML 包、XML、SVG、PDF、JSON AST、LaTeX、Typst、Markdown math、模型 manifest 和插件 manifest。
+
+```bash
+cargo install cargo-fuzz
+cargo +nightly fuzz list
+cargo +nightly fuzz run format_signature
+```
+
+PR CI 会编译 fuzz target；Scheduled hardening 会运行有界 libFuzzer campaign，并在失败时上传 crash artifact。
+
+### 持续集成覆盖
+
+CI 覆盖：
+
+- Windows、Linux、macOS workspace 检查；
+- formatting、strict Clippy、MSRV、测试、doc test、feature matrix；
+- 原生真实模型流水线；
+- parser security 与 round-trip corpus；
+- Chrome 与 Firefox 浏览器测试；
+- web、bundler、Node WASM package；
+- TypeScript、Worker、IndexedDB、download、ESM、Vite 测试；
+- 依赖审计、模型 URL 校验、benchmark 与 scheduled fuzz。
+
+Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆弱的时间阈值。详见 [Benchmarks](docs/benchmark.md)。
+
+---
+
+## 安全与信任模型
+
+主要控制包括：
+
+- 签名/包结构优先的格式检测；
+- 对 hint 不匹配和加密包返回 typed error；
+- archive entry 数量、解压体积、压缩比和路径穿越限制；
+- XML 深度/元素、DTD/entity 与 external relationship 限制；
+- 分配前检查栅格尺寸和总像素；
+- 模型 archive SHA-256 与解压限制；
+- 插件包 checksum、ABI、路径、symlink、文件数量和体积校验；
+- 使用结构化诊断，而不是静默丢失保真度。
+
+这些控制会降低风险，但不会把 native process plugin 变成不可信代码沙箱。
+
+---
+
+## 已知边界与 GA 工作
+
+2.0.0 代码基线适合进行 release-candidate 评估，但仍有以下明确边界：
+
+- 在宣传执行不可信第三方插件前，实现并验证 WASI Component host；
+- 在启用远程插件安装前，完成 registry、signature、provenance 与 update policy；
+- 补充超出浏览器方向模型兼容性 smoke 的生产 OCR 兼容性和准确率证据；
+- 基于代表性 corpus 与平台定义 Office/PDF 保真保证；
+- 继续更长时间 fuzz、benchmark 趋势存储、更多浏览器覆盖和移动端内存 profile。
+
+详见 [v2.0.0-rc.1 release checklist](docs/release-checklist.md)。
+
+---
+
+## 文档
+
+| 文档 | 用途 |
+|---|---|
+| [生产能力](docs/production-capabilities.md) | 稳定性、保真和不支持能力策略 |
+| [WASM adapter](docs/wasm.md) | 浏览器 API、Worker、cache、下载与模型验证 |
+| [插件系统](docs/plugin.md) | 执行类别、包校验、权限和安全边界 |
+| [CLI option matrix](docs/cli-option-matrix.md) | 参数传播与支持组合 |
+| [Export](docs/export.md) | 视觉和文档包导出行为 |
+| [Benchmarks](docs/benchmark.md) | 原生与浏览器 benchmark 方法 |
+| [Release checklist](docs/release-checklist.md) | RC 条件、GA blocker 与后续工作 |
+| [Architecture](docs/architecture.md) | 核心架构概览 |
+| [Pipeline](docs/pipeline.md) | 识别与处理流水线 |
+| [Testing](docs/testing.md) | 测试策略与 fixture |
 
 ---
 
 ## 相关项目
 
-- [LaTeXSnipper Mobile](https://github.com/strangelion/LaTeXSnipper_mobile) — Android 应用
-- LaTeXSnipper Office — Office 插件
-- [LaTeXSnipper 桌面端](https://github.com/SakuraMathcraft/LaTeXSnipper)
-- LaTeXSnipper Web — Web 端（规划中）
-
-所有项目共享同一个 Rust Core。
+- [LaTeXSnipper Office](https://github.com/strangelion/LaTeXSnipper-Office) — 桌面应用与 Office/WPS 集成。
+- [LaTeXSnipper Mobile](https://github.com/strangelion/LaTeXSnipper_mobile) — 移动端集成工作。
+- [SakuraMathcraft/LaTeXSnipper](https://github.com/SakuraMathcraft/LaTeXSnipper) — 原始 Python 桌面项目，也是模型与后处理思路的重要来源。
 
 ---
 
 ## 许可证
 
-GNU AGPL-3.0。允许学习和个人使用，禁止闭源商业化分发。修改后分发或网络服务必须公开全部源码。
+LaTeXSnipper Core 采用 **GNU Affero General Public License v3.0**。
+
+该许可证并不笼统禁止商业使用。分发受许可证覆盖的程序，或通过网络向用户提供修改版本时，可能需要按照 AGPL-3.0 提供对应源码。本段仅为实用摘要，不构成法律意见；具体以许可证正文为准。
+
+第三方模型和依赖保留各自许可证。重新分发前请检查模型 manifest 与 release metadata。
+
+---
+
+## 致谢
+
+LaTeXSnipper Core 建立在 Rust、ONNX、OCR、文档处理和浏览器生态的众多开源项目之上，包括 PaddleOCR、OpenOCR、Microsoft TrOCR、Table Transformer、RapidAI、Ultralytics、ONNX Runtime、Tract、`image`、`tokio`、`serde`、`clap`、`wasm-bindgen` 等。
+
+贡献代码时应保持能力描述准确：不能因为存在代码路径就将功能标记为稳定，也不能将文档包结构有效等同于语义、视觉、可编辑或 round-trip 保真。
