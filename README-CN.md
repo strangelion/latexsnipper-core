@@ -7,7 +7,7 @@
 [![CI](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml)
 [![WASM](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88.0-orange?logo=rust)](Cargo.toml)
-[![Workspace](https://img.shields.io/badge/workspace-2.0.0-blue)](Cargo.toml)
+[![Workspace](https://img.shields.io/badge/workspace-3.0.0--alpha.1-blue)](Cargo.toml)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20WASM-lightgrey)]()
 
@@ -23,7 +23,7 @@
 
 ## 项目状态
 
-`main` 分支当前面向 **2.0.0 workspace 代码基线**。核心已经完成发布候选级硬化，覆盖原生多平台 CI、浏览器/WASM 打包、真实模型测试、fuzz、依赖审计、插件进程隔离、能力注册表和 CLI 行为。
+workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的第一个 stacked change。本 alpha 只实现版本化契约类型、严格迁移报告和 schema fuzz 覆盖；可调用的 WASM、能力文档、插件 host、模型 loader、Worker、CLI 与 FFI 路径仍使用现有 v2 时代契约。详见 [Core 3 架构与交付状态](docs/v3/architecture.md)。
 
 这并不表示所有格式、模型和插件边界具有相同成熟度。
 
@@ -510,7 +510,7 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 
 ## 已知边界与 GA 工作
 
-2.0.0 代码基线适合进行 release-candidate 评估，但仍有以下明确边界：
+3.0 alpha 是契约反馈版本，不是 release candidate，仍有以下明确边界：
 
 - 在宣传执行不可信第三方插件前，实现并验证 WASI Component host；
 - 在启用远程插件安装前，完成 registry、signature、provenance 与 update policy；
@@ -518,7 +518,7 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 - 基于代表性 corpus 与平台定义 Office/PDF 保真保证；
 - 继续更长时间 fuzz、benchmark 趋势存储、更多浏览器覆盖和移动端内存 profile。
 
-详见 [v2.0.0-rc.1 release checklist](docs/release-checklist.md)。
+详见 [Core 3 release checklist](docs/release-checklist.md) 与 [schema 版本计划](docs/v3/schema-versions.md)。
 
 ---
 
@@ -526,6 +526,8 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 
 | 文档 | 用途 |
 |---|---|
+| [Core 3 架构](docs/v3/architecture.md) | Stacked 交付状态、版本边界与信任模型 |
+| [Core 3 迁移](docs/v3/migration-from-v2.md) | 严格的 v2 到 v3 契约迁移指南 |
 | [生产能力](docs/production-capabilities.md) | 稳定性、保真和不支持能力策略 |
 | [WASM adapter](docs/wasm.md) | 浏览器 API、Worker、cache、下载与模型验证 |
 | [插件系统](docs/plugin.md) | 执行类别、包校验、权限和安全边界 |

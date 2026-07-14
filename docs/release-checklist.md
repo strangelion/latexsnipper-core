@@ -1,4 +1,15 @@
-# v2.0.0-rc.1 release checklist
+# Core 3 release checklist
+
+## Alpha 1 contract-foundation requirements
+
+- [ ] Every workspace crate and the WASM npm package uses `3.0.0-alpha.1`.
+- [ ] Public API inventory, version map, breaking changes, migration guide, and compatibility policy are reviewed.
+- [ ] Plugin/model migrations reject unsafe reinterpretation and emit structured manual-action warnings.
+- [ ] New schema and migration fuzz targets compile in PR CI.
+- [ ] Documentation clearly separates implemented, contract-only, existing v2 runtime, and planned behavior.
+- [ ] Full workspace, all-feature, doc, WASM/TypeScript, dependency-audit, actionlint, and fuzz-build gates pass.
+
+Alpha 1 is not an RC and must not satisfy later runtime/security items by checking only a contract type or stub.
 
 ## RC-ready requirements
 

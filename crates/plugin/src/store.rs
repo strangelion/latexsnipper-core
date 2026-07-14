@@ -6,6 +6,7 @@ use latexsnipper_foundation::{Result, SnipperError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::manifest::legacy_core_requirement_matches;
 use crate::{
     EffectivePermissionSummary, EffectivePluginPermissions, IsolatedProcessHost,
     IsolatedProcessLimits, IsolatedProcessResult, PluginClass, PluginHook, PluginManifest,
@@ -427,7 +428,7 @@ fn validate_external_manifest(manifest: &PluginManifest) -> Result<()> {
         .map_err(|error| plugin_error(error.to_string()))?;
     let requirement = semver::VersionReq::parse(&manifest.core_version_requirement)
         .map_err(|error| plugin_error(format!("Invalid core version requirement: {error}")))?;
-    if !requirement.matches(&core) {
+    if !legacy_core_requirement_matches(&requirement, &core) {
         return Err(plugin_error(format!("Plugin does not support core {core}")));
     }
     if matches!(manifest.class, PluginClass::BuiltInRust) {
