@@ -38,7 +38,7 @@ jobs:
             artifact: snipper-macos-amd64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -65,7 +65,7 @@ jobs:
             -DestinationPath ${{ matrix.artifact }}.zip
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.*
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate SPDX SBOM
         uses: anchore/sbom-action@v0
@@ -93,7 +93,7 @@ jobs:
           git ls-files | LC_ALL=C sort > target/source-manifest.txt
           git rev-parse HEAD > target/source-commit.txt
       - name: Upload supply-chain metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: supply-chain-metadata
           path: |
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -130,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Dry-run leaf crates (no internal deps)
         run: |
@@ -162,7 +162,7 @@ jobs:
     timeout-minutes: 90
     environment: crates-io
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Check version consistency
@@ -222,7 +222,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Determine version
         id: version
@@ -232,7 +232,7 @@ jobs:
           echo "Release version: $VERSION"
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
 

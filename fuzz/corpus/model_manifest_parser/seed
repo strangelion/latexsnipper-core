@@ -1,0 +1,1 @@
+{"sourceId":"seed","sourceLabel":"Seed","version":"1","categories":{"text":{"required":true,"variants":[{"id":"small","files":["model.onnx"]}]}}}
