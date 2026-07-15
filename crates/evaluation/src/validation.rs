@@ -604,8 +604,10 @@ fn validate_license(license: &CorpusLicense) -> Result<(), ValidationError> {
 
 fn validate_relative_path(value: &str, label: &str) -> Result<(), ValidationError> {
     validate_nonempty(value, label)?;
-    if value.contains('\\') {
-        return invalid(format!("{label} must use forward slashes: '{value}'"));
+    if value.contains('\\') || value.contains(':') {
+        return invalid(format!(
+            "{label} must use portable forward-slash paths: '{value}'"
+        ));
     }
     let path = Path::new(value);
     if path.is_absolute()
