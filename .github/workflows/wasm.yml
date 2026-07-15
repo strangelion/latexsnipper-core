@@ -157,7 +157,14 @@ jobs:
             mv "$MODEL_ARCHIVE.part" "$MODEL_ARCHIVE"
           fi
           echo "$MODEL_SHA256  $MODEL_ARCHIVE" | sha256sum --check --strict
-          unzip -q -o "$MODEL_ARCHIVE" -d models/formula-rec
+          unzip_exit=0
+          unzip -q -o "$MODEL_ARCHIVE" -d models/formula-rec || unzip_exit=$?
+          if [ "$unzip_exit" -gt 1 ]; then
+            exit "$unzip_exit"
+          fi
+          for artifact in config.json encoder_model.onnx decoder_model.onnx tokenizer.json; do
+            test -f "models/formula-rec/trocr-deit/$artifact"
+          done
       - name: Execute production TrOCR with the browser runtime
         run: >-
           cargo test -p latexsnipper-wasm --test production_profiles --
