@@ -88,7 +88,7 @@ impl DocumentExportService {
             }
         }
         latexsnipper_ast::CapabilityMatrix {
-            schema_version: "2.0.0".to_string(),
+            schema_version: "2.1.0".to_string(),
             entries,
         }
     }
@@ -1314,6 +1314,7 @@ mod tests {
     #[test]
     fn office_and_pdf_pairs_report_six_independent_fidelity_dimensions() {
         let matrix = DocumentExportService::capability_matrix();
+        assert_eq!(matrix.schema_version, "2.1.0");
         let office = matrix.query("DOCX", "DOCX").unwrap();
         assert_eq!(
             office.fidelity_dimensions.structural_validity.claim,
