@@ -237,6 +237,11 @@ pub struct FormatCapability {
     pub supports_layout: bool,
     pub supports_office_objects: bool,
     pub fidelity: FidelityLevel,
+    /// Independent fidelity claims. A structural package check must not be
+    /// interpreted as evidence for semantic, layout, visual, editable, or
+    /// round-trip fidelity.
+    #[serde(default)]
+    pub fidelity_dimensions: FidelityDimensions,
     #[serde(default)]
     pub known_loss: Vec<LossKind>,
     #[serde(default)]
@@ -259,6 +264,81 @@ pub enum FidelityLevel {
     SemanticOnly,
     VisualOnly,
     BestEffort,
+}
+
+#[cfg(test)]
+mod fidelity_dimension_tests {
+    use super::*;
+
+    #[test]
+    fn older_capability_json_defaults_new_dimensions_to_not_measured() {
+        let capability: FormatCapability = serde_json::from_value(serde_json::json!({
+            "input": "AST",
+            "output": "DOCX",
+            "available": true,
+            "supports_formula": true,
+            "supports_table": true,
+            "supports_image": true,
+            "supports_svg": false,
+            "supports_style": true,
+            "supports_layout": true,
+            "supports_office_objects": false,
+            "fidelity": "BestEffort",
+            "experimental": true
+        }))
+        .unwrap();
+        assert_eq!(
+            capability.fidelity_dimensions.visual_fidelity.claim,
+            FidelityClaim::NotMeasured
+        );
+    }
+}
+
+/// Strength of the evidence supporting one fidelity dimension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FidelityClaim {
+    Verified,
+    Partial,
+    Unsupported,
+    NotMeasured,
+    NotApplicable,
+}
+
+/// Evidence for one independently evaluated fidelity dimension.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FidelityMeasurement {
+    pub claim: FidelityClaim,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score: Option<f64>,
+    #[serde(default)]
+    pub evidence: Vec<String>,
+    #[serde(default)]
+    pub limitations: Vec<String>,
+}
+
+impl Default for FidelityMeasurement {
+    fn default() -> Self {
+        Self {
+            claim: FidelityClaim::NotMeasured,
+            score: None,
+            evidence: Vec::new(),
+            limitations: Vec::new(),
+        }
+    }
+}
+
+/// Six independent fidelity dimensions reported for every format pair.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FidelityDimensions {
+    pub structural_validity: FidelityMeasurement,
+    pub semantic_preservation: FidelityMeasurement,
+    pub layout_preservation: FidelityMeasurement,
+    pub visual_fidelity: FidelityMeasurement,
+    pub editability: FidelityMeasurement,
+    pub round_trip_fidelity: FidelityMeasurement,
 }
 
 /// A matrix of all known conversion/export capabilities.

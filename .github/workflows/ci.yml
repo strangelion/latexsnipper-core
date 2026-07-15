@@ -116,6 +116,47 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  office-pdf-fidelity:
+    name: Office and PDF fidelity evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate golden corpora
+        run: >-
+          cargo run -p latexsnipper-fidelity --bin fidelity-check --
+          validate --index fidelity/corpora/index.json --repository-root .
+      - name: Run fidelity evidence gates
+        run: >-
+          cargo run -p latexsnipper-fidelity --bin fidelity-check --
+          run --index fidelity/corpora/index.json --repository-root .
+          --source-commit "$GITHUB_SHA"
+          --generated-at-utc "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          --output target/fidelity/report.json
+      - name: Verify generated capability documentation
+        run: |
+          cargo run -p latexsnipper-fidelity --bin generate-fidelity-capabilities -- \
+            --output docs/generated/fidelity-capabilities.md
+          git diff --exit-code -- docs/generated/fidelity-capabilities.md
+      - name: Upload fidelity evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: office-pdf-fidelity-${{ github.run_id }}
+          path: target/fidelity/report.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload visual failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: office-pdf-visual-failures-${{ github.run_id }}
+          path: target/fidelity/visual
+          if-no-files-found: warn
+          retention-days: 30
+
   fmt:
     name: Format
     runs-on: ubuntu-latest

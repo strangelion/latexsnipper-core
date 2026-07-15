@@ -1009,6 +1009,7 @@ mod tests {
             supports_layout: false,
             supports_office_objects: false,
             fidelity: FidelityLevel::SemanticOnly,
+            fidelity_dimensions: Default::default(),
             known_loss: Vec::new(),
             notes: vec!["Registered by exporter plugin".to_string()],
             required_features: Vec::new(),

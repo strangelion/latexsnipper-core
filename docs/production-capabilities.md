@@ -9,6 +9,10 @@ snipper capabilities --format json
 snipper capabilities --format json --input docx --output png
 ```
 
+Office/PDF rows include six independent fidelity measurements. The checked-in
+[generated matrix](generated/fidelity-capabilities.md) is regenerated directly
+from that executable registry in CI; drift fails the build.
+
 ## Stability classes
 
 | Class | Contract |
@@ -69,6 +73,23 @@ be ambiguous. Scanned pages require OCR models and a rendering dependency.
 Package validity, semantic preservation, layout preservation, visual fidelity,
 editability, and round-trip fidelity are independent claims. Passing a ZIP/package
 reopen test proves only structural validity unless the relevant row states more.
+
+The executable golden-corpus gate is:
+
+```bash
+cargo run -p latexsnipper-fidelity --bin fidelity-check -- \
+  run --index fidelity/corpora/index.json --repository-root . \
+  --source-commit local --generated-at-utc unspecified \
+  --output target/fidelity/report.json
+```
+
+It reports `structuralValidity`, `semanticPreservation`, `layoutPreservation`,
+`visualFidelity`, `editability`, and `roundTripFidelity` separately. Its seven
+layers cover reopen, semantic AST, expected diagnostics, assets, opaque parts,
+optional rendering, and application-specific smoke. A missing renderer or Office
+application is recorded as `skipped`; it never upgrades visual fidelity to passed.
+The repository-generated DOCX/PPTX/XLSX/PDF corpora are checksum-pinned and cover
+the representative features listed in `fidelity/corpora/index.json`.
 
 ## Export policy
 

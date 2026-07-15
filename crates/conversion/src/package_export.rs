@@ -4,7 +4,8 @@ use std::io::{Cursor, Write};
 use base64::Engine as _;
 use latexsnipper_ast::{
     AssetFormat, AssetId, AssetStorage, Block, Document, ExportArtifact, ExportFormat,
-    FidelityLevel, FormatCapability, GeneratedContent, Inline, InputFormat, LossKind, MediaAsset,
+    FidelityClaim, FidelityDimensions, FidelityLevel, FidelityMeasurement, FormatCapability,
+    GeneratedContent, Inline, InputFormat, LossKind, MediaAsset,
 };
 use latexsnipper_export::{ExportService, VisualFormat};
 use latexsnipper_foundation::{Result, SnipperError};
@@ -87,7 +88,7 @@ impl DocumentExportService {
             }
         }
         latexsnipper_ast::CapabilityMatrix {
-            schema_version: "2.0.0".to_string(),
+            schema_version: "2.1.0".to_string(),
             entries,
         }
     }
@@ -126,7 +127,7 @@ fn capability(input: InputFormat, output: ExportFormat) -> FormatCapability {
     ) {
         known_loss.push(LossKind::LayoutLoss);
     }
-    if office_input && !office_output {
+    if office_input || office_output {
         known_loss.push(LossKind::OfficeObjectPreviewOnly);
     }
     if output == ExportFormat::PlainText {
@@ -169,7 +170,7 @@ fn capability(input: InputFormat, output: ExportFormat) -> FormatCapability {
                 ExportFormat::PlainText | ExportFormat::MathML | ExportFormat::OMML
             ),
         supports_layout: available && (visual || office_output),
-        supports_office_objects: available && office_output,
+        supports_office_objects: false,
         fidelity: if visual || raster_input {
             FidelityLevel::VisualOnly
         } else if office_input || office_output {
@@ -177,12 +178,153 @@ fn capability(input: InputFormat, output: ExportFormat) -> FormatCapability {
         } else {
             FidelityLevel::SemanticOnly
         },
+        fidelity_dimensions: fidelity_dimensions(input, output, available),
         known_loss,
         notes,
         required_features,
         external_dependencies,
         platform_restrictions: Vec::new(),
         experimental: visual || office_output,
+    }
+}
+
+fn fidelity_dimensions(
+    input: InputFormat,
+    output: ExportFormat,
+    available: bool,
+) -> FidelityDimensions {
+    if !available {
+        let unsupported = measurement(
+            FidelityClaim::Unsupported,
+            None,
+            &[],
+            &["format pair is not callable without an explicit recognition stage"],
+        );
+        return FidelityDimensions {
+            structural_validity: unsupported.clone(),
+            semantic_preservation: unsupported.clone(),
+            layout_preservation: unsupported.clone(),
+            visual_fidelity: unsupported.clone(),
+            editability: unsupported.clone(),
+            round_trip_fidelity: unsupported,
+        };
+    }
+
+    let office_input = matches!(
+        input,
+        InputFormat::OfficeDocx | InputFormat::OfficePptx | InputFormat::OfficeXlsx
+    );
+    let pdf_input = input == InputFormat::Pdf;
+    let office_output = matches!(
+        output,
+        ExportFormat::Docx | ExportFormat::Pptx | ExportFormat::Xlsx
+    );
+    let pdf_output = output == ExportFormat::Pdf;
+
+    if !(office_input || pdf_input || office_output || pdf_output) {
+        return FidelityDimensions::default();
+    }
+
+    let structural_validity = if office_output {
+        measurement(
+            FidelityClaim::Verified,
+            None,
+            &["gate:office-package-reopen"],
+            &["package validity is not visual parity"],
+        )
+    } else if pdf_output {
+        measurement(
+            FidelityClaim::Verified,
+            None,
+            &["gate:pdf-reopen"],
+            &["PDF syntax validity does not prove rendering parity"],
+        )
+    } else {
+        measurement(
+            FidelityClaim::Partial,
+            None,
+            &["gate:source-import"],
+            &["the target format has no pair-specific reopen gate"],
+        )
+    };
+
+    let semantic_preservation = measurement(
+        FidelityClaim::Partial,
+        None,
+        &["gate:semantic-ast-comparison"],
+        &["unsupported source constructs require diagnostics or opaque preservation"],
+    );
+    let layout_preservation = measurement(
+        FidelityClaim::Partial,
+        None,
+        &["gate:layout-comparison"],
+        &["pagination, floating objects, and application layout engines may differ"],
+    );
+    let visual_fidelity = measurement(
+        FidelityClaim::NotMeasured,
+        None,
+        &["gate:optional-visual-render"],
+        &["visual comparison requires an external renderer and is not inferred from reopen"],
+    );
+    let editability = if pdf_output {
+        measurement(
+            FidelityClaim::Unsupported,
+            Some(0.0),
+            &[],
+            &["PDF export is a visual document path, not an editable Office object model"],
+        )
+    } else if office_output {
+        measurement(
+            FidelityClaim::Partial,
+            None,
+            &["gate:editable-ast-node-coverage"],
+            &["charts, SmartArt, OLE, and other opaque parts are not semantically editable"],
+        )
+    } else {
+        FidelityMeasurement::default()
+    };
+    let round_trip_fidelity = if pdf_output || pdf_input {
+        measurement(
+            FidelityClaim::Unsupported,
+            None,
+            &[],
+            &["native PDF extraction and reflow export are not lossless round-trip operations"],
+        )
+    } else if office_input || office_output {
+        measurement(
+            FidelityClaim::Partial,
+            None,
+            &["gate:office-round-trip"],
+            &["generated core parts take precedence over preserved opaque parts"],
+        )
+    } else {
+        FidelityMeasurement::default()
+    };
+
+    FidelityDimensions {
+        structural_validity,
+        semantic_preservation,
+        layout_preservation,
+        visual_fidelity,
+        editability,
+        round_trip_fidelity,
+    }
+}
+
+fn measurement(
+    claim: FidelityClaim,
+    score: Option<f64>,
+    evidence: &[&str],
+    limitations: &[&str],
+) -> FidelityMeasurement {
+    FidelityMeasurement {
+        claim,
+        score,
+        evidence: evidence.iter().map(|value| (*value).to_string()).collect(),
+        limitations: limitations
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect(),
     }
 }
 
@@ -1166,6 +1308,52 @@ mod tests {
             let artifact = DocumentExportService::export(&document, format)
                 .unwrap_or_else(|error| panic!("registered {format:?} failed: {error}"));
             assert!(artifact.as_bytes().is_some_and(|bytes| !bytes.is_empty()));
+        }
+    }
+
+    #[test]
+    fn office_and_pdf_pairs_report_six_independent_fidelity_dimensions() {
+        let matrix = DocumentExportService::capability_matrix();
+        assert_eq!(matrix.schema_version, "2.1.0");
+        let office = matrix.query("DOCX", "DOCX").unwrap();
+        assert_eq!(
+            office.fidelity_dimensions.structural_validity.claim,
+            FidelityClaim::Verified
+        );
+        assert_eq!(
+            office.fidelity_dimensions.visual_fidelity.claim,
+            FidelityClaim::NotMeasured
+        );
+        assert_eq!(
+            office.fidelity_dimensions.editability.claim,
+            FidelityClaim::Partial
+        );
+
+        let pdf = matrix.query("PDF", "PDF").unwrap();
+        assert_eq!(
+            pdf.fidelity_dimensions.structural_validity.claim,
+            FidelityClaim::Verified
+        );
+        assert_eq!(
+            pdf.fidelity_dimensions.visual_fidelity.claim,
+            FidelityClaim::NotMeasured
+        );
+        assert_eq!(
+            pdf.fidelity_dimensions.editability.claim,
+            FidelityClaim::Unsupported
+        );
+
+        let json = serde_json::to_value(office).unwrap();
+        let dimensions = json.get("fidelity_dimensions").unwrap();
+        for key in [
+            "structuralValidity",
+            "semanticPreservation",
+            "layoutPreservation",
+            "visualFidelity",
+            "editability",
+            "roundTripFidelity",
+        ] {
+            assert!(dimensions.get(key).is_some(), "missing {key}");
         }
     }
 

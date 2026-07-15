@@ -59,6 +59,13 @@ fn read_pptx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
         });
     }
 
+    // Some producers omit or reshape slide relationship metadata. Preserve
+    // package media even when no image relationship could be resolved so the
+    // source assets are not silently dropped.
+    if all_assets.is_empty() {
+        all_assets = read_package_media(&mut archive);
+    }
+
     Ok(Document {
         metadata: Metadata {
             language: None,
@@ -75,6 +82,45 @@ fn read_pptx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
         notes: Vec::new(),
         outline: None,
     })
+}
+
+fn read_package_media<R: Read + Seek>(archive: &mut zip::ZipArchive<R>) -> Vec<MediaAsset> {
+    let mut assets = Vec::new();
+    for index in 0..archive.len() {
+        let Ok(mut file) = archive.by_index(index) else {
+            continue;
+        };
+        let name = file.name().to_string();
+        if !name.starts_with("ppt/media/") || name.ends_with('/') {
+            continue;
+        }
+        let mut bytes = Vec::new();
+        if file.read_to_end(&mut bytes).is_err() || bytes.is_empty() {
+            continue;
+        }
+        let format = guess_image_format(&name);
+        if format == AssetFormat::Unknown {
+            continue;
+        }
+        let id = AssetId(format!("pptx-media-{}", assets.len()));
+        assets.push(MediaAsset {
+            id,
+            format,
+            mime_type: None,
+            role: MediaRole::Photo,
+            storage: AssetStorage::InlineBase64 {
+                data: base64_encode(&bytes),
+            },
+            width: None,
+            height: None,
+            dpi: None,
+            color_space: None,
+            checksum: None,
+            alt_text: Some(name),
+            metadata: Default::default(),
+        });
+    }
+    assets
 }
 
 fn read_entry<R: Read + Seek>(archive: &mut zip::ZipArchive<R>, name: &str) -> Result<String> {

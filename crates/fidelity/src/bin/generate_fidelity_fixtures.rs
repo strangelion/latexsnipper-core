@@ -1,0 +1,261 @@
+use std::fs;
+use std::io::Write;
+use std::path::Path;
+
+use lopdf::content::{Content, Operation};
+use lopdf::{dictionary, Dictionary, Document, Object, Stream};
+use zip::write::FileOptions;
+
+fn main() {
+    if let Err(error) = generate() {
+        eprintln!("generate-fidelity-fixtures: {error}");
+        std::process::exit(2);
+    }
+}
+
+fn generate() -> Result<(), Box<dyn std::error::Error>> {
+    let root = Path::new("fidelity/fixtures");
+    fs::create_dir_all(root)?;
+    write_docx(&root.join("office-rich.docx"))?;
+    write_pptx(&root.join("presentation-rich.pptx"))?;
+    write_xlsx(&root.join("workbook-rich.xlsx"))?;
+    write_pdf(&root.join("pdf-rich.pdf"))?;
+    Ok(())
+}
+
+fn options() -> FileOptions {
+    FileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .unix_permissions(0o644)
+}
+
+fn package(path: &Path, parts: &[(&str, &[u8])]) -> Result<(), Box<dyn std::error::Error>> {
+    let file = fs::File::create(path)?;
+    let mut zip = zip::ZipWriter::new(file);
+    for (name, bytes) in parts {
+        zip.start_file(*name, options())?;
+        zip.write_all(bytes)?;
+    }
+    zip.finish()?;
+    Ok(())
+}
+
+fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let document = br#"<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+<w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="336699"/></w:rPr><w:t>Office Fidelity Heading</w:t></w:r><w:r><w:t> styled run</w:t></w:r></w:p>
+<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>List item</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Merged cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+<m:oMathPara><m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath></m:oMathPara>
+<w:p><w:r><w:drawing><a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="rIdImage"/></w:drawing></w:r></w:p>
+<w:p><w:footnoteReference w:id="1"/><w:commentRangeStart w:id="0"/><w:ins><w:r><w:t>Inserted</w:t></w:r></w:ins><w:del><w:r><w:delText>Deleted</w:delText></w:r></w:del></w:p>
+<mc:AlternateContent><mc:Choice Requires="dgm"><w:p><w:r><w:t>SmartArt preview</w:t></w:r></w:p></mc:Choice></mc:AlternateContent>
+<w:p><w:r><w:object><o:OLEObject Type="Embed" ProgID="Package"/></w:object></w:r><c:chart r:id="rIdChart"/></w:p>
+<w:sectPr><w:headerReference r:id="rIdHeader"/><w:footerReference r:id="rIdFooter"/><w:type w:val="nextPage"/></w:sectPr>
+</w:body></w:document>"#;
+    let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage" Target="media/image1.png"/><Relationship Id="rIdHeader" Target="header1.xml"/><Relationship Id="rIdFooter" Target="footer1.xml"/><Relationship Id="rIdChart" Target="charts/chart1.xml"/></Relationships>"#;
+    package(
+        path,
+        &[
+            ("[Content_Types].xml", br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>"#),
+            ("word/document.xml", document),
+            ("word/_rels/document.xml.rels", rels),
+            ("word/styles.xml", br#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Heading1"/></w:styles>"#),
+            ("word/numbering.xml", br#"<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:num w:numId="1"/></w:numbering>"#),
+            ("word/header1.xml", br#"<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Header</w:t></w:r></w:p></w:hdr>"#),
+            ("word/footer1.xml", br#"<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Footer</w:t></w:r></w:p></w:ftr>"#),
+            ("word/footnotes.xml", br#"<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:id="1"><w:p><w:r><w:t>Note</w:t></w:r></w:p></w:footnote></w:footnotes>"#),
+            ("word/comments.xml", br#"<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment w:id="0"><w:p><w:r><w:t>Comment</w:t></w:r></w:p></w:comment></w:comments>"#),
+            ("word/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
+            ("word/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"/>"#),
+            ("word/embeddings/oleObject1.bin", b"OLE fidelity fixture"),
+            ("word/media/image1.png", b"\x89PNG\r\n\x1a\nFIDELITY_IMAGE"),
+            ("customXml/fidelity.xml", b"<fidelity opaque=\"true\">DOCX_OPAQUE_PART</fidelity>"),
+        ],
+    )
+}
+
+fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let presentation = br#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldMasterIdLst><p:sldMasterId r:id="rIdMaster"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#;
+    let presentation_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="slides/slide1.xml"/><Relationship Id="rIdMaster" Target="slideMasters/slideMaster1.xml"/></Relationships>"#;
+    let slide = br#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="2" name="Text Box"/></p:nvSpPr><p:spPr><a:prstGeom prst="rect"/></p:spPr><p:txBody><a:p><a:r><a:t>Presentation Fidelity Text Box</a:t></a:r></a:p></p:txBody></p:sp><p:pic><p:blipFill><a:blip r:embed="rIdImage"/></p:blipFill></p:pic><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Table cell</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame><p:graphicFrame><a:graphic><a:graphicData uri="chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rIdChart"/></a:graphicData></a:graphic></p:graphicFrame><p:oleObj r:id="rIdOle"/></p:spTree></p:cSld><p:timing><p:tnLst><p:par/></p:tnLst></p:timing></p:sld>"#;
+    let slide_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage" Target="../media/image1.png"/><Relationship Id="rIdChart" Target="../charts/chart1.xml"/><Relationship Id="rIdOle" Target="../embeddings/oleObject1.bin"/><Relationship Id="rIdNotes" Target="../notesSlides/notesSlide1.xml"/></Relationships>"#;
+    package(
+        path,
+        &[
+            ("[Content_Types].xml", br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>"#),
+            ("ppt/presentation.xml", presentation),
+            ("ppt/_rels/presentation.xml.rels", presentation_rels),
+            ("ppt/slides/slide1.xml", slide),
+            ("ppt/slides/_rels/slide1.xml.rels", slide_rels),
+            ("ppt/slideMasters/slideMaster1.xml", br#"<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sldMaster>"#),
+            ("ppt/slideLayouts/slideLayout1.xml", br#"<p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sldLayout>"#),
+            ("ppt/notesSlides/notesSlide1.xml", br#"<p:notes xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree/></p:cSld></p:notes>"#),
+            ("ppt/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
+            ("ppt/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram">SMARTART_DATA</dgm:dataModel>"#),
+            ("ppt/embeddings/oleObject1.bin", b"PPTX_OLE_OBJECT"),
+            ("ppt/media/image1.png", b"\x89PNG\r\n\x1a\nPPTX_IMAGE"),
+            ("ppt/customXml/fidelity.xml", b"<fidelity>PPTX_OPAQUE_PART</fidelity>"),
+        ],
+    )
+}
+
+fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let workbook = br#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Fidelity" sheetId="1" r:id="rId1"/></sheets></workbook>"#;
+    let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#;
+    let sheet = br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:D3"/><cols><col min="1" max="4" width="18" customWidth="1"/></cols><sheetData><row r="1" ht="24" customHeight="1"><c r="A1" t="inlineStr"><is><t>Workbook Fidelity</t></is></c><c r="B1" t="b"><v>1</v></c><c r="C1" t="n"><v>42</v></c><c r="D1" t="e"><v>#N/A</v></c></row><row r="2"><c r="A2"><f>SUM(C1,8)</f><v>50</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="A3:D3"/></mergeCells><conditionalFormatting sqref="C1"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting><tableParts count="1"><tablePart r:id="rIdTable"/></tableParts><drawing r:id="rIdDrawing"/></worksheet>"#;
+    package(
+        path,
+        &[
+            ("[Content_Types].xml", br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="bin" ContentType="application/vnd.ms-office.vbaProject"/></Types>"#),
+            ("xl/workbook.xml", workbook),
+            ("xl/_rels/workbook.xml.rels", rels),
+            ("xl/worksheets/sheet1.xml", sheet),
+            ("xl/styles.xml", br#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><b/></font></fonts><cellXfs count="1"><xf fontId="0"/></cellXfs></styleSheet>"#),
+            ("xl/tables/table1.xml", br#"<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ref="A1:D3" displayName="FidelityTable"/>"#),
+            ("xl/drawings/drawing1.xml", br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><xdr:graphicFrame/></xdr:wsDr>"#),
+            ("xl/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
+            ("xl/pivotTables/pivotTable1.xml", br#"<pivotTableDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" name="FidelityPivot"/>"#),
+            ("xl/vbaProject.bin", b"VBA_PROJECT_FIDELITY_MACRO"),
+            ("xl/embeddings/oleObject1.bin", b"XLSX_EMBEDDED_OBJECT"),
+            ("xl/customXml/fidelity.xml", b"<fidelity>XLSX_OPAQUE_PART</fidelity>"),
+        ],
+    )
+}
+
+fn write_pdf(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let mut document = Document::with_version("1.7");
+    let pages_id = document.new_object_id();
+    let font_file_id = document.add_object(Stream::new(
+        dictionary! {"Length1" => 8},
+        b"FONTDATA".to_vec(),
+    ));
+    let descriptor_id = document.add_object(dictionary! {
+        "Type" => "FontDescriptor",
+        "FontName" => "FidelityEmbedded",
+        "Flags" => 4,
+        "FontBBox" => vec![0.into(), (-200).into(), 1000.into(), 900.into()],
+        "ItalicAngle" => 0,
+        "Ascent" => 800,
+        "Descent" => -200,
+        "CapHeight" => 700,
+        "StemV" => 80,
+        "FontFile2" => font_file_id,
+    });
+    let cid_font_id = document.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "CIDFontType2",
+        "BaseFont" => "FidelityEmbedded",
+        "CIDSystemInfo" => dictionary! {"Registry" => Object::string_literal("Adobe"), "Ordering" => Object::string_literal("Identity"), "Supplement" => 0},
+        "FontDescriptor" => descriptor_id,
+    });
+    let cjk_font_id = document.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type0",
+        "BaseFont" => "FidelityEmbedded",
+        "Encoding" => "Identity-H",
+        "DescendantFonts" => vec![cid_font_id.into()],
+    });
+    let latin_font_id = document.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica"
+    });
+    let image_id = document.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Image", "Width" => 1,
+            "Height" => 1, "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8,
+        },
+        vec![0x80, 0x80, 0x80],
+    ));
+    let gs_id = document.add_object(dictionary! {
+        "Type" => "ExtGState", "CA" => 0.5, "ca" => 0.5
+    });
+    let base_content = Content {
+        operations: vec![
+            Operation::new("BT", vec![]),
+            Operation::new("Tf", vec![Object::Name(b"F1".to_vec()), 12.into()]),
+            Operation::new("Td", vec![50.into(), 740.into()]),
+            Operation::new(
+                "Tj",
+                vec![Object::string_literal("PDF Fidelity left column")],
+            ),
+            Operation::new("Td", vec![250.into(), 0.into()]),
+            Operation::new("Tj", vec![Object::string_literal("right column")]),
+            Operation::new("ET", vec![]),
+            Operation::new("m", vec![50.into(), 700.into()]),
+            Operation::new("l", vec![550.into(), 700.into()]),
+            Operation::new("S", vec![]),
+            Operation::new("gs", vec![Object::Name(b"GS1".to_vec())]),
+            Operation::new("q", vec![]),
+            Operation::new(
+                "cm",
+                vec![
+                    100.into(),
+                    0.into(),
+                    0.into(),
+                    100.into(),
+                    50.into(),
+                    560.into(),
+                ],
+            ),
+            Operation::new("Do", vec![Object::Name(b"Scan1".to_vec())]),
+            Operation::new("Q", vec![]),
+        ],
+    }
+    .encode()?;
+    let overlay_content = Content {
+        operations: vec![
+            Operation::new("BT", vec![]),
+            Operation::new("Tf", vec![Object::Name(b"F2".to_vec()), 14.into()]),
+            Operation::new(
+                "Tm",
+                vec![
+                    0.into(),
+                    1.into(),
+                    (-1).into(),
+                    0.into(),
+                    500.into(),
+                    100.into(),
+                ],
+            ),
+            Operation::new(
+                "Tj",
+                vec![Object::String(
+                    vec![0x4f, 0x60, 0x59, 0x7d],
+                    lopdf::StringFormat::Hexadecimal,
+                )],
+            ),
+            Operation::new("ET", vec![]),
+        ],
+    }
+    .encode()?;
+    let base_id = document.add_object(Stream::new(Dictionary::new(), base_content));
+    let overlay_id = document.add_object(Stream::new(Dictionary::new(), overlay_content));
+    let annotation_id = document.add_object(dictionary! {
+        "Type" => "Annot", "Subtype" => "Text",
+        "Rect" => vec![50.into(), 500.into(), 70.into(), 520.into()],
+        "Contents" => Object::string_literal("Fidelity annotation"),
+    });
+    let page_id = document.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        "Resources" => dictionary! {
+            "Font" => dictionary! {"F1" => latin_font_id, "F2" => cjk_font_id},
+            "XObject" => dictionary! {"Scan1" => image_id},
+            "ExtGState" => dictionary! {"GS1" => gs_id},
+        },
+        "Contents" => vec![base_id.into(), overlay_id.into()],
+        "Annots" => vec![annotation_id.into()],
+    });
+    document.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1
+        }),
+    );
+    let catalog_id = document.add_object(dictionary! {"Type" => "Catalog", "Pages" => pages_id});
+    document.trailer.set("Root", catalog_id);
+    document.save(path)?;
+    Ok(())
+}

@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "1.0.0",
+  "cases": [
+    {
+      "id": "docx-office-rich-v1",
+      "format": "docx",
+      "fixture": "fidelity/fixtures/office-rich.docx",
+      "sha256": "65eb27c81a1f0f988a75b24d19daa32f934d5cbbb2fd925e32ab543ecb261e9f",
+      "license": "AGPL-3.0",
+      "source": "repository-generated deterministic OOXML fixture",
+      "features": [
+        { "feature": "runs", "evidenceToken": "<w:r>" },
+        { "feature": "styles", "evidenceToken": "Heading1" },
+        { "feature": "headings", "evidenceToken": "<w:pStyle" },
+        { "feature": "lists", "evidenceToken": "<w:numPr" },
+        { "feature": "tables", "evidenceToken": "<w:tbl>" },
+        { "feature": "merged-cells", "evidenceToken": "<w:gridSpan" },
+        { "feature": "omml", "evidenceToken": "<m:oMath" },
+        { "feature": "images", "evidenceToken": "word/media/image1.png" },
+        { "feature": "headers", "evidenceToken": "word/header1.xml" },
+        { "feature": "footers", "evidenceToken": "word/footer1.xml" },
+        { "feature": "notes", "evidenceToken": "word/footnotes.xml" },
+        { "feature": "sections", "evidenceToken": "<w:sectPr" },
+        { "feature": "comments-revisions", "evidenceToken": "<w:commentRangeStart" },
+        { "feature": "charts", "evidenceToken": "word/charts/chart1.xml" },
+        { "feature": "smartart", "evidenceToken": "word/diagrams/data1.xml" },
+        { "feature": "ole", "evidenceToken": "word/embeddings/oleObject1.bin" },
+        { "feature": "opaque-parts", "evidenceToken": "DOCX_OPAQUE_PART" }
+      ],
+      "expectedText": ["Office Fidelity Heading", "List item"],
+      "requiredDiagnosticCodes": [
+        "W_CHART_DATA_SIMPLIFIED",
+        "W_SMARTART_NOT_SUPPORTED",
+        "W_OLE_NOT_SUPPORTED",
+        "W_REVISION_NOT_FULLY_PRESERVED",
+        "W_UNSUPPORTED_FEATURE"
+      ],
+      "requiredOpaqueParts": ["customXml/fidelity.xml"],
+      "minimumAssets": 1,
+      "minimumSemanticSimilarity": 0.75,
+      "minimumLayoutSimilarity": 0.95
+    },
+    {
+      "id": "pptx-presentation-rich-v1",
+      "format": "pptx",
+      "fixture": "fidelity/fixtures/presentation-rich.pptx",
+      "sha256": "6250880644b642856075909ac833f024859dcf61e1477dee3b586844318c5eb5",
+      "license": "AGPL-3.0",
+      "source": "repository-generated deterministic OOXML fixture",
+      "features": [
+        { "feature": "slides", "evidenceToken": "ppt/slides/slide1.xml" },
+        { "feature": "layouts", "evidenceToken": "ppt/slideLayouts/slideLayout1.xml" },
+        { "feature": "masters", "evidenceToken": "ppt/slideMasters/slideMaster1.xml" },
+        { "feature": "text-boxes", "evidenceToken": "Text Box" },
+        { "feature": "shapes", "evidenceToken": "<a:prstGeom" },
+        { "feature": "images", "evidenceToken": "ppt/media/image1.png" },
+        { "feature": "tables", "evidenceToken": "<a:tbl" },
+        { "feature": "charts", "evidenceToken": "ppt/charts/chart1.xml" },
+        { "feature": "smartart", "evidenceToken": "SMARTART_DATA" },
+        { "feature": "notes", "evidenceToken": "ppt/notesSlides/notesSlide1.xml" },
+        { "feature": "animations", "evidenceToken": "<p:timing" },
+        { "feature": "ole", "evidenceToken": "ppt/embeddings/oleObject1.bin" }
+      ],
+      "expectedText": ["Presentation Fidelity Text Box"],
+      "requiredDiagnosticCodes": [
+        "W_CHART_DATA_SIMPLIFIED",
+        "W_SMARTART_NOT_SUPPORTED",
+        "W_OLE_NOT_SUPPORTED",
+        "W_UNSUPPORTED_FEATURE"
+      ],
+      "requiredOpaqueParts": ["ppt/customXml/fidelity.xml"],
+      "minimumAssets": 1,
+      "minimumSemanticSimilarity": 0.70,
+      "minimumLayoutSimilarity": 0.95
+    },
+    {
+      "id": "xlsx-workbook-rich-v1",
+      "format": "xlsx",
+      "fixture": "fidelity/fixtures/workbook-rich.xlsx",
+      "sha256": "dc9f1abca94dc75d87baa3b33c1ebeb4a0150ebdf866bb9e5d831049bfb6da92",
+      "license": "AGPL-3.0",
+      "source": "repository-generated deterministic OOXML fixture",
+      "features": [
+        { "feature": "cell-types", "evidenceToken": "t=\"inlineStr\"" },
+        { "feature": "formulas", "evidenceToken": "<f>" },
+        { "feature": "merged-cells", "evidenceToken": "<mergeCell" },
+        { "feature": "styles", "evidenceToken": "xl/styles.xml" },
+        { "feature": "dimensions", "evidenceToken": "<dimension" },
+        { "feature": "tables", "evidenceToken": "xl/tables/table1.xml" },
+        { "feature": "charts", "evidenceToken": "xl/charts/chart1.xml" },
+        { "feature": "conditional-formatting", "evidenceToken": "<conditionalFormatting" },
+        { "feature": "pivots", "evidenceToken": "xl/pivotTables/pivotTable1.xml" },
+        { "feature": "macros", "evidenceToken": "xl/vbaProject.bin" },
+        { "feature": "embedded-objects", "evidenceToken": "xl/embeddings/oleObject1.bin" }
+      ],
+      "expectedText": [],
+      "requiredDiagnosticCodes": [
+        "W_CHART_DATA_SIMPLIFIED",
+        "W_OLE_NOT_SUPPORTED",
+        "W_UNSUPPORTED_FEATURE"
+      ],
+      "requiredOpaqueParts": ["xl/customXml/fidelity.xml"],
+      "minimumAssets": 0,
+      "minimumSemanticSimilarity": 0.70,
+      "minimumLayoutSimilarity": 0.95
+    },
+    {
+      "id": "pdf-rich-v1",
+      "format": "pdf",
+      "fixture": "fidelity/fixtures/pdf-rich.pdf",
+      "sha256": "385e487e25646fdca268261c6c527f855b14df25126d487f84ac390efe34483a",
+      "license": "AGPL-3.0",
+      "source": "repository-generated deterministic PDF fixture",
+      "features": [
+        { "feature": "embedded-fonts", "evidenceToken": "/FontFile2" },
+        { "feature": "missing-tounicode", "evidenceToken": "/Identity-H" },
+        { "feature": "cjk", "evidenceToken": "4F60597D" },
+        { "feature": "rotated-text", "evidenceToken": " Tm" },
+        { "feature": "columns", "evidenceToken": "right column" },
+        { "feature": "vector-graphics", "evidenceToken": "700 m" },
+        { "feature": "scanned-pages", "evidenceToken": "/Subtype/Image" },
+        { "feature": "transparency", "evidenceToken": "/ExtGState" },
+        { "feature": "annotations", "evidenceToken": "/Subtype/Text" },
+        { "feature": "overlays", "evidenceToken": "/Contents[" }
+      ],
+      "expectedText": ["PDF Fidelity left column"],
+      "requiredDiagnosticCodes": ["W_LAYOUT_LOSS"],
+      "requiredOpaqueParts": [],
+      "minimumAssets": 0,
+      "minimumSemanticSimilarity": 0.85,
+      "minimumLayoutSimilarity": 0.75
+    }
+  ]
+}
