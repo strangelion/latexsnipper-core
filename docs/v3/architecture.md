@@ -119,7 +119,7 @@ Implemented in this stacked change:
 Still planned after PR 3:
 
 - public runtime execution integration for verified remote packages;
-- browser table and handwriting pipelines, production OCR evidence,
+- production OCR evidence,
   Office/PDF fidelity certification, v3 public runtime migration, and release
   candidate/GA work.
 
@@ -128,7 +128,7 @@ Still planned after PR 3:
 1. v3 contracts and migration foundation (implemented).
 2. WASI Component host and WIT interfaces (implemented and hardened).
 3. signed plugin registry and cryptographic package verification (implemented).
-4. browser table and handwriting recognition.
+4. browser table and handwriting recognition (implemented; experimental).
 5. production OCR validation and benchmark evidence.
 6. Office/PDF fidelity framework.
 7. public API/CLI integration and compatibility adapters.

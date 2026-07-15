@@ -699,6 +699,10 @@ impl SnipperEngine {
         if let Some(v) = &self.config.table_struct_model {
             ctx.model_variants.insert("table-struct".into(), v.clone());
         }
+        if let Some(v) = &self.config.handwriting_det_model {
+            ctx.model_variants
+                .insert("handwriting-det".into(), v.clone());
+        }
 
         // Mode-specific defaults
         match self.config.parse_mode {

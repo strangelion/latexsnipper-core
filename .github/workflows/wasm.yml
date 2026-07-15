@@ -50,7 +50,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: crates/wasm/js/package-lock.json
       - uses: Swatinem/rust-cache@v2
+      - name: Install package smoke dependencies
+        working-directory: crates/wasm/js
+        run: npm ci
       - name: Install pinned wasm-pack
         run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
       - name: Build web package
@@ -64,12 +72,12 @@ jobs:
       - name: Build Node package
         run: >-
           wasm-pack build crates/wasm --target nodejs --release
-          --out-dir ../../target/wasm-node
+          --out-dir ../../target/wasm-nodejs
       - name: Include license in generated npm packages
         run: |
           cp LICENSE target/wasm-web/LICENSE
           cp LICENSE target/wasm-bundler/LICENSE
-          cp LICENSE target/wasm-node/LICENSE
+          cp LICENSE target/wasm-nodejs/LICENSE
       - name: Record package sizes
         run: |
           find target/wasm-web -maxdepth 1 -type f -printf '%f %s bytes\n' | sort | tee target/wasm-web/size-report.txt
@@ -77,7 +85,8 @@ jobs:
         working-directory: target/wasm-web
         run: npm pack --dry-run
       - name: Smoke-test ESM and Node imports
-        run: node crates/wasm/js/scripts/package-smoke.mjs
+        working-directory: crates/wasm/js
+        run: npm run smoke:packages
       - name: Upload browser package
         uses: actions/upload-artifact@v7
         with:
@@ -119,6 +128,48 @@ jobs:
             target/wasm-bindgen-test*
           if-no-files-found: warn
           retention-days: 14
+
+  production-handwriting:
+    name: Production TrOCR compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MODEL_ARCHIVE: target/test-models/latexsnipper-formula-rec.zip
+      MODEL_SHA256: fdcc414b9073c73325614faafc6473ddd7e91a80305cdc55f7267195de152a21
+      MODEL_URL: https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/latexsnipper-formula-rec.zip
+      LATEXSNIPPER_REQUIRE_REAL_MODELS: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache checksum-verified TrOCR archive
+        uses: actions/cache@v5
+        with:
+          path: target/test-models
+          key: trocr-deit-${{ env.MODEL_SHA256 }}
+      - name: Download, verify, and extract TrOCR
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "$MODEL_ARCHIVE")" models/formula-rec
+          if [ ! -f "$MODEL_ARCHIVE" ]; then
+            curl --fail --location --retry 3 --max-redirs 5 \
+              --output "$MODEL_ARCHIVE.part" "$MODEL_URL"
+            mv "$MODEL_ARCHIVE.part" "$MODEL_ARCHIVE"
+          fi
+          echo "$MODEL_SHA256  $MODEL_ARCHIVE" | sha256sum --check --strict
+          unzip_exit=0
+          unzip -q -o "$MODEL_ARCHIVE" -d models/formula-rec || unzip_exit=$?
+          if [ "$unzip_exit" -gt 1 ]; then
+            exit "$unzip_exit"
+          fi
+          for artifact in config.json encoder_model.onnx decoder_model.onnx tokenizer.json; do
+            test -f "models/formula-rec/trocr-deit/$artifact"
+          done
+      - name: Execute production TrOCR with the browser runtime
+        run: >-
+          cargo test -p latexsnipper-wasm --test production_profiles --
+          --exact production_handwriting_profile_executes_with_the_wasm_runtime
+          --nocapture
 
   typescript-runtime:
     name: Worker, Node, TypeScript, and Vite

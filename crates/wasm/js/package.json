@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/*.test.js",
     "build:example": "vite build example",
+    "smoke:packages": "node scripts/package-smoke.mjs",
     "smoke:production-model": "node scripts/production-model-smoke.mjs"
   },
   "devDependencies": {
@@ -26,6 +27,7 @@
     "fake-indexeddb": "6.0.1",
     "pngjs": "7.0.0",
     "typescript": "5.8.3",
-    "vite": "6.4.3"
+    "vite": "6.4.3",
+    "vite-plugin-wasm": "3.6.0"
   }
 }

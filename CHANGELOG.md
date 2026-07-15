@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   downloads, bounded archive validation, atomic remote WASI installation, and rollback.
 - Registry and remote-plugin CLI commands with explicit trust-root confirmation and
   machine-readable trust, revocation, expiry, quarantine, and compatibility states.
+- Browser table recognition with a bounded projection structure fallback, per-cell OCR
+  confidence, merged-cell geometry preservation, and artifact-derived readiness.
+- Browser handwriting recognition through TrOCR encoder/decoder/tokenizer artifacts,
+  including production-model Tract execution and a bounded WASM decode profile.
+- Browser-side model, image, queue, task-duration, table-element, result, cache, and
+  download budgets with pre-allocation validation where possible.
 
 ### Changed
 
@@ -29,10 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WASI Component authority is enforced with capability-directory filesystem access,
   host-owned resource ceilings, exact runtime/manifest capability matching, and a
   RustSec-clean Wasmtime 36.0.12 runtime.
+- Tract 0.21.10 is vendored with a narrowly scoped inference-to-typed compatibility
+  fix for dimension tensors represented as typed `I64` values.
 
 ### Compatibility
 
-- Existing WASM API v2, capability v2, plugin/model runtime, process IPC v1, Worker protocol v1, CLI, and FFI behavior remain unchanged.
+- Existing WASM API v2, capability v2, plugin/model runtime, process IPC v1, Worker protocol v1, CLI, and FFI behavior remain unchanged. JSON AST text runs may now include an optional `confidence` field.
 - This alpha does not yet expose a callable v3 endpoint or v3 model loader; remotely installed
   WASI packages remain disabled until public runtime integration.
 

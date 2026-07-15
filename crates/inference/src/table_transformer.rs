@@ -59,9 +59,31 @@ pub fn recognize_table_transformer(
     image: &SnipperImage,
     session: &dyn InferenceSession,
 ) -> Result<Vec<TableTransformerDetection>> {
+    #[cfg(target_arch = "wasm32")]
+    const MAX_INPUT_EDGE: u32 = 256;
+    #[cfg(not(target_arch = "wasm32"))]
+    const MAX_INPUT_EDGE: u32 = 1000;
+
+    recognize_table_transformer_with_max_edge(image, session, MAX_INPUT_EDGE)
+}
+
+/// Run Table Transformer with an explicit preprocessing budget.
+///
+/// Browser callers use a smaller edge to bound CPU and linear-memory pressure.
+/// Native callers retain the upstream 1000-pixel preprocessing profile.
+pub fn recognize_table_transformer_with_max_edge(
+    image: &SnipperImage,
+    session: &dyn InferenceSession,
+    max_input_edge: u32,
+) -> Result<Vec<TableTransformerDetection>> {
+    if max_input_edge == 0 {
+        return Err(SnipperError::Config(
+            "TableTransformer max input edge must be positive".into(),
+        ));
+    }
     let (w, h) = (image.width() as f32, image.height() as f32);
     let max_dim = w.max(h);
-    let scale = 1000.0 / max_dim;
+    let scale = max_input_edge as f32 / max_dim;
     let new_w = (w * scale).round() as u32;
     let new_h = (h * scale).round() as u32;
     let resized = latexsnipper_image::operations::resize(image, new_w, new_h);

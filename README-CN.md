@@ -37,7 +37,7 @@ workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的 stacked changes。�
 | SVG、PNG、PDF | **实验性 / best effort** | 已测试结构或视觉输出，但不保证完整布局、字体、可编辑性和 round-trip。 |
 | DOCX、PPTX、XLSX | **实验性 / best effort** | 已测试包结构与受支持语义，但不保证 Microsoft Office 视觉一致性。 |
 | WASM 语义转换 | **稳定** | 浏览器 target 有意排除原生二进制 exporter。 |
-| WASM Tract 识别 | **实验性** | 模型驱动、异步执行，并在 Chrome/Firefox 测试；浏览器表格和手写流水线尚不可用。 |
+| WASM Tract 识别 | **实验性** | 模型驱动且异步执行；文本、projection 结构表格和 TrOCR 手写已接入浏览器流水线，readiness 由已加载且验证通过的 artifact 决定。 |
 | 内置 Rust 插件 | **Host 行为稳定** | 已实现确定性排序、typed hook、事务 patch、失败策略、soft deadline 和 quarantine。 |
 | 隔离 native process 插件 | **仅限经过审核的本地代码** | 支持 hard timeout 和资源控制，但不是操作系统文件/网络沙箱。 |
 | WASI Component host | **已实现为 Rust host crate** | WIT v1、manifest/digest 校验、typed broker、硬中断和资源限制已有真实组件测试；public execution 集成仍待完成。 |
@@ -331,7 +331,7 @@ JavaScript 包还提供：
 - mirror fallback；
 - best-effort 或 required cache policy。
 
-浏览器表格和手写流水线尚不可用。Production-derived WASM 模型测试证明模型/运行时兼容性，不证明 OCR 准确率。
+浏览器表格模式使用有界的内置 projection 结构后端与已加载的文本识别模型；兼容结构模型产生的合并单元格元数据会被保留。手写模式要求 TrOCR encoder、decoder、tokenizer 以及预处理/输出元数据完整，并限制浏览器解码步数。生产模型测试只证明 Tract/runtime 兼容与可执行性，不证明 OCR 准确率。由于当前上游导出无法满足默认浏览器运行预算，TATR 与 SLANet 结构后端仍为 opt-in experimental。
 
 详见 [WASM adapter](docs/wasm.md)。
 

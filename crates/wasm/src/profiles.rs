@@ -27,16 +27,117 @@ pub fn validate_profile(
             profile,
             &["formula-det", "formula-rec", "text-det", "text-rec"],
         ),
-        "table" | "handwriting" => Ok(ProfileValidation {
-            profile: profile.to_string(),
-            ready: false,
-            missing: vec![format!("{} browser pipeline is not implemented", profile)],
-            variants: Vec::new(),
-        }),
+        "table" => validate_table_profile(resolver, profile),
+        "handwriting" => {
+            validate_specialized_profile(resolver, profile, &["formula-rec"], &["handwriting-det"])
+        }
         _ => Err(WasmError::new(
             WasmErrorCode::UnsupportedMode,
             format!("Unknown recognition mode: {profile}"),
         )),
+    }
+}
+
+fn validate_table_profile(
+    resolver: &MemoryModelResolver,
+    profile: &str,
+) -> Result<ProfileValidation, WasmError> {
+    let mut validation = validate_components(resolver, profile, &["text-rec"])?;
+    if let Some(variant) = find_variant(resolver, "table-struct") {
+        validation.variants.push(format!("table-struct/{variant}"));
+        validate_component(resolver, "table-struct", &variant, &mut validation.missing);
+        validate_specialized_metadata(
+            resolver,
+            profile,
+            "table-struct",
+            &variant,
+            &mut validation.missing,
+        );
+    } else {
+        validation
+            .variants
+            .push("table-struct/projection".to_string());
+    }
+
+    if let Some(variant) = find_variant(resolver, "table-det") {
+        validation.variants.push(format!("table-det/{variant}"));
+        validate_component(resolver, "table-det", &variant, &mut validation.missing);
+    }
+    validation.ready = validation.missing.is_empty();
+    Ok(validation)
+}
+
+fn validate_specialized_profile(
+    resolver: &MemoryModelResolver,
+    profile: &str,
+    required: &[&str],
+    optional: &[&str],
+) -> Result<ProfileValidation, WasmError> {
+    let mut validation = validate_components(resolver, profile, required)?;
+    for category in optional {
+        let Some(variant) = find_variant(resolver, category) else {
+            continue;
+        };
+        validation.variants.push(format!("{category}/{variant}"));
+        validate_component(resolver, category, &variant, &mut validation.missing);
+    }
+
+    for selected in validation.variants.clone() {
+        let Some((category, variant)) = selected.split_once('/') else {
+            continue;
+        };
+        validate_specialized_metadata(
+            resolver,
+            profile,
+            category,
+            variant,
+            &mut validation.missing,
+        );
+    }
+    validation.ready = validation.missing.is_empty();
+    Ok(validation)
+}
+
+fn validate_specialized_metadata(
+    resolver: &MemoryModelResolver,
+    profile: &str,
+    category: &str,
+    variant: &str,
+    missing: &mut Vec<String>,
+) {
+    let id = ModelId::new(category, variant);
+    let prefix = id.composite_key();
+    let Ok(config_text) = resolver.read_text_artifact(&id, "config.json") else {
+        return;
+    };
+    let Ok(config) = ModelConfig::from_json_str(&config_text) else {
+        return;
+    };
+
+    if config.preprocessing.is_none() {
+        missing.push(format!(
+            "{prefix}/config.json (preprocessing metadata missing)"
+        ));
+    }
+    if profile == "table" && category == "table-struct" {
+        if !matches!(config.model_type.as_str(), "slanet" | "tatr") {
+            missing.push(format!("{prefix}/config.json (unsupported table runtime)"));
+        }
+        if config.input.is_none() || config.output.is_none() {
+            missing.push(format!("{prefix}/config.json (table I/O schema missing)"));
+        }
+    }
+    if profile == "handwriting" && category == "formula-rec" {
+        if config.encoder.is_none() || config.decoder.is_none() {
+            missing.push(format!(
+                "{prefix}/config.json (handwriting I/O schema missing)"
+            ));
+        }
+        if config.decoding.is_none() {
+            missing.push(format!(
+                "{prefix}/config.json (handwriting decoding metadata missing)"
+            ));
+        }
     }
 }
 
@@ -200,9 +301,90 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_pipelines_are_never_advertised() {
+    fn specialized_pipelines_require_complete_artifacts() {
         let resolver = MemoryModelResolver::new();
         assert!(!validate_profile(&resolver, "table").unwrap().ready);
         assert!(!validate_profile(&resolver, "handwriting").unwrap().ready);
+
+        resolver.store(
+            "table-struct/browser/config.json",
+            serde_json::to_vec(&serde_json::json!({
+                "model_type": "slanet",
+                "input": { "name": "x", "shape": [1, 3, 488, 488], "dtype": "float32" },
+                "output": { "name": "structure_probs", "shape": [1, -1, 50] },
+                "preprocessing": { "resize": { "width": 488, "height": 488 } },
+                "pipeline": { "model_files": { "primary": "model.onnx" } }
+            }))
+            .unwrap(),
+        );
+        resolver.store("table-struct/browser/model.onnx", vec![1]);
+        resolver.store(
+            "text-rec/browser/config.json",
+            serde_json::to_vec(&serde_json::json!({
+                "model_type": "crnn_ctc",
+                "input": { "name": "x", "shape": [1, 3, 48, 320], "dtype": "float32" },
+                "output": { "name": "softmax", "shape": [1, -1, 10] },
+                "preprocessing": { "resize": { "height": 48 } },
+                "decoding": { "keys_file": "keys.txt" },
+                "pipeline": { "model_files": { "primary": "model.onnx" } }
+            }))
+            .unwrap(),
+        );
+        resolver.store("text-rec/browser/model.onnx", vec![2]);
+        resolver.store("text-rec/browser/keys.txt", b"a\nb".to_vec());
+        assert!(validate_profile(&resolver, "table").unwrap().ready);
+
+        resolver.store(
+            "formula-rec/browser/config.json",
+            serde_json::to_vec(&serde_json::json!({
+                "model_type": "trocr",
+                "encoder": {
+                    "input": { "name": "pixel_values", "shape": [1, 3, 384, 384], "dtype": "float32" },
+                    "output": { "name": "last_hidden_state", "shape": [1, 577, 384] }
+                },
+                "decoder": {
+                    "input_ids": { "name": "input_ids" },
+                    "encoder_hidden": { "name": "encoder_hidden_states" },
+                    "output": { "name": "logits", "shape": [1, -1, 10] }
+                },
+                "preprocessing": { "resize": { "width": 384, "height": 384 } },
+                "decoding": { "tokenizer_file": "tokenizer.json" },
+                "pipeline": { "model_files": {
+                    "encoder": "encoder.onnx",
+                    "decoder": "decoder.onnx",
+                    "tokenizer": "tokenizer.json"
+                } }
+            }))
+            .unwrap(),
+        );
+        resolver.store("formula-rec/browser/encoder.onnx", vec![3]);
+        resolver.store("formula-rec/browser/decoder.onnx", vec![4]);
+        resolver.store("formula-rec/browser/tokenizer.json", b"{}".to_vec());
+        assert!(validate_profile(&resolver, "handwriting").unwrap().ready);
+    }
+
+    #[test]
+    fn table_profile_uses_builtin_projection_without_a_structure_model() {
+        let resolver = MemoryModelResolver::new();
+        resolver.store(
+            "text-rec/browser/config.json",
+            serde_json::to_vec(&serde_json::json!({
+                "model_type": "crnn_ctc",
+                "input": { "name": "x", "shape": [1, 3, 48, 320], "dtype": "float32" },
+                "output": { "name": "softmax", "shape": [1, -1, 10] },
+                "preprocessing": { "resize": { "height": 48 } },
+                "decoding": { "keys_file": "keys.txt" },
+                "pipeline": { "model_files": { "primary": "model.onnx" } }
+            }))
+            .unwrap(),
+        );
+        resolver.store("text-rec/browser/model.onnx", vec![2]);
+        resolver.store("text-rec/browser/keys.txt", b"a\nb".to_vec());
+
+        let validation = validate_profile(&resolver, "table").unwrap();
+        assert!(validation.ready);
+        assert!(validation
+            .variants
+            .contains(&"table-struct/projection".to_string()));
     }
 }

@@ -22,6 +22,7 @@ interface RecognitionTask extends PendingCall {
   input: Omit<RecognitionInput, "requestId">;
   onProgress?: (event: ProgressEvent) => void;
   generation: number;
+  timeout?: ReturnType<typeof setTimeout>;
 }
 
 export class WorkerRuntimeError extends Error {
@@ -36,6 +37,13 @@ export interface WasmWorkerClientOptions extends WorkerInitOptions {
   workerFactory?: WorkerFactory;
   maxQueueLength?: number;
   rpcTimeoutMillis?: number;
+  maxTaskDurationMillis?: number;
+  maxModelBytes?: number;
+  maxTotalModelBytes?: number;
+  maxImageWidth?: number;
+  maxImageHeight?: number;
+  maxImagePixels?: number;
+  maxResultBytes?: number;
 }
 
 export interface WorkerCallOptions {
@@ -55,13 +63,36 @@ export class WasmWorkerClient {
   private terminated = false;
   private readonly maxQueueLength: number;
   private readonly rpcTimeoutMillis: number;
+  private readonly maxTaskDurationMillis: number;
+  private readonly maxModelBytes: number;
+  private readonly maxTotalModelBytes: number;
+  private readonly maxImageWidth: number;
+  private readonly maxImageHeight: number;
+  private readonly maxImagePixels: number;
+  private readonly maxResultBytes: number;
   private restarting?: Promise<void>;
 
   constructor(private readonly options: WasmWorkerClientOptions) {
     this.maxQueueLength = options.maxQueueLength ?? 32;
     this.rpcTimeoutMillis = options.rpcTimeoutMillis ?? 30_000;
-    if (!Number.isFinite(this.rpcTimeoutMillis) || this.rpcTimeoutMillis <= 0) {
-      throw new RangeError("rpcTimeoutMillis must be a positive finite number");
+    this.maxTaskDurationMillis = options.maxTaskDurationMillis ?? 120_000;
+    this.maxModelBytes = options.maxModelBytes ?? 128 * 1024 * 1024;
+    this.maxTotalModelBytes = options.maxTotalModelBytes ?? 256 * 1024 * 1024;
+    this.maxImageWidth = options.maxImageWidth ?? 8_192;
+    this.maxImageHeight = options.maxImageHeight ?? 8_192;
+    this.maxImagePixels = options.maxImagePixels ?? 40_000_000;
+    this.maxResultBytes = options.maxResultBytes ?? 16 * 1024 * 1024;
+    positiveInteger("maxQueueLength", this.maxQueueLength);
+    positiveInteger("rpcTimeoutMillis", this.rpcTimeoutMillis);
+    positiveInteger("maxTaskDurationMillis", this.maxTaskDurationMillis);
+    positiveInteger("maxModelBytes", this.maxModelBytes);
+    positiveInteger("maxTotalModelBytes", this.maxTotalModelBytes);
+    positiveInteger("maxImageWidth", this.maxImageWidth);
+    positiveInteger("maxImageHeight", this.maxImageHeight);
+    positiveInteger("maxImagePixels", this.maxImagePixels);
+    positiveInteger("maxResultBytes", this.maxResultBytes);
+    if (this.maxModelBytes > this.maxTotalModelBytes) {
+      throw new RangeError("maxModelBytes must not exceed maxTotalModelBytes");
     }
     this.initialized = this.startWorker();
   }
@@ -71,6 +102,14 @@ export class WasmWorkerClient {
   }
 
   async loadModel(artifact: ModelArtifact, callOptions: WorkerCallOptions = {}): Promise<unknown> {
+    if (artifact.bytes.byteLength > this.maxModelBytes) {
+      throw this.runtimeError("MODEL_ARTIFACT_LIMIT", "Model artifact exceeds the configured byte limit");
+    }
+    const currentBytes = this.models.get(artifact.name)?.bytes.byteLength ?? 0;
+    const projectedBytes = this.loadedModelBytes() - currentBytes + artifact.bytes.byteLength;
+    if (projectedBytes > this.maxTotalModelBytes) {
+      throw this.runtimeError("MODEL_TOTAL_LIMIT", "Loaded models would exceed the configured total byte limit");
+    }
     await this.initialized;
     const owned = { ...artifact, bytes: artifact.bytes.slice() };
     const result = await this.call({
@@ -85,6 +124,8 @@ export class WasmWorkerClient {
 
   recognize(input: RecognitionInput, onProgress?: (event: ProgressEvent) => void): Promise<unknown> {
     if (this.terminated) return Promise.reject(this.runtimeError("WORKER_TERMINATED", "Worker client is terminated"));
+    const inputError = this.validateRecognitionInput(input);
+    if (inputError) return Promise.reject(inputError);
     const requestId = input.requestId ?? this.nextId("recognize");
     if (this.hasRequest(requestId)) {
       return Promise.reject(this.runtimeError("DUPLICATE_REQUEST_ID", `Request '${requestId}' already exists`));
@@ -132,6 +173,7 @@ export class WasmWorkerClient {
     if (this.terminated) return;
     this.terminated = true;
     this.worker.terminate();
+    if (this.active?.timeout) clearTimeout(this.active.timeout);
     this.active?.reject(this.runtimeError("WORKER_TERMINATED", "Worker client terminated"));
     this.active = undefined;
     for (const task of this.queue.splice(0)) task.reject(this.runtimeError("WORKER_TERMINATED", "Worker client terminated"));
@@ -183,6 +225,16 @@ export class WasmWorkerClient {
         requestId: task.wireRequestId,
         input: task.input,
       });
+      task.timeout = setTimeout(() => {
+        if (this.active !== task) return;
+        this.restartWorker(
+          "WORKER_TASK_TIMEOUT",
+          `Recognition exceeded ${this.maxTaskDurationMillis} ms`,
+          this.runtimeError("WORKER_TASK_TIMEOUT", "Recognition exceeded the configured duration limit", {
+            workerRestarted: true,
+          }),
+        );
+      }, this.maxTaskDurationMillis);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       this.restartWorker(
@@ -220,7 +272,12 @@ export class WasmWorkerClient {
     }
     const task = this.active;
     this.active = undefined;
-    response.type === "result" ? task.resolve(response.data) : task.reject(new WorkerRuntimeError(response.error));
+    if (task.timeout) clearTimeout(task.timeout);
+    if (response.type === "result" && serializedBytes(response.data) > this.maxResultBytes) {
+      task.reject(this.runtimeError("WORKER_RESULT_LIMIT", "Recognition result exceeds the configured byte limit"));
+    } else {
+      response.type === "result" ? task.resolve(response.data) : task.reject(new WorkerRuntimeError(response.error));
+    }
     void this.pump();
   }
 
@@ -287,6 +344,7 @@ export class WasmWorkerClient {
     if (this.terminated) return;
     const active = this.active;
     this.active = undefined;
+    if (active?.timeout) clearTimeout(active.timeout);
     this.generation += 1;
     this.worker.terminate();
     this.rejectAllCalls(code, message);
@@ -330,9 +388,45 @@ export class WasmWorkerClient {
     return `internal:${prefix}:${this.sequence}`;
   }
 
+  private loadedModelBytes(): number {
+    let total = 0;
+    for (const artifact of this.models.values()) total += artifact.bytes.byteLength;
+    return total;
+  }
+
+  private validateRecognitionInput(input: RecognitionInput): WorkerRuntimeError | undefined {
+    for (const [name, value] of [["width", input.width], ["height", input.height]] as const) {
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        return this.runtimeError("WORKER_INVALID_IMAGE", `${name} must be a positive safe integer`);
+      }
+    }
+    if (input.width > this.maxImageWidth || input.height > this.maxImageHeight) {
+      return this.runtimeError("WORKER_IMAGE_LIMIT", "Image dimensions exceed the configured limit");
+    }
+    const pixels = input.width * input.height;
+    if (!Number.isSafeInteger(pixels) || pixels > this.maxImagePixels) {
+      return this.runtimeError("WORKER_IMAGE_LIMIT", "Image pixels exceed the configured limit");
+    }
+    if (input.pixels.byteLength !== pixels * 4) {
+      return this.runtimeError("WORKER_INVALID_IMAGE", "RGBA pixel length does not match image dimensions");
+    }
+    return undefined;
+  }
+
   private runtimeError(code: string, message: string, extra: Partial<WorkerError> = {}): WorkerRuntimeError {
     return new WorkerRuntimeError({ code, message, recoverable: true, ...extra });
   }
+}
+
+function positiveInteger(name: string, value: number): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive safe integer`);
+  }
+}
+
+function serializedBytes(value: unknown): number {
+  const serialized = JSON.stringify(value);
+  return serialized === undefined ? 0 : new TextEncoder().encode(serialized).byteLength;
 }
 
 export function warnIfMainThreadInference(): void {

@@ -1,24 +1,50 @@
-import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { build } from "vite";
+import wasm from "vite-plugin-wasm";
 
-const root = resolve(import.meta.dirname, "../../../..");
-for (const packageName of ["wasm-web", "wasm-bundler", "wasm-node"]) {
-  assert.equal(existsSync(resolve(root, `target/${packageName}/LICENSE`)), true);
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(scriptDirectory, "../../../..");
+const nodeEntry = resolve(repositoryRoot, "target/wasm-nodejs/latexsnipper_wasm.js");
+const webEntry = resolve(repositoryRoot, "target/wasm-web/latexsnipper_wasm.js");
+const bundlerEntry = resolve(repositoryRoot, "target/wasm-bundler/latexsnipper_wasm.js");
+
+const require = createRequire(import.meta.url);
+const nodePackage = require(nodeEntry);
+const apiInfo = nodePackage.api_info_v2();
+if (!apiInfo || apiInfo.ok !== true) {
+  throw new Error("Node package did not return a successful API envelope");
 }
-const web = await import(pathToFileURL(resolve(root, "target/wasm-web/latexsnipper_wasm.js")));
-assert.equal(typeof web.default, "function");
-assert.equal(typeof web.capabilities_v2, "function");
 
-const nodeImported = await import(pathToFileURL(resolve(root, "target/wasm-node/latexsnipper_wasm.js")));
-const node = nodeImported.default ?? nodeImported;
-assert.equal(typeof node.api_info_v2, "function");
-const info = node.api_info_v2();
-assert.equal(info.ok, true);
-assert.equal(info.data.wasmApiVersion, 2);
+const webPackage = await import(pathToFileURL(webEntry).href);
+if (typeof webPackage.default !== "function") {
+  throw new Error("Web ESM package does not expose the async initializer");
+}
 
-const bundler = await import(pathToFileURL(resolve(root, "target/wasm-bundler/latexsnipper_wasm.js")));
-assert.equal(typeof bundler.capabilities_v2, "function");
+const normalizedBundlerEntry = bundlerEntry.replaceAll("\\", "/");
+await build({
+  configFile: false,
+  logLevel: "silent",
+  plugins: [
+    wasm(),
+    {
+      name: "latexsnipper-generated-package-smoke",
+      resolveId(id) {
+        return id === "virtual:entry" ? "\0virtual:entry" : null;
+      },
+      load(id) {
+        if (id !== "\0virtual:entry") return null;
+        return `import { api_info_v2 } from ${JSON.stringify(normalizedBundlerEntry)}; export { api_info_v2 };`;
+      },
+    },
+  ],
+  build: {
+    write: false,
+    target: "esnext",
+    rollupOptions: { input: "virtual:entry" },
+  },
+});
 
-console.log("web ESM, Node, and bundler package imports passed");
+console.log("Node, web ESM, and bundler package smoke passed");

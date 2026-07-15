@@ -69,6 +69,9 @@ sha2 = "0.10"
 cap-std = "=4.0.2"
 cap-fs-ext = "=4.0.2"
 
+[patch.crates-io]
+tract-hir = { path = "vendor/tract-hir-0.21.10" }
+
 # Root package for examples and tests
 [package]
 name = "latexsnipper-core"

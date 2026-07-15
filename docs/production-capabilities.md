@@ -89,12 +89,16 @@ Synchronous OCR SDK entry points execute work on a dedicated OS thread so caller
 inside an existing Tokio runtime do not trigger nested-runtime panics.
 
 WASM semantic conversion is stable. WASM recognition, progress/cancellation, and
-model-memory management remain experimental. Hosted Chrome runs real ONNX execution
-through Tract and the document pipeline using deterministic synthetic detector and
-recognizer fixtures. This proves browser runtime and pipeline compatibility, not
-production-model accuracy. Capability readiness follows loaded artifact profiles;
-table and handwriting remain unavailable. Native binary exporters are not linked
-into the browser target.
+model-memory management remain experimental. Chrome and Firefox execute deterministic
+text, table, and handwriting fixtures through Tract and the document pipeline. The
+table profile uses a built-in projection structure backend when no compatible structure
+model is loaded and requires a validated text recognizer. The handwriting profile
+requires a TrOCR encoder, decoder, tokenizer, preprocessing metadata, and output schema.
+A production TrOCR encoder/decoder also compiles and executes through Tract in the
+opt-in real-model test. These tests prove runtime compatibility, not OCR accuracy.
+TATR is Tract-compatible but exceeds the default browser hard-timeout budget, while
+current SLANet exports require an unsupported ONNX Loop; neither is a default browser
+profile. Native binary exporters are not linked into the browser target.
 
 Built-in Rust plugin ordering, failure policies, transactional patches, cooperative
 soft deadlines, quarantine, and bounded concurrency are stable. The versioned

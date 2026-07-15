@@ -9,6 +9,7 @@ use crate::artifacts::RecognizedTable;
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::nodes::utils::resolve_model_handle;
+use crate::nodes::utils::resolve_variant;
 
 /// Parses table structure using a configurable backend.
 ///
@@ -79,6 +80,7 @@ impl TableStructureNode {
         let backend = match variant.as_str() {
             "slanet-plus" | "slanet" => "slanet",
             "tatr-structure" | "tatr" => "tatr",
+            "projection" => "projection",
             _ => return None,
         };
 
@@ -99,7 +101,11 @@ impl TableStructureNode {
         }
 
         if let Some(choice) = self.explicit_choice(ctx) {
-            return vec![choice];
+            return if choice.backend == "projection" {
+                Vec::new()
+            } else {
+                vec![choice]
+            };
         }
 
         match ctx.parse_mode {
@@ -153,10 +159,22 @@ impl PipelineNode for TableStructureNode {
         let mut backend_sessions: Vec<(String, Box<dyn InferenceSession>)> = Vec::new();
 
         for choice in choices {
-            let Some(model_path) = self.backend_model_path(&models, &choice.variant) else {
-                continue;
+            let model_path = if ctx
+                .model_variants
+                .get("table-struct")
+                .is_some_and(|variant| variant == &choice.variant)
+            {
+                match resolve_variant(ctx, &models, "table-struct") {
+                    Ok((_, model_path, _)) => model_path,
+                    Err(_) => continue,
+                }
+            } else {
+                let Some(model_path) = self.backend_model_path(&models, &choice.variant) else {
+                    continue;
+                };
+                model_path
             };
-            let Ok(handle) = resolve_model_handle(ctx, &choice.backend, model_path) else {
+            let Ok(handle) = resolve_model_handle(ctx, "table-struct", model_path) else {
                 continue;
             };
             let Some(backend) = ctx.backend.as_ref() else {
@@ -178,7 +196,14 @@ impl PipelineNode for TableStructureNode {
             }
         }
 
-        if backend_sessions.is_empty() && self.backend.as_str() != "projection" {
+        let projection_selected = ctx
+            .model_variants
+            .get("table-struct")
+            .is_some_and(|variant| variant == "projection");
+        if backend_sessions.is_empty()
+            && self.backend.as_str() != "projection"
+            && !projection_selected
+        {
             ctx.diagnostic_warn(
                 "table_structure",
                 "No table structure model available; falling back to projection backend",

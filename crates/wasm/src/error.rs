@@ -7,6 +7,8 @@ pub enum WasmErrorCode {
     InvalidArgument,
     InvalidImage,
     ImageLimitExceeded,
+    TableElementLimitExceeded,
+    ResultLimitExceeded,
     UnsupportedMode,
     UnsupportedFormat,
     ModelArtifactMissing,

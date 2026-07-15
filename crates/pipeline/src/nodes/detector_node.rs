@@ -276,17 +276,39 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let (det_config, det_model_path, _variant_dir) =
-            match resolve_variant(ctx, models, "handwriting-det") {
-                Ok(r) => r,
-                Err(_) => {
-                    ctx.diagnostic_warn(
-                        "detect_handwriting",
-                        "Handwriting detection model not found, skipping",
-                    );
+        let (det_config, det_model_path, _variant_dir) = match resolve_variant(
+            ctx,
+            models,
+            "handwriting-det",
+        ) {
+            Ok(r) => r,
+            Err(_) => {
+                if ctx.model_variants.contains_key("formula-rec") {
+                    ctx.artifacts.handwriting_detections =
+                        vec![latexsnipper_inference::DetectionBox::rect(
+                            latexsnipper_ast::Rect::new(
+                                0.0,
+                                0.0,
+                                image.width() as f32,
+                                image.height() as f32,
+                            ),
+                            1.0,
+                            2,
+                            "handwriting_explicit_region".to_string(),
+                        )];
+                    ctx.diagnostic_info(
+                            "detect_handwriting",
+                            "No handwriting detector was selected; explicit handwriting mode uses the full input region",
+                        );
                     return Ok(());
                 }
-            };
+                ctx.diagnostic_warn(
+                    "detect_handwriting",
+                    "Handwriting detection model not found, skipping",
+                );
+                return Ok(());
+            }
+        };
 
         let det_params = HandwritingDetParams::from_config(&det_config);
         let det_handle = resolve_model_handle(ctx, "handwriting-det", det_model_path)?;
@@ -313,17 +335,36 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         models: &std::path::Path,
     ) -> Result<()> {
-        let (det_config, det_model_path, _variant_dir) =
-            match resolve_variant(ctx, models, "table-det") {
-                Ok(r) => r,
-                Err(_) => {
-                    ctx.diagnostic_warn(
-                        "detect_table",
-                        "Table detection model not found, skipping",
-                    );
+        let (det_config, det_model_path, _variant_dir) = match resolve_variant(
+            ctx,
+            models,
+            "table-det",
+        ) {
+            Ok(r) => r,
+            Err(_) => {
+                if ctx.model_variants.contains_key("table-struct") {
+                    ctx.artifacts.table_detections =
+                        vec![latexsnipper_inference::DetectionBox::rect(
+                            latexsnipper_ast::Rect::new(
+                                0.0,
+                                0.0,
+                                image.width() as f32,
+                                image.height() as f32,
+                            ),
+                            1.0,
+                            3,
+                            "table_explicit_region".to_string(),
+                        )];
+                    ctx.diagnostic_info(
+                            "detect_table",
+                            "No table detector was selected; explicit table mode uses the full input region",
+                        );
                     return Ok(());
                 }
-            };
+                ctx.diagnostic_warn("detect_table", "Table detection model not found, skipping");
+                return Ok(());
+            }
+        };
 
         let det_handle = resolve_model_handle(ctx, "table-det", det_model_path)?;
 

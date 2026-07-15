@@ -105,6 +105,7 @@ pub fn set_model_memory_limits_v2(
                 total_model_bytes,
                 max_image_pixels,
                 profile: "custom",
+                ..MemoryLimits::default()
             }),
             Vec::new(),
         )
@@ -225,7 +226,10 @@ async fn recognize_internal(
         return error_to_js(error);
     }
 
-    let diagnostics = document.diagnostics.iter().map(api_diagnostic).collect();
+    let diagnostics: Vec<_> = document.diagnostics.iter().map(api_diagnostic).collect();
+    if let Err(error) = validate_recognition_result(&document, &diagnostics) {
+        return error_to_js(error);
+    }
     response_to_js(WasmResponse::success(document, diagnostics))
 }
 
@@ -448,6 +452,7 @@ fn engine_config(profile: &ProfileValidation) -> EngineConfig {
             "text-rec" => config.set_text_rec(variant),
             "table-det" => config.set_table_det(variant),
             "table-struct" => config.set_table_struct(variant),
+            "handwriting-det" => config.set_handwriting_det(variant),
             _ => config,
         };
     }
@@ -465,10 +470,20 @@ fn validate_image(
             "Image width and height must be positive",
         ));
     }
+    let limits = STATE.with(|cell| cell.borrow().limits());
+    if width > limits.max_image_width || height > limits.max_image_height {
+        return Err(WasmError::new(
+            WasmErrorCode::ImageLimitExceeded,
+            format!(
+                "Image dimensions {width}x{height} exceed the configured {}x{} limit",
+                limits.max_image_width, limits.max_image_height
+            ),
+        ));
+    }
     let pixel_count = u64::from(width)
         .checked_mul(u64::from(height))
         .ok_or_else(|| WasmError::new(WasmErrorCode::ImageLimitExceeded, "Image is too large"))?;
-    let limit = STATE.with(|cell| cell.borrow().limits().max_image_pixels);
+    let limit = limits.max_image_pixels;
     if pixel_count > limit {
         return Err(WasmError::new(
             WasmErrorCode::ImageLimitExceeded,
@@ -494,6 +509,55 @@ fn validate_image(
         PixelFormat::Rgba,
         pixels,
     ))
+}
+
+fn validate_recognition_result(
+    document: &Document,
+    diagnostics: &[ApiDiagnostic],
+) -> Result<(), WasmError> {
+    let limits = STATE.with(|cell| cell.borrow().limits());
+    let table_elements = document
+        .all_blocks()
+        .into_iter()
+        .filter_map(|block| match block {
+            latexsnipper_ast::Block::Table(table) => Some(
+                table
+                    .rows
+                    .iter()
+                    .map(|row| row.cells.len() as u64)
+                    .sum::<u64>(),
+            ),
+            _ => None,
+        })
+        .sum::<u64>();
+    if table_elements > limits.max_table_elements {
+        return Err(WasmError::new(
+            WasmErrorCode::TableElementLimitExceeded,
+            format!(
+                "Recognition returned {table_elements} table elements; configured limit is {}",
+                limits.max_table_elements
+            ),
+        )
+        .at_stage("result-validation"));
+    }
+
+    let result_bytes = serde_json::to_vec(&(document, diagnostics))
+        .map_err(|error| {
+            WasmError::new(WasmErrorCode::SerializationFailed, error.to_string())
+                .at_stage("result-validation")
+        })?
+        .len() as u64;
+    if result_bytes > limits.max_result_bytes {
+        return Err(WasmError::new(
+            WasmErrorCode::ResultLimitExceeded,
+            format!(
+                "Recognition result is {result_bytes} bytes; configured limit is {}",
+                limits.max_result_bytes
+            ),
+        )
+        .at_stage("result-validation"));
+    }
+    Ok(())
 }
 
 fn emit_progress(callback: Option<&Function>, stage: &str, progress: f64) -> Result<(), WasmError> {

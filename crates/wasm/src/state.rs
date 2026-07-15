@@ -15,7 +15,11 @@ const MIB: u64 = 1024 * 1024;
 pub struct MemoryLimits {
     pub per_artifact_bytes: u64,
     pub total_model_bytes: u64,
+    pub max_image_width: u32,
+    pub max_image_height: u32,
     pub max_image_pixels: u64,
+    pub max_table_elements: u64,
+    pub max_result_bytes: u64,
     pub profile: &'static str,
 }
 
@@ -24,7 +28,11 @@ impl Default for MemoryLimits {
         Self {
             per_artifact_bytes: 128 * MIB,
             total_model_bytes: 256 * MIB,
+            max_image_width: 8_192,
+            max_image_height: 8_192,
             max_image_pixels: 40_000_000,
+            max_table_elements: 4_096,
+            max_result_bytes: 16 * MIB,
             profile: "balanced",
         }
     }
@@ -35,7 +43,11 @@ impl MemoryLimits {
         Self {
             per_artifact_bytes: 64 * MIB,
             total_model_bytes: 128 * MIB,
+            max_image_width: 4_096,
+            max_image_height: 4_096,
             max_image_pixels: 16_000_000,
+            max_table_elements: 2_048,
+            max_result_bytes: 8 * MIB,
             profile: "low-memory",
         }
     }
@@ -300,7 +312,11 @@ impl WasmState {
     pub fn set_limits(&mut self, limits: MemoryLimits) -> Result<Vec<String>, WasmError> {
         if limits.per_artifact_bytes == 0
             || limits.total_model_bytes == 0
+            || limits.max_image_width == 0
+            || limits.max_image_height == 0
             || limits.max_image_pixels == 0
+            || limits.max_table_elements == 0
+            || limits.max_result_bytes == 0
             || limits.per_artifact_bytes > limits.total_model_bytes
         {
             return Err(WasmError::new(
@@ -434,7 +450,11 @@ mod tests {
         MemoryLimits {
             per_artifact_bytes: total,
             total_model_bytes: total,
+            max_image_width: 10,
+            max_image_height: 10,
             max_image_pixels: 100,
+            max_table_elements: 100,
+            max_result_bytes: 1_024,
             profile: "test",
         }
     }

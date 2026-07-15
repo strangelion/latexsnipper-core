@@ -9,7 +9,7 @@ use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_inference::{
-    load_keys, load_keys_from_str, recognize_text_with_keys, TextRecParams,
+    load_keys, load_keys_from_str, recognize_text_with_keys, RecognitionResult, TextRecParams,
 };
 use latexsnipper_model::ModelConfig;
 use latexsnipper_runtime::{
@@ -172,6 +172,17 @@ impl TextRecognitionService {
         rect: &Rect,
         quad: Option<&Quad>,
     ) -> Result<String> {
+        self.recognize_region_result(image, rect, quad)
+            .map(|result| result.text)
+    }
+
+    /// Recognize a region while preserving OCR confidence for AST consumers.
+    pub fn recognize_region_result(
+        &self,
+        image: &SnipperImage,
+        rect: &Rect,
+        quad: Option<&Quad>,
+    ) -> Result<RecognitionResult> {
         if let Some(q) = quad {
             let (tw, th) = q.warp_target_size();
             let padding = (th as f32 * 0.1).max(2.0);
@@ -184,7 +195,7 @@ impl TextRecognitionService {
                 &self.params,
             )?;
             if !result.text.trim().is_empty() {
-                return Ok(result.text);
+                return Ok(result);
             }
         }
 
@@ -198,7 +209,7 @@ impl TextRecognitionService {
             &self.params,
         )?;
 
-        Ok(result.text)
+        Ok(result)
     }
 }
 

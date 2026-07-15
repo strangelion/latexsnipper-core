@@ -187,12 +187,57 @@ fn normalize_type_dimensions(value_type: &mut tract_onnx::pb::TypeProto) -> usiz
         let Some(DimensionValue::DimParam(parameter)) = dimension.value.as_mut() else {
             continue;
         };
-        if parameter.contains('.') {
-            *parameter = parameter.replace('.', "_");
+        if let Some(normalized_parameter) = normalize_dimension_parameter(parameter) {
+            *parameter = normalized_parameter;
             normalized += 1;
         }
     }
     normalized
+}
+
+fn normalize_dimension_parameter(parameter: &str) -> Option<String> {
+    if parameter == "batch_size" {
+        return Some("1".to_string());
+    }
+    if parameter == "num_channels" {
+        return Some("3".to_string());
+    }
+    let mut translated = parameter.to_string();
+    for axis in ["height", "width"] {
+        for divisor in [2, 4, 8, 16, 32] {
+            let pattern = format!("((({axis} - 1)//{divisor})) + 1");
+            let replacement = format!("(({axis}+{})/{divisor})", divisor - 1);
+            translated = translated.replace(&pattern, &replacement);
+        }
+    }
+    translated.retain(|character| !character.is_ascii_whitespace());
+    let tract_expression = !translated.contains("//")
+        && translated.chars().all(|character| {
+            character.is_ascii_alphanumeric()
+                || matches!(character, '_' | '+' | '-' | '*' | '/' | '(' | ')')
+        });
+    if tract_expression {
+        return (translated != parameter).then_some(translated);
+    }
+
+    let mut symbol: String = parameter
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '_' {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if symbol
+        .chars()
+        .next()
+        .is_some_and(|character| character.is_ascii_digit())
+    {
+        symbol.insert_str(0, "dim_");
+    }
+    (symbol != parameter).then_some(symbol)
 }
 
 #[cfg(test)]
@@ -246,5 +291,46 @@ mod tests {
             Some(DimensionValue::DimParam("DynamicDimension_0".to_string()))
         );
         assert_eq!(shape.dim[1].value, Some(DimensionValue::DimValue(3)));
+    }
+
+    #[test]
+    fn normalizes_exporter_dimension_expressions_to_tract_symbols() {
+        let mut shape = TypeProto {
+            denotation: String::new(),
+            value: Some(TypeValue::TensorType(Tensor {
+                elem_type: 1,
+                shape: Some(TensorShapeProto {
+                    dim: vec![tract_onnx::pb::tensor_shape_proto::Dimension {
+                        denotation: String::new(),
+                        value: Some(DimensionValue::DimParam(
+                            "(((height - 1)//2)) + 1".to_string(),
+                        )),
+                    }],
+                }),
+            })),
+        };
+        assert_eq!(normalize_type_dimensions(&mut shape), 1);
+        let TypeValue::TensorType(tensor) = shape.value.unwrap();
+        let value = tensor.shape.unwrap().dim[0].value.clone().unwrap();
+        let DimensionValue::DimParam(parameter) = value else {
+            panic!("expected symbolic dimension");
+        };
+        assert!(parameter.chars().all(|character| {
+            character.is_ascii_alphanumeric()
+                || matches!(character, '_' | '+' | '-' | '*' | '/' | '(' | ')')
+        }));
+        assert!(!parameter.contains("//"));
+    }
+
+    #[test]
+    fn fixes_exported_rgb_channel_dimension() {
+        assert_eq!(
+            normalize_dimension_parameter("batch_size"),
+            Some("1".to_string())
+        );
+        assert_eq!(
+            normalize_dimension_parameter("num_channels"),
+            Some("3".to_string())
+        );
     }
 }
