@@ -25,6 +25,7 @@ members = [
     "crates/tests",
     "crates/tract",
     "crates/evaluation",
+    "crates/fidelity",
 ]
 
 [workspace.package]
@@ -66,6 +67,7 @@ latexsnipper-ffi = { path = "crates/ffi", version = "3.0.0-alpha.1" }
 latexsnipper-wasm = { path = "crates/wasm", version = "3.0.0-alpha.1" }
 latexsnipper-cli = { path = "crates/cli", version = "3.0.0-alpha.1" }
 latexsnipper-tests = { path = "crates/tests", version = "3.0.0-alpha.1" }
+latexsnipper-fidelity = { path = "crates/fidelity", version = "3.0.0-alpha.1" }
 sha2 = "0.10"
 cap-std = "=4.0.2"
 cap-fs-ext = "=4.0.2"

@@ -1,0 +1,32 @@
+[package]
+name = "latexsnipper-fidelity"
+description = "Executable Office and PDF fidelity evidence framework"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[dependencies]
+latexsnipper-ast.workspace = true
+latexsnipper-conversion = { workspace = true, features = ["native"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+lopdf = "0.44"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[[bin]]
+name = "fidelity-check"
+path = "src/bin/fidelity_check.rs"
+
+[[bin]]
+name = "generate-fidelity-fixtures"
+path = "src/bin/generate_fidelity_fixtures.rs"
+
+[[bin]]
+name = "generate-fidelity-capabilities"
+path = "src/bin/generate_fidelity_capabilities.rs"

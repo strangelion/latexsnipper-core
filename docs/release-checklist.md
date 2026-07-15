@@ -26,6 +26,8 @@ Alpha 1 is not an RC and must not satisfy later runtime/security items by checki
 - [ ] Dependency audit, real libFuzzer smoke, model URL verification, and benchmark
       artifacts pass.
 - [ ] Known fidelity and unsupported capabilities are in release notes.
+- [x] Office/PDF golden corpora, six-dimensional evidence, diagnostic, asset,
+      opaque-part, and optional visual/application layers run in CI.
 
 ## GA blockers
 
@@ -37,6 +39,8 @@ Alpha 1 is not an RC and must not satisfy later runtime/security items by checki
       document-orientation compatibility smoke.
 - [ ] Verify live GitHub ruleset/CODEOWNERS approval requirements.
 - [ ] Define supported fidelity guarantees per Office/PDF corpus and platform.
+  - [x] Core registry and repository corpus guarantees are generated and gated.
+  - [ ] Execute and approve platform-specific Microsoft Office/viewer visual smoke.
 
 ## Optional future enhancements
 

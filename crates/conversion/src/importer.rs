@@ -3,9 +3,9 @@ use std::path::Path;
 
 use base64::Engine as _;
 use latexsnipper_ast::{
-    AssetFormat, AssetId, AssetStorage, Block, DiagnosticLevel, Document, Formula, FormulaBlock,
-    ImportOptions, Inline, InputFormat, MediaAsset, MediaRole, Metadata, NodeIdGenerator, Page,
-    ParagraphBlock, TextRun,
+    AssetFormat, AssetId, AssetStorage, Block, Diagnostic, DiagnosticLevel, Document, Formula,
+    FormulaBlock, ImportOptions, Inline, InputFormat, MediaAsset, MediaRole, Metadata,
+    NodeIdGenerator, Page, ParagraphBlock, TextRun,
 };
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_syntax::latex::LatexParser;
@@ -142,6 +142,9 @@ impl DocumentImporter {
             }
         };
 
+        if is_office(format) {
+            append_office_feature_diagnostics(bytes, format, &mut document)?;
+        }
         if options.preserve_unknown_parts && is_office(format) {
             preserve_package_parts(bytes, &mut document, options.max_decompressed_size)?;
         }
@@ -544,6 +547,135 @@ fn preserve_package_parts(bytes: &[u8], document: &mut Document, limit: u64) -> 
         });
     }
     Ok(())
+}
+
+fn append_office_feature_diagnostics(
+    bytes: &[u8],
+    format: InputFormat,
+    document: &mut Document,
+) -> Result<()> {
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+        .map_err(|error| SnipperError::InvalidFormat(format!("Invalid OOXML ZIP: {error}")))?;
+    let mut has_chart = false;
+    let mut has_smartart = false;
+    let mut has_ole = false;
+    let mut has_revisions = false;
+    let mut has_document_stories = false;
+    let mut has_notes_or_animations = false;
+    let mut has_advanced_workbook_features = false;
+    for index in 0..archive.len() {
+        let mut file = archive
+            .by_index(index)
+            .map_err(|error| SnipperError::InvalidFormat(format!("Invalid OOXML part: {error}")))?;
+        let name = file.name().to_ascii_lowercase();
+        has_chart |= name.contains("/charts/");
+        has_smartart |= name.contains("/diagrams/");
+        has_ole |= name.contains("/embeddings/");
+        has_revisions |= name.contains("word/comments");
+        has_document_stories |= name.contains("word/header")
+            || name.contains("word/footer")
+            || name.contains("word/footnotes");
+        has_notes_or_animations |= name.contains("/notesslides/");
+        has_advanced_workbook_features |=
+            name.contains("/pivottables/") || name.contains("vbaproject.bin");
+        if name.ends_with(".xml") || name.ends_with(".rels") {
+            let mut part = Vec::new();
+            file.by_ref()
+                .take(4 * 1024 * 1024)
+                .read_to_end(&mut part)
+                .map_err(|error| SnipperError::Io(format!("Failed to scan '{name}': {error}")))?;
+            let part = String::from_utf8_lossy(&part).to_ascii_lowercase();
+            has_chart |= part.contains("<c:chart");
+            has_smartart |= part.contains("smartart");
+            has_ole |= part.contains("oleobject") || part.contains("oleobj");
+            has_revisions |= part.contains("<w:ins") || part.contains("<w:del");
+            has_notes_or_animations |= part.contains("<p:timing");
+            has_advanced_workbook_features |= part.contains("<conditionalformatting");
+        }
+    }
+
+    let mut add = |code: &str, feature: &str, message: &str| {
+        if document
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == code)
+        {
+            return;
+        }
+        let mut diagnostic = Diagnostic::new(DiagnosticLevel::Warning, code, message)
+            .with_formats(Some(format_label(format)), Some("AST"))
+            .with_recoverable(true);
+        diagnostic.data = serde_json::json!({ "feature": feature });
+        document.diagnostics.push(diagnostic);
+    };
+
+    if has_chart {
+        add(
+            latexsnipper_ast::W_CHART_DATA_SIMPLIFIED,
+            "charts",
+            "Office chart content is preserved opaquely but is not fully editable in the AST",
+        );
+    }
+    if has_smartart {
+        add(
+            latexsnipper_ast::W_SMARTART_NOT_SUPPORTED,
+            "smartart",
+            "SmartArt content is preserved opaquely but is not semantically editable",
+        );
+    }
+    if has_ole {
+        add(
+            latexsnipper_ast::W_OLE_NOT_SUPPORTED,
+            "embedded-objects",
+            "Embedded Office objects are preserved opaquely but cannot be activated by Core",
+        );
+    }
+
+    match format {
+        InputFormat::OfficeDocx => {
+            if has_revisions {
+                add(
+                    latexsnipper_ast::W_REVISION_NOT_FULLY_PRESERVED,
+                    "comments-revisions",
+                    "Comments and tracked revisions are not fully represented in the AST",
+                );
+            }
+            if has_document_stories {
+                add(
+                    latexsnipper_ast::W_UNSUPPORTED_FEATURE,
+                    "document-stories",
+                    "Headers, footers, and notes are preserved as package parts but not fully imported",
+                );
+            }
+        }
+        InputFormat::OfficePptx => {
+            if has_notes_or_animations {
+                add(
+                    latexsnipper_ast::W_UNSUPPORTED_FEATURE,
+                    "notes-animations",
+                    "Slide notes and animations are preserved as package parts but not fully imported",
+                );
+            }
+        }
+        InputFormat::OfficeXlsx if has_advanced_workbook_features => {
+            add(
+                latexsnipper_ast::W_UNSUPPORTED_FEATURE,
+                "advanced-workbook-features",
+                "Pivots, macros, and conditional formatting are preserved opaquely but not fully imported",
+            );
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn format_label(format: InputFormat) -> &'static str {
+    match format {
+        InputFormat::OfficeDocx => "DOCX",
+        InputFormat::OfficePptx => "PPTX",
+        InputFormat::OfficeXlsx => "XLSX",
+        _ => "Office",
+    }
 }
 
 fn apply_options(document: &mut Document, options: &ImportOptions) -> Result<()> {
