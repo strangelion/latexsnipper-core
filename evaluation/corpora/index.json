@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "corpora": [
+    { "manifest": "printed-formula.json", "tiers": ["pull_request", "scheduled", "release"] },
+    { "manifest": "handwritten-formula.json", "tiers": ["pull_request", "scheduled", "release"] },
+    { "manifest": "latin-text.json", "tiers": ["pull_request", "scheduled", "release"] },
+    { "manifest": "simplified-chinese-text.json", "tiers": ["pull_request", "scheduled", "release"] },
+    { "manifest": "mixed-cjk-latin-text.json", "tiers": ["pull_request", "scheduled", "release"] },
+    { "manifest": "mixed-formula-text.json", "tiers": ["pull_request", "scheduled", "release"] },
+    { "manifest": "document-layout.json", "tiers": ["pull_request", "scheduled", "release"] },
+    { "manifest": "table-structure.json", "tiers": ["pull_request", "scheduled", "release"] },
+    { "manifest": "orientation.json", "tiers": ["pull_request", "scheduled", "release"] }
+  ]
+}

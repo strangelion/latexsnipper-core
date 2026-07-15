@@ -78,6 +78,44 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo bench -p latexsnipper-tests --bench core_bench
 
+  ocr-evidence-contract:
+    name: OCR evidence contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate corpora and generate non-production contract predictions
+        shell: bash
+        run: |
+          cargo run -p latexsnipper-evaluation --bin ocr-eval -- \
+            validate --index evaluation/corpora/index.json
+          cargo run -p latexsnipper-evaluation --bin ocr-eval -- \
+            contract-predictions \
+            --index evaluation/corpora/index.json \
+            --tier pull-request \
+            --model-spec evaluation/contract-oracle-v1.json \
+            --output target/evaluation/contract-predictions.json
+      - name: Calculate metrics and enforce the contract gates
+        shell: bash
+        run: |
+          cargo run -p latexsnipper-evaluation --bin ocr-eval -- \
+            evaluate \
+            --index evaluation/corpora/index.json \
+            --predictions target/evaluation/contract-predictions.json \
+            --gates evaluation/gates/pull-request.json \
+            --tier pull-request \
+            --source-commit "$GITHUB_SHA" \
+            --generated-at-utc "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --output target/evaluation/pull-request-evidence.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ocr-evidence-contract-${{ github.run_id }}
+          path: target/evaluation/pull-request-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
   fmt:
     name: Format
     runs-on: ubuntu-latest

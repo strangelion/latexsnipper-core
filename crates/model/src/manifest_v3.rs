@@ -44,6 +44,10 @@ pub struct ModelEvidenceV3 {
     pub status: ModelEvidenceStatusV3,
     pub corpus_id: Option<String>,
     pub benchmark_id: Option<String>,
+    #[serde(default)]
+    pub report_path: Option<String>,
+    #[serde(default)]
+    pub report_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -212,6 +216,8 @@ impl ModelManifestV3 {
                         status: ModelEvidenceStatusV3::Unavailable,
                         corpus_id: None,
                         benchmark_id: None,
+                        report_path: None,
+                        report_sha256: None,
                     },
                     notes: variant.notes,
                 });
@@ -308,7 +314,17 @@ impl ModelManifestV3 {
                             .evidence
                             .benchmark_id
                             .as_deref()
-                            .is_none_or(str::is_empty))
+                            .is_none_or(str::is_empty)
+                        || profile
+                            .evidence
+                            .report_path
+                            .as_deref()
+                            .is_none_or(|path| !valid_package_path(path))
+                        || profile
+                            .evidence
+                            .report_sha256
+                            .as_deref()
+                            .is_none_or(|digest| !valid_sha256(digest)))
                 {
                     return Err(ModelManifestV3Error::InvalidContract(format!(
                         "validated profile '{}' lacks executable evidence metadata",
@@ -483,5 +499,19 @@ mod tests {
             migrated.validate_contract(),
             Err(ModelManifestV3Error::InvalidContract(_))
         ));
+
+        let profile = &mut migrated.categories.get_mut("text-rec").unwrap().profiles[0];
+        profile.supported_modes = vec!["text".to_string()];
+        profile.supported_languages = vec!["en".to_string()];
+        profile.runtime_compatibility = vec!["onnxruntime-cpu".to_string()];
+        profile.memory_estimate_bytes = Some(1024);
+        profile.preprocessing_schema = Some(serde_json::json!({"version": 1}));
+        profile.postprocessing_schema = Some(serde_json::json!({"version": 1}));
+        profile.output_schema = Some(serde_json::json!({"version": 1}));
+        profile.evidence.corpus_id = Some("repository-latin-text-v1".to_string());
+        profile.evidence.benchmark_id = Some("ocr-evidence-v1".to_string());
+        profile.evidence.report_path = Some("evidence/text-rec.json".to_string());
+        profile.evidence.report_sha256 = Some("a".repeat(64));
+        migrated.validate_contract().unwrap();
     }
 }

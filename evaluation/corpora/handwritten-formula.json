@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-handwritten-formula-v1",
+  "description": "Deterministically generated freehand-stroke formula regression subset.",
+  "task": "handwritten_formula",
+  "source": {
+    "name": "LaTeXSnipper deterministic handwritten fixture generator",
+    "uri": "crates/evaluation/examples/generate_handwritten_fixture.rs",
+    "revision": "generator-v1"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "latex",
+  "preprocessingAssumptions": [
+    "Use the generated 640 by 240 RGB PNG without cropping.",
+    "Treat the connected freehand strokes as one formula line."
+  ],
+  "contentSha256": "2775966eca15743beb29a633bdd0603147e661ca20c3c5e82a9fc9d48e7b987b",
+  "samples": [
+    {
+      "id": "handwritten-formula-001",
+      "asset": "assets/handwritten-formula.png",
+      "sha256": "4e5ab79ad33beafb54b6d40ca2d38d02b52fc4d7e18152ec84d0c20ae31df64f",
+      "annotation": { "kind": "formula", "latex": "x^2+y^2=1" }
+    }
+  ]
+}

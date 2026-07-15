@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "evaluation-contract-oracle-v1",
+  "purpose": "Exercise corpus validation, metric calculation, evidence serialization, and gate failures without claiming OCR quality.",
+  "behavior": "Return the checked-in reference annotation for each known sample ID.",
+  "productionModel": false
+}

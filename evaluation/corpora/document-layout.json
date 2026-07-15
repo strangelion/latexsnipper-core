@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-document-layout-v1",
+  "description": "Repository-authored document layout class and geometry subset.",
+  "task": "document_layout",
+  "source": {
+    "name": "LaTeXSnipper benchmark fixtures",
+    "uri": "https://github.com/strangelion/latexsnipper-core/tree/521eafddb8fc3980de145a560f3d0563ccd7eb98/assets/benchmark",
+    "revision": "521eafddb8fc3980de145a560f3d0563ccd7eb98"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "class-aware-xywh-pixels-v1",
+  "preprocessingAssumptions": [
+    "Bounding boxes use top-left x, top-left y, width, and height in source pixels.",
+    "Evaluate class-aware matching at intersection-over-union 0.5."
+  ],
+  "contentSha256": "33cb015725018a695169bae5f3c3c15898b899ce02312b923e4c745a921b1bcc",
+  "samples": [
+    {
+      "id": "document-layout-001",
+      "asset": "assets/document-layout.png",
+      "sha256": "de52c1b25201c0cd63a4ec3e88ffebc15d09f2f8a444ed48e7a4b0f2a02698db",
+      "annotation": {
+        "kind": "layout",
+        "regions": [
+          { "class": "heading", "bbox": [75.0, 65.0, 575.0, 70.0] },
+          { "class": "paragraph", "bbox": [75.0, 140.0, 1375.0, 60.0] },
+          { "class": "formula", "bbox": [700.0, 220.0, 260.0, 75.0] },
+          { "class": "paragraph", "bbox": [75.0, 310.0, 790.0, 65.0] },
+          { "class": "heading", "bbox": [75.0, 405.0, 210.0, 65.0] },
+          { "class": "paragraph", "bbox": [75.0, 465.0, 715.0, 65.0] },
+          { "class": "formula", "bbox": [590.0, 545.0, 510.0, 155.0] },
+          { "class": "heading", "bbox": [75.0, 730.0, 330.0, 70.0] },
+          { "class": "paragraph", "bbox": [75.0, 790.0, 625.0, 70.0] },
+          { "class": "formula", "bbox": [650.0, 875.0, 390.0, 90.0] }
+        ]
+      }
+    }
+  ]
+}

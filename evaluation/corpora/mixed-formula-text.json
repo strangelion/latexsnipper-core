@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-mixed-formula-text-v1",
+  "description": "Repository-authored mixed document block semantics and reading-order subset.",
+  "task": "mixed_formula_text",
+  "source": {
+    "name": "LaTeXSnipper benchmark fixtures",
+    "uri": "https://github.com/strangelion/latexsnipper-core/tree/521eafddb8fc3980de145a560f3d0563ccd7eb98/assets/benchmark",
+    "revision": "521eafddb8fc3980de145a560f3d0563ccd7eb98"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "ordered-semantic-blocks-v1",
+  "preprocessingAssumptions": [
+    "Decode the full page without cropping.",
+    "Return heading, paragraph, and formula blocks in visual top-to-bottom order."
+  ],
+  "contentSha256": "1b93c4981c46003875c5ad0972a353a78884f98abe19cafa9aee665af699e6ad",
+  "samples": [
+    {
+      "id": "mixed-formula-text-001",
+      "asset": "assets/mixed-formula-text.png",
+      "sha256": "1362598c01a26a2380dc2839791f504fd3003accab5f67e9382b44a23b911dd1",
+      "annotation": {
+        "kind": "document",
+        "blocks": [
+          { "id": "b01", "kind": "heading", "text": "Abstract" },
+          { "id": "b02", "kind": "paragraph", "text": "We present a novel approach to solving the heat equation using Fourier analysis." },
+          { "id": "b03", "kind": "paragraph", "text": "The solution can be expressed as:" },
+          { "id": "b04", "kind": "formula", "text": "u(x,t)=\\sum_{n=1}^{\\infty}B_n\\sin\\left(\\frac{n\\pi x}{L}\\right)e^{-\\alpha(n\\pi/L)^2t}" },
+          { "id": "b05", "kind": "paragraph", "text": "where alpha is the thermal diffusivity and L is the length of the domain." },
+          { "id": "b06", "kind": "heading", "text": "Boundary Conditions" },
+          { "id": "b07", "kind": "paragraph", "text": "For Dirichlet boundary conditions:" },
+          { "id": "b08", "kind": "formula", "text": "u(0,t)=u(L,t)=0" },
+          { "id": "b09", "kind": "paragraph", "text": "The coefficients B_n are determined by the initial condition:" },
+          { "id": "b10", "kind": "formula", "text": "B_n=\\frac{2}{L}\\int_0^L u(x,0)\\sin\\left(\\frac{n\\pi x}{L}\\right)dx" },
+          { "id": "b11", "kind": "heading", "text": "Numerical Results" },
+          { "id": "b12", "kind": "paragraph", "text": "We tested with L=1, alpha=0.01, and initial condition u(x,0)=sin(pi x)." },
+          { "id": "b13", "kind": "paragraph", "text": "The solution converges to zero as t approaches infinity, as expected." }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-latin-text-v1",
+  "description": "Repository-authored Latin OCR smoke subset.",
+  "task": "latin_text",
+  "source": {
+    "name": "LaTeXSnipper OpenOCR fixtures",
+    "uri": "https://github.com/strangelion/latexsnipper-core/tree/e7f3db9a1ec4ef03b6cbee0456dd1e47d1ddae32/tests/fixtures/openocr",
+    "revision": "e7f3db9a1ec4ef03b6cbee0456dd1e47d1ddae32"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "utf-8-text",
+  "preprocessingAssumptions": [
+    "Decode as sRGB without resizing.",
+    "Preserve spaces and reading order; omit trailing newline."
+  ],
+  "contentSha256": "7783917e286a7687790ffc75b3c31bc55f144b64dc772765c95ff8185279e2a1",
+  "samples": [
+    {
+      "id": "latin-text-001",
+      "asset": "assets/latin-text.png",
+      "sha256": "b5c8dbb086cb0d24cc19787ba8cdc388b65dcf3fdeb97a84c02b5306e5626ecd",
+      "annotation": { "kind": "text", "text": "Hello World OCR Test" }
+    }
+  ]
+}

@@ -24,6 +24,7 @@ members = [
     "crates/cli",
     "crates/tests",
     "crates/tract",
+    "crates/evaluation",
 ]
 
 [workspace.package]

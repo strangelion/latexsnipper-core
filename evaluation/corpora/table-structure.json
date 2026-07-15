@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-table-structure-v1",
+  "description": "Repository-authored table structure and cell text subset.",
+  "task": "table_structure",
+  "source": {
+    "name": "LaTeXSnipper OpenOCR fixtures",
+    "uri": "https://github.com/strangelion/latexsnipper-core/tree/e7f3db9a1ec4ef03b6cbee0456dd1e47d1ddae32/tests/fixtures/openocr",
+    "revision": "e7f3db9a1ec4ef03b6cbee0456dd1e47d1ddae32"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "logical-grid-cells-v1",
+  "preprocessingAssumptions": [
+    "Rows and columns are zero based.",
+    "Evaluate cell positions, spans, and normalized UTF-8 text."
+  ],
+  "contentSha256": "1fbef5b4cc699924980cfbde7a8cba3538f1945688f935cb623e65d7d52753a3",
+  "samples": [
+    {
+      "id": "table-structure-001",
+      "asset": "assets/table-structure.png",
+      "sha256": "48d56f963973c17b1e2aecfd2295e7391204c8688ec2f829b92dad686339e46a",
+      "annotation": {
+        "kind": "table",
+        "cells": [
+          { "row": 0, "col": 0, "rowspan": 1, "colspan": 1, "text": "Name" },
+          { "row": 0, "col": 1, "rowspan": 1, "colspan": 1, "text": "Age" },
+          { "row": 0, "col": 2, "rowspan": 1, "colspan": 1, "text": "City" },
+          { "row": 1, "col": 0, "rowspan": 1, "colspan": 1, "text": "Alice" },
+          { "row": 1, "col": 1, "rowspan": 1, "colspan": 1, "text": "30" },
+          { "row": 1, "col": 2, "rowspan": 1, "colspan": 1, "text": "Beijing" },
+          { "row": 2, "col": 0, "rowspan": 1, "colspan": 1, "text": "Bob" },
+          { "row": 2, "col": 1, "rowspan": 1, "colspan": 1, "text": "25" },
+          { "row": 2, "col": 2, "rowspan": 1, "colspan": 1, "text": "Shanghai" },
+          { "row": 3, "col": 0, "rowspan": 1, "colspan": 1, "text": "Carol" },
+          { "row": 3, "col": 1, "rowspan": 1, "colspan": 1, "text": "35" },
+          { "row": 3, "col": 2, "rowspan": 1, "colspan": 1, "text": "Guangzhou" }
+        ]
+      }
+    }
+  ]
+}

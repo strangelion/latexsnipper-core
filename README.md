@@ -535,7 +535,8 @@ See the [Core 3 release checklist](docs/release-checklist.md) and [schema versio
 | [Plugin system](docs/plugin.md) | Execution classes, package verification, permissions, and security boundaries |
 | [CLI option matrix](docs/cli-option-matrix.md) | Option propagation and supported combinations |
 | [Export](docs/export.md) | Visual and package export behavior |
-| [Benchmarks](docs/benchmark.md) | Native and browser benchmark methodology |
+| [Benchmarks](docs/benchmark.md) | Native and browser performance benchmark methodology |
+| [OCR evaluation](docs/ocr-evaluation.md) | Licensed corpora, accuracy metrics, gates, and evidence identity |
 | [Release checklist](docs/release-checklist.md) | RC requirements, GA blockers, and future work |
 | [Architecture](docs/architecture.md) | Core architecture overview |
 | [Pipeline](docs/pipeline.md) | Recognition and processing pipeline |
