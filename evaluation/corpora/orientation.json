@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-orientation-v1",
+  "description": "Deterministically rotated repository text orientation subset.",
+  "task": "orientation",
+  "source": {
+    "name": "LaTeXSnipper deterministic orientation fixture generator",
+    "uri": "crates/evaluation/examples/generate_handwritten_fixture.rs",
+    "revision": "generator-v1"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "clockwise-degrees-v1",
+  "preprocessingAssumptions": [
+    "Classify clockwise image rotation before applying orientation correction.",
+    "Allowed labels are 0, 90, 180, and 270 degrees."
+  ],
+  "contentSha256": "d2744372f198e1f24abc6ceef8bbc6978fc8f58ac8c88f8edea1f34b08477322",
+  "samples": [
+    {
+      "id": "orientation-001",
+      "asset": "assets/orientation.png",
+      "sha256": "fc1282dc135e4989950964f77c5682b994ae65ff151c16e6608eb7621425c24f",
+      "annotation": { "kind": "orientation", "degrees": 90 }
+    }
+  ]
+}

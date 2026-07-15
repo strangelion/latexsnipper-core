@@ -1,0 +1,22 @@
+[package]
+name = "latexsnipper-evaluation"
+description = "Reproducible OCR corpus validation, metrics, and evidence generation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[[bin]]
+name = "ocr-eval"
+path = "src/main.rs"

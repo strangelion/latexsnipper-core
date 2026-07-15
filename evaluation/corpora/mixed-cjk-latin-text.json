@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-mixed-cjk-latin-text-v1",
+  "description": "Repository-authored mixed CJK and Latin OCR smoke subset.",
+  "task": "mixed_cjk_latin_text",
+  "source": {
+    "name": "LaTeXSnipper OpenOCR fixtures",
+    "uri": "https://github.com/strangelion/latexsnipper-core/tree/e7f3db9a1ec4ef03b6cbee0456dd1e47d1ddae32/tests/fixtures/openocr",
+    "revision": "e7f3db9a1ec4ef03b6cbee0456dd1e47d1ddae32"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "utf-8-text",
+  "preprocessingAssumptions": [
+    "Decode as sRGB without resizing.",
+    "Preserve script transitions and spaces; omit trailing newline."
+  ],
+  "contentSha256": "13e9c351709c7ea24a9981dfcf43964038210da9527a195ab35bddceb3925938",
+  "samples": [
+    {
+      "id": "mixed-cjk-latin-text-001",
+      "asset": "assets/mixed-cjk-latin-text.png",
+      "sha256": "5ce56b1cf42baa2e1f544f6ba3d2d57d991361129573dc3dcd880ba18ed36fc7",
+      "annotation": { "kind": "text", "text": "English 中文混合 Mixed Text 测试" }
+    }
+  ]
+}

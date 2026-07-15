@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-simplified-chinese-text-v1",
+  "description": "Repository-authored Simplified Chinese OCR smoke subset.",
+  "task": "simplified_chinese_text",
+  "source": {
+    "name": "LaTeXSnipper OpenOCR fixtures",
+    "uri": "https://github.com/strangelion/latexsnipper-core/tree/e7f3db9a1ec4ef03b6cbee0456dd1e47d1ddae32/tests/fixtures/openocr",
+    "revision": "e7f3db9a1ec4ef03b6cbee0456dd1e47d1ddae32"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "utf-8-text",
+  "preprocessingAssumptions": [
+    "Decode as sRGB without resizing.",
+    "Preserve Simplified Chinese code points; omit trailing newline."
+  ],
+  "contentSha256": "eb8060c6385cc4c6c8b1cca86e310c393f1389f69661263370955a1daa404020",
+  "samples": [
+    {
+      "id": "simplified-chinese-text-001",
+      "asset": "assets/simplified-chinese-text.png",
+      "sha256": "7821fa28abef2620f1801c6093d421a6e88774fc93b190bb1af289aed57acfe4",
+      "annotation": { "kind": "text", "text": "中文识别测试" }
+    }
+  ]
+}

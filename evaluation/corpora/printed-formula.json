@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "repository-printed-formula-v1",
+  "description": "Small repository-authored printed formula regression subset.",
+  "task": "printed_formula",
+  "source": {
+    "name": "LaTeXSnipper benchmark fixtures",
+    "uri": "https://github.com/strangelion/latexsnipper-core/tree/521eafddb8fc3980de145a560f3d0563ccd7eb98/assets/benchmark",
+    "revision": "521eafddb8fc3980de145a560f3d0563ccd7eb98"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-only",
+    "attribution": "LaTeXSnipper contributors",
+    "redistribution": "allowed"
+  },
+  "annotationFormat": "latex",
+  "preprocessingAssumptions": [
+    "Decode as sRGB without cropping.",
+    "Evaluate the complete image as one ordered formula sequence."
+  ],
+  "contentSha256": "ae0c44c61928577cf33b200269761d786b008327d09cb633fecc672c6560678a",
+  "samples": [
+    {
+      "id": "printed-formula-001",
+      "asset": "assets/printed-formula.png",
+      "sha256": "4218f4e10d282e11bc75e731e4c4608031fa19df23414885815c5e259d52833c",
+      "annotation": {
+        "kind": "formula",
+        "latex": "E=mc^2\\;\\;\\int_0^\\infty e^{-x^2}\\,dx=\\frac{\\sqrt{\\pi}}{2}\\;\\;\\frac{a+b}{c}=d"
+      }
+    }
+  ]
+}

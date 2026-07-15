@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "tier": "pull_request",
+  "thresholds": {
+    "printed_formula": {
+      "formula_normalized_exact_match": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must reproduce the normalized formula reference exactly."
+      },
+      "formula_structural_similarity": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must preserve every formula token."
+      }
+    },
+    "handwritten_formula": {
+      "formula_normalized_exact_match": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must reproduce the handwritten reference exactly."
+      },
+      "formula_structural_similarity": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must preserve every handwritten formula token."
+      }
+    },
+    "latin_text": {
+      "cer": {
+        "direction": "maximum",
+        "value": 0.0,
+        "rationale": "The contract oracle must introduce no character edits."
+      },
+      "wer": {
+        "direction": "maximum",
+        "value": 0.0,
+        "rationale": "The contract oracle must introduce no word edits."
+      }
+    },
+    "simplified_chinese_text": {
+      "cer": {
+        "direction": "maximum",
+        "value": 0.0,
+        "rationale": "The contract oracle must preserve every Chinese character."
+      },
+      "wer": {
+        "direction": "maximum",
+        "value": 0.0,
+        "rationale": "The contract oracle must preserve the complete Chinese reference string."
+      }
+    },
+    "mixed_cjk_latin_text": {
+      "cer": {
+        "direction": "maximum",
+        "value": 0.0,
+        "rationale": "The contract oracle must preserve every mixed-script character."
+      },
+      "wer": {
+        "direction": "maximum",
+        "value": 0.0,
+        "rationale": "The contract oracle must preserve mixed-script token boundaries."
+      }
+    },
+    "mixed_formula_text": {
+      "document_block_semantics_f1": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must preserve block kind and normalized content."
+      },
+      "document_reading_order_similarity": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must preserve the complete block reading order."
+      }
+    },
+    "document_layout": {
+      "layout_macro_f1": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must preserve class-aware layout regions."
+      }
+    },
+    "table_structure": {
+      "table_structure_f1": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must preserve every logical cell and span."
+      },
+      "table_tree_similarity": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must preserve the complete ordered table token tree."
+      }
+    },
+    "orientation": {
+      "orientation_accuracy": {
+        "direction": "minimum",
+        "value": 1.0,
+        "rationale": "The contract oracle must preserve the orientation label."
+      }
+    }
+  }
+}
