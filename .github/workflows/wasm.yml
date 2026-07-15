@@ -135,7 +135,7 @@ jobs:
     timeout-minutes: 45
     env:
       MODEL_ARCHIVE: target/test-models/latexsnipper-formula-rec.zip
-      MODEL_SHA256: e07f664d7c2c429f1d3d7266738bf58e0deb1c63da066d7f5292288e8d15276b
+      MODEL_SHA256: fdcc414b9073c73325614faafc6473ddd7e91a80305cdc55f7267195de152a21
       MODEL_URL: https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/latexsnipper-formula-rec.zip
       LATEXSNIPPER_REQUIRE_REAL_MODELS: '1'
     steps:

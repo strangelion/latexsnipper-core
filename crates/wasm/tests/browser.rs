@@ -20,6 +20,19 @@ fn json(value: &JsValue) -> String {
     JSON::stringify(value).unwrap().as_string().unwrap()
 }
 
+fn bordered_table_pixels(width: usize, height: usize) -> Vec<u8> {
+    let mut pixels = vec![255; width * height * 4];
+    for y in 0..height {
+        for x in 0..width {
+            if x == 0 || x + 1 == width || y == 0 || y + 1 == height {
+                let offset = (y * width + x) * 4;
+                pixels[offset..offset + 3].fill(0);
+            }
+        }
+    }
+    pixels
+}
+
 fn load_text_profile() {
     let artifacts: [(&str, &[u8]); 5] = [
         (
@@ -178,16 +191,25 @@ async fn table_profile_runs_projection_structure_and_cell_ocr() {
     );
     assert!(capabilities.contains("table-struct/projection"));
 
-    let recognized = recognize_v2(16, 8, vec![255; 16 * 8 * 4], "table".to_string()).await;
+    let recognized = recognize_v2(16, 8, bordered_table_pixels(16, 8), "table".to_string()).await;
     assert!(
         field(&recognized, "ok").as_bool().unwrap(),
         "table recognition failed: {}",
         json(&recognized)
     );
     let document_json = json(&field(&recognized, "data"));
-    assert!(document_json.to_ascii_lowercase().contains("table"));
-    assert!(document_json.contains("AB"));
-    assert!(document_json.contains("confidence"));
+    assert!(
+        document_json.to_ascii_lowercase().contains("table"),
+        "missing table block: {document_json}"
+    );
+    assert!(
+        document_json.contains("AB"),
+        "missing cell OCR: {document_json}"
+    );
+    assert!(
+        document_json.contains("confidence"),
+        "missing OCR confidence: {document_json}"
+    );
 }
 
 #[wasm_bindgen_test(async)]

@@ -11,7 +11,7 @@ use latexsnipper_runtime::ModelId;
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
 use crate::nodes::utils::{
-    get_backend, get_or_create_session, resolve_model_handle, resolve_variant,
+    get_backend, get_or_create_session, model_artifact_path, resolve_model_handle, resolve_variant,
 };
 
 /// Recognizes content in handwriting-detected regions.
@@ -75,15 +75,31 @@ impl HandwritingRecognizerNode {
             }
         };
 
-        let enc_path = rec_config
-            .pipeline_encoder_path(&rec_dir)
-            .ok_or_else(|| SnipperError::Model("Encoder not found".into()))?;
-        let dec_path = rec_config
-            .pipeline_decoder_path(&rec_dir)
-            .ok_or_else(|| SnipperError::Model("Decoder not found".into()))?;
-        let tok_path = rec_config
-            .pipeline_tokenizer_path(&rec_dir)
-            .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
+        let model_files = rec_config
+            .pipeline
+            .as_ref()
+            .and_then(|pipeline| pipeline.model_files.as_ref());
+        let enc_path = model_artifact_path(
+            ctx,
+            &rec_dir,
+            model_files.and_then(|files| files.encoder.as_deref()),
+            rec_config.pipeline_encoder_path(&rec_dir),
+        )
+        .ok_or_else(|| SnipperError::Model("Encoder not found".into()))?;
+        let dec_path = model_artifact_path(
+            ctx,
+            &rec_dir,
+            model_files.and_then(|files| files.decoder.as_deref()),
+            rec_config.pipeline_decoder_path(&rec_dir),
+        )
+        .ok_or_else(|| SnipperError::Model("Decoder not found".into()))?;
+        let tok_path = model_artifact_path(
+            ctx,
+            &rec_dir,
+            model_files.and_then(|files| files.tokenizer.as_deref()),
+            rec_config.pipeline_tokenizer_path(&rec_dir),
+        )
+        .ok_or_else(|| SnipperError::Model("Tokenizer not found".into()))?;
         let tokenizer_name = tok_path
             .file_name()
             .and_then(|name| name.to_str())

@@ -147,6 +147,26 @@ pub fn resolve_model_handle(
     Ok(ModelHandle::with_path(id, fallback_path))
 }
 
+/// Resolve a configured artifact path for both filesystem and virtual model packages.
+///
+/// ModelConfig's filesystem helpers intentionally require files to exist. Virtual
+/// resolvers instead need the declared package-relative path so the artifact name
+/// can be resolved from in-memory bytes.
+pub fn model_artifact_path(
+    ctx: &PipelineContext,
+    model_dir: &Path,
+    declared_name: Option<&str>,
+    filesystem_path: Option<std::path::PathBuf>,
+) -> Option<std::path::PathBuf> {
+    if ctx.model_resolver.is_some() {
+        declared_name
+            .map(|name| model_dir.join(name))
+            .or(filesystem_path)
+    } else {
+        filesystem_path
+    }
+}
+
 /// Get or create a cached session.
 pub fn get_or_create_session(
     ctx: &mut PipelineContext,
