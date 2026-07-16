@@ -15,6 +15,7 @@
 | 函数 | 参数 | 返回 | 说明 |
 |---|---|---|---|
 | `nativeInit` | models_dir: String | i32 | 初始化引擎 |
+| `nativeResponseVersion` | — | u32 | 返回 FFI JSON contract version（当前为 3） |
 | `nativeRecognizeFormula` | data: byte[], len: int | String (JSON) | 公式识别 |
 | `nativeRecognizeText` | data: byte[], len: int | String (JSON) | 文字识别 |
 | `nativeRecognizeMixed` | data: byte[], len: int | String (JSON) | 混合识别 |
@@ -26,6 +27,7 @@
 | 函数 | 参数 | 返回 | 说明 |
 |---|---|---|---|
 | `latexsnipper_init` | models_dir: *const c_char | i32 | 初始化 |
+| `latexsnipper_ffi_response_version` | — | u32 | 返回 FFI JSON contract version（当前为 3） |
 | `latexsnipper_recognize_formula` | data, len | *mut c_char | 公式识别 |
 | `latexsnipper_recognize_text` | data, len | *mut c_char | 文字识别 |
 | `latexsnipper_recognize_mixed` | data, len | *mut c_char | 混合识别 |
@@ -36,6 +38,12 @@
 
 ```json
 {
+  "versions": {
+    "ffiResponseVersion": 3,
+    "diagnosticSchemaVersion": 1,
+    "documentSchemaVersion": "1.0.0",
+    "coreVersion": "3.0.0"
+  },
   "done": true,
   "latex": "...",
   "text": "...",
@@ -44,6 +52,8 @@
   "time_ms": 1234
 }
 ```
+
+`versions` 是 additive 字段；原有结果字段与 C/JNI pointer/length ABI 保持不变。
 
 ## 构建
 

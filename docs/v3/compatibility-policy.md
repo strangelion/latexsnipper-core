@@ -1,11 +1,12 @@
 # Core 3 compatibility and deprecation policy
 
-## SemVer and alpha stability
+## SemVer and pre-GA stability
 
-Stable Rust crates follow semantic versioning. `3.0.0-alpha.*` is an explicit
-feedback period: contract adjustments may occur between alpha releases, but
-every change must be recorded in the changelog and migration guide. The API and
-schema freeze is deferred to the release-candidate stage.
+Stable Rust crates follow semantic versioning. The source tree keeps its
+pre-GA version until every RC-grade gate is complete; intermediate alpha, beta,
+or RC packages are not required. Every contract change must be recorded in the
+changelog and migration guide. API/schema freeze is a validation state, not a
+reason to publish an intermediate artifact.
 
 ## Independent serialized contracts
 
@@ -20,14 +21,15 @@ counterpart.
 
 ## Compatibility window
 
-- Existing v2 runtime entry points remain usable during the contract-only alpha.
+- Existing v2 runtime entry points remain usable through explicit adapters;
+  callable v3 CLI/WASM replacements are now available.
 - Legacy plugin API 1 manifests are checked against both the current crate
   version and the preserved Core 2 contract version; this adapter does not
   enable any new execution class or broaden permissions.
 - A v2 surface may be deprecated only after its tested v3 replacement and
   migration path are available.
-- Safe deprecations remain for at least one documented prerelease phase and,
-  after GA, at least one minor release unless a security issue requires faster
+- Safe deprecations remain through the unpublished development cycle and for at
+  least one minor release after GA unless a security issue requires faster
   removal.
 - Removal dates belong in the changelog, migration guide, and API docs.
 - Security-sensitive compatibility is not promised when it would broaden a
@@ -36,7 +38,7 @@ counterpart.
 
 ## Document schema
 
-The `Document` schema remains `1.0.0` for PR 1. A Core major-version bump does
+The `Document` schema remains `1.0.0`. A Core major-version bump does
 not by itself change serialized documents. A future Document change requires a
 separate schema version, reader/migration tests where feasible, golden fixtures,
 and an explicit fidelity statement.
@@ -47,6 +49,12 @@ Migration results contain source/target identifiers, versions, a status, and
 structured warnings. `RequiresManualAction` is not success. Callers must not
 install, enable, or publish the migrated result until the warnings are resolved
 and the v3 contract validates.
+
+The CLI therefore writes no output for a manual-action result. Version-aware
+loaders reject unknown future schemas before legacy parsing. Manifest-v3 local
+process packages are rejected because the legacy process host cannot enforce
+the complete v3 permission model; verified WASI registry packages use the v3
+path and remain disabled until explicitly enabled.
 
 External plugin compatibility ends where the v3 trust model would be weakened:
 legacy native ABI and ambiguous reserved WASI manifests are rejected. Model

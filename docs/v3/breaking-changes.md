@@ -1,21 +1,23 @@
 # Core 3.0 breaking changes
 
-This file covers only changes introduced by the v3 contract foundation. The
-existing v2 runtime remains available in PR 1.
+This file covers the v3 contract foundation and its public runtime integration.
+Safe v2 adapters remain explicit; unknown future versions are never treated as
+v2.
 
 ## Workspace crate version
 
 1. **v2 behavior:** workspace crates identify as `2.0.0`.
-2. **Insufficiency:** Core 3 needs an explicit prerelease boundary for contract
-   feedback without claiming release-candidate readiness.
-3. **v3 replacement:** all workspace crates use `3.0.0-alpha.1` and internal
-   dependency requirements match it.
-4. **Migration:** depend on `3.0.0-alpha.1` only when evaluating v3 contracts;
-   production callers can remain on v2.
-5. **Adapter:** the v2 runtime paths remain in the alpha source tree. Legacy
+2. **Insufficiency:** Core 3 needs an internal development boundary while its
+   GA contract and release gates are completed.
+3. **v3 replacement:** all workspace crates use the unpublished
+   `3.0.0-alpha.1` development identifier and internal dependency requirements
+   match it. The next published package is `3.0.0` GA.
+4. **Migration:** build the source branch only when evaluating v3 contracts;
+   production callers should remain on the latest published v2 release until GA.
+5. **Adapter:** the v2 runtime paths remain in the development source tree. Legacy
    plugin API 1 Core requirements may match the preserved `2.0.0` contract.
-6. **Removal:** adapter removal is not scheduled before a documented Core 3 RC
-   deprecation review.
+6. **Removal:** adapter removal is not scheduled before a documented post-GA
+   deprecation review and compatibility window.
 
 ## Plugin execution classes and plugin API
 
@@ -29,10 +31,11 @@ existing v2 runtime remains available in PR 1.
 4. **Migration:** call `PluginManifestV3::migrate_from_v2` and inspect its
    structured report. Native dynamic-library and reserved v2 WASI manifests are
    rejected rather than reinterpreted.
-5. **Adapter:** reviewed built-in and isolated-process manifests can be mapped;
-   runtime execution still uses the legacy host in PR 1.
+5. **Adapter:** reviewed built-in and isolated-process manifests can be mapped
+   by the migration helper. The local legacy process store explicitly rejects a
+   manifest-v3 package; signed registry/WASI installation is the v3 runtime path.
 6. **Removal:** no v2 executor removal date is set; it requires a later host
-   integration PR and at least the documented alpha/beta deprecation window.
+   integration review and at least the documented post-GA compatibility window.
 
 ## Plugin permissions, artifacts, and identity
 
@@ -63,8 +66,9 @@ existing v2 runtime remains available in PR 1.
 4. **Migration:** call `ModelManifestV3::migrate_from_v2`. Missing or malformed
    artifact digests fail. Missing metadata produces structured warnings, and
    migrated profiles stay `unavailable` until evidence is authored.
-5. **Adapter:** a strict in-memory migration helper exists; the model manager
-   does not consume v3 manifests in PR 1.
+5. **Adapter:** the version-aware loader consumes v3 manifests, but exposes only
+   `experimental` or `validated` profiles to the legacy native model manager.
+   `unavailable` profiles are rejected.
 6. **Removal:** the legacy reader remains until a later runtime PR documents
    real-package conversion and an RC removal decision.
 
@@ -78,10 +82,15 @@ existing v2 runtime remains available in PR 1.
    strict success/failure shape and independent versions.
 4. **Migration:** construct `success`/`failure`, validate `has_valid_shape`, and
    gate each version independently. See `migration-from-v2.md`.
-5. **Adapter:** no callable endpoint or TypeScript adapter is provided in PR 1;
-   v2 WASM endpoints remain unchanged.
+5. **Adapter:** `api_info_v3`, `capabilities_v3`, `convert_v3`, CLI capability
+   JSON, and TypeScript declarations are callable. v2 WASM endpoints and CLI
+   `--api-version 2` remain explicit adapters.
 6. **Removal:** v2 endpoint deprecation begins only after a tested v3 endpoint
    and TypeScript migration path exist.
+
+WASM recognition deliberately remains on asynchronous `recognize_v2`: its
+Worker progress/cancellation protocol is an independent v1 contract, and a new
+envelope alone would not justify duplicating or renaming that runtime path.
 
 ## Intentionally non-breaking surfaces
 
@@ -89,4 +98,8 @@ existing v2 runtime remains available in PR 1.
 - native process IPC stays at version 1.
 - Worker protocol stays at version 1.
 - model cache stays at schema 2.
-- CLI commands, FFI, Cargo features, and package layout are unchanged.
+- Cargo features and package layout are unchanged.
+- FFI pointer/length ABI and legacy result fields are unchanged; version
+  metadata and numeric query functions are additive.
+- CLI adds `migrate`, capability API selection, and exit code 11. Output file
+  extensions no longer override recognition/job `--format`.

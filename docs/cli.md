@@ -42,6 +42,11 @@ snipper plugin install ./my-plugin
 snipper plugin enable example.plugin
 snipper plugin doctor
 snipper capabilities --format json
+snipper capabilities --format json --api-version 2
+snipper migrate plugin-manifest plugin.json --json
+snipper migrate model-manifest model-manifest.json --json
+snipper migrate document document.json --json
+snipper migrate inspect unknown.json --json
 snipper validate input.docx
 snipper completions bash
 snipper completions zsh
@@ -51,10 +56,15 @@ snipper manpages --output-dir ./man
 ```
 
 `models purge` 只删除模型根目录下经过路径校验的 variant，并保留 manifest；必须显式
-传入 `--yes`。外部 plugin 安装仅支持本地 package，安装前强制检查 manifest、API/core
-版本、entrypoint 边界与 SHA-256，安装后保持 disabled，且不会执行代码。远程 plugin 安装
-和 Native ABI/WASI execution host 当前明确不支持。
+传入 `--yes`。legacy 外部 process plugin 本地安装会强制检查 manifest、API/core 版本、
+entrypoint 边界与 SHA-256。manifest-v3 WASI package 必须通过 signed registry 安装，安装后
+保持 disabled；显式 enable 时再次校验，只有已授权的 capability 才会进入运行时矩阵。
+Native ABI 不会被重新解释为 v3 trusted plugin。
+
+`recognize` 与 `job run` 的 `--format` 始终决定输出语义，文件扩展名不会静默覆盖它。
+完整选项传播/拒绝审计见 [CLI option matrix](cli-option-matrix.md)。迁移命令默认写入新的
+同级文件并保护源文件；需要人工处理时返回退出码 11 且不写输出。
 
 稳定退出码可由 `snipper version` 查看：0 success，1 generic，2 arguments，3 input，
 4 model，5 recognition，6 conversion，7 output validation，8 strict diagnostics，
-9 plugin，10 partial batch failure。
+9 plugin，10 partial batch failure，11 migration requires manual action。

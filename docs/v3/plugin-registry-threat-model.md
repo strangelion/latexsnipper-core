@@ -59,7 +59,7 @@ Content-Length. Metadata is limited to 8 MiB per envelope and packages to 64 MiB
 Extraction defaults to 128 MiB total, 64 MiB per file, and 256 members.
 
 Verification occurs while extracting to private staging and again from staged filesystem objects.
-The package must contain `plugin-v3.json`. Its ID/version/class must match the signed target, its
+The package must contain `plugin.json` with manifest schema 3. Its ID/version/class must match the signed target, its
 artifact digest and size must match the manifest, and `wasmparser` must validate the artifact as a
 Component. No plugin code runs during download, install, update, rollback, verification, or doctor.
 
@@ -111,5 +111,6 @@ Tests cover canonical serialization, real Ed25519, thresholds, malformed/unknown
 expiry, rollback, remote-class policy, digest mismatch, redirect origin, content type, size limits,
 traversal, symlink, malformed Component bytes, staging re-verification, update, rollback, interrupted
 staging, corrupt-index recovery, concurrent install, revocation, offline cache, HTTP rejection,
-arbitrary URL rejection, and trust confirmation. Signed-envelope fuzzing is required at the release
-candidate gate; this alpha retains the existing WASI package fuzz target.
+arbitrary URL rejection, trust confirmation, registry-to-host activation binding, and post-activation
+disable/revocation enforcement. Signed-envelope fuzzing and the existing WASI package fuzz target
+must pass before the single `3.0.0` GA release.

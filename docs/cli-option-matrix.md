@@ -1,22 +1,38 @@
-# CLI advanced option propagation
+# CLI option propagation matrix
 
-The CLI rejects every unknown flag through Clap. It never accepts and silently ignores
-an advanced option. Currently implemented options are deliberately narrower than the
-underlying AST option types.
+This matrix is the Core 3 audit record. `propagated` means the value reaches the
+operation that owns its semantics. `rejected` means Clap or the handler returns
+a stable non-zero exit instead of silently ignoring the value.
 
-| Option family | CLI status | Propagation and validation |
+| Command | Options and arguments | Disposition |
 |---|---|---|
-| Page range | implemented for `convert` | Parsed as typed `PageRange`, rejected before I/O when invalid, passed through `AdvancedConversionOptions` to `ImportOptions`, and reported by `CLI_OPTIONS_APPLIED`. |
-| Strict preservation | implemented for `convert` | Sets strict import plus unknown OOXML part preservation; diagnostics identify activation. |
-| Parse mode | implemented where parsing is selected | Accepted values and aliases come from `DocumentParseMode`; invalid values are rejected. |
-| Recognition/OCR mode | implemented for recognition commands | Accepted values and aliases come from `RecognizeMode` and propagate to the engine. |
-| Slide range, sheet selection | not exposed | Importers have separate safety budgets but no complete CLI selection contract; supplied flags are rejected. |
-| DPI, scale, background, transparency | not exposed | Renderer-specific typed options are not consistently supported across exporters; supplied flags are rejected. |
-| Provider, acceleration | not exposed as conversion flags | Runtime selection has no uniform cross-target CLI guarantee; supplied flags are rejected. |
-| Model variant, models directory | command-specific existing paths only | They are not accepted by unrelated conversion commands. |
-| Timeout, memory limit | plugin/WASM runtime-specific | Plugin manifests and WASM model limits enforce their own budgets; conversion flags are rejected. |
-| Fidelity mode | not exposed | Strict preservation is the current enforceable mode; a general fidelity enum requires importer/exporter support first. |
+| `import` | `input`, `--output` | propagated to importer and JSON writer |
+| `convert` | inputs, `--to`, `--output`, `--force-binary-stdout` | propagated to format resolution and output policy |
+| `convert` | `--force`, `--no-clobber`, `--atomic` | propagated; contradictory overwrite flags rejected by Clap |
+| `convert` | `--diagnostics`, `--strict`, `--fail-on-warning` | propagated to diagnostic rendering and failure policy |
+| `convert` | `--page-range`, `--strict-preservation` | parsed and propagated to typed import/conversion options |
+| `convert` | `--quiet`, `--verbose` | propagated; simultaneous use rejected by Clap |
+| `convert` | `--recursive`, `--output-dir`, `--jobs`, `--continue-on-error`, `--report` | propagated to batch discovery, scheduling, paths, and report writer |
+| `export` | `input`, `--to`, `--output` | propagated to import and visual exporter |
+| `inspect` | `input`, `--json` | propagated to detection/import and renderer |
+| `validate` | `input` | propagated to structural importer |
+| `recognize`, `rec` | `--input`, `--format`, `--output`, `--parse-mode`, `--recognize-mode` | propagated; output extension never overrides `--format` |
+| `parse`, `render` | `--latex` | propagated to parser/renderer |
+| `capabilities` | `--format`, `--input`, `--output`, `--api-version` | propagated; unknown format rejected; explicit API versions are JSON-only, JSON defaults to v3, and v2 is the compatibility adapter |
+| `models download` | `--category`, `--all`, `--manifest-url` | propagated; `--category` with `--all` rejected by Clap |
+| `models list`, `models verify` | `--category` | propagated as category filter |
+| `models purge` | `--category`, `--variant`, `--yes` | propagated; variant requires category; missing confirmation rejected |
+| `plugin` | `--store-dir` | propagated to local store and signed-registry state roots |
+| `plugin search/info/verify/install/update/rollback/uninstall/enable/disable/revoke` | positional IDs/sources, `--all` | propagated; update requires ID or `--all`; remote uninstall is explicitly rejected pending atomic removal support |
+| `plugin registry add/remove/trust/refresh` | names, origins, roots, `--yes`, `--offline` | propagated; trust/removal require confirmation; insecure origins rejected |
+| `job run` | `--input`, `--format`, `--output`, `--mode` | propagated to recognition and conversion; output extension does not change format |
+| `job inspect` | job ID | propagated to job lookup |
+| `migrate plugin-manifest/model-manifest/document` | input, `--output`, `--force`, `--json` | propagated; source overwrite and unsafe automatic migration rejected |
+| `migrate inspect` | input, `--json` | propagated; read-only by contract |
+| `completions` | shell | propagated through the generated Clap schema |
+| `manpages` | `--output-dir` | propagated to the roff writer |
 
-Adding a flag requires a typed options field, format/target support matrix, early
-invalid-combination rejection, end-to-end propagation, diagnostic evidence, and an
-integration test in the same change.
+The CLI integration suite exercises conflicts, migration source preservation,
+manual-action exit code 11, capability envelope selection, overwrite policy,
+batch propagation, plugin trust boundaries, model purge scope, completions, and
+man-page generation.

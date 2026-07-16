@@ -23,7 +23,7 @@
 
 ## Project status
 
-The workspace is staged as **3.0.0-alpha.1** for the stacked Core 3 changes. The contract foundation, default-deny WASI Component host, signed registry, and disabled-by-default remote WASI installation CLI are implemented; callable WASM, capability, model-loader, Worker, and FFI paths remain on their existing v2-era contracts. See the [Core 3 architecture and delivery status](docs/v3/architecture.md).
+The workspace uses **3.0.0-alpha.1** only as an unpublished development identifier while the stacked Core 3 changes are integrated. The contract foundation, default-deny WASI Component host, signed registry, disabled-by-default remote installation, verified remote activation, version-aware model/plugin loaders, callable WASM v3 API, capability v3 projection, and additive FFI v3 query are implemented. The Worker transport remains independently versioned at protocol v1. No alpha, beta, or RC package is published; the next package release is 3.0.0 GA after every release gate passes. See the [Core 3 architecture and delivery status](docs/v3/architecture.md).
 
 This does **not** mean that every format, model, or plugin boundary has the same maturity.
 
@@ -511,9 +511,8 @@ These controls reduce risk but do not turn native process plugins into untrusted
 
 ## Known boundaries and GA work
 
-The 3.0 alpha is a contract-feedback build, not a release candidate. The following remain explicit boundaries:
+The current 3.0 source version is an unpublished integration build. The following remain explicit GA boundaries:
 
-- integrate verified remote packages with the public WASI execution runtime before advertising untrusted third-party execution;
 - complete independent security review and longer fuzzing of registry/update policy before GA;
 - collect production OCR compatibility and accuracy evidence beyond browser orientation-model compatibility smoke tests;
 - define supported Office/PDF fidelity guarantees against representative corpora and platforms;

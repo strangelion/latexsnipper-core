@@ -7,18 +7,18 @@ silently advance every serialized protocol.
 |---|---:|---:|---|
 | Workspace crates | `2.0.0` baseline | `3.0.0-alpha.1` | Implemented |
 | `Document` JSON schema | `1.0.0` | `1.0.0` | Preserved; constant centralized |
-| WASM API envelope | `2` | `3` | Contract only; exports remain v2 |
-| Capability schema | `2` | `3` | Version plan only; generator remains v2 |
+| WASM API envelope | `2` | `3` | `api_info_v3`, `capabilities_v3`, and `convert_v3` callable; v2 adapters retained |
+| Capability schema | `2` | `3` (`3.0.0` matrix) | Executable registry, CLI, and WASM projection integrated |
 | Diagnostic schema | implicit/current | `1` | Version identified in v3 envelope contract |
 | Plugin manifest schema | legacy manifest | `3` | Types/migration implemented; consumed by the Component host |
 | Plugin API | `1` | `2` for manifest v3 | Component host validates v2; legacy host remains API 1 |
 | Native process IPC | `1` | `1` | Preserved |
 | Component WIT | unavailable | `1` (`latexsnipper:plugin@1.0.0`) | WIT package, typed host, and real fixtures implemented |
-| Model manifest/profile | legacy v2 shape | `3` | Types and migration implemented; loaders remain legacy |
+| Model manifest/profile | legacy v2 shape | `3` | Version-aware loader integrated; only evidenced v3 profiles enter runtime adapter |
 | Browser model cache | `2` | TBD by cache implementation | Unchanged |
 | Browser Worker protocol | `1` | `1` unless behavior requires change | Unchanged |
-| FFI response contract | current v2-era surface | TBD after inventory review | Unchanged |
-| Benchmark evidence | current ad hoc output | independent version required | Planned |
+| FFI response contract | unversioned v2-era surface | `3` | Self-describing JSON plus native numeric version query |
+| Benchmark evidence | current ad hoc output | independent version required | Implemented by OCR evidence schema; freeze review remains |
 | Registry metadata | unavailable | signed schema `1.0`; independent root/timestamp/snapshot/targets counters | Implemented |
 | Remote plugin store index | unavailable | `1` | Implemented; separate from the legacy local store |
 

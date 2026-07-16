@@ -14,7 +14,9 @@ Every callable format pair exposes six independent measurements:
 Each measurement has a claim, optional score, evidence identifiers, and explicit
 limitations. `not-measured` and `unsupported` are first-class results. No aggregate
 boolean is allowed to replace the six measurements. This backward-compatible
-addition advances the executable capability schema from `2.0.0` to `2.1.0`;
+addition advanced the executable capability schema from `2.0.0` to `2.1.0`;
+the public v3 runtime integration subsequently promotes it to `3.0.0` without
+changing the meaning of those independent dimensions;
 missing dimension data still deserializes to `not-measured`.
 
 ## Golden corpora

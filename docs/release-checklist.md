@@ -1,17 +1,17 @@
 # Core 3 release checklist
 
-## Alpha 1 contract-foundation requirements
+## Unpublished integration requirements
 
-- [ ] Every workspace crate and the WASM npm package uses `3.0.0-alpha.1`.
-- [ ] Public API inventory, version map, breaking changes, migration guide, and compatibility policy are reviewed.
-- [ ] Plugin/model migrations reject unsafe reinterpretation and emit structured manual-action warnings.
-- [ ] New schema and migration fuzz targets compile in PR CI.
-- [ ] Documentation clearly separates implemented, contract-only, existing v2 runtime, and planned behavior.
-- [ ] Full workspace, all-feature, doc, WASM/TypeScript, dependency-audit, actionlint, and fuzz-build gates pass.
+- [x] The workspace and WASM package use one internal development version.
+- [x] Public API inventory, version map, breaking changes, migration guide, and compatibility policy are maintained.
+- [x] Plugin/model migrations reject unsafe reinterpretation and emit structured manual-action warnings.
+- [x] New schema and migration fuzz targets compile in PR CI.
+- [x] Documentation separates implemented behavior, compatibility adapters, and planned work.
+- [ ] Every stacked integration PR passes the full workspace, all-feature, documentation, WASM/TypeScript, dependency-audit, actionlint, and fuzz-build gates.
 
-Alpha 1 is not an RC and must not satisfy later runtime/security items by checking only a contract type or stub.
+The development version is not published. No alpha, beta, or RC package or tag is created; the next published package is `3.0.0` GA.
 
-## RC-ready requirements
+## GA runtime and evidence requirements
 
 - [ ] Local fmt, check, strict Clippy, workspace tests, doc tests, WASM builds, and
       TypeScript tests pass.
@@ -33,8 +33,9 @@ Alpha 1 is not an RC and must not satisfy later runtime/security items by checki
 
 - [x] Integrate signed registry metadata, verified disabled remote installation,
       signature/provenance/update policy, and the public management CLI.
-- [ ] Integrate verified remote packages with public WASI execution and obtain an
-      independent security review before advertising third-party execution.
+- [x] Integrate verified remote packages with public WASI execution, including
+      enable-state checks and host-side package re-verification.
+- [ ] Obtain an independent security review before advertising third-party execution.
 - [ ] Obtain production OCR-model compatibility and accuracy evidence beyond the
       document-orientation compatibility smoke.
 - [ ] Verify live GitHub ruleset/CODEOWNERS approval requirements.
