@@ -55,6 +55,9 @@ integration state.
 
 ## Review obligations for later PRs
 
-RC hardening must freeze Rust exports, serialized examples, TypeScript
+GA hardening freezes Rust exports, serialized examples, TypeScript
 declarations, CLI behavior/exit codes, package contents, compatibility adapters,
-WIT, and this inventory together.
+WIT, and this inventory together. `contracts/v3-contract-freeze.json` is checked
+in CI and covers exact contract files plus aggregate hashes for the public Rust
+source trees. An intentional change requires an explicit manifest refresh and
+renewed review.

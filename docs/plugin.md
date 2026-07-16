@@ -2,7 +2,9 @@
 
 当前稳定范围包括：built-in Rust plugin 生命周期、版本化 isolated-process IPC host、外部 package
 离线校验、typed hooks、确定性排序、事务 patch、能力注册以及强制资源预算。独立的
-`latexsnipper-plugin-wasi` crate 已实现 WIT v1 Component host；legacy plugin registry/CLI 尚未接入。
+`latexsnipper-plugin-wasi` crate 已实现 WIT v1 Component host；签名 registry、
+默认禁用安装、显式启用和远程 WASI 调用前重新验证均已接入。legacy 本地插件
+路径继续独立存在，远程原生插件会被拒绝。
 Native dynamic-library ABI 仍未实现。
 
 ## 执行类别

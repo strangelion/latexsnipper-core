@@ -23,7 +23,7 @@
 
 ## 项目状态
 
-workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的 stacked changes。契约基础、default-deny WASI Component host、signed registry 以及安装后默认禁用的远程 WASI CLI 已实现；可调用的 WASM、能力文档、模型 loader、Worker 与 FFI 路径仍使用现有 v2 时代契约。详见 [Core 3 架构与交付状态](docs/v3/architecture.md)。
+workspace 使用 **3.0.0-alpha.1** 作为未发布的内部开发标识。契约基础、default-deny WASI Component host、signed registry、安装后默认禁用的远程 WASI、已验证远程激活、版本感知模型/插件 loader、可调用 WASM v3 API、能力 v3 投影和增量 FFI v3 查询均已实现。Worker transport 独立保持 protocol v1。不会发布 alpha、beta 或 RC 包；所有 release gate 通过后，下一次公开发包直接是 3.0.0 GA。详见 [Core 3 架构与交付状态](docs/v3/architecture.md)。
 
 这并不表示所有格式、模型和插件边界具有相同成熟度。
 
@@ -40,8 +40,8 @@ workspace 已暂定为 **3.0.0-alpha.1**，用于 Core 3 的 stacked changes。�
 | WASM Tract 识别 | **实验性** | 模型驱动且异步执行；文本、projection 结构表格和 TrOCR 手写已接入浏览器流水线，readiness 由已加载且验证通过的 artifact 决定。 |
 | 内置 Rust 插件 | **Host 行为稳定** | 已实现确定性排序、typed hook、事务 patch、失败策略、soft deadline 和 quarantine。 |
 | 隔离 native process 插件 | **仅限经过审核的本地代码** | 支持 hard timeout 和资源控制，但不是操作系统文件/网络沙箱。 |
-| WASI Component host | **已实现为 Rust host crate** | WIT v1、manifest/digest 校验、typed broker、硬中断和资源限制已有真实组件测试；public execution 集成仍待完成。 |
-| signed 远程 WASI registry/install | **已实现，安装后禁用** | 已测试 Ed25519 threshold、过期/rollback/freeze、受限 HTTPS/ZIP、provenance、update、revoke 与 rollback；安装不会执行或启用代码。 |
+| WASI Component host | **已实现并完成运行时接入** | WIT v1、manifest/digest 校验、typed broker、硬中断、资源限制、已验证激活和调用时信任检查已有真实组件测试。 |
+| signed 远程 WASI registry/install | **已实现，安装后禁用** | 已测试 Ed25519 threshold、过期/rollback/freeze、受限 HTTPS/ZIP、provenance、update、revoke、rollback 与显式 enable；安装不会执行或启用代码。 |
 | native 动态库 ABI | **不可用** | 会拒绝远程 native 替换；经过审核的本地 process plugin 使用独立路径。 |
 
 可执行能力注册表是事实来源：
@@ -230,7 +230,8 @@ snipper plugin doctor
 snipper plugin uninstall example.plugin
 ```
 
-远程 URL 安装仍保持禁用。
+任意未签名 URL 安装仍保持禁用。signed registry 包安装后保持禁用，只有显式
+enable 成功后才可执行。
 
 ---
 
@@ -373,7 +374,6 @@ JavaScript 包还提供：
 
 仍不可用：
 
-- 远程安装 WASI Component 的 public execution；
 - 稳定 native 动态库插件 ABI；
 - 完整 native 文件系统/网络沙箱。
 
@@ -529,6 +529,12 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 |---|---|
 | [Core 3 架构](docs/v3/architecture.md) | Stacked 交付状态、版本边界与信任模型 |
 | [WASI Component host](docs/v3/wasi-component-host.md) | WIT v1 权限、资源限制、package 边界与诊断 |
+| [WASI 插件指南](docs/v3/wasi-plugin-guide.md) | Component package、权限、限制与验证 |
+| [Registry operator 指南](docs/v3/registry-operator-guide.md) | 签名 metadata 发布、撤销与恢复 |
+| [安全审查记录](docs/v3/security-review.md) | 审查范围、依赖例外与独立审查状态 |
+| [模型验证](docs/v3/model-validation.md) | 模型身份、证据 tier 与准确率要求 |
+| [格式保真度](docs/v3/format-fidelity.md) | Office/PDF 六维保证与应用审批 |
+| [Core 3 release notes](docs/v3/release-notes.md) | GA 变更、兼容性与已知限制 |
 | [Core 3 迁移](docs/v3/migration-from-v2.md) | 严格的 v2 到 v3 契约迁移指南 |
 | [生产能力](docs/production-capabilities.md) | 稳定性、保真和不支持能力策略 |
 | [WASM adapter](docs/wasm.md) | 浏览器 API、Worker、cache、下载与模型验证 |
@@ -536,7 +542,7 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 | [CLI option matrix](docs/cli-option-matrix.md) | 参数传播与支持组合 |
 | [Export](docs/export.md) | 视觉和文档包导出行为 |
 | [Benchmarks](docs/benchmark.md) | 原生与浏览器 benchmark 方法 |
-| [Release checklist](docs/release-checklist.md) | RC 条件、GA blocker 与后续工作 |
+| [Release checklist](docs/release-checklist.md) | GA 条件、blocker 与后续工作 |
 | [Architecture](docs/architecture.md) | 核心架构概览 |
 | [Pipeline](docs/pipeline.md) | 识别与处理流水线 |
 | [Testing](docs/testing.md) | 测试策略与 fixture |

@@ -7,6 +7,8 @@
 - [x] Plugin/model migrations reject unsafe reinterpretation and emit structured manual-action warnings.
 - [x] New schema and migration fuzz targets compile in PR CI.
 - [x] Documentation separates implemented behavior, compatibility adapters, and planned work.
+- [x] Stable-tag release guard rejects every prerelease version and manual publication path.
+- [x] Lockfiles, frozen contract/source-tree hashes, and version consistency are CI-gated.
 - [ ] Every stacked integration PR passes the full workspace, all-feature, documentation, WASM/TypeScript, dependency-audit, actionlint, and fuzz-build gates.
 
 The development version is not published. No alpha, beta, or RC package or tag is created; the next published package is `3.0.0` GA.
@@ -17,15 +19,15 @@ The development version is not published. No alpha, beta, or RC package or tag i
       TypeScript tests pass.
 - [ ] PR CI and manually dispatched Scheduled hardening workflow pass.
 - [ ] Chrome and Firefox browser tests pass and diagnostics artifacts are inspected.
-- [ ] Trusted plugin soft timeout/quarantine and isolated-process hard timeout pass.
+- [x] Trusted plugin soft timeout/quarantine and isolated-process hard timeout pass.
 - [x] WASI Component real fixtures cover hard timeout, in-flight cancellation,
       default-deny brokers, memory/output limits, cleanup, and host reuse.
-- [ ] Capability projection and drift tests pass.
+- [x] Capability projection and drift tests pass.
 - [ ] Official production-derived model executes in Tract/WASM with verified origin,
       license, checksum, shape, timing, and memory report.
 - [ ] Dependency audit, real libFuzzer smoke, model URL verification, and benchmark
       artifacts pass.
-- [ ] Known fidelity and unsupported capabilities are in release notes.
+- [x] Known fidelity and unsupported capabilities are in release notes.
 - [x] Office/PDF golden corpora, six-dimensional evidence, diagnostic, asset,
       opaque-part, and optional visual/application layers run in CI.
 

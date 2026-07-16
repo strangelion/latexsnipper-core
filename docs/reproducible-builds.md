@@ -16,7 +16,7 @@ To reproduce the browser package:
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack --version 0.13.1 --locked
-wasm-pack build crates/wasm --target web --release --out-dir ../../target/wasm-web
+wasm-pack build crates/wasm --target web --release --out-dir ../../target/wasm-web --locked
 ```
 
 Exact byte reproducibility can still vary with linker, operating-system SDK,
