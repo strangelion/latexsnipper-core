@@ -124,6 +124,28 @@ pub fn collect(
     }
 }
 
+pub fn collect_v3(
+    resolver: &MemoryModelResolver,
+    limits: MemoryLimits,
+    usage: MemoryUsage,
+) -> serde_json::Value {
+    let mut value = serde_json::to_value(collect(resolver, limits, usage))
+        .expect("capability document serialization must succeed");
+    let object = value
+        .as_object_mut()
+        .expect("capability document must serialize as an object");
+    object.remove("api");
+    object.insert(
+        "schemaVersion".to_string(),
+        serde_json::Value::from(crate::api::CAPABILITY_VERSION_V3),
+    );
+    object.insert(
+        "v2CompatibilityExports".to_string(),
+        serde_json::Value::Bool(true),
+    );
+    value
+}
+
 pub fn mime_type(format: &str) -> &'static str {
     OutputFormat::all()
         .iter()
@@ -162,5 +184,22 @@ mod tests {
             assert_eq!(exported.mime_type, entry.mime_type);
             assert_eq!(exported.reason, entry.unavailable_reason);
         }
+    }
+
+    #[test]
+    fn v3_capability_projection_has_an_explicit_schema_and_no_v2_api_block() {
+        let value = collect_v3(
+            &MemoryModelResolver::new(),
+            MemoryLimits::default(),
+            MemoryUsage {
+                artifact_count: 0,
+                total_model_bytes: 0,
+                pending_bytes: 0,
+                session_bytes: None,
+            },
+        );
+        assert_eq!(value["schemaVersion"], 3);
+        assert!(value.get("api").is_none());
+        assert_eq!(value["v2CompatibilityExports"], true);
     }
 }

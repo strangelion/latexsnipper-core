@@ -1,4 +1,97 @@
 export const WORKER_PROTOCOL_VERSION = 1 as const;
+export const API_ENVELOPE_VERSION_V3 = 3 as const;
+export const CAPABILITY_SCHEMA_VERSION_V3 = 3 as const;
+export const DIAGNOSTIC_SCHEMA_VERSION_V3 = 1 as const;
+
+export interface ApiContractVersionsV3 {
+  apiEnvelopeVersion: typeof API_ENVELOPE_VERSION_V3;
+  capabilitySchemaVersion: typeof CAPABILITY_SCHEMA_VERSION_V3;
+  diagnosticSchemaVersion: typeof DIAGNOSTIC_SCHEMA_VERSION_V3;
+  documentSchemaVersion: string;
+  coreVersion: string;
+}
+
+export interface ApiErrorV3 {
+  code: string;
+  message: string;
+  recoverable: boolean;
+  details?: unknown;
+}
+
+export interface ApiDiagnosticV3 {
+  level: "Info" | "Warning" | "Error";
+  code: string;
+  message: string;
+  source: unknown | null;
+  recoverable: boolean;
+  data: unknown;
+}
+
+export type ApiEnvelopeV3<T> =
+  | {
+      ok: true;
+      versions: ApiContractVersionsV3;
+      diagnostics?: ApiDiagnosticV3[];
+      data: T;
+      error?: never;
+    }
+  | {
+      ok: false;
+      versions: ApiContractVersionsV3;
+      diagnostics?: ApiDiagnosticV3[];
+      data?: never;
+      error: ApiErrorV3;
+    };
+
+export interface WasmApiInfoV3 {
+  wasmApiVersion: typeof API_ENVELOPE_VERSION_V3;
+  capabilitySchemaVersion: typeof CAPABILITY_SCHEMA_VERSION_V3;
+  coreVersion: string;
+  documentSchemaVersion: string;
+  v2CompatibilityExports: boolean;
+}
+
+export interface WasmCapabilityDocumentV3 {
+  schemaVersion: typeof CAPABILITY_SCHEMA_VERSION_V3;
+  v2CompatibilityExports: boolean;
+  recognition: unknown[];
+  exports: unknown[];
+  memoryLimits: unknown;
+  memoryUsage: unknown;
+  asyncRecognition: boolean;
+  progressCallbacks: boolean;
+  cancellation: {
+    supported: boolean;
+    mode: string;
+    canInterruptActiveInference: boolean;
+  };
+  workerExecution: {
+    availableInRustPackage: boolean;
+    officialWrapper: string;
+    hardCancellationMode: string;
+    discardsModelSessionsOnTermination: boolean;
+    maxConcurrentRecognitions: number;
+  };
+  indexedDbCache: WasmBrowserFeatureCapability;
+  incrementalDownloads: WasmBrowserFeatureCapability;
+}
+
+export interface WasmBrowserFeatureCapability {
+  availableInRustPackage: boolean;
+  availableInOfficialWrapper: boolean;
+  runtimeDetectionRequired: boolean;
+}
+
+export interface WasmArtifactV3 {
+  format: string;
+  mimeType: string;
+  suggestedFileName: string | null;
+  text: string | null;
+  bytes?: Uint8Array;
+  diagnostics: ApiDiagnosticV3[];
+  checksum: string | null;
+  sizeBytes: number;
+}
 
 export interface WorkerInitOptions {
   moduleUrl: string;

@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 latexsnipper-foundation.workspace = true
+latexsnipper-api-types.workspace = true
 latexsnipper-ast.workspace = true
 latexsnipper-image.workspace = true
 latexsnipper-model.workspace = true

@@ -3,6 +3,28 @@ use std::os::raw::c_char;
 
 use latexsnipper_foundation::{Result, SnipperError};
 
+pub const FFI_RESPONSE_VERSION_V3: u32 = 3;
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FfiContractVersions {
+    pub ffi_response_version: u32,
+    pub diagnostic_schema_version: u32,
+    pub document_schema_version: &'static str,
+    pub core_version: &'static str,
+}
+
+impl FfiContractVersions {
+    pub const fn current() -> Self {
+        Self {
+            ffi_response_version: FFI_RESPONSE_VERSION_V3,
+            diagnostic_schema_version: latexsnipper_api_types::DIAGNOSTIC_SCHEMA_VERSION_V3,
+            document_schema_version: latexsnipper_ast::DOCUMENT_SCHEMA_VERSION,
+            core_version: env!("CARGO_PKG_VERSION"),
+        }
+    }
+}
+
 /// Convert a C string to a Rust String.
 ///
 /// # Safety
@@ -41,6 +63,7 @@ pub unsafe fn free_string(ptr: *mut c_char) {
 /// JSON response structure for FFI.
 #[derive(serde::Serialize)]
 pub struct FfiResponse {
+    pub versions: FfiContractVersions,
     pub done: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latex: Option<String>,
@@ -57,6 +80,7 @@ pub struct FfiResponse {
 impl FfiResponse {
     pub fn success(latex: &str, confidence: f32, time_ms: u64) -> Self {
         Self {
+            versions: FfiContractVersions::current(),
             done: true,
             latex: Some(latex.to_string()),
             text: Some(latex.to_string()),
@@ -68,6 +92,7 @@ impl FfiResponse {
 
     pub fn error(msg: &str) -> Self {
         Self {
+            versions: FfiContractVersions::current(),
             done: true,
             latex: None,
             text: None,
@@ -79,5 +104,20 @@ impl FfiResponse {
 
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ffi_json_is_self_describing_without_changing_legacy_result_fields() {
+        let value: serde_json::Value =
+            serde_json::from_str(&FfiResponse::success("x", 0.9, 1).to_json()).unwrap();
+        assert_eq!(value["versions"]["ffiResponseVersion"], 3);
+        assert_eq!(value["versions"]["documentSchemaVersion"], "1.0.0");
+        assert_eq!(value["done"], true);
+        assert_eq!(value["latex"], "x");
     }
 }

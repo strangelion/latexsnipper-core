@@ -17,6 +17,14 @@ const apiInfo = nodePackage.api_info_v2();
 if (!apiInfo || apiInfo.ok !== true) {
   throw new Error("Node package did not return a successful API envelope");
 }
+const apiInfoV3 = nodePackage.api_info_v3();
+if (
+  !apiInfoV3 ||
+  apiInfoV3.ok !== true ||
+  apiInfoV3.versions?.apiEnvelopeVersion !== 3
+) {
+  throw new Error("Node package did not return a successful v3 API envelope");
+}
 
 const webPackage = await import(pathToFileURL(webEntry).href);
 if (typeof webPackage.default !== "function") {
@@ -36,7 +44,7 @@ await build({
       },
       load(id) {
         if (id !== "\0virtual:entry") return null;
-        return `import { api_info_v2 } from ${JSON.stringify(normalizedBundlerEntry)}; export { api_info_v2 };`;
+        return `import { api_info_v2, api_info_v3 } from ${JSON.stringify(normalizedBundlerEntry)}; export { api_info_v2, api_info_v3 };`;
       },
     },
   ],

@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 latexsnipper-foundation.workspace = true
+latexsnipper-api-types.workspace = true
 latexsnipper-ast.workspace = true
 latexsnipper-engine = { workspace = true, features = ["native"] }
 latexsnipper-runtime.workspace = true

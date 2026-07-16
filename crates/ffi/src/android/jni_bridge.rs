@@ -6,6 +6,12 @@ use latexsnipper_runtime::StubRuntime;
 
 use crate::common::FfiResponse;
 
+/// Return the stable FFI JSON response contract version.
+#[no_mangle]
+pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeResponseVersion() -> u32 {
+    crate::common::FFI_RESPONSE_VERSION_V3
+}
+
 /// Global engine instance (protected by Mutex for thread safety).
 static ENGINE: Lazy<Mutex<Option<SnipperEngine>>> = Lazy::new(|| Mutex::new(None));
 

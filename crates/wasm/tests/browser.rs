@@ -1,7 +1,8 @@
 use js_sys::{Reflect, JSON};
 use latexsnipper_wasm::{
-    begin_model_update_v2, capabilities_v2, clear_models_v2, commit_model_update_v2, convert_v2,
-    load_model_v2, recognize_v2, rollback_model_update_v2, unload_model_v2,
+    api_info_v3, begin_model_update_v2, capabilities_v2, capabilities_v3, clear_models_v2,
+    commit_model_update_v2, convert_v2, convert_v3, load_model_v2, recognize_v2,
+    rollback_model_update_v2, unload_model_v2,
 };
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
@@ -96,6 +97,34 @@ fn load_handwriting_profile() {
 }
 
 #[wasm_bindgen_test]
+fn v3_contract_exports_are_callable_and_versioned_independently() {
+    let info = api_info_v3();
+    assert!(field(&info, "ok").as_bool().unwrap());
+    let versions = field(&info, "versions");
+    assert_eq!(field(&versions, "apiEnvelopeVersion").as_f64(), Some(3.0));
+    assert_eq!(
+        field(&versions, "capabilitySchemaVersion").as_f64(),
+        Some(3.0)
+    );
+    let capability = capabilities_v3();
+    assert!(field(&capability, "ok").as_bool().unwrap());
+    assert_eq!(
+        field(&field(&capability, "data"), "schemaVersion").as_f64(),
+        Some(3.0)
+    );
+
+    let failure = convert_v3("not-json", "latex");
+    assert_eq!(field(&failure, "ok").as_bool(), Some(false));
+    assert!(!field(&field(&failure, "error"), "code")
+        .as_string()
+        .unwrap()
+        .is_empty());
+    assert!(Reflect::get(&failure, &JsValue::from_str("data"))
+        .unwrap()
+        .is_undefined());
+}
+
+#[wasm_bindgen_test]
 fn model_transactions_are_atomic_and_reversible() {
     clear_models_v2();
     assert!(field(&begin_model_update_v2(), "ok").as_bool().unwrap());
@@ -174,6 +203,17 @@ async fn tiny_models_run_through_tract_pipeline_ast_and_latex() {
         json(&converted)
     );
     assert!(field(&field(&converted, "data"), "text")
+        .as_string()
+        .unwrap()
+        .contains("AB"));
+
+    let converted_v3 = convert_v3(&document_json, "latex");
+    assert!(field(&converted_v3, "ok").as_bool().unwrap());
+    assert_eq!(
+        field(&field(&converted_v3, "versions"), "apiEnvelopeVersion").as_f64(),
+        Some(3.0)
+    );
+    assert!(field(&field(&converted_v3, "data"), "text")
         .as_string()
         .unwrap()
         .contains("AB"));

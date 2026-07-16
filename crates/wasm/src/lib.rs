@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::sync::Arc;
 
 use js_sys::{Function, Reflect, Uint8Array};
+use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3};
 use latexsnipper_ast::{DiagnosticLevel, Document, GeneratedContent};
 use latexsnipper_conversion::{DocumentConverter, OutputFormat};
 use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
@@ -37,11 +38,30 @@ pub fn api_info_v2() -> JsValue {
 }
 
 #[wasm_bindgen]
+pub fn api_info_v3() -> JsValue {
+    serialize_to_js(&ApiEnvelopeV3::success(
+        api::ApiInfoV3::current(),
+        Vec::new(),
+    ))
+}
+
+#[wasm_bindgen]
 pub fn capabilities_v2() -> JsValue {
     STATE.with(|cell| {
         let state = cell.borrow();
         response_to_js(WasmResponse::success(
             capabilities::collect(&state.resolver, state.limits(), state.usage()),
+            Vec::new(),
+        ))
+    })
+}
+
+#[wasm_bindgen]
+pub fn capabilities_v3() -> JsValue {
+    STATE.with(|cell| {
+        let state = cell.borrow();
+        serialize_to_js(&ApiEnvelopeV3::success(
+            capabilities::collect_v3(&state.resolver, state.limits(), state.usage()),
             Vec::new(),
         ))
     })
@@ -599,10 +619,58 @@ struct WasmArtifact {
 
 #[wasm_bindgen]
 pub fn convert_v2(doc_json: &str, format: &str) -> JsValue {
+    match convert_artifact(doc_json, format) {
+        Ok(value) => {
+            let diagnostics = value.diagnostics.iter().map(api_diagnostic).collect();
+            artifact_response_to_js(value, diagnostics)
+        }
+        Err(error) => error_to_js(error),
+    }
+}
+
+#[wasm_bindgen]
+pub fn convert_v3(doc_json: &str, format: &str) -> JsValue {
+    match convert_artifact(doc_json, format) {
+        Ok(value) => {
+            let bytes = value
+                .bytes
+                .as_ref()
+                .map(|bytes| Uint8Array::from(bytes.as_slice()));
+            let diagnostics = value.diagnostics.clone();
+            let response = serialize_to_js(&ApiEnvelopeV3::success(value, diagnostics));
+            if let Some(bytes) = bytes {
+                if let Ok(data) = Reflect::get(&response, &JsValue::from_str("data")) {
+                    let _ = Reflect::set(&data, &JsValue::from_str("bytes"), &bytes);
+                }
+            }
+            response
+        }
+        Err(error) => {
+            let code = serde_json::to_value(error.code)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .unwrap_or_else(|| "INTERNAL_ERROR".to_string());
+            serialize_to_js(&ApiEnvelopeV3::<()>::failure(
+                ApiErrorV3 {
+                    code,
+                    message: error.message,
+                    recoverable: error.recoverable,
+                    details: Some(serde_json::json!({
+                        "stage": error.stage,
+                        "context": error.details,
+                    })),
+                },
+                Vec::new(),
+            ))
+        }
+    }
+}
+
+fn convert_artifact(doc_json: &str, format: &str) -> Result<WasmArtifact, WasmError> {
     let document: Document = match serde_json::from_str(doc_json) {
         Ok(document) => document,
         Err(error) => {
-            return error_to_js(
+            return Err(
                 WasmError::new(WasmErrorCode::InvalidArgument, error.to_string())
                     .at_stage("parse-document"),
             );
@@ -611,32 +679,29 @@ pub fn convert_v2(doc_json: &str, format: &str) -> JsValue {
     let output_format = match output_format(format) {
         Some(format) => format,
         None => {
-            return error_to_js(
-                WasmError::new(
-                    WasmErrorCode::UnsupportedFormat,
-                    format!("Format '{format}' is unavailable in the WASM build"),
-                )
-                .with_details(serde_json::json!({
-                    "available": OutputFormat::all().iter().map(OutputFormat::name).collect::<Vec<_>>()
-                })),
-            );
+            return Err(WasmError::new(
+                WasmErrorCode::UnsupportedFormat,
+                format!("Format '{format}' is unavailable in the WASM build"),
+            )
+            .with_details(serde_json::json!({
+                "available": OutputFormat::all().iter().map(OutputFormat::name).collect::<Vec<_>>()
+            })));
         }
     };
     let artifact = match DocumentConverter::new(output_format).convert_artifact(&document) {
         Ok(artifact) => artifact,
         Err(error) => {
-            return error_to_js(
-                WasmError::new(WasmErrorCode::ConversionFailed, error).at_stage("conversion"),
+            return Err(
+                WasmError::new(WasmErrorCode::ConversionFailed, error).at_stage("conversion")
             );
         }
     };
-    let diagnostics: Vec<_> = artifact.diagnostics.iter().map(api_diagnostic).collect();
     let (text, bytes) = match artifact.content {
         Some(GeneratedContent::Text(text)) => (Some(text), None),
         Some(GeneratedContent::Binary(bytes)) => (None, Some(bytes)),
         None => (artifact.text, None),
     };
-    let value = WasmArtifact {
+    Ok(WasmArtifact {
         format: artifact.format,
         mime_type: artifact
             .mime_type
@@ -647,8 +712,7 @@ pub fn convert_v2(doc_json: &str, format: &str) -> JsValue {
         checksum: artifact.checksum_sha256,
         diagnostics: artifact.diagnostics,
         bytes,
-    };
-    artifact_response_to_js(value, diagnostics)
+    })
 }
 
 fn artifact_response_to_js(artifact: WasmArtifact, diagnostics: Vec<ApiDiagnostic>) -> JsValue {
@@ -852,7 +916,11 @@ fn api_diagnostic(diagnostic: &latexsnipper_ast::Diagnostic) -> ApiDiagnostic {
 }
 
 fn response_to_js<T: Serialize>(response: WasmResponse<T>) -> JsValue {
-    serde_wasm_bindgen::to_value(&response).unwrap_or_else(|error| {
+    serialize_to_js(&response)
+}
+
+fn serialize_to_js<T: Serialize>(value: &T) -> JsValue {
+    serde_wasm_bindgen::to_value(value).unwrap_or_else(|error| {
         JsValue::from_str(&format!("WASM response serialization failed: {error}"))
     })
 }
