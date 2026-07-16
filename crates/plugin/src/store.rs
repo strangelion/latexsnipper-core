@@ -9,8 +9,8 @@ use sha2::{Digest, Sha256};
 use crate::manifest::legacy_core_requirement_matches;
 use crate::{
     EffectivePermissionSummary, EffectivePluginPermissions, IsolatedProcessHost,
-    IsolatedProcessLimits, IsolatedProcessResult, PluginClass, PluginHook, PluginManifest,
-    PluginRequest, PLUGIN_ABI_VERSION, PLUGIN_API_VERSION,
+    IsolatedProcessLimits, IsolatedProcessResult, LoadedPluginManifest, PluginClass, PluginHook,
+    PluginManifest, PluginRequest, PLUGIN_ABI_VERSION, PLUGIN_API_VERSION,
 };
 
 const MAX_PACKAGE_FILES: usize = 256;
@@ -72,8 +72,17 @@ impl PluginStore {
     pub fn verify_package(&self, source: &Path) -> Result<PluginVerification> {
         let (package_root, manifest_path) = locate_manifest(source)?;
         let manifest_bytes = read_limited(&manifest_path, 1024 * 1024)?;
-        let manifest: PluginManifest = serde_json::from_slice(&manifest_bytes)
-            .map_err(|error| plugin_error(format!("Invalid plugin manifest: {error}")))?;
+        let manifest = match LoadedPluginManifest::parse_json(&manifest_bytes)
+            .map_err(|error| plugin_error(format!("Invalid plugin manifest: {error}")))?
+        {
+            LoadedPluginManifest::V2(manifest) => *manifest,
+            LoadedPluginManifest::V3(manifest) => {
+                return Err(plugin_error(format!(
+                    "Plugin manifest v3 '{}' must be installed through the signed registry/WASI path; the legacy local process store cannot enforce v3 permissions",
+                    manifest.id
+                )))
+            }
+        };
         validate_external_manifest(&manifest)?;
 
         let entrypoint = manifest

@@ -30,3 +30,4 @@ tempfile = "3"
 wat = "1.239.0"
 wit-component = { version = "0.239.0", features = ["dummy-module"] }
 wit-parser = "0.239.0"
+zip = { version = "0.6", default-features = false, features = ["deflate"] }

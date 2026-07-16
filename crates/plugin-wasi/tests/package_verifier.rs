@@ -1,12 +1,17 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{Cursor, Write};
 use std::sync::Arc;
 
-use latexsnipper_plugin::PluginManifestV3;
+use latexsnipper_plugin::{
+    PluginExecutionClassV3, PluginManifestV3, RegistryTarget, RemotePluginProvenance,
+    RemotePluginStore,
+};
 use latexsnipper_plugin_wasi::{
-    wit_types, ComponentInvocation, ComponentNetworkScheme, NetworkBroker, NetworkRequest,
-    NetworkResponse, WasiComponentHost, WasiComponentPackageVerifier, WasiDiagnosticCode,
-    WasiDiagnosticDetail, WasiDiagnosticSeverity, WasiHostPolicy, WasiPackagePolicy,
+    wit_types, ActivatedRemoteWasiPlugin, ComponentInvocation, ComponentNetworkScheme,
+    NetworkBroker, NetworkRequest, NetworkResponse, WasiComponentHost,
+    WasiComponentPackageVerifier, WasiDiagnosticCode, WasiDiagnosticDetail, WasiDiagnosticSeverity,
+    WasiHostPolicy, WasiPackagePolicy,
 };
 use semver::Version;
 use serde_json::{json, Value};
@@ -174,6 +179,23 @@ fn typed_success_component() -> Vec<u8> {
         .validate(true)
         .encode()
         .unwrap()
+}
+
+fn remote_archive(component: &[u8]) -> Vec<u8> {
+    let manifest = serde_json::to_vec_pretty(&manifest(component)).unwrap();
+    let mut output = Cursor::new(Vec::new());
+    {
+        let mut archive = zip::ZipWriter::new(&mut output);
+        let options = zip::write::FileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .unix_permissions(0o644);
+        archive.start_file("plugin.json", options).unwrap();
+        archive.write_all(&manifest).unwrap();
+        archive.start_file("plugin.wasm", options).unwrap();
+        archive.write_all(component).unwrap();
+        archive.finish().unwrap();
+    }
+    output.into_inner()
 }
 
 fn patch_payload(result: latexsnipper_plugin_wasi::ComponentInvocationResult) -> Vec<u8> {
@@ -412,6 +434,94 @@ fn real_typed_component_runs_transform_import_and_export() {
     };
     assert_eq!(output.media_type, "application/octet-stream");
     assert_eq!(output.payload, b"exported");
+}
+
+#[test]
+fn signed_remote_component_requires_enablement_and_executes_after_activation() {
+    let component = typed_success_component();
+    let archive = remote_archive(&component);
+    let target = RegistryTarget {
+        plugin_id: "fixture.component".to_string(),
+        version: "1.0.0".to_string(),
+        package_path: "packages/fixture.component-1.0.0.zip".to_string(),
+        length: archive.len() as u64,
+        sha256: hex::encode(Sha256::digest(&archive)),
+        execution_class: PluginExecutionClassV3::WasiComponent,
+        core_version_requirement: ">=3.0.0-alpha.1, <4.0.0".to_string(),
+        revoked: false,
+        revocation_reason: None,
+    };
+    let provenance = RemotePluginProvenance {
+        registry_name: "fixture".to_string(),
+        registry_origin: "https://registry.example.invalid".to_string(),
+        targets_version: 1,
+        package_path: target.package_path.clone(),
+        package_sha256: target.sha256.clone(),
+        verified_at_unix: 1_900_000_000,
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let store = RemotePluginStore::new(temporary.path().join("remote"));
+    store
+        .install(&target, &archive, provenance, "3.0.0-alpha.1")
+        .unwrap();
+
+    let Err(disabled) = ActivatedRemoteWasiPlugin::activate(&store, "fixture.component") else {
+        panic!("disabled remote plugin activated");
+    };
+    assert_eq!(
+        disabled.code,
+        WasiDiagnosticCode::PluginWasiProtocolMismatch
+    );
+
+    store.set_enabled("fixture.component", true).unwrap();
+    let activated = ActivatedRemoteWasiPlugin::activate(&store, "fixture.component").unwrap();
+    assert_eq!(activated.manifest().id, "fixture.component");
+    assert_eq!(
+        activated.component_sha256(),
+        hex::encode(Sha256::digest(&component))
+    );
+    let result = activated
+        .execute(
+            ComponentInvocation::Import(wit_types::ImportRequest {
+                format: "text/plain".to_string(),
+                payload: b"remote-import".to_vec(),
+            }),
+            latexsnipper_plugin::CancellationToken::default(),
+        )
+        .unwrap();
+    let latexsnipper_plugin_wasi::ComponentInvocationResult::Document(document) = result else {
+        panic!("expected document result");
+    };
+    assert_eq!(document.payload, b"remote-import");
+
+    store.set_enabled("fixture.component", false).unwrap();
+    let disabled = activated
+        .execute(
+            ComponentInvocation::Import(wit_types::ImportRequest {
+                format: "text/plain".to_string(),
+                payload: b"blocked-after-disable".to_vec(),
+            }),
+            latexsnipper_plugin::CancellationToken::default(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        disabled.code,
+        WasiDiagnosticCode::PluginWasiProtocolMismatch
+    );
+
+    store.set_enabled("fixture.component", true).unwrap();
+    let revoked = ActivatedRemoteWasiPlugin::activate(&store, "fixture.component").unwrap();
+    store.revoke("fixture.component").unwrap();
+    let revoked = revoked
+        .execute(
+            ComponentInvocation::Import(wit_types::ImportRequest {
+                format: "text/plain".to_string(),
+                payload: b"blocked-after-revoke".to_vec(),
+            }),
+            latexsnipper_plugin::CancellationToken::default(),
+        )
+        .unwrap_err();
+    assert_eq!(revoked.code, WasiDiagnosticCode::PluginWasiProtocolMismatch);
 }
 
 #[test]

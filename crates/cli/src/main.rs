@@ -15,6 +15,11 @@ use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use std::io::{self, Read, Write};
 
+mod fs_util;
+mod migration;
+
+use migration::{MigrationCommand, MigrationRunStatus};
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum DiagnosticsFormat {
     Text,
@@ -35,10 +40,11 @@ enum CliExitCode {
     StrictDiagnosticFailure = 8,
     PluginFailure = 9,
     PartialBatchFailure = 10,
+    MigrationRequiresManualAction = 11,
 }
 
 impl CliExitCode {
-    const fn contract() -> [(Self, &'static str); 10] {
+    const fn contract() -> [(Self, &'static str); 11] {
         [
             (Self::GenericFailure, "generic failure"),
             (Self::InvalidArguments, "invalid arguments"),
@@ -50,6 +56,10 @@ impl CliExitCode {
             (Self::StrictDiagnosticFailure, "strict diagnostic failure"),
             (Self::PluginFailure, "plugin failure"),
             (Self::PartialBatchFailure, "partial batch failure"),
+            (
+                Self::MigrationRequiresManualAction,
+                "migration requires manual action",
+            ),
         ]
     }
 }
@@ -280,7 +290,15 @@ enum Commands {
         /// Filter by output format (e.g., "markdown", "html", "svg")
         #[arg(long)]
         output: Option<String>,
+
+        /// JSON API envelope version; only valid with --format json
+        #[arg(long, value_parser = clap::value_parser!(u32).range(2..=3))]
+        api_version: Option<u32>,
     },
+
+    /// Inspect or migrate serialized v2 contracts without overwriting the source
+    #[command(subcommand)]
+    Migrate(MigrationCommand),
 
     /// Play the LaTeX Math Rendering Challenge (minigame)
     #[command(long_about = "Launch the LaTeX Math Rendering Challenge.\n\n\
@@ -384,7 +402,7 @@ enum ModelsCommand {
         snipper models download --all")]
     Download {
         /// Model category to download (e.g., formula-det, text-rec)
-        #[arg(short = 'c', long)]
+        #[arg(short = 'c', long, conflicts_with = "all")]
         category: Option<String>,
 
         /// Download all models (not just required ones)
@@ -503,24 +521,7 @@ enum PluginRegistryCommand {
     },
 }
 
-fn resolve_format(format: &str, output: Option<&str>) -> String {
-    if let Some(path) = output {
-        if let Some(ext) = std::path::Path::new(path)
-            .extension()
-            .and_then(|e| e.to_str())
-        {
-            return match ext.to_ascii_lowercase().as_str() {
-                "tex" | "latex" => "latex".to_string(),
-                "typ" => "typst".to_string(),
-                "md" | "markdown" => "markdown".to_string(),
-                "html" | "htm" => "html".to_string(),
-                "json" => "json".to_string(),
-                "mathml" | "xml" => "mathml".to_string(),
-                "omml" => "omml".to_string(),
-                _ => format.to_string(),
-            };
-        }
-    }
+fn resolve_format(format: &str) -> String {
     format.to_ascii_lowercase()
 }
 
@@ -775,7 +776,7 @@ fn main() {
 
             eprintln!("Detected {} blocks", snipper.document().block_count());
 
-            let resolved_format = resolve_format(&format, output.as_deref());
+            let resolved_format = resolve_format(&format);
 
             let output_result = match resolved_format.as_str() {
                 "latex" | "tex" => snipper.to_latex(),
@@ -876,7 +877,13 @@ fn main() {
                 .map(|backend| backend.runtime_diagnostics());
             #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let runtime: Option<serde_json::Value> = None;
-            let capabilities = build_capability_matrix();
+            let (capabilities, capability_registry_error) = match build_capability_matrix() {
+                Ok(matrix) => (matrix, None),
+                Err(error) => (
+                    latexsnipper_conversion::DocumentExportService::capability_matrix(),
+                    Some(error),
+                ),
+            };
             let model_state = doctor_model_state(&models_dir);
             let plugin_state = doctor_plugin_state(std::path::Path::new(".snipper/plugins"));
             println!(
@@ -893,6 +900,7 @@ fn main() {
                     "outputDirectoryWritable": directory_is_writable(&current_dir),
                     "plugins": plugin_state,
                     "availableConversions": capabilities.entries.iter().filter(|entry| entry.available).count(),
+                    "capabilityRegistryError": capability_registry_error,
                     "exitCodes": CliExitCode::contract().into_iter().map(|(code, description)| serde_json::json!({
                         "code": code as i32,
                         "description": description,
@@ -906,10 +914,37 @@ fn main() {
             format,
             input,
             output,
+            api_version,
         } => {
-            let matrix = build_capability_matrix();
+            let normalized_format = format.to_ascii_lowercase();
+            if !matches!(
+                normalized_format.as_str(),
+                "table" | "markdown" | "md" | "json"
+            ) {
+                exit_with_code(
+                    CliExitCode::InvalidArguments,
+                    "Invalid capability options",
+                    format!(
+                        "unsupported capability output format '{format}'; use table, markdown, or json"
+                    ),
+                );
+            }
+            if normalized_format != "json" && api_version.is_some() {
+                exit_with_code(
+                    CliExitCode::InvalidArguments,
+                    "Invalid capability options",
+                    "--api-version is only meaningful with --format json",
+                );
+            }
+            let matrix = build_capability_matrix().unwrap_or_else(|error| {
+                exit_with_code(
+                    CliExitCode::PluginFailure,
+                    "Capability registry failed",
+                    error,
+                )
+            });
             let filtered = filter_capabilities(&matrix, input.as_deref(), output.as_deref());
-            match format.as_str() {
+            match normalized_format.as_str() {
                 "markdown" | "md" => print_capabilities_markdown(&filtered),
                 "json" => {
                     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -922,18 +957,36 @@ fn main() {
                         target_os = "macos"
                     )))]
                     let runtime: Option<serde_json::Value> = None;
+                    let data = serde_json::json!({
+                        "capabilities": filtered,
+                        "runtime": runtime,
+                    });
+                    let value = if api_version.unwrap_or(3) == 3 {
+                        serde_json::to_value(latexsnipper_api_types::ApiEnvelopeV3::success(
+                            data,
+                            Vec::new(),
+                        ))
+                        .expect("v3 capability envelope serialization must succeed")
+                    } else {
+                        data
+                    };
                     println!(
                         "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "capabilities": filtered,
-                            "runtime": runtime,
-                        }))
-                        .expect("capability JSON serialization must succeed")
+                        serde_json::to_string_pretty(&value)
+                            .expect("capability JSON serialization must succeed")
                     );
                 }
                 _ => print_capabilities_table(&filtered),
             }
         }
+
+        Commands::Migrate(command) => match migration::run(command) {
+            Ok(MigrationRunStatus::Completed) => {}
+            Ok(MigrationRunStatus::RequiresManualAction) => {
+                std::process::exit(CliExitCode::MigrationRequiresManualAction as i32)
+            }
+            Err(error) => exit_with_code(CliExitCode::InvalidInput, "Migration failed", error),
+        },
 
         Commands::Play => play_game(),
 
@@ -1740,11 +1793,7 @@ fn write_output_file(
             .and_then(|_| file.sync_all())
             .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
         drop(file);
-        if options.force && path.exists() {
-            std::fs::remove_file(path)
-                .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))?;
-        }
-        std::fs::rename(&temporary, path)
+        fs_util::activate_file(&temporary, path, options.force)
             .map_err(|error| CliFailure::new(CliExitCode::GenericFailure, error.to_string()))
     })();
     if result.is_err() {
@@ -1763,7 +1812,7 @@ fn doctor_model_state(models_dir: &std::path::Path) -> serde_json::Value {
             "checksumStatus": "unavailable_without_manifest",
         });
     }
-    let manifest = match latexsnipper_model::ModelManifest::load(&manifest_path) {
+    let manifest = match load_runtime_model_manifest(&manifest_path) {
         Ok(value) => value,
         Err(error) => {
             return serde_json::json!({
@@ -1804,6 +1853,21 @@ fn doctor_model_state(models_dir: &std::path::Path) -> serde_json::Value {
         "expectedFilesPresent": missing_files == 0,
         "checksumStatus": "archives_verified_at_download; extracted_files_checked_for_presence",
     })
+}
+
+fn load_runtime_model_manifest(
+    path: &std::path::Path,
+) -> latexsnipper_foundation::Result<latexsnipper_model::ModelManifest> {
+    latexsnipper_model::LoadedModelManifest::load(path)?.into_runtime_manifest()
+}
+
+fn download_runtime_model_manifest(
+    url: &str,
+    save_path: &std::path::Path,
+) -> latexsnipper_foundation::Result<latexsnipper_model::ModelManifest> {
+    let loaded = latexsnipper_model::LoadedModelManifest::download(url)?;
+    loaded.save(save_path)?;
+    loaded.into_runtime_manifest()
 }
 
 fn doctor_plugin_state(store_dir: &std::path::Path) -> serde_json::Value {
@@ -1913,11 +1977,8 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
     // --manifest-url overrides local manifest: always download fresh
     let manifest = if let Some(url) = manifest_url {
         eprintln!("Downloading manifest from {}", url);
-        match latexsnipper_model::ModelManifest::download(&url) {
+        match download_runtime_model_manifest(&url, &manifest_path) {
             Ok(m) => {
-                if let Err(e) = m.save(&manifest_path) {
-                    eprintln!("Warning: could not save manifest locally: {}", e);
-                }
                 eprintln!("Manifest downloaded successfully.");
                 m
             }
@@ -1927,7 +1988,7 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
             }
         }
     } else if manifest_path.exists() {
-        match latexsnipper_model::ModelManifest::load(&manifest_path) {
+        match load_runtime_model_manifest(&manifest_path) {
             Ok(m) => m,
             Err(e) => {
                 eprintln!("Failed to load local manifest: {}", e);
@@ -1939,11 +2000,8 @@ fn handle_models_download(category: Option<String>, all: bool, manifest_url: Opt
         let url = DEFAULT_MANIFEST_URL.to_string();
         eprintln!("Local manifest not found, downloading from {}", url);
 
-        match latexsnipper_model::ModelManifest::download(&url) {
+        match download_runtime_model_manifest(&url, &manifest_path) {
             Ok(m) => {
-                if let Err(e) = m.save(&manifest_path) {
-                    eprintln!("Warning: could not save manifest locally: {}", e);
-                }
                 eprintln!("Manifest downloaded successfully.");
                 m
             }
@@ -2071,7 +2129,7 @@ fn handle_models_list(category: Option<String>) {
         // List all categories
         let manifest_path = std::path::PathBuf::from("models/model-manifest.json");
         if manifest_path.exists() {
-            if let Ok(manifest) = latexsnipper_model::ModelManifest::load(&manifest_path) {
+            if let Ok(manifest) = load_runtime_model_manifest(&manifest_path) {
                 eprintln!("Installed models:");
                 for (cat, info) in &manifest.categories {
                     let variants = manager.list_installed(cat);
@@ -2111,7 +2169,7 @@ fn handle_models_verify(category: Option<String>) {
         std::process::exit(1);
     }
 
-    let manifest = match latexsnipper_model::ModelManifest::load(&manifest_path) {
+    let manifest = match load_runtime_model_manifest(&manifest_path) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("Failed to load manifest: {}", e);
@@ -2408,23 +2466,53 @@ fn handle_plugin_command(store_dir: &str, command: PluginCommand) -> Result<(), 
             );
         }
         PluginCommand::Uninstall { id } => {
+            if store.get(&id).map_err(|error| error.to_string())?.is_none()
+                && registries
+                    .remote_store()
+                    .get(&id)
+                    .map_err(|error| error.to_string())?
+                    .is_some()
+            {
+                return Err(format!(
+                    "Remote plugin '{id}' cannot be removed by the legacy uninstall path; disable it or revoke its trust first"
+                ));
+            }
             store.uninstall(&id).map_err(|error| error.to_string())?;
             println!("Plugin '{id}' uninstalled");
         }
         PluginCommand::Enable { id } => {
-            let plugin = store
-                .set_enabled(&id, true)
-                .map_err(|error| error.to_string())?;
-            println!(
-                "Plugin '{}' enabled in store metadata; execution still requires a compatible host",
-                plugin.manifest.id
-            );
+            if store.get(&id).map_err(|error| error.to_string())?.is_some() {
+                let plugin = store
+                    .set_enabled(&id, true)
+                    .map_err(|error| error.to_string())?;
+                println!(
+                    "Plugin '{}' enabled in store metadata; execution still requires a compatible host",
+                    plugin.manifest.id
+                );
+            } else {
+                let plugin = registries
+                    .remote_store()
+                    .set_enabled(&id, true)
+                    .map_err(|error| error.to_string())?;
+                println!(
+                    "Verified WASI plugin '{}' enabled; declared capabilities are now eligible for registration",
+                    plugin.manifest.id
+                );
+            }
         }
         PluginCommand::Disable { id } => {
-            let plugin = store
-                .set_enabled(&id, false)
-                .map_err(|error| error.to_string())?;
-            println!("Plugin '{}' disabled", plugin.manifest.id);
+            if store.get(&id).map_err(|error| error.to_string())?.is_some() {
+                let plugin = store
+                    .set_enabled(&id, false)
+                    .map_err(|error| error.to_string())?;
+                println!("Plugin '{}' disabled", plugin.manifest.id);
+            } else {
+                let plugin = registries
+                    .remote_store()
+                    .set_enabled(&id, false)
+                    .map_err(|error| error.to_string())?;
+                println!("Verified WASI plugin '{}' disabled", plugin.manifest.id);
+            }
         }
         PluginCommand::Revoke { id } => {
             let plugin = registries
@@ -2695,7 +2783,7 @@ fn handle_job_run(input: &str, format: &str, output: Option<&str>, mode: &str) {
     eprintln!("  Blocks: {}", snipper.document().block_count());
 
     // Export
-    let resolved = resolve_format(format, output);
+    let resolved = resolve_format(format);
     let result = match resolved.as_str() {
         "latex" => snipper.to_latex(),
         "markdown" => snipper.to_markdown(),
@@ -2761,8 +2849,15 @@ fn chrono_job_id() -> String {
     format!("{:x}", now.as_nanos())
 }
 
-fn build_capability_matrix() -> CapabilityMatrix {
-    latexsnipper_conversion::DocumentExportService::capability_matrix()
+fn build_capability_matrix() -> Result<CapabilityMatrix, String> {
+    let mut matrix = latexsnipper_conversion::DocumentExportService::capability_matrix();
+    let remote_root = std::path::PathBuf::from(".snipper/plugins/signed-registries/remote");
+    if remote_root.exists() {
+        latexsnipper_plugin::RemotePluginStore::new(remote_root)
+            .extend_capability_matrix(&mut matrix)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(matrix)
 }
 /// Filter capability entries by input/output format.
 fn filter_capabilities(
@@ -3514,10 +3609,10 @@ mod tests {
 
     #[test]
     fn resolves_all_public_format_aliases() {
-        assert_eq!(resolve_format("latex_display", None), "latex_display");
-        assert_eq!(resolve_format("LATEX_EQUATION", None), "latex_equation");
-        assert_eq!(resolve_format("markdown_inline", None), "markdown_inline");
-        assert_eq!(resolve_format("ignored", Some("out.typ")), "typst");
+        assert_eq!(resolve_format("latex_display"), "latex_display");
+        assert_eq!(resolve_format("LATEX_EQUATION"), "latex_equation");
+        assert_eq!(resolve_format("markdown_inline"), "markdown_inline");
+        assert_eq!(resolve_format("latex"), "latex");
         assert_eq!(suggest_format("equationlatex"), Some("latex_equation"));
     }
 
