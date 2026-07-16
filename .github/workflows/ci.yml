@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --all-targets --all-features
+      - run: cargo check --locked --workspace --all-targets --all-features
 
   test:
     name: Test
@@ -37,8 +37,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace
-      - run: cargo test --workspace --all-features
+      - run: cargo test --locked --workspace
+      - run: cargo test --locked --workspace --all-features
 
   focused-tests:
     name: ${{ matrix.name }}
@@ -49,19 +49,19 @@ jobs:
       matrix:
         include:
           - name: Package validation
-            command: cargo test -p latexsnipper-conversion package_export
+            command: cargo test --locked -p latexsnipper-conversion package_export
           - name: Parser security and fuzz smoke
-            command: cargo test -p latexsnipper-conversion importer::tests
+            command: cargo test --locked -p latexsnipper-conversion importer::tests
           - name: Round-trip corpus
-            command: cargo test --test conversion_roundtrip
+            command: cargo test --locked --test conversion_roundtrip
           - name: CLI smoke
-            command: cargo test -p latexsnipper-cli --test cli_convert
+            command: cargo test --locked -p latexsnipper-cli --test cli_convert
           - name: Plugin lifecycle and package management
-            command: cargo test -p latexsnipper-plugin
+            command: cargo test --locked -p latexsnipper-plugin
           - name: V3 contracts and migrations
-            command: cargo test -p latexsnipper-foundation -p latexsnipper-api-types -p latexsnipper-plugin -p latexsnipper-model
+            command: cargo test --locked -p latexsnipper-foundation -p latexsnipper-api-types -p latexsnipper-plugin -p latexsnipper-model
           - name: WASI Component isolation
-            command: cargo test -p latexsnipper-plugin-wasi
+            command: cargo test --locked -p latexsnipper-plugin-wasi
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -76,7 +76,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo bench -p latexsnipper-tests --bench core_bench
+      - run: cargo bench --locked -p latexsnipper-tests --bench core_bench
 
   ocr-evidence-contract:
     name: OCR evidence contract
@@ -89,9 +89,9 @@ jobs:
       - name: Validate corpora and generate non-production contract predictions
         shell: bash
         run: |
-          cargo run -p latexsnipper-evaluation --bin ocr-eval -- \
+          cargo run --locked -p latexsnipper-evaluation --bin ocr-eval -- \
             validate --index evaluation/corpora/index.json
-          cargo run -p latexsnipper-evaluation --bin ocr-eval -- \
+          cargo run --locked -p latexsnipper-evaluation --bin ocr-eval -- \
             contract-predictions \
             --index evaluation/corpora/index.json \
             --tier pull-request \
@@ -100,7 +100,7 @@ jobs:
       - name: Calculate metrics and enforce the contract gates
         shell: bash
         run: |
-          cargo run -p latexsnipper-evaluation --bin ocr-eval -- \
+          cargo run --locked -p latexsnipper-evaluation --bin ocr-eval -- \
             evaluate \
             --index evaluation/corpora/index.json \
             --predictions target/evaluation/contract-predictions.json \
@@ -126,18 +126,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Validate golden corpora
         run: >-
-          cargo run -p latexsnipper-fidelity --bin fidelity-check --
+          cargo run --locked -p latexsnipper-fidelity --bin fidelity-check --
           validate --index fidelity/corpora/index.json --repository-root .
       - name: Run fidelity evidence gates
         run: >-
-          cargo run -p latexsnipper-fidelity --bin fidelity-check --
+          cargo run --locked -p latexsnipper-fidelity --bin fidelity-check --
           run --index fidelity/corpora/index.json --repository-root .
           --source-commit "$GITHUB_SHA"
           --generated-at-utc "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           --output target/fidelity/report.json
       - name: Verify generated capability documentation
         run: |
-          cargo run -p latexsnipper-fidelity --bin generate-fidelity-capabilities -- \
+          cargo run --locked -p latexsnipper-fidelity --bin generate-fidelity-capabilities -- \
             --output docs/generated/fidelity-capabilities.md
           git diff --exit-code -- docs/generated/fidelity-capabilities.md
       - name: Upload fidelity evidence
@@ -178,7 +178,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
   fuzz-build:
     name: Compile all fuzz targets
@@ -224,7 +224,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --doc --workspace --all-features
+      - run: cargo test --locked --doc --workspace --all-features
 
   feature-matrix:
     name: Feature matrix
@@ -234,9 +234,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p latexsnipper-runtime --no-default-features
-      - run: cargo check -p latexsnipper-runtime --features remote-api
-      - run: cargo check -p latexsnipper-cli --all-targets
+      - run: cargo check --locked -p latexsnipper-runtime --no-default-features
+      - run: cargo check --locked -p latexsnipper-runtime --features remote-api
+      - run: cargo check --locked -p latexsnipper-cli --all-targets
 
   real-model-windows:
     name: Real models (Windows CPU)
@@ -260,13 +260,13 @@ jobs:
         shell: pwsh
         run: ./scripts/setup-real-model-tests.ps1
       - name: Run text, formula, orientation, and multi-model tests
-        run: cargo test -p latexsnipper-tests --test real_model -- --nocapture
+        run: cargo test --locked -p latexsnipper-tests --test real_model -- --nocapture
       - name: Run real-model pipeline integration tests
-        run: cargo test -p latexsnipper-tests --test pipeline_integration -- --nocapture
+        run: cargo test --locked -p latexsnipper-tests --test pipeline_integration -- --nocapture
       - name: Run full recognition pipeline tests
-        run: cargo test -p latexsnipper-tests --test pipeline_e2e -- --nocapture
+        run: cargo test --locked -p latexsnipper-tests --test pipeline_e2e -- --nocapture
       - name: Run table recognition test
-        run: cargo test --test table_e2e -- --nocapture
+        run: cargo test --locked --test table_e2e -- --nocapture
       - name: Upload model setup diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -284,4 +284,15 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace
+      - run: cargo check --locked --workspace
+
+  release-contract:
+    name: Release version and frozen contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - run: python scripts/verify_release_version.py
+      - run: python scripts/verify_v3_contract_freeze.py
+      - run: cargo metadata --locked --no-deps --format-version 1 > /dev/null

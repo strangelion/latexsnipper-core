@@ -2,10 +2,21 @@
   "name": "@latexsnipper/wasm-runtime",
   "version": "3.0.0-alpha.1",
   "private": true,
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/strangelion/latexsnipper-core.git",
+    "directory": "crates/wasm/js"
+  },
+  "homepage": "https://github.com/strangelion/latexsnipper-core",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "files": [
     "dist",
-    "example"
+    "example",
+    "LICENSE"
   ],
   "exports": {
     ".": {
