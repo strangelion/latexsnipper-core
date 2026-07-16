@@ -22,7 +22,7 @@ pub trait InferenceSession: Send + Sync {
     fn release(&mut self);
 }
 
-/// Blanket implementation for Box<dyn InferenceSession>.
+/// Blanket implementation for `Box<dyn InferenceSession>`.
 impl InferenceSession for Box<dyn InferenceSession> {
     fn run(&self, inputs: &[Tensor]) -> Result<Vec<Tensor>> {
         (**self).run(inputs)

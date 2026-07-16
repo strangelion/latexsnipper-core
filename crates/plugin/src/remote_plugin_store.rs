@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fs2::FileExt;
+use latexsnipper_ast::CapabilityMatrix;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -14,7 +15,7 @@ use crate::{
 };
 
 const REMOTE_INDEX_SCHEMA_VERSION: u32 = 1;
-const MANIFEST_FILE: &str = "plugin-v3.json";
+const MANIFEST_FILE: &str = "plugin.json";
 
 #[derive(Debug, Clone, Copy)]
 pub struct RemotePackageLimits {
@@ -109,6 +110,7 @@ impl Default for RemoteStoreIndex {
     }
 }
 
+#[derive(Clone)]
 pub struct RemotePluginStore {
     root: PathBuf,
     limits: RemotePackageLimits,
@@ -277,6 +279,86 @@ impl RemotePluginStore {
         }))
     }
 
+    pub fn set_enabled(
+        &self,
+        id: &str,
+        enabled: bool,
+    ) -> Result<RemoteInstalledPlugin, RegistryError> {
+        if enabled {
+            self.verify_installed(id)?;
+        }
+        let lock = self.lock_exclusive()?;
+        let mut index = self.load_index_with_recovery()?;
+        let record = index.plugins.get_mut(id).ok_or_else(|| {
+            RegistryError::InvalidMetadata(format!("plugin '{id}' is not installed"))
+        })?;
+        if record.revoked {
+            return Err(RegistryError::Revoked(id.to_string()));
+        }
+        let version = record
+            .versions
+            .get_mut(&record.active_version)
+            .ok_or_else(|| {
+                RegistryError::InvalidMetadata("active remote package is absent".to_string())
+            })?;
+        if enabled && version.plugin.trust_state != TrustState::VerifiedWasiComponent {
+            return Err(RegistryError::InvalidMetadata(
+                "only verified WASI components can be enabled".to_string(),
+            ));
+        }
+        version.plugin.enabled = enabled;
+        let result = version.plugin.clone();
+        self.write_index(&index)?;
+        FileExt::unlock(&lock)?;
+        Ok(result)
+    }
+
+    /// Register enabled, verified WASI format capabilities into an executable
+    /// capability matrix. Built-in entries keep precedence.
+    pub fn extend_capability_matrix(
+        &self,
+        matrix: &mut CapabilityMatrix,
+    ) -> Result<usize, RegistryError> {
+        let plugins = self.list()?;
+        let mut added = 0usize;
+        for plugin in plugins {
+            if !plugin.enabled
+                || !plugin.active
+                || plugin.trust_state != TrustState::VerifiedWasiComponent
+                || plugin.manifest.execution_class != PluginExecutionClassV3::WasiComponent
+                || !plugin.manifest.permissions.registrations.capabilities
+            {
+                continue;
+            }
+            let verified = self.verify_installed(&plugin.manifest.id)?;
+            for capability in &verified.manifest.format_capabilities {
+                if !capability.available {
+                    continue;
+                }
+                let importer = capability
+                    .input
+                    .as_deref()
+                    .is_some_and(|input| !input.eq_ignore_ascii_case("ast"));
+                let exporter = capability
+                    .output
+                    .as_deref()
+                    .is_some_and(|output| !output.eq_ignore_ascii_case("ast"));
+                if (importer && !verified.manifest.permissions.registrations.importers)
+                    || (exporter && !verified.manifest.permissions.registrations.exporters)
+                    || matrix.entries.iter().any(|existing| {
+                        option_eq_ignore_ascii_case(&existing.input, &capability.input)
+                            && option_eq_ignore_ascii_case(&existing.output, &capability.output)
+                    })
+                {
+                    continue;
+                }
+                matrix.entries.push(capability.clone());
+                added += 1;
+            }
+        }
+        Ok(added)
+    }
+
     pub fn verify_installed(&self, id: &str) -> Result<VerifiedRemotePackage, RegistryError> {
         let index = self.load_index_with_recovery()?;
         let record = index.plugins.get(id).ok_or_else(|| {
@@ -292,6 +374,42 @@ impl RemotePluginStore {
             &version.plugin.provenance.package_sha256,
             self.limits,
         )
+    }
+
+    /// Return the verified package directory and its enabled index snapshot.
+    /// The WASI host must verify the directory again while acquiring its
+    /// handle-relative package view, then bind that result to this snapshot.
+    pub fn enabled_package_directory(
+        &self,
+        id: &str,
+    ) -> Result<(PathBuf, RemoteInstalledPlugin), RegistryError> {
+        let index = self.load_index_with_recovery()?;
+        let record = index.plugins.get(id).ok_or_else(|| {
+            RegistryError::InvalidMetadata(format!("plugin '{id}' is not installed"))
+        })?;
+        if record.revoked {
+            return Err(RegistryError::Revoked(id.to_string()));
+        }
+        let version = record.versions.get(&record.active_version).ok_or_else(|| {
+            RegistryError::InvalidMetadata("active remote package is absent".to_string())
+        })?;
+        if !version.plugin.active
+            || !version.plugin.enabled
+            || version.plugin.trust_state != TrustState::VerifiedWasiComponent
+        {
+            return Err(RegistryError::InvalidMetadata(format!(
+                "plugin '{id}' is not an enabled verified WASI component"
+            )));
+        }
+        let directory = self.root.join(&version.relative_directory);
+        let target = installed_target(version);
+        verify_staged_remote_package(
+            &directory,
+            &target,
+            &version.plugin.provenance.package_sha256,
+            self.limits,
+        )?;
+        Ok((directory, version.plugin.clone()))
     }
 
     pub fn rollback(&self, id: &str) -> Result<RemoteInstalledPlugin, RegistryError> {
@@ -475,6 +593,14 @@ impl RemotePluginStore {
         replace_file(&temporary, &path)?;
         sync_directory(&self.root)?;
         Ok(())
+    }
+}
+
+fn option_eq_ignore_ascii_case(left: &Option<String>, right: &Option<String>) -> bool {
+    match (left.as_deref(), right.as_deref()) {
+        (Some(left), Some(right)) => left.eq_ignore_ascii_case(right),
+        (None, None) => true,
+        _ => false,
     }
 }
 
@@ -909,6 +1035,7 @@ mod tests {
         PluginRegistrationGrantsV3, PluginResourceLimitsV3, COMPONENT_WIT_VERSION_V1,
         PLUGIN_API_VERSION_FOR_MANIFEST_V3, PLUGIN_MANIFEST_SCHEMA_VERSION_V3,
     };
+    use latexsnipper_ast::{FidelityDimensions, FidelityLevel, FormatCapability};
     use std::sync::Arc;
     use zip::write::FileOptions;
 
@@ -930,7 +1057,26 @@ mod tests {
                 component_wit: Some(COMPONENT_WIT_VERSION_V1),
             },
             capabilities: Vec::new(),
-            format_capabilities: Vec::new(),
+            format_capabilities: vec![FormatCapability {
+                input: Some("fixture".to_string()),
+                output: Some("AST".to_string()),
+                available: true,
+                supports_formula: true,
+                supports_table: false,
+                supports_image: false,
+                supports_svg: false,
+                supports_style: false,
+                supports_layout: false,
+                supports_office_objects: false,
+                fidelity: FidelityLevel::SemanticOnly,
+                fidelity_dimensions: FidelityDimensions::default(),
+                known_loss: Vec::new(),
+                notes: Vec::new(),
+                required_features: Vec::new(),
+                external_dependencies: Vec::new(),
+                platform_restrictions: Vec::new(),
+                experimental: true,
+            }],
             hooks: Vec::new(),
             priority: 0,
             dependencies: Vec::new(),
@@ -945,8 +1091,8 @@ mod tests {
                 clocks: false,
                 randomness: false,
                 registrations: PluginRegistrationGrantsV3 {
-                    capabilities: false,
-                    importers: false,
+                    capabilities: true,
+                    importers: true,
                     exporters: false,
                     runtimes: false,
                 },
@@ -1070,6 +1216,33 @@ mod tests {
             serde_json::to_vec(&verified).unwrap(),
             serde_json::to_vec(&reverified).unwrap()
         );
+    }
+
+    #[test]
+    fn only_enabled_verified_wasi_plugins_extend_runtime_capabilities() {
+        let bytes = package("1.0.0");
+        let target = target("1.0.0", &bytes);
+        let temporary = tempfile::tempdir().unwrap();
+        let store = RemotePluginStore::new(temporary.path().join("remote"));
+        store
+            .install(&target, &bytes, provenance(&target), "3.0.0-alpha.1")
+            .unwrap();
+        let mut matrix = CapabilityMatrix {
+            schema_version: "3.0.0".to_string(),
+            entries: Vec::new(),
+        };
+        assert_eq!(store.extend_capability_matrix(&mut matrix).unwrap(), 0);
+
+        store.set_enabled("example.plugin", true).unwrap();
+        assert_eq!(store.extend_capability_matrix(&mut matrix).unwrap(), 1);
+        assert_eq!(matrix.entries[0].input.as_deref(), Some("fixture"));
+
+        store.set_enabled("example.plugin", false).unwrap();
+        let mut empty = CapabilityMatrix {
+            schema_version: "3.0.0".to_string(),
+            entries: Vec::new(),
+        };
+        assert_eq!(store.extend_capability_matrix(&mut empty).unwrap(), 0);
     }
 
     #[test]

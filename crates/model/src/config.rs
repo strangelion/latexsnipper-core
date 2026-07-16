@@ -260,7 +260,7 @@ pub struct PostprocessConfig {
     /// Apply sigmoid to class scores before thresholding (YOLOv8 with built-in sigmoid = false)
     #[serde(default)]
     pub apply_sigmoid: Option<bool>,
-    /// Output tensor layout: "row_major" [N,6] or "col_major" [6,N]
+    /// Output tensor layout: `row_major` `[N, 6]` or `col_major` `[6, N]`.
     #[serde(default)]
     pub output_layout: Option<String>,
     /// Extra postprocessing params

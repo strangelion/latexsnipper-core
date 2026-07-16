@@ -26,7 +26,7 @@ pub struct TableTransformerDetection {
     pub class_id: u32,
     /// Confidence score (softmax probability)
     pub score: f32,
-    /// Bounding box in (x1, y1, x2, y2) normalized to [0,1], then scaled to image pixels
+    /// Bounding box in `(x1, y1, x2, y2)` normalized to `[0, 1]`, then scaled to image pixels.
     pub bbox: [f32; 4],
 }
 

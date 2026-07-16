@@ -1,105 +1,93 @@
-# Migrating from Core 2 to the Core 3 alpha contracts
+# Migrating from Core 2 to Core 3 contracts
 
-PR 1 provides migration building blocks, not a complete v3 runtime. Keep using
-the v2 WASM, CLI, plugin host, and model loader until the corresponding stacked
-PR documents a tested replacement.
+Core 3 keeps compatibility adapters only where the old contract can be mapped
+without widening permissions, inventing evidence, or changing field meaning.
+Unknown future schema versions are rejected before legacy deserialization.
 
-## Rust: inspect every migration outcome
+## CLI migration workflow
 
-```rust
-use latexsnipper_foundation::MigrationStatus;
-use latexsnipper_plugin::{PluginManifest, PluginManifestV3};
+The migration commands preserve the source and choose a new sibling output by
+default:
 
-fn migrate_plugin(json: &str) -> Result<PluginManifestV3, Box<dyn std::error::Error>> {
-    let old: PluginManifest = serde_json::from_str(json)?;
-    let migrated = PluginManifestV3::migrate_from_v2(old)?;
-
-    if migrated.report.status == MigrationStatus::RequiresManualAction {
-        for warning in &migrated.report.warnings {
-            eprintln!("{}: {}", warning.code, warning.message);
-        }
-        return Err("plugin manifest requires review".into());
-    }
-
-    migrated.value.validate_contract()?;
-    Ok(migrated.value)
-}
+```bash
+snipper migrate plugin-manifest plugin.json --json
+snipper migrate model-manifest model-manifest.json --json
+snipper migrate document document.json --json
+snipper migrate inspect unknown.json --json
 ```
 
-Never convert `native_abi` to trusted in-process execution. Never infer a WASI
-WIT version, network scheme/port, or signature key identity from a v2 field.
+Plugin and model destinations use `*.v3.json`; Document migration uses
+`*.migrated.json` because the Document schema remains `1.0.0`. Existing output
+is rejected unless `--force` is present. The output path is always checked
+against the canonical source path, so `--force` can never overwrite the source.
 
-```rust
-use latexsnipper_foundation::MigrationStatus;
-use latexsnipper_model::{ModelManifest, ModelManifestV3};
+Exit code `11` means `requires_manual_action`. In that case the CLI emits the
+structured report and writes no migrated contract. Examples include native ABI
+plugins, ambiguous legacy WASI declarations, untyped network/signature fields,
+missing artifact digests, and model profiles without authored evidence.
 
-fn migrate_models(text: &str) -> Result<ModelManifestV3, Box<dyn std::error::Error>> {
-    let old = ModelManifest::parse(text)?;
-    let migrated = ModelManifestV3::migrate_from_v2(old)?;
+`migrate inspect` never writes and succeeds after reporting whether automatic
+migration would require manual action.
 
-    if migrated.report.status == MigrationStatus::RequiresManualAction {
-        return Err("add profile metadata and executable validation evidence".into());
-    }
+## Version-aware runtime loaders
 
-    migrated.value.validate_contract()?;
-    Ok(migrated.value)
-}
+`LoadedPluginManifest::parse_json` and `LoadedModelManifest::parse/load` inspect
+the explicit schema before selecting a reader. They do not attempt to parse
+schema 4 or another future schema as v2.
+
+The native model manager receives a compatibility view only from v3 profiles
+whose evidence state is `experimental` or `validated`. An `unavailable` profile
+cannot become a runtime model through the adapter. The original v3 manifest is
+preserved on disk when downloaded.
+
+Local process-plugin installation remains the legacy API 1 path. A manifest-v3
+package is explicitly rejected there because that host cannot enforce every v3
+permission. Manifest-v3 WASI packages are installed through the signed registry
+path, remain disabled after installation, and are registered only after an
+explicit enable operation and re-verification.
+
+Runtime hosts activate an enabled registry package through
+`ActivatedRemoteWasiPlugin`. This bridge re-verifies the canonical
+`plugin.json` package with the WASI host policy, compiles the verified
+Component, and preserves invocation-time manifest/declaration checks.
+
+## API envelope and capability output
+
+CLI capability JSON defaults to API envelope v3:
+
+```bash
+snipper capabilities --format json
+snipper capabilities --format json --api-version 2
 ```
 
-All referenced model files and packages need exact SHA-256 values before
-migration. A mechanically migrated profile is deliberately `unavailable`.
+The second command is the explicit v2 compatibility adapter. `--api-version`
+with a non-JSON format is rejected rather than ignored. The executable
+capability matrix is schema `3.0.0`.
 
-## Rust: v3 envelope construction
+WASM callers can use `api_info_v3`, `capabilities_v3`, and `convert_v3`.
+Existing `*_v2` exports remain callable. The TypeScript package declares the
+discriminated `ApiEnvelopeV3<T>`, independent contract versions, capability-v3
+document, and API-info types.
 
-```rust
-use latexsnipper_api_types::ApiEnvelopeV3;
+## Rust migration helpers
 
-let envelope = ApiEnvelopeV3::success("result", Vec::new());
-assert!(envelope.has_valid_shape());
-assert_eq!(envelope.versions.document_schema_version, "1.0.0");
-```
+Rust callers may still use `PluginManifestV3::migrate_from_v2` and
+`ModelManifestV3::migrate_from_v2` directly. Always inspect
+`MigrationOutcome.report.status`; `RequiresManualAction` is not successful
+installation or publication.
 
-This is a Rust contract example only. No v3 WASM export consumes or returns the
-type in PR 1.
+Never infer:
 
-## TypeScript: keep version guards explicit
+- trusted in-process execution from `native_abi`;
+- a Component WIT version from a reserved legacy WASI enum;
+- network scheme or port from a host-only grant;
+- signature algorithm or key identity from an untyped signature;
+- model quality/readiness from the presence of files.
 
-The shipped TypeScript client still speaks Worker protocol 1 and calls WASM API
-v2. Do not change production callers to expect API v3 yet. A future adapter
-should gate contracts independently:
+## FFI
 
-```ts
-type ContractVersionsV3 = {
-  apiEnvelopeVersion: 3;
-  capabilitySchemaVersion: 3;
-  diagnosticSchemaVersion: 1;
-  documentSchemaVersion: "1.0.0";
-  coreVersion: string;
-};
-
-function acceptsContract(v: ContractVersionsV3): boolean {
-  return v.apiEnvelopeVersion === 3 && v.documentSchemaVersion === "1.0.0";
-}
-```
-
-This example is not part of the published declaration file yet. The later API
-integration PR must add generated declarations, fixtures, and browser tests.
-
-## CLI migration
-
-There is no `snipper migrate-v3` command in PR 1, so no command is silently
-advertised. Continue to use existing v2 CLI commands. Until a reviewed command
-is added, migration tools should deserialize with the Rust helpers, write to a
-new output file, print structured warnings, and refuse to overwrite the source
-when `RequiresManualAction` is returned.
-
-## Compatibility checklist
-
-- Pin the exact alpha version; alpha contracts may change with documented notes.
-- Preserve `Document.schemaVersion = "1.0.0"`.
-- Treat every migration warning as actionable.
-- Verify external plugin and model artifact SHA-256 values independently.
-- Do not enable a migrated model profile until runtime and evidence metadata are
-  complete.
-- Do not claim WASI isolation, signed-registry trust, or v3 endpoint support
-  until later PRs provide executable validation.
+FFI recognition JSON now includes a `versions` object with
+`ffiResponseVersion = 3`, diagnostic schema, Document schema, and Core version.
+Legacy result fields (`done`, `latex`, `text`, `confidence`, `error`, `time_ms`)
+remain unchanged. Native callers can query the numeric response version through
+`latexsnipper_ffi_response_version` or Android `nativeResponseVersion`.

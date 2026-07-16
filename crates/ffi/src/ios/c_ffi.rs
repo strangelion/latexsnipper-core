@@ -9,6 +9,12 @@ use latexsnipper_runtime::StubRuntime;
 
 use crate::common::FfiResponse;
 
+/// Return the stable FFI JSON response contract version.
+#[no_mangle]
+pub extern "C" fn latexsnipper_ffi_response_version() -> u32 {
+    crate::common::FFI_RESPONSE_VERSION_V3
+}
+
 /// Global engine instance for iOS.
 static ENGINE: Lazy<Mutex<Option<SnipperEngine>>> = Lazy::new(|| Mutex::new(None));
 

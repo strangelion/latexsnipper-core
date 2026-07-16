@@ -5,7 +5,7 @@ use latexsnipper_foundation::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::manifest::ModelManifest;
+use crate::manifest::{CategoryInfo, ModelManifest, VariantInfo};
 
 pub const MODEL_MANIFEST_SCHEMA_VERSION_V3: u32 = 3;
 
@@ -344,6 +344,95 @@ impl ModelManifestV3 {
         }
         Ok(())
     }
+
+    /// Build the legacy downloader view used by the current native model
+    /// manager. Only explicitly evidenced v3 profiles are exposed.
+    pub fn to_runtime_adapter(&self) -> Result<ModelManifest, ModelManifestV3Error> {
+        self.validate_contract()?;
+        let mut checksums = std::collections::HashMap::new();
+        let mut categories = std::collections::HashMap::new();
+        for (category_id, category) in &self.categories {
+            let mut variants = Vec::new();
+            for profile in &category.profiles {
+                if profile.evidence.status == ModelEvidenceStatusV3::Unavailable {
+                    continue;
+                }
+                let mut files = Vec::new();
+                let mut package = None;
+                for artifact in &profile.artifacts {
+                    if checksums
+                        .insert(artifact.path.clone(), artifact.sha256.clone())
+                        .is_some_and(|existing| existing != artifact.sha256)
+                    {
+                        return Err(ModelManifestV3Error::InvalidContract(format!(
+                            "artifact '{}' has conflicting digests",
+                            artifact.path
+                        )));
+                    }
+                    if artifact.kind == ModelArtifactKindV3::Package {
+                        if package.replace(artifact.path.clone()).is_some() {
+                            return Err(ModelManifestV3Error::InvalidContract(format!(
+                                "profile '{}' declares multiple package artifacts",
+                                profile.id
+                            )));
+                        }
+                    } else {
+                        files.push(artifact.path.clone());
+                    }
+                }
+                if files.is_empty() {
+                    return Err(ModelManifestV3Error::InvalidContract(format!(
+                        "profile '{}' has no runtime files",
+                        profile.id
+                    )));
+                }
+                variants.push(VariantInfo {
+                    id: profile.id.clone(),
+                    label: profile.label.clone(),
+                    adapter: Some(profile.adapter.clone()),
+                    model_type: Some(profile.model_type.clone()),
+                    source: Some(profile.source.clone()),
+                    license: Some(profile.license.clone()),
+                    files,
+                    zip_file: package,
+                    notes: profile.notes.clone(),
+                });
+            }
+            if variants.is_empty() {
+                return Err(ModelManifestV3Error::InvalidContract(format!(
+                    "category '{category_id}' has no evidenced runtime profile"
+                )));
+            }
+            if category
+                .default_profile
+                .as_ref()
+                .is_some_and(|default| !variants.iter().any(|variant| &variant.id == default))
+            {
+                return Err(ModelManifestV3Error::InvalidContract(format!(
+                    "category '{category_id}' default profile is unavailable"
+                )));
+            }
+            categories.insert(
+                category_id.clone(),
+                CategoryInfo {
+                    required: category.required,
+                    default: category.default_profile.clone(),
+                    label: category.label.clone(),
+                    description: category.description.clone(),
+                    variants,
+                },
+            );
+        }
+        Ok(ModelManifest {
+            source_id: self.source_id.clone(),
+            source_label: self.source_label.clone(),
+            version: self.version.clone(),
+            base_url: self.base_url.clone(),
+            mirrors: self.mirrors.clone(),
+            checksums,
+            categories,
+        })
+    }
 }
 
 fn required_profile_field(
@@ -513,5 +602,23 @@ mod tests {
         profile.evidence.report_path = Some("evidence/text-rec.json".to_string());
         profile.evidence.report_sha256 = Some("a".repeat(64));
         migrated.validate_contract().unwrap();
+    }
+
+    #[test]
+    fn runtime_adapter_refuses_unavailable_profiles_and_accepts_evidenced_profiles() {
+        let mut migrated = ModelManifestV3::migrate_from_v2(source_manifest(true))
+            .unwrap()
+            .value;
+        assert!(matches!(
+            migrated.to_runtime_adapter(),
+            Err(ModelManifestV3Error::InvalidContract(_))
+        ));
+
+        migrated.categories.get_mut("text-rec").unwrap().profiles[0]
+            .evidence
+            .status = ModelEvidenceStatusV3::Experimental;
+        let adapted = migrated.to_runtime_adapter().unwrap();
+        assert_eq!(adapted.categories["text-rec"].variants[0].id, "fixture");
+        assert_eq!(adapted.checksums["model.onnx"], "b".repeat(64));
     }
 }

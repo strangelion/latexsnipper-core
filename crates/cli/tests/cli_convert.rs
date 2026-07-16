@@ -166,6 +166,27 @@ fn atomic_output_refuses_clobber_and_leaves_no_temporary_file() {
         .unwrap();
     assert_eq!(second.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&second.stderr).contains("output already exists"));
+    let original = std::fs::read(&output_path).unwrap();
+
+    std::fs::write(&input, "c+d").unwrap();
+    let replacement = snipper()
+        .args([
+            "convert",
+            input.to_str().unwrap(),
+            "--to",
+            "json",
+            "-o",
+            output_path.to_str().unwrap(),
+            "--force",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        replacement.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replacement.stderr)
+    );
+    assert_ne!(std::fs::read(&output_path).unwrap(), original);
     assert!(std::fs::read_dir(&directory).unwrap().all(|entry| !entry
         .unwrap()
         .file_name()
@@ -549,4 +570,150 @@ fn signed_registry_cli_requires_https_ids_and_explicit_trust_confirmation() {
         .unwrap();
     assert!(removed.status.success());
     std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn migration_writes_a_new_v3_plugin_manifest_and_preserves_source() {
+    let directory = workspace();
+    let source = directory.join("plugin.json");
+    let manifest = latexsnipper_plugin::PluginManifest::built_in("fixture.plugin", "1.0.0");
+    let original = serde_json::to_vec_pretty(&manifest).unwrap();
+    std::fs::write(&source, &original).unwrap();
+
+    let output = snipper()
+        .args([
+            "migrate",
+            "plugin-manifest",
+            source.to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    let migrated_path = directory.join("plugin.v3.json");
+    let migrated: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&migrated_path).unwrap()).unwrap();
+    assert_eq!(migrated["schemaVersion"], 3);
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["wroteOutput"], true);
+    assert_eq!(report["report"]["status"], "migrated");
+
+    std::fs::write(&migrated_path, b"stale").unwrap();
+    let replacement = snipper()
+        .args([
+            "migrate",
+            "plugin-manifest",
+            source.to_str().unwrap(),
+            "--force",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        replacement.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replacement.stderr)
+    );
+    let replaced: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&migrated_path).unwrap()).unwrap();
+    assert_eq!(replaced["schemaVersion"], 3);
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn unsafe_model_migration_requires_manual_action_without_writing_output() {
+    let directory = workspace();
+    let source = directory.join("model-manifest.json");
+    std::fs::write(
+        &source,
+        br#"{
+          "sourceId":"fixture",
+          "sourceLabel":"Fixture",
+          "version":"2.0.0",
+          "baseUrl":"https://example.invalid",
+          "categories":{"formula":{"required":true,"default":"fixture","variants":[{"id":"fixture","files":["model.onnx"]}]}}
+        }"#,
+    )
+    .unwrap();
+
+    let output = snipper()
+        .args([
+            "migrate",
+            "model-manifest",
+            source.to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(11));
+    assert!(!directory.join("model-manifest.v3.json").exists());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["wroteOutput"], false);
+    assert_eq!(report["report"]["status"], "requires_manual_action");
+
+    let inspected = snipper()
+        .args(["migrate", "inspect", source.to_str().unwrap(), "--json"])
+        .output()
+        .unwrap();
+    assert_eq!(inspected.status.code(), Some(11));
+    let inspected_report: serde_json::Value = serde_json::from_slice(&inspected.stdout).unwrap();
+    assert_eq!(
+        inspected_report["report"]["status"],
+        "requires_manual_action"
+    );
+
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn capability_json_defaults_to_v3_envelope_and_keeps_explicit_v2_adapter() {
+    let v3 = snipper()
+        .args(["capabilities", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(v3.status.success());
+    let v3: serde_json::Value = serde_json::from_slice(&v3.stdout).unwrap();
+    assert_eq!(v3["ok"], true);
+    assert_eq!(v3["versions"]["apiEnvelopeVersion"], 3);
+    assert_eq!(v3["versions"]["capabilitySchemaVersion"], 3);
+
+    let v2 = snipper()
+        .args(["capabilities", "--format", "json", "--api-version", "2"])
+        .output()
+        .unwrap();
+    assert!(v2.status.success());
+    let v2: serde_json::Value = serde_json::from_slice(&v2.stdout).unwrap();
+    assert!(v2.get("versions").is_none());
+    assert!(v2.get("capabilities").is_some());
+}
+
+#[test]
+fn cli_rejects_options_that_would_otherwise_be_ignored() {
+    let unknown_capability_format = snipper()
+        .args(["capabilities", "--format", "yaml"])
+        .output()
+        .unwrap();
+    assert_eq!(unknown_capability_format.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&unknown_capability_format.stderr)
+        .contains("unsupported capability output format"));
+
+    let ignored_capability_api = snipper()
+        .args(["capabilities", "--format", "table", "--api-version", "3"])
+        .output()
+        .unwrap();
+    assert_eq!(ignored_capability_api.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&ignored_capability_api.stderr)
+        .contains("only meaningful with --format json"));
+
+    let conflicting_model_scope = snipper()
+        .args(["models", "download", "--category", "formula-det", "--all"])
+        .output()
+        .unwrap();
+    assert_eq!(conflicting_model_scope.status.code(), Some(2));
 }

@@ -4,6 +4,107 @@ use std::collections::HashMap;
 #[cfg(feature = "native")]
 use std::path::Path;
 
+use crate::{ModelManifestV3, MODEL_MANIFEST_SCHEMA_VERSION_V3};
+
+/// Version-aware model manifest loader. Unknown future schemas are rejected
+/// instead of being reinterpreted as the legacy shape.
+#[derive(Debug, Clone)]
+pub enum LoadedModelManifest {
+    V2(ModelManifest),
+    V3(ModelManifestV3),
+}
+
+impl LoadedModelManifest {
+    pub fn parse(json: &str) -> Result<Self> {
+        let raw: serde_json::Value = serde_json::from_str(json)
+            .map_err(|error| SnipperError::Model(format!("Invalid manifest: {error}")))?;
+        match raw
+            .get("schemaVersion")
+            .or_else(|| raw.get("schema_version"))
+        {
+            Some(version) => {
+                let version = version.as_u64().ok_or_else(|| {
+                    SnipperError::Model("Manifest schema version must be an integer".to_string())
+                })?;
+                if version == MODEL_MANIFEST_SCHEMA_VERSION_V3 as u64 {
+                    let manifest: ModelManifestV3 =
+                        serde_json::from_value(raw).map_err(|error| {
+                            SnipperError::Model(format!("Invalid model manifest v3: {error}"))
+                        })?;
+                    manifest.validate_contract().map_err(|error| {
+                        SnipperError::Model(format!("Invalid model manifest v3 contract: {error}"))
+                    })?;
+                    Ok(Self::V3(manifest))
+                } else if version == 2 {
+                    serde_json::from_value(raw)
+                        .map(Self::V2)
+                        .map_err(|error| SnipperError::Model(format!("Invalid manifest: {error}")))
+                } else {
+                    Err(SnipperError::Model(format!(
+                        "Unsupported model manifest schema version {version}"
+                    )))
+                }
+            }
+            None => serde_json::from_value(raw)
+                .map(Self::V2)
+                .map_err(|error| SnipperError::Model(format!("Invalid manifest: {error}"))),
+        }
+    }
+
+    #[cfg(feature = "native")]
+    pub fn load(path: &Path) -> Result<Self> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|error| SnipperError::Model(format!("Failed to read manifest: {error}")))?;
+        Self::parse(&content)
+    }
+
+    #[cfg(feature = "native")]
+    pub fn download(url: &str) -> Result<Self> {
+        let response = ureq::get(url).call().map_err(|error| {
+            SnipperError::Model(format!("Failed to download manifest: {error}"))
+        })?;
+        let body = response.into_string().map_err(|error| {
+            SnipperError::Model(format!("Failed to read manifest response: {error}"))
+        })?;
+        Self::parse(&body)
+    }
+
+    #[cfg(feature = "native")]
+    pub fn save(&self, path: &Path) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                SnipperError::Model(format!("Failed to create manifest directory: {error}"))
+            })?;
+        }
+        let json = match self {
+            Self::V2(manifest) => serde_json::to_string_pretty(manifest),
+            Self::V3(manifest) => serde_json::to_string_pretty(manifest),
+        }
+        .map_err(|error| SnipperError::Model(format!("Failed to serialize manifest: {error}")))?;
+        std::fs::write(path, json)
+            .map_err(|error| SnipperError::Model(format!("Failed to write manifest: {error}")))
+    }
+
+    pub fn into_runtime_manifest(self) -> Result<ModelManifest> {
+        match self {
+            Self::V2(manifest) => {
+                manifest.validate()?;
+                Ok(manifest)
+            }
+            Self::V3(manifest) => manifest
+                .to_runtime_adapter()
+                .map_err(|error| SnipperError::Model(error.to_string())),
+        }
+    }
+
+    pub const fn schema_version(&self) -> u32 {
+        match self {
+            Self::V2(_) => 2,
+            Self::V3(_) => 3,
+        }
+    }
+}
+
 /// Model manifest describing available models and their variants.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -184,5 +285,30 @@ mod tests {
         assert_eq!(v.id, "yolov8-mfd");
         assert_eq!(v.zip_file.as_deref(), Some("latexsnipper-formula-det.zip"));
         assert!(v.files.contains(&"model.onnx".to_string()));
+    }
+
+    #[test]
+    fn versioned_loader_rejects_unknown_future_schema() {
+        let error = LoadedModelManifest::parse(r#"{"schemaVersion":4}"#).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Unsupported model manifest schema version 4"));
+    }
+
+    #[test]
+    fn versioned_loader_accepts_an_explicit_v2_schema_adapter() {
+        let loaded = LoadedModelManifest::parse(
+            r#"{
+                "schemaVersion": 2,
+                "sourceId": "fixture",
+                "sourceLabel": "Fixture",
+                "version": "2.0.0",
+                "categories": {
+                    "formula": {"default": null, "variants": [{"id": "v1", "files": ["model.onnx"]}]}
+                }
+            }"#,
+        )
+        .unwrap();
+        assert!(matches!(loaded, LoadedModelManifest::V2(_)));
     }
 }

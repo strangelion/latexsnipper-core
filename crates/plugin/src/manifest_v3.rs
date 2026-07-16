@@ -171,6 +171,10 @@ pub struct PluginManifestV3 {
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum PluginManifestV3Error {
+    #[error("invalid plugin manifest JSON: {0}")]
+    InvalidJson(String),
+    #[error("unsupported plugin manifest schema version {0}")]
+    UnsupportedSchemaVersion(u64),
     #[error("unsupported v2 plugin API version {0}")]
     UnsupportedSourceApi(u32),
     #[error("native dynamic-library plugins cannot migrate to the v3 trust model")]
@@ -193,6 +197,57 @@ pub enum PluginManifestV3Error {
     MissingLicense,
     #[error("execution class and interface versions are inconsistent")]
     InterfaceMismatch,
+}
+
+/// Version-aware plugin manifest loader. Runtime callers must branch on the
+/// explicit contract and may not deserialize a v3 document as the legacy type.
+#[derive(Debug, Clone)]
+pub enum LoadedPluginManifest {
+    V2(Box<PluginManifest>),
+    V3(Box<PluginManifestV3>),
+}
+
+impl LoadedPluginManifest {
+    pub fn parse_json(bytes: &[u8]) -> Result<Self, PluginManifestV3Error> {
+        let raw: serde_json::Value = serde_json::from_slice(bytes)
+            .map_err(|error| PluginManifestV3Error::InvalidJson(error.to_string()))?;
+        match raw
+            .get("schemaVersion")
+            .or_else(|| raw.get("schema_version"))
+        {
+            Some(version) => {
+                let version = version.as_u64().ok_or_else(|| {
+                    PluginManifestV3Error::InvalidJson(
+                        "schema version must be an unsigned integer".to_string(),
+                    )
+                })?;
+                if version == PLUGIN_MANIFEST_SCHEMA_VERSION_V3 as u64 {
+                    let manifest: PluginManifestV3 = serde_json::from_value(raw)
+                        .map_err(|error| PluginManifestV3Error::InvalidJson(error.to_string()))?;
+                    manifest.validate_contract()?;
+                    Ok(Self::V3(Box::new(manifest)))
+                } else if version <= 2 {
+                    serde_json::from_value(raw)
+                        .map(Box::new)
+                        .map(Self::V2)
+                        .map_err(|error| PluginManifestV3Error::InvalidJson(error.to_string()))
+                } else {
+                    Err(PluginManifestV3Error::UnsupportedSchemaVersion(version))
+                }
+            }
+            None => serde_json::from_value(raw)
+                .map(Box::new)
+                .map(Self::V2)
+                .map_err(|error| PluginManifestV3Error::InvalidJson(error.to_string())),
+        }
+    }
+
+    pub const fn schema_version(&self) -> u32 {
+        match self {
+            Self::V2(_) => 2,
+            Self::V3(_) => 3,
+        }
+    }
 }
 
 impl PluginManifestV3 {
@@ -557,6 +612,21 @@ mod tests {
         assert_eq!(
             migrated.validate_contract().unwrap_err(),
             PluginManifestV3Error::InterfaceMismatch
+        );
+    }
+
+    #[test]
+    fn versioned_loader_selects_v3_and_rejects_future_schemas() {
+        let source = PluginManifest::built_in("fixture.loader", "1.0.0");
+        let migrated = PluginManifestV3::migrate_from_v2(source).unwrap().value;
+        let encoded = serde_json::to_vec(&migrated).unwrap();
+        let loaded = LoadedPluginManifest::parse_json(&encoded).unwrap();
+        assert!(matches!(loaded, LoadedPluginManifest::V3(_)));
+        assert_eq!(loaded.schema_version(), 3);
+
+        assert_eq!(
+            LoadedPluginManifest::parse_json(br#"{"schemaVersion":4}"#).unwrap_err(),
+            PluginManifestV3Error::UnsupportedSchemaVersion(4)
         );
     }
 }

@@ -1,11 +1,14 @@
 //! Default-deny host for versioned LaTeXSnipper WebAssembly components.
 
+mod activation;
 pub mod bindings;
 pub mod diagnostic;
 pub mod host;
 pub mod limits;
 pub mod package;
 pub mod permissions;
+
+pub use activation::ActivatedRemoteWasiPlugin;
 
 pub use diagnostic::{
     WasiDiagnostic, WasiDiagnosticCode, WasiDiagnosticDetail, WasiDiagnosticSeverity,

@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   including production-model Tract execution and a bounded WASM decode profile.
 - Browser-side model, image, queue, task-duration, table-element, result, cache, and
   download budgets with pre-allocation validation where possible.
+- Version-aware plugin and model manifest loaders that reject unknown schemas and
+  expose only runtime-safe v3 model profiles.
+- CLI migration commands for plugin manifests, model manifests, and documents,
+  including bounded input, source preservation, and explicit manual-action exits.
+- Callable WASM v3 API-info, capability, and conversion exports with matching
+  TypeScript envelope declarations while retaining explicit v2 adapters.
+- Additive FFI response-version queries and independent contract-version metadata.
+- Explicit enable/disable, verified capability registration, and a re-verifying
+  execution bridge for signed remote WASI plugins. Activation binds the registry
+  snapshot to the host-verified manifest and artifact; every invocation rejects
+  plugins disabled, revoked, updated, or replaced after activation.
 
 ### Changed
 
@@ -37,12 +48,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   RustSec-clean Wasmtime 36.0.12 runtime.
 - Tract 0.21.10 is vendored with a narrowly scoped inference-to-typed compatibility
   fix for dimension tensors represented as typed `I64` values.
+- The generated capability matrix now uses schema `3.0.0`; CLI JSON output defaults
+  to the v3 envelope and requires `--api-version 2` for the legacy shape.
+
+### Fixed
+
+- WASM v3 envelopes serialize JSON maps as plain JavaScript objects, matching
+  the TypeScript declarations and making fields such as `data.schemaVersion`
+  available through normal property access in browsers and Node.js.
 
 ### Compatibility
 
 - Existing WASM API v2, capability v2, plugin/model runtime, process IPC v1, Worker protocol v1, CLI, and FFI behavior remain unchanged. JSON AST text runs may now include an optional `confidence` field.
-- This alpha does not yet expose a callable v3 endpoint or v3 model loader; remotely installed
-  WASI packages remain disabled until public runtime integration.
+- The `3.0.0-alpha.1` source version is an internal development identifier only;
+  no alpha, beta, or RC package is required or published on the path to 3.0.0 GA.
+- Synchronous WASM recognition remains on its asynchronous v2 endpoint because its
+  Worker progress/cancellation protocol is independently versioned and unchanged.
 
 ## [Unreleased]
 
