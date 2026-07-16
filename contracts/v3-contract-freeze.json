@@ -2,7 +2,7 @@
   "contractRelease": "3.0.0",
   "files": {
     "crates/api-types/src/v3.rs": "c9ad460a6d7fd6d3de86145cd575ca9b3fb1d74fb5f2016113b4f26853f62ffb",
-    "crates/cli/src/main.rs": "b25d31e4e8c5c5fcea805a45d1ff8589a5208313c0e2b06b833ea21022c8a4f9",
+    "crates/cli/src/main.rs": "dfcb1dc5f3fcc03b7b5e18172fff50b7151621856e05d721be7b9c1f77a8e775",
     "crates/conversion/src/capability_registry.rs": "8d3dc7a94a3c77ed6f8b2fb26d424a2eb434663b6bb984e9ddd0f66a43a18a24",
     "crates/evaluation/src/schema.rs": "2dd3abc6ec391c5886035917f4cea1c16e8e95046293c8fa386568c1869d9e67",
     "crates/fidelity/src/lib.rs": "57a62f5675e73839319eeab98309a5ef773de5afd10aa43b5b4072959187b7ce",

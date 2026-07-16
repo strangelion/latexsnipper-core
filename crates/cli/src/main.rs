@@ -778,6 +778,47 @@ fn main() {
 
             let resolved_format = resolve_format(&format);
 
+            if let Some(CliTarget::Export(export_format)) = resolve_cli_target(&resolved_format) {
+                let artifact = snipper
+                    .export_format(export_format)
+                    .unwrap_or_else(|error| {
+                        eprintln!("Export error: {}", error);
+                        std::process::exit(1);
+                    });
+                let bytes = artifact.as_bytes().unwrap_or_else(|| {
+                    eprintln!("Export error: exporter returned no primary content");
+                    std::process::exit(1);
+                });
+                if let Some(path) = output {
+                    std::fs::write(&path, bytes).unwrap_or_else(|error| {
+                        eprintln!("Failed to write {}: {}", path, error);
+                        std::process::exit(1);
+                    });
+                    eprintln!("Exported to {} ({})", path, resolved_format);
+                } else if artifact
+                    .content
+                    .as_ref()
+                    .is_some_and(GeneratedContent::is_binary)
+                {
+                    eprintln!(
+                        "Export error: binary format '{}' requires --output",
+                        resolved_format
+                    );
+                    std::process::exit(2);
+                } else {
+                    let mut stdout = io::stdout().lock();
+                    stdout.write_all(bytes).unwrap_or_else(|error| {
+                        eprintln!("Failed to write stdout: {}", error);
+                        std::process::exit(1);
+                    });
+                    stdout.write_all(b"\n").unwrap_or_else(|error| {
+                        eprintln!("Failed to write stdout: {}", error);
+                        std::process::exit(1);
+                    });
+                }
+                return;
+            }
+
             let output_result = match resolved_format.as_str() {
                 "latex" | "tex" => snipper.to_latex(),
                 "latex_display" | "display" => snipper.to_format(OutputFormat::LatexDisplay),
@@ -3614,6 +3655,18 @@ mod tests {
         assert_eq!(resolve_format("markdown_inline"), "markdown_inline");
         assert_eq!(resolve_format("latex"), "latex");
         assert_eq!(suggest_format("equationlatex"), Some("latex_equation"));
+    }
+
+    #[test]
+    fn recognition_formats_route_through_the_unified_export_registry() {
+        assert!(matches!(
+            resolve_cli_target("text"),
+            Some(CliTarget::Export(ExportFormat::PlainText))
+        ));
+        assert!(matches!(
+            resolve_cli_target("pdf"),
+            Some(CliTarget::Export(ExportFormat::Pdf))
+        ));
     }
 
     #[test]
