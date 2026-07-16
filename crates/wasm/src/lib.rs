@@ -39,7 +39,7 @@ pub fn api_info_v2() -> JsValue {
 
 #[wasm_bindgen]
 pub fn api_info_v3() -> JsValue {
-    serialize_to_js(&ApiEnvelopeV3::success(
+    serialize_v3_to_js(&ApiEnvelopeV3::success(
         api::ApiInfoV3::current(),
         Vec::new(),
     ))
@@ -60,7 +60,7 @@ pub fn capabilities_v2() -> JsValue {
 pub fn capabilities_v3() -> JsValue {
     STATE.with(|cell| {
         let state = cell.borrow();
-        serialize_to_js(&ApiEnvelopeV3::success(
+        serialize_v3_to_js(&ApiEnvelopeV3::success(
             capabilities::collect_v3(&state.resolver, state.limits(), state.usage()),
             Vec::new(),
         ))
@@ -637,7 +637,7 @@ pub fn convert_v3(doc_json: &str, format: &str) -> JsValue {
                 .as_ref()
                 .map(|bytes| Uint8Array::from(bytes.as_slice()));
             let diagnostics = value.diagnostics.clone();
-            let response = serialize_to_js(&ApiEnvelopeV3::success(value, diagnostics));
+            let response = serialize_v3_to_js(&ApiEnvelopeV3::success(value, diagnostics));
             if let Some(bytes) = bytes {
                 if let Ok(data) = Reflect::get(&response, &JsValue::from_str("data")) {
                     let _ = Reflect::set(&data, &JsValue::from_str("bytes"), &bytes);
@@ -650,7 +650,7 @@ pub fn convert_v3(doc_json: &str, format: &str) -> JsValue {
                 .ok()
                 .and_then(|value| value.as_str().map(str::to_owned))
                 .unwrap_or_else(|| "INTERNAL_ERROR".to_string());
-            serialize_to_js(&ApiEnvelopeV3::<()>::failure(
+            serialize_v3_to_js(&ApiEnvelopeV3::<()>::failure(
                 ApiErrorV3 {
                     code,
                     message: error.message,
@@ -922,6 +922,13 @@ fn response_to_js<T: Serialize>(response: WasmResponse<T>) -> JsValue {
 fn serialize_to_js<T: Serialize>(value: &T) -> JsValue {
     serde_wasm_bindgen::to_value(value).unwrap_or_else(|error| {
         JsValue::from_str(&format!("WASM response serialization failed: {error}"))
+    })
+}
+
+fn serialize_v3_to_js<T: Serialize>(value: &T) -> JsValue {
+    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+    value.serialize(&serializer).unwrap_or_else(|error| {
+        JsValue::from_str(&format!("WASM v3 response serialization failed: {error}"))
     })
 }
 

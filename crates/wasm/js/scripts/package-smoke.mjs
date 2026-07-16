@@ -25,6 +25,14 @@ if (
 ) {
   throw new Error("Node package did not return a successful v3 API envelope");
 }
+const capabilitiesV3 = nodePackage.capabilities_v3();
+if (
+  !capabilitiesV3 ||
+  capabilitiesV3.ok !== true ||
+  capabilitiesV3.data?.schemaVersion !== 3
+) {
+  throw new Error("Node package did not return a plain-object v3 capability document");
+}
 
 const webPackage = await import(pathToFileURL(webEntry).href);
 if (typeof webPackage.default !== "function") {

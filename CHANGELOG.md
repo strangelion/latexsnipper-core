@@ -51,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The generated capability matrix now uses schema `3.0.0`; CLI JSON output defaults
   to the v3 envelope and requires `--api-version 2` for the legacy shape.
 
+### Fixed
+
+- WASM v3 envelopes serialize JSON maps as plain JavaScript objects, matching
+  the TypeScript declarations and making fields such as `data.schemaVersion`
+  available through normal property access in browsers and Node.js.
+
 ### Compatibility
 
 - Existing WASM API v2, capability v2, plugin/model runtime, process IPC v1, Worker protocol v1, CLI, and FFI behavior remain unchanged. JSON AST text runs may now include an optional `confidence` field.
