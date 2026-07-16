@@ -18,7 +18,7 @@ pub struct DetectionParams {
     /// true = raw logits from model, need sigmoid
     /// false = model already outputs probabilities
     pub apply_sigmoid: bool,
-    /// Output tensor layout: "row_major" [N,6] or "col_major" [6,N]
+    /// Output tensor layout: `row_major` `[N, 6]` or `col_major` `[6, N]`.
     pub output_layout: String,
 }
 

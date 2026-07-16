@@ -199,7 +199,7 @@ pub fn preprocess_for_slanet(image: &SnipperImage) -> Result<(Vec<f32>, [f32; 4]
 /// - cell_coords: [1, max_cells, 8] — quadrilateral per cell (normalized)
 /// - structure_logits: [1, max_cells, vocab_size] — structure token logits
 ///
-/// The structure tokens form an HTML-like stream (<tr>, <td>, etc.) that
+/// The structure tokens form an HTML-like stream (`<tr>`, `<td>`, etc.) that
 /// determines the row/col indices and merge tags for each cell.
 pub fn recognize_structure_slanet(
     image: &SnipperImage,
@@ -328,7 +328,7 @@ fn is_sparse_or_exploded_grid(cells: &[GridCell]) -> bool {
 /// Decode SLANet model outputs into table structure.
 ///
 /// # Arguments
-/// * `cell_coords` - First output: [1, max_cells, 8] bbox predictions (normalized [0,1])
+/// * `cell_coords` - First output: `[1, max_cells, 8]` bbox predictions (normalized `[0, 1]`)
 /// * `structure_logits` - Second output: [1, max_cells, vocab_size] class logits
 /// * `shape_info` - [resized_h, resized_w, orig_h, orig_w] from preprocessing
 /// * `img_width` - Original image width (for final rect)

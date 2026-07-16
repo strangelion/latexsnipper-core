@@ -87,7 +87,7 @@ pub enum SymbolCategory {
     Greek,
     /// Accents: \hat, \bar, etc.
     Accent,
-    /// Delimiters: (, ), [, ], etc.
+    /// Delimiters: `(`, `)`, `[`, `]`, etc.
     Delimiter,
     /// Functions: \sin, \cos, etc.
     Function,

@@ -99,7 +99,7 @@ pub enum CoordinateSpace {
     PdfPoints,
     /// Office English Metric Units (EMU).
     OfficeEmu,
-    /// Normalized [0,1] coordinate space.
+    /// Normalized `[0, 1]` coordinate space.
     Normalized01,
     /// Logical page coordinates (e.g., CSS px).
     PageLogical,

@@ -35,7 +35,7 @@ pub enum LatexNode {
         num: Box<LatexNode>,
         den: Box<LatexNode>,
     },
-    /// Square root: \sqrt{x} or \sqrt[n]{x}
+    /// Square root: `\sqrt{x}` or `\sqrt[n]{x}`.
     SquareRoot {
         index: Option<Box<LatexNode>>,
         content: Box<LatexNode>,
@@ -60,7 +60,7 @@ pub enum LatexNode {
     },
     /// Cases: \begin{cases} ... \end{cases}
     Cases(Vec<Vec<LatexNode>>),
-    /// Description list item: \item[label] content
+    /// Description list item: `\item[label] content`.
     DescriptionItem {
         label: Option<Box<LatexNode>>,
         content: Vec<LatexNode>,
