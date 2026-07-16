@@ -14,7 +14,7 @@ replacement, revocation, rollback/freeze, registry thresholds, redirect/MIME/
 size policy, ZIP traversal/symlink/duplicate/ratio limits, process-tree timeout,
 and crash-resistant replacement.
 
-Pull requests also run GitHub dependency review and CodeQL
+Pull requests also run locked Rust/npm dependency audits and CodeQL
 `security-extended` analysis for Rust and JavaScript/TypeScript. These automated
 scans supplement but do not replace the independent final-commit approval.
 
