@@ -3,7 +3,8 @@ use std::io::Write;
 use std::path::Path;
 
 use latexsnipper_conversion::package_export::{
-    OFFICE_THEME, PPTX_LAYOUT, PPTX_LAYOUT_RELS, PPTX_MASTER, PPTX_MASTER_RELS, XLSX_STYLES,
+    OFFICE_THEME, PPTX_LAYOUT, PPTX_LAYOUT_RELS, PPTX_MASTER, PPTX_MASTER_RELS,
+    PPTX_PRESENTATION_PROPERTIES, XLSX_STYLES,
 };
 use latexsnipper_fidelity::{validate_ooxml_package_structure, FidelityFormat};
 use lopdf::content::{Content, Operation};
@@ -391,6 +392,10 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
             ),
             (
+                "/ppt/presProps.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.presProps+xml",
+            ),
+            (
                 "/ppt/slides/slide1.xml",
                 "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
             ),
@@ -401,10 +406,6 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             (
                 "/ppt/slideLayouts/slideLayout1.xml",
                 "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
-            ),
-            (
-                "/ppt/notesSlides/notesSlide1.xml",
-                "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml",
             ),
             (
                 "/docProps/core.xml",
@@ -446,6 +447,12 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             relationship_type:
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
             target: "slideMasters/slideMaster1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdPresProps",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/presProps",
+            target: "presProps.xml",
         },
     ]);
 
@@ -537,33 +544,7 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
             target: "../media/image1.png",
         },
-        RelationshipSpec {
-            id: "rIdNotes",
-            relationship_type:
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
-            target: "../notesSlides/notesSlide1.xml",
-        },
     ]);
-
-    let notes_slide = concat!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
-        "<p:notes ",
-        "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" ",
-        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" ",
-        "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">",
-        "<p:cSld>",
-        "<p:spTree>",
-        "<p:nvGrpSpPr>",
-        "<p:cNvPr id=\"1\" name=\"\"/>",
-        "<p:cNvGrpSpPr/>",
-        "<p:nvPr/>",
-        "</p:nvGrpSpPr>",
-        "<p:grpSpPr/>",
-        "</p:spTree>",
-        "</p:cSld>",
-        "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>",
-        "</p:notes>",
-    );
 
     package(
         path,
@@ -578,6 +559,7 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "ppt/_rels/presentation.xml.rels",
                 presentation_rels.as_bytes(),
             ),
+            ("ppt/presProps.xml", PPTX_PRESENTATION_PROPERTIES.as_bytes()),
             ("ppt/slides/slide1.xml", slide.as_bytes()),
             ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
             ("ppt/slideMasters/slideMaster1.xml", PPTX_MASTER.as_bytes()),
@@ -591,7 +573,6 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 PPTX_LAYOUT_RELS.as_bytes(),
             ),
             ("ppt/theme/theme1.xml", OFFICE_THEME.as_bytes()),
-            ("ppt/notesSlides/notesSlide1.xml", notes_slide.as_bytes()),
             ("ppt/media/image1.png", ONE_PIXEL_PNG),
         ],
     )

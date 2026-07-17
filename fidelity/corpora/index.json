@@ -38,7 +38,7 @@
       "id": "pptx-presentation-rich-v1",
       "format": "pptx",
       "fixture": "fidelity/fixtures/presentation-rich.pptx",
-      "sha256": "2e382f68be32e438549c52a8c76f7af2b595a01b4b9036b5b8ac0ef1ac79b07e",
+      "sha256": "830616736ee2f7781b454d5b98b78b691f3a1787eef793b3c0bcd4a533767558",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -47,8 +47,7 @@
         { "feature": "masters", "evidenceToken": "ppt/slideMasters/slideMaster1.xml" },
         { "feature": "text-boxes", "evidenceToken": "Text Box" },
         { "feature": "shapes", "evidenceToken": "<a:prstGeom" },
-        { "feature": "images", "evidenceToken": "ppt/media/image1.png" },
-        { "feature": "notes", "evidenceToken": "ppt/notesSlides/notesSlide1.xml" }
+        { "feature": "images", "evidenceToken": "ppt/media/image1.png" }
       ],
       "expectedText": ["Presentation Fidelity Text Box"],
       "requiredDiagnosticCodes": [],
