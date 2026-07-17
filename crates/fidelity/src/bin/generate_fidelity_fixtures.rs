@@ -268,8 +268,12 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         // Table with merged cell
         "<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val=\"2\"/></w:tcPr>",
         "<w:p><w:r><w:t>Merged cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>",
-        // OMML formula
-        "<m:oMathPara><m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath></m:oMathPara>",
+        // OMML formula (must be inside w:p)
+        "<w:p>",
+        "<m:oMathPara>",
+        "<m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath>",
+        "</m:oMathPara>",
+        "</w:p>",
         // Image with full DrawingML structure
         "<w:p><w:r><w:drawing>",
         "<wp:inline>",

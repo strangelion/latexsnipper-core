@@ -5,7 +5,7 @@
       "id": "docx-office-rich-v1",
       "format": "docx",
       "fixture": "fidelity/fixtures/office-rich.docx",
-      "sha256": "779598849c8ab7c301088a090095a638acf390fc6c2a817a9eb65fcbd38f93f6",
+      "sha256": "5428558444cf045aa6f4434cdc918cff3f6d01ed0f64e397410bd9f33f7feeb3",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [

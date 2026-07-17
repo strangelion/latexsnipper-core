@@ -543,14 +543,7 @@ fn word_block(block: &Block, media: &HashMap<&AssetId, &MediaPart>) -> Result<St
             "<w:p>{}</w:p>",
             word_inlines(&paragraph.inlines, media)?
         )),
-        Block::Formula(formula) => {
-            let omml = formula_omml(&formula.formula)?;
-            if omml.contains("<m:oMathPara") {
-                Ok(omml)
-            } else {
-                Ok(format!("<m:oMathPara>{omml}</m:oMathPara>"))
-            }
-        }
+        Block::Formula(formula) => block_formula_omml(&formula.formula),
         Block::Table(table) => Ok(crate::write_word_table_ooxml(table)),
         Block::List(list) => {
             let mut xml = String::new();
@@ -651,6 +644,20 @@ fn formula_omml(formula: &latexsnipper_ast::Formula) -> Result<String> {
         return Ok(raw.to_string());
     }
     DocumentConverter::convert_latex_string(formula.as_latex(), OutputFormat::OMML)
+}
+
+fn block_formula_omml(formula: &latexsnipper_ast::Formula) -> Result<String> {
+    let omml = formula_omml(formula)?;
+
+    if omml.contains("<m:oMathPara") {
+        Ok(format!("<w:p>{omml}</w:p>"))
+    } else if omml.contains("<m:oMath") {
+        Ok(format!("<w:p><m:oMathPara>{omml}</m:oMathPara></w:p>"))
+    } else {
+        Err(SnipperError::Export(
+            "formula conversion did not produce valid OMML".to_string(),
+        ))
+    }
 }
 
 fn word_drawing(part: &MediaPart, width: Option<f32>, height: Option<f32>) -> String {
@@ -1293,6 +1300,25 @@ mod tests {
             artifact.as_bytes().unwrap(),
             "word/document.xml",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+        );
+    }
+
+    #[test]
+    fn generated_docx_wraps_display_math_in_word_paragraph() {
+        let artifact =
+            DocumentExportService::export(&sample_document(), ExportFormat::Docx).unwrap();
+
+        let document_xml =
+            package_entry_text(artifact.as_bytes().unwrap(), "word/document.xml");
+
+        assert!(
+            document_xml.contains("<w:p><m:oMathPara>"),
+            "display OMML must be hosted inside a Word paragraph",
+        );
+
+        assert!(
+            !document_xml.contains("</w:tbl><m:oMathPara>"),
+            "m:oMathPara must not be emitted directly as a w:body child",
         );
     }
 
