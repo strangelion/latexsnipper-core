@@ -57,8 +57,7 @@ const ONE_PIXEL_PNG: &[u8] = &[
     0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1
     0x08, 0x04, 0x00, 0x00, 0x00, 0xb5, 0x1c, 0x0c, // RGBA
     0x02, 0x00, 0x00, 0x00, 0x0b, 0x49, 0x44, 0x41, // IDAT
-    0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0x0f, 0x00,
-    0x01, 0x05, 0x01, 0x01, 0x27, 0x18, 0xe3, 0x66,
+    0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0x0f, 0x00, 0x01, 0x05, 0x01, 0x01, 0x27, 0x18, 0xe3, 0x66,
     0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, // IEND
     0xae, 0x42, 0x60, 0x82,
 ];
@@ -116,10 +115,7 @@ fn root_relationships(main_target: &'static str) -> String {
     ])
 }
 
-fn content_types_xml(
-    defaults: &[(&str, &str)],
-    overrides: &[(&str, &str)],
-) -> String {
+fn content_types_xml(defaults: &[(&str, &str)], overrides: &[(&str, &str)]) -> String {
     let mut xml = concat!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
         "<Types ",
@@ -524,10 +520,7 @@ fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "/xl/pivotTables/pivotTable1.xml",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml",
             ),
-            (
-                "/xl/vbaProject.bin",
-                "application/vnd.ms-office.vbaProject",
-            ),
+            ("/xl/vbaProject.bin", "application/vnd.ms-office.vbaProject"),
             (
                 "/xl/embeddings/oleObject1.bin",
                 "application/vnd.openxmlformats-officedocument.oleObject",

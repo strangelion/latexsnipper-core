@@ -1310,23 +1310,13 @@ mod tests {
         let first = package("1.0.0");
         let first_target = target("1.0.0", &first);
         store
-            .install(
-                &first_target,
-                &first,
-                provenance(&first_target),
-                "3.0.0",
-            )
+            .install(&first_target, &first, provenance(&first_target), "3.0.0")
             .unwrap();
 
         let second = package("2.0.0");
         let second_target = target("2.0.0", &second);
         store
-            .install(
-                &second_target,
-                &second,
-                provenance(&second_target),
-                "3.0.0",
-            )
+            .install(&second_target, &second, provenance(&second_target), "3.0.0")
             .unwrap();
         assert_eq!(
             store
@@ -1339,12 +1329,7 @@ mod tests {
         );
 
         assert!(matches!(
-            store.install(
-                &first_target,
-                &first,
-                provenance(&first_target),
-                "3.0.0"
-            ),
+            store.install(&first_target, &first, provenance(&first_target), "3.0.0"),
             Err(RegistryError::VersionDowngrade { .. })
         ));
 
@@ -1368,22 +1353,12 @@ mod tests {
         let first = package("1.0.0");
         let first_target = target("1.0.0", &first);
         store
-            .install(
-                &first_target,
-                &first,
-                provenance(&first_target),
-                "3.0.0",
-            )
+            .install(&first_target, &first, provenance(&first_target), "3.0.0")
             .unwrap();
         let second = package("2.0.0");
         let second_target = target("2.0.0", &second);
         store
-            .install(
-                &second_target,
-                &second,
-                provenance(&second_target),
-                "3.0.0",
-            )
+            .install(&second_target, &second, provenance(&second_target), "3.0.0")
             .unwrap();
         let interrupted = temporary.path().join("staging").join("install-interrupted");
         fs::create_dir_all(&interrupted).unwrap();

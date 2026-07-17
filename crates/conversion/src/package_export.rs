@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{Cursor, Read as _, Write};
+use std::io::{Cursor, Write};
 
 use base64::Engine as _;
 use latexsnipper_ast::{
@@ -995,6 +995,10 @@ fn docx_content_types(media: &[MediaPart]) -> String {
                 "/word/theme/theme1.xml",
                 "application/vnd.openxmlformats-officedocument.theme+xml",
             ),
+            (
+                "/word/embeddings/oleObject1.bin",
+                "application/vnd.openxmlformats-officedocument.oleObject",
+            ),
         ],
     )
 }
@@ -1011,6 +1015,22 @@ fn pptx_content_types(slides: usize, media: &[MediaPart]) -> String {
         (
             "/ppt/theme/theme1.xml",
             "application/vnd.openxmlformats-officedocument.theme+xml",
+        ),
+        (
+            "/ppt/notesSlides/notesSlide1.xml",
+            "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml",
+        ),
+        (
+            "/ppt/charts/chart1.xml",
+            "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+        ),
+        (
+            "/ppt/diagrams/data1.xml",
+            "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
+        ),
+        (
+            "/ppt/embeddings/oleObject1.bin",
+            "application/vnd.openxmlformats-officedocument.oleObject",
         ),
     ];
     let names: Vec<String> = (1..=slides)
@@ -1082,23 +1102,18 @@ fn docx_rels(media: &[MediaPart]) -> String {
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
         "<Relationships ",
         "xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
-
         "<Relationship Id=\"rIdStyles\" ",
         "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" ",
         "Target=\"styles.xml\"/>",
-
         "<Relationship Id=\"rIdNumbering\" ",
         "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering\" ",
         "Target=\"numbering.xml\"/>",
-
         "<Relationship Id=\"rIdSettings\" ",
         "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings\" ",
         "Target=\"settings.xml\"/>",
-
         "<Relationship Id=\"rIdFontTable\" ",
         "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable\" ",
         "Target=\"fontTable.xml\"/>",
-
         "<Relationship Id=\"rIdTheme\" ",
         "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" ",
         "Target=\"theme/theme1.xml\"/>"
@@ -1143,8 +1158,53 @@ fn slide_rels(media: &[MediaPart]) -> String {
     xml
 }
 fn xlsx_content_types(sheets: usize) -> String {
-    let overrides = (1..=sheets).map(|index| format!("<Override PartName=\"/xl/worksheets/sheet{index}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>")).collect::<String>();
-    format!("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>{overrides}<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>")
+    let mut overrides = vec![
+        (
+            "/xl/workbook.xml",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+        ),
+        (
+            "/xl/styles.xml",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
+        ),
+        (
+            "/xl/tables/table1.xml",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml",
+        ),
+        (
+            "/xl/drawings/drawing1.xml",
+            "application/vnd.openxmlformats-officedocument.drawing+xml",
+        ),
+        (
+            "/xl/charts/chart1.xml",
+            "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+        ),
+        (
+            "/xl/pivotTables/pivotTable1.xml",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml",
+        ),
+        (
+            "/xl/vbaProject.bin",
+            "application/vnd.ms-office.vbaProject",
+        ),
+        (
+            "/xl/embeddings/oleObject1.bin",
+            "application/vnd.openxmlformats-officedocument.oleObject",
+        ),
+    ];
+    let sheet_ct =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
+    for index in 1..=sheets {
+        let name = format!("/xl/worksheets/sheet{index}.xml");
+        let leaked: &'static str = Box::leak(name.into_boxed_str());
+        overrides.push((leaked, sheet_ct));
+    }
+    content_types(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+        "/xl/workbook.xml",
+        &[],
+        &overrides,
+    )
 }
 fn workbook_xml(document: &Document) -> String {
     let count = document.pages.len().max(1);
@@ -1201,6 +1261,7 @@ const XLSX_STYLES: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\
 mod tests {
     use super::*;
     use latexsnipper_ast::{DocumentBuilder, MediaRole, TableBlock, TableCell, TableRow};
+    use std::io::Read as _;
 
     fn sample_document() -> Document {
         DocumentBuilder::new()
@@ -1474,15 +1535,8 @@ mod tests {
         text
     }
 
-    fn assert_office_package_contract(
-        bytes: &[u8],
-        main_part: &str,
-        main_content_type: &str,
-    ) {
-        assert_package_entries(
-            bytes,
-            &["[Content_Types].xml", "_rels/.rels", main_part],
-        );
+    fn assert_office_package_contract(bytes: &[u8], main_part: &str, main_content_type: &str) {
+        assert_package_entries(bytes, &["[Content_Types].xml", "_rels/.rels", main_part]);
 
         let root_rels = package_entry_text(bytes, "_rels/.rels");
 
@@ -1499,8 +1553,6 @@ mod tests {
             "missing main-part content type for {main_part}",
         );
 
-        assert!(
-            content_types.contains(&format!("ContentType=\"{main_content_type}\"")),
-        );
+        assert!(content_types.contains(&format!("ContentType=\"{main_content_type}\"")),);
     }
 }

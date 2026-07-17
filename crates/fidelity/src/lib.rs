@@ -174,9 +174,8 @@ pub fn validate_ooxml_package_structure(bytes: &[u8], format: FidelityFormat) ->
         return Ok(());
     };
 
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|error| {
-        FidelityError::Package(format!("invalid OOXML ZIP package: {error}"))
-    })?;
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+        .map_err(|error| FidelityError::Package(format!("invalid OOXML ZIP package: {error}")))?;
 
     let mut names = BTreeSet::new();
 
@@ -209,10 +208,7 @@ pub fn validate_ooxml_package_structure(bytes: &[u8], format: FidelityFormat) ->
     if !has_xml_element_with_attrs(
         &root_rels,
         "Relationship",
-        &[
-            ("Type", office_document_type),
-            ("Target", main_part),
-        ],
+        &[("Type", office_document_type), ("Target", main_part)],
     ) {
         return Err(FidelityError::Package(format!(
             "{} package root relationships do not identify '{}'",
@@ -257,11 +253,7 @@ pub fn validate_ooxml_package_structure(bytes: &[u8], format: FidelityFormat) ->
         let has_default = part
             .rsplit_once('.')
             .map(|(_, extension)| {
-                has_xml_element_with_attrs(
-                    &content_types,
-                    "Default",
-                    &[("Extension", extension)],
-                )
+                has_xml_element_with_attrs(&content_types, "Default", &[("Extension", extension)])
             })
             .unwrap_or(false);
 
@@ -289,10 +281,7 @@ pub fn validate_ooxml_package_structure(bytes: &[u8], format: FidelityFormat) ->
     Ok(())
 }
 
-fn read_package_text(
-    archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
-    name: &str,
-) -> Result<String> {
+fn read_package_text(archive: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<String> {
     let mut file = archive.by_name(name).map_err(|error| {
         FidelityError::Package(format!("failed to open package part '{name}': {error}"))
     })?;
@@ -325,14 +314,12 @@ fn xml_attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
 
 fn has_xml_element_with_attrs(xml: &str, element: &str, attrs: &[(&str, &str)]) -> bool {
     let needle = format!("<{element} ");
-    xml.split(&needle)
-        .skip(1)
-        .any(|fragment| {
-            let tag = fragment.split('>').next().unwrap_or(fragment);
-            attrs
-                .iter()
-                .all(|(name, expected)| xml_attribute(tag, name) == Some(*expected))
-        })
+    xml.split(&needle).skip(1).any(|fragment| {
+        let tag = fragment.split('>').next().unwrap_or(fragment);
+        attrs
+            .iter()
+            .all(|(name, expected)| xml_attribute(tag, name) == Some(*expected))
+    })
 }
 
 fn validate_relationship_part(
@@ -392,13 +379,11 @@ fn relationship_base_dir(relationship_part: &str) -> Result<String> {
 
     let marker = "/_rels/";
 
-    let marker_index = relationship_part
-        .rfind(marker)
-        .ok_or_else(|| {
-            FidelityError::Package(format!(
-                "invalid relationship part path '{relationship_part}'"
-            ))
-        })?;
+    let marker_index = relationship_part.rfind(marker).ok_or_else(|| {
+        FidelityError::Package(format!(
+            "invalid relationship part path '{relationship_part}'"
+        ))
+    })?;
 
     let prefix = &relationship_part[..marker_index];
 

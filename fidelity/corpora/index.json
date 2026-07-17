@@ -5,7 +5,7 @@
       "id": "docx-office-rich-v1",
       "format": "docx",
       "fixture": "fidelity/fixtures/office-rich.docx",
-      "sha256": "65eb27c81a1f0f988a75b24d19daa32f934d5cbbb2fd925e32ab543ecb261e9f",
+      "sha256": "7ace6616bb81f6084ef93e7a2abb2f27ff101d9d16266ed72dca40364807d9f0",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -44,7 +44,7 @@
       "id": "pptx-presentation-rich-v1",
       "format": "pptx",
       "fixture": "fidelity/fixtures/presentation-rich.pptx",
-      "sha256": "6250880644b642856075909ac833f024859dcf61e1477dee3b586844318c5eb5",
+      "sha256": "8259dfc8747efe72369892e3838cd90445e334d94ff967723f0ea2fd342e1b97",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -77,7 +77,7 @@
       "id": "xlsx-workbook-rich-v1",
       "format": "xlsx",
       "fixture": "fidelity/fixtures/workbook-rich.xlsx",
-      "sha256": "dc9f1abca94dc75d87baa3b33c1ebeb4a0150ebdf866bb9e5d831049bfb6da92",
+      "sha256": "db98c6c43b06933b88e9fcd32991cf1e57601189776170138a0439589141646a",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
