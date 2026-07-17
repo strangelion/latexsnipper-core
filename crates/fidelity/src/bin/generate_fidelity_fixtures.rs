@@ -206,10 +206,6 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml",
             ),
             (
-                "/word/charts/chart1.xml",
-                "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
-            ),
-            (
                 "/word/diagrams/data1.xml",
                 "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
             ),
@@ -228,19 +224,100 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
-    let document = br#"<?xml version="1.0" encoding="UTF-8"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
-<w:body>
-<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="336699"/></w:rPr><w:t>Office Fidelity Heading</w:t></w:r><w:r><w:t> styled run</w:t></w:r></w:p>
-<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>List item</w:t></w:r></w:p>
-<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Merged cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
-<m:oMathPara><m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath></m:oMathPara>
-<w:p><w:r><w:drawing><a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="rIdImage"/></w:drawing></w:r></w:p>
-<w:p><w:footnoteReference w:id="1"/><w:commentRangeStart w:id="0"/><w:ins><w:r><w:t>Inserted</w:t></w:r></w:ins><w:del><w:r><w:delText>Deleted</w:delText></w:r></w:del></w:p>
-<mc:AlternateContent><mc:Choice Requires="dgm"><w:p><w:r><w:t>SmartArt preview</w:t></w:r></w:p></mc:Choice></mc:AlternateContent>
-<w:p><w:r><w:object><o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/></w:object></w:r><c:chart r:id="rIdChart"/></w:p>
-<w:sectPr><w:headerReference r:id="rIdHeader"/><w:footerReference r:id="rIdFooter"/><w:type w:val="nextPage"/></w:sectPr>
-</w:body></w:document>"#;
+    let docx_numbering = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<w:numbering ",
+        "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">",
+        "<w:abstractNum w:abstractNumId=\"0\">",
+        "<w:lvl w:ilvl=\"0\">",
+        "<w:start w:val=\"1\"/>",
+        "<w:numFmt w:val=\"decimal\"/>",
+        "<w:lvlText w:val=\"%1.\"/>",
+        "<w:lvlJc w:val=\"left\"/>",
+        "</w:lvl>",
+        "</w:abstractNum>",
+        "<w:num w:numId=\"1\">",
+        "<w:abstractNumId w:val=\"0\"/>",
+        "</w:num>",
+        "</w:numbering>",
+    );
+
+    let document = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        "<w:document ",
+        "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" ",
+        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" ",
+        "xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" ",
+        "xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" ",
+        "xmlns:o=\"urn:schemas-microsoft-com:office:office\" ",
+        "xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" ",
+        "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" ",
+        "xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\" ",
+        "xmlns:dgm=\"http://schemas.openxmlformats.org/drawingml/2006/diagram\">",
+        "<w:body>",
+        // Heading with bold + color
+        "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr>",
+        "<w:r><w:rPr><w:b/><w:color w:val=\"336699\"/></w:rPr><w:t>Office Fidelity Heading</w:t></w:r>",
+        "<w:r><w:t> styled run</w:t></w:r></w:p>",
+        // Numbered list item
+        "<w:p><w:pPr><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"1\"/></w:numPr></w:pPr>",
+        "<w:r><w:t>List item</w:t></w:r></w:p>",
+        // Table with merged cell
+        "<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val=\"2\"/></w:tcPr>",
+        "<w:p><w:r><w:t>Merged cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>",
+        // OMML formula
+        "<m:oMathPara><m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath></m:oMathPara>",
+        // Image with full DrawingML structure
+        "<w:p><w:r><w:drawing>",
+        "<wp:inline>",
+        "<wp:extent cx=\"9525\" cy=\"9525\"/>",
+        "<wp:docPr id=\"1\" name=\"Fidelity Image\"/>",
+        "<a:graphic>",
+        "<a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">",
+        "<pic:pic>",
+        "<pic:nvPicPr>",
+        "<pic:cNvPr id=\"1\" name=\"image1.png\"/>",
+        "<pic:cNvPicPr/>",
+        "</pic:nvPicPr>",
+        "<pic:blipFill>",
+        "<a:blip r:embed=\"rIdImage\"/>",
+        "<a:stretch><a:fillRect/></a:stretch>",
+        "</pic:blipFill>",
+        "<pic:spPr>",
+        "<a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"9525\" cy=\"9525\"/></a:xfrm>",
+        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>",
+        "</pic:spPr>",
+        "</pic:pic>",
+        "</a:graphicData>",
+        "</a:graphic>",
+        "</wp:inline>",
+        "</w:drawing></w:r></w:p>",
+        // Footnote reference (inside w:r), comment, track changes
+        "<w:p>",
+        "<w:r><w:footnoteReference w:id=\"1\"/></w:r>",
+        "<w:commentRangeStart w:id=\"0\"/>",
+        "<w:ins><w:r><w:t>Inserted</w:t></w:r></w:ins>",
+        "<w:del><w:r><w:delText>Deleted</w:delText></w:r></w:del>",
+        "</w:p>",
+        // SmartArt AlternateContent with dgm namespace and Fallback
+        "<mc:AlternateContent>",
+        "<mc:Choice Requires=\"dgm\">",
+        "<w:p><w:r><w:t>SmartArt preview</w:t></w:r></w:p>",
+        "</mc:Choice>",
+        "<mc:Fallback>",
+        "<w:p><w:r><w:t>SmartArt fallback</w:t></w:r></w:p>",
+        "</mc:Fallback>",
+        "</mc:AlternateContent>",
+        // OLE object (no chart in w:p)
+        "<w:p>",
+        "<w:r><w:object><o:OLEObject Type=\"Embed\" ProgID=\"Package\" r:id=\"rIdOle\"/></w:object></w:r>",
+        "</w:p>",
+        // Section properties
+        "<w:sectPr><w:headerReference r:id=\"rIdHeader\"/>",
+        "<w:footerReference r:id=\"rIdFooter\"/>",
+        "<w:type w:val=\"nextPage\"/></w:sectPr>",
+        "</w:body></w:document>",
+    );
 
     let rels = relationships_xml(&[
         RelationshipSpec {
@@ -286,12 +363,6 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             target: "comments.xml",
         },
         RelationshipSpec {
-            id: "rIdChart",
-            relationship_type:
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
-            target: "charts/chart1.xml",
-        },
-        RelationshipSpec {
             id: "rIdOle",
             relationship_type:
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
@@ -307,16 +378,16 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("_rels/.rels", root_rels.as_bytes()),
             ("docProps/core.xml", core_properties_xml().as_bytes()),
             ("docProps/app.xml", app_properties_xml().as_bytes()),
-            ("word/document.xml", document),
+            ("word/document.xml", document.as_bytes()),
             ("word/_rels/document.xml.rels", rels.as_bytes()),
             ("word/styles.xml", br#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Heading1"/></w:styles>"#),
-            ("word/numbering.xml", br#"<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:num w:numId="1"/></w:numbering>"#),
+            ("word/numbering.xml", docx_numbering.as_bytes()),
             ("word/header1.xml", br#"<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Header</w:t></w:r></w:p></w:hdr>"#),
             ("word/footer1.xml", br#"<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Footer</w:t></w:r></w:p></w:ftr>"#),
             ("word/footnotes.xml", br#"<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:id="1"><w:p><w:r><w:t>Note</w:t></w:r></w:p></w:footnote></w:footnotes>"#),
             ("word/comments.xml", br#"<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment w:id="0"><w:p><w:r><w:t>Comment</w:t></w:r></w:p></w:comment></w:comments>"#),
-            ("word/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
             ("word/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"/>"#),
+            ("word/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
             ("word/embeddings/oleObject1.bin", b"OLE fidelity fixture"),
             ("word/media/image1.png", ONE_PIXEL_PNG),
             ("customXml/fidelity.xml", b"<fidelity opaque=\"true\">DOCX_OPAQUE_PART</fidelity>"),
