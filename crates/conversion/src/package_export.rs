@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read as _, Write};
 
 use base64::Engine as _;
 use latexsnipper_ast::{
@@ -1232,6 +1232,11 @@ mod tests {
                 "word/numbering.xml",
             ],
         );
+        assert_office_package_contract(
+            artifact.as_bytes().unwrap(),
+            "word/document.xml",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+        );
     }
 
     #[test]
@@ -1245,10 +1250,16 @@ mod tests {
             artifact.as_bytes().unwrap(),
             &[
                 "[Content_Types].xml",
+                "_rels/.rels",
                 "ppt/presentation.xml",
                 "ppt/slides/slide1.xml",
                 "ppt/slideMasters/slideMaster1.xml",
             ],
+        );
+        assert_office_package_contract(
+            artifact.as_bytes().unwrap(),
+            "ppt/presentation.xml",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
         );
     }
 
@@ -1299,10 +1310,16 @@ mod tests {
             artifact.as_bytes().unwrap(),
             &[
                 "[Content_Types].xml",
+                "_rels/.rels",
                 "xl/workbook.xml",
                 "xl/styles.xml",
                 "xl/worksheets/sheet1.xml",
             ],
+        );
+        assert_office_package_contract(
+            artifact.as_bytes().unwrap(),
+            "xl/workbook.xml",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
         );
     }
 
@@ -1447,5 +1464,43 @@ mod tests {
                 "missing package part {entry}"
             );
         }
+    }
+
+    fn package_entry_text(bytes: &[u8], name: &str) -> String {
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut entry = archive.by_name(name).unwrap();
+        let mut text = String::new();
+        entry.read_to_string(&mut text).unwrap();
+        text
+    }
+
+    fn assert_office_package_contract(
+        bytes: &[u8],
+        main_part: &str,
+        main_content_type: &str,
+    ) {
+        assert_package_entries(
+            bytes,
+            &["[Content_Types].xml", "_rels/.rels", main_part],
+        );
+
+        let root_rels = package_entry_text(bytes, "_rels/.rels");
+
+        assert!(root_rels.contains(
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"
+        ));
+
+        assert!(root_rels.contains(&format!("Target=\"{main_part}\"")));
+
+        let content_types = package_entry_text(bytes, "[Content_Types].xml");
+
+        assert!(
+            content_types.contains(&format!("PartName=\"/{main_part}\"")),
+            "missing main-part content type for {main_part}",
+        );
+
+        assert!(
+            content_types.contains(&format!("ContentType=\"{main_content_type}\"")),
+        );
     }
 }
