@@ -1,12 +1,14 @@
-use latexsnipper_ast::{Document, ExportArtifact, GeneratedContent};
-use latexsnipper_foundation::Result;
+use latexsnipper_ast::{Diagnostic, Document, ExportArtifact, GeneratedContent};
+use latexsnipper_foundation::{Result, SnipperError};
 use sha2::{Digest, Sha256};
 
+use crate::bundle::{RenderBundle, RenderPreference};
 use crate::generator::Generator;
 use crate::pdf::PdfGenerator;
 use crate::png::PngGenerator;
 use crate::render_tree::RenderTree;
 use crate::svg::SvgGenerator;
+use crate::svg_policy::{normalize_svg, SvgContentPolicy};
 use crate::text::TextGenerator;
 
 /// Supported visual export formats.
@@ -72,6 +74,35 @@ impl VisualFormat {
 pub struct ExportService;
 
 impl ExportService {
+    fn build_artifact(
+        format: VisualFormat,
+        content: GeneratedContent,
+        diagnostics: Vec<Diagnostic>,
+    ) -> ExportArtifact {
+        let bytes = content.as_bytes();
+
+        let checksum = format!("{:x}", Sha256::digest(bytes));
+
+        let size_bytes = bytes.len() as u64;
+
+        let text = match &content {
+            GeneratedContent::Text(text) => Some(text.clone()),
+            GeneratedContent::Binary(_) => None,
+        };
+
+        ExportArtifact {
+            format: format.extension().to_string(),
+            primary_path: None,
+            content: Some(content),
+            text,
+            assets: Vec::new(),
+            diagnostics,
+            mime_type: Some(format.mime_type().to_string()),
+            checksum_sha256: Some(checksum),
+            size_bytes: Some(size_bytes),
+        }
+    }
+
     /// Export a Document to the specified visual format.
     ///
     /// Returns an `ExportArtifact` with the generated content,
@@ -85,26 +116,8 @@ impl ExportService {
             VisualFormat::Png => PngGenerator.generate(&tree)?,
             VisualFormat::PlainText => TextGenerator.generate(&tree)?,
         };
-        let bytes = content.as_bytes();
-        let checksum = format!("{:x}", Sha256::digest(bytes));
-        let size_bytes = bytes.len() as u64;
-        let text = match &content {
-            GeneratedContent::Text(text) => Some(text.clone()),
-            GeneratedContent::Binary(_) => None,
-        };
 
-        let diagnostics = tree.diagnostics.clone();
-        Ok(ExportArtifact {
-            format: format.extension().to_string(),
-            primary_path: None,
-            content: Some(content),
-            text,
-            assets: Vec::new(),
-            diagnostics,
-            mime_type: Some(format.mime_type().to_string()),
-            checksum_sha256: Some(checksum),
-            size_bytes: Some(size_bytes),
-        })
+        Ok(Self::build_artifact(format, content, tree.diagnostics))
     }
 
     /// Export a Document to SVG (convenience method).
@@ -135,6 +148,94 @@ impl ExportService {
             VisualFormat::Png,
             VisualFormat::PlainText,
         ]
+    }
+
+    /// Build a portable render bundle from a Document.
+    ///
+    /// The bundle provides a preferred artifact and optional fallback artifacts
+    /// based on the specified render preference.
+    pub fn render_bundle(doc: &Document, preference: RenderPreference) -> Result<RenderBundle> {
+        let tree = RenderTree::from_document(doc);
+
+        let generated = SvgGenerator.generate(&tree)?;
+
+        let svg = generated.as_text().ok_or_else(|| {
+            SnipperError::Export("SVG generator returned binary content".to_string())
+        })?;
+
+        Self::render_bundle_from_svg_internal(svg, preference, tree.diagnostics)
+    }
+
+    /// Build a portable render bundle from pre-existing SVG content.
+    ///
+    /// This is the recommended entry point when the caller already has
+    /// high-quality SVG (e.g. from MathJax). The SVG is validated,
+    /// normalized, and composed into a bundle with the appropriate fallback.
+    pub fn render_bundle_from_svg(svg: &str, preference: RenderPreference) -> Result<RenderBundle> {
+        Self::render_bundle_from_svg_internal(svg, preference, Vec::new())
+    }
+
+    fn render_bundle_from_svg_internal(
+        svg: &str,
+        preference: RenderPreference,
+        diagnostics: Vec<Diagnostic>,
+    ) -> Result<RenderBundle> {
+        let svg_policy = match preference {
+            RenderPreference::VectorOnly => SvgContentPolicy::VectorOnly,
+            RenderPreference::Auto | RenderPreference::RasterOnly => {
+                SvgContentPolicy::AllowEmbeddedRaster
+            }
+        };
+
+        let normalized = normalize_svg(svg, svg_policy)?;
+
+        let dimensions = normalized.validation.dimensions;
+
+        match preference {
+            RenderPreference::VectorOnly => {
+                let preferred = Self::build_artifact(
+                    VisualFormat::Svg,
+                    GeneratedContent::Text(normalized.svg),
+                    diagnostics,
+                );
+
+                Ok(RenderBundle {
+                    preferred,
+                    fallbacks: Vec::new(),
+                    dimensions,
+                })
+            }
+
+            RenderPreference::RasterOnly => {
+                let png = PngGenerator::generate_from_svg(&normalized.svg)?;
+
+                let preferred = Self::build_artifact(VisualFormat::Png, png, diagnostics);
+
+                Ok(RenderBundle {
+                    preferred,
+                    fallbacks: Vec::new(),
+                    dimensions,
+                })
+            }
+
+            RenderPreference::Auto => {
+                let png = PngGenerator::generate_from_svg(&normalized.svg)?;
+
+                let preferred = Self::build_artifact(
+                    VisualFormat::Svg,
+                    GeneratedContent::Text(normalized.svg),
+                    diagnostics.clone(),
+                );
+
+                let fallback = Self::build_artifact(VisualFormat::Png, png, diagnostics);
+
+                Ok(RenderBundle {
+                    preferred,
+                    fallbacks: vec![fallback],
+                    dimensions,
+                })
+            }
+        }
     }
 }
 
@@ -183,5 +284,62 @@ mod tests {
         assert!(svg.contains("id=\"page-1\""));
         assert!(svg.contains("data-latex=\"\\frac{a}{b}\""));
         assert!(svg.contains(">(a)/(b)</text>"));
+    }
+
+    #[test]
+    fn auto_bundle_has_svg_primary_and_png_fallback() {
+        let bundle = ExportService::render_bundle(&document(), RenderPreference::Auto).unwrap();
+
+        assert_eq!(bundle.preferred.format, "svg");
+
+        assert_eq!(bundle.fallbacks.len(), 1);
+
+        assert_eq!(bundle.fallbacks[0].format, "png");
+
+        assert_eq!(
+            &bundle.fallbacks[0].as_bytes().unwrap()[..8],
+            b"\x89PNG\r\n\x1a\n"
+        );
+    }
+
+    #[test]
+    fn vector_only_bundle_has_no_fallback() {
+        let bundle =
+            ExportService::render_bundle(&document(), RenderPreference::VectorOnly).unwrap();
+
+        assert_eq!(bundle.preferred.format, "svg");
+
+        assert!(bundle.fallbacks.is_empty());
+    }
+
+    #[test]
+    fn raster_only_bundle_returns_png() {
+        let bundle =
+            ExportService::render_bundle(&document(), RenderPreference::RasterOnly).unwrap();
+
+        assert_eq!(bundle.preferred.format, "png");
+
+        assert!(bundle.fallbacks.is_empty());
+    }
+
+    #[test]
+    fn render_bundle_from_svg_auto() {
+        let svg = r#"
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="200"
+              height="100"
+              viewBox="0 0 200 100">
+              <rect width="200" height="100" fill="blue"/>
+            </svg>
+        "#;
+
+        let bundle = ExportService::render_bundle_from_svg(svg, RenderPreference::Auto).unwrap();
+
+        assert_eq!(bundle.preferred.format, "svg");
+        assert_eq!(bundle.fallbacks.len(), 1);
+        assert_eq!(bundle.fallbacks[0].format, "png");
+        assert!((bundle.dimensions.width_px - 200.0).abs() < f32::EPSILON);
+        assert!((bundle.dimensions.height_px - 100.0).abs() < f32::EPSILON);
     }
 }

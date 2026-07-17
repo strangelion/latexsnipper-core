@@ -18,7 +18,7 @@
     "crates/ast/src": "52bda28931dbe15928f1090ffded6cf28ccfdcbaa82a29619bf392873bc9a717",
     "crates/conversion/src": "613b0992d2034e8cb390aa6deed28814c6b4d3ded07d3a09f3ebe586a390003b",
     "crates/engine/src": "0c0c72430b33db8fd45f79e03073dd3ffc9001fc0eae871b7b2a0bef345a88ea",
-    "crates/export/src": "54de184af1802b235c3e617d4bf275007c37e985e1463afa00a203ae50410f25",
+    "crates/export/src": "85a87b758cba7453e539a09747f8e0322b174c2fd65ea8b28add9312391bd453",
     "crates/ffi/src": "9096deeb3fe4bf673dbd323fd80e1ed6a7e9056fa7e7e76f27b874442021b5ed",
     "crates/foundation/src": "afbbf9d5e3e47b3e7080eb6d02a182c0063f92005acb22358a03974f4f382fbe",
     "crates/image/src": "0485efad62f6b82477d1e1091b474d36d56ca44091b30f5ef1527822e1324be3",

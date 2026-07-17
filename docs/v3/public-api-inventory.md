@@ -22,6 +22,7 @@ integration state.
 | Package layout | crates, WASM npm package, model/plugin artifacts | no layout change | unchanged |
 | Cargo features | native/WASM/provider feature matrix | no feature removal | unchanged |
 | FFI | current JSON response and pointer/length API | no ABI change | additive version object and numeric response-version exports |
+| Portable visual rendering | Single-format `ExportArtifact` output | Adds `RenderPreference`, `RenderBundle`, SVG validation/normalization, and SVG-to-PNG fallback composition | additive |
 
 ## Serialized-contract audit notes
 

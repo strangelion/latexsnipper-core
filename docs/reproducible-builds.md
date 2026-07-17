@@ -11,15 +11,24 @@ rustup toolchain install 1.88.0
 cargo build --locked --release -p latexsnipper-cli --target <target-triple>
 ```
 
-The Intel macOS release target is the only exception to the default `ort`
-binary download path. `ort` no longer publishes an Intel macOS bundle, so the
-release workflows download Microsoft ONNX Runtime `1.23.2` for
-`x86_64-apple-darwin`, verify SHA-256
-`d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6`, set
-`ORT_LIB_LOCATION` to its `lib` directory, request dynamic linking, add an
-`@executable_path` runtime search path, and package the dylib with its license
-and third-party notices. The extracted CLI smoke test verifies that this
-bundled runtime is loadable.
+## Supported native release targets
+
+Core 3.0 GA publishes and validates native CLI archives for:
+
+- `x86_64-unknown-linux-gnu`
+- `x86_64-pc-windows-msvc`
+- `aarch64-apple-darwin`
+
+Intel macOS (`x86_64-apple-darwin`) is not part of the official GA binary
+artifact matrix.
+
+Current upstream ONNX Runtime releases no longer provide prebuilt macOS
+x86_64 binaries. Maintaining a release-only dependency on an older runtime
+would create a separate unsupported runtime path, so the official Core 3
+release matrix targets Apple Silicon macOS.
+
+This does not define a source-level portability guarantee for custom Intel
+macOS builds using a separately supplied compatible runtime.
 
 To reproduce the browser package:
 

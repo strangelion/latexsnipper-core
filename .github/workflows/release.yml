@@ -14,8 +14,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  ONNXRUNTIME_INTEL_MACOS_VERSION: 1.23.2
-  ONNXRUNTIME_INTEL_MACOS_SHA256: d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6
 
 jobs:
   release-guard:
@@ -54,9 +52,6 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: snipper-windows-amd64
-          - target: x86_64-apple-darwin
-            os: macos-15-intel
-            artifact: snipper-macos-amd64
           - target: aarch64-apple-darwin
             os: macos-15
             artifact: snipper-macos-arm64
@@ -72,44 +67,37 @@ jobs:
         with:
           key: cli-${{ matrix.target }}
 
-      - name: Prepare verified Intel macOS ONNX Runtime
-        if: matrix.target == 'x86_64-apple-darwin'
-        shell: bash
-        run: |
-          archive="onnxruntime-osx-x86_64-${ONNXRUNTIME_INTEL_MACOS_VERSION}.tgz"
-          url="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_INTEL_MACOS_VERSION}/${archive}"
-          curl --fail --location --retry 3 --retry-all-errors --output "$archive" "$url"
-          echo "${ONNXRUNTIME_INTEL_MACOS_SHA256}  ${archive}" | shasum -a 256 --check
-          mkdir -p target/onnxruntime
-          tar -xzf "$archive" --strip-components=1 -C target/onnxruntime
-          test -f target/onnxruntime/lib/libonnxruntime.dylib
-          test -f target/onnxruntime/LICENSE
-          test -f target/onnxruntime/ThirdPartyNotices.txt
-          echo "ORT_LIB_LOCATION=$GITHUB_WORKSPACE/target/onnxruntime/lib" >> "$GITHUB_ENV"
-          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
-
       - name: Build
         run: cargo build --locked --release -p latexsnipper-cli --target ${{ matrix.target }}
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
+        shell: bash
         run: |
           mkdir -p target/release-stage target/release-install
-          cp target/${{ matrix.target }}/release/snipper target/release-stage/
+
+          cp \
+            "target/${{ matrix.target }}/release/snipper" \
+            target/release-stage/
+
           cp LICENSE README.md target/release-stage/
-          if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
-            cp -P target/onnxruntime/lib/libonnxruntime*.dylib target/release-stage/
-            cp target/onnxruntime/LICENSE target/release-stage/ONNXRUNTIME-LICENSE
-            cp target/onnxruntime/ThirdPartyNotices.txt target/release-stage/ONNXRUNTIME-ThirdPartyNotices.txt
-            install_name_tool -add_rpath "@executable_path" target/release-stage/snipper
-            otool -L target/release-stage/snipper | grep onnxruntime
-          fi
-          tar -C target/release-stage -czf ${{ matrix.artifact }}.tar.gz .
-          tar -C target/release-install -xzf ${{ matrix.artifact }}.tar.gz
+
+          tar \
+            -C target/release-stage \
+            -czf "${{ matrix.artifact }}.tar.gz" \
+            .
+
+          tar \
+            -C target/release-install \
+            -xzf "${{ matrix.artifact }}.tar.gz"
+
           target/release-install/snipper version
+
           target/release-install/snipper capabilities --format json \
             > target/release-install/capabilities.json
-          python -c 'import json; json.load(open("target/release-install/capabilities.json", encoding="utf-8"))'
+
+          python -c \
+            'import json; json.load(open("target/release-install/capabilities.json", encoding="utf-8"))'
 
       - name: Package (Windows)
         if: runner.os == 'Windows'

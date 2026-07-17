@@ -15,8 +15,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   WASM_PACK_VERSION: 0.13.1
-  ONNXRUNTIME_INTEL_MACOS_VERSION: 1.23.2
-  ONNXRUNTIME_INTEL_MACOS_SHA256: d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6
 
 jobs:
   preflight:
@@ -51,9 +49,6 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             archive: snipper-windows-amd64.zip
-          - target: x86_64-apple-darwin
-            os: macos-15-intel
-            archive: snipper-macos-amd64.tar.gz
           - target: aarch64-apple-darwin
             os: macos-15
             archive: snipper-macos-arm64.tar.gz
@@ -65,21 +60,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ga-cli-${{ matrix.target }}
-      - name: Prepare verified Intel macOS ONNX Runtime
-        if: matrix.target == 'x86_64-apple-darwin'
-        shell: bash
-        run: |
-          archive="onnxruntime-osx-x86_64-${ONNXRUNTIME_INTEL_MACOS_VERSION}.tgz"
-          url="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_INTEL_MACOS_VERSION}/${archive}"
-          curl --fail --location --retry 3 --retry-all-errors --output "$archive" "$url"
-          echo "${ONNXRUNTIME_INTEL_MACOS_SHA256}  ${archive}" | shasum -a 256 --check
-          mkdir -p target/onnxruntime
-          tar -xzf "$archive" --strip-components=1 -C target/onnxruntime
-          test -f target/onnxruntime/lib/libonnxruntime.dylib
-          test -f target/onnxruntime/LICENSE
-          test -f target/onnxruntime/ThirdPartyNotices.txt
-          echo "ORT_LIB_LOCATION=$GITHUB_WORKSPACE/target/onnxruntime/lib" >> "$GITHUB_ENV"
-          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
       - run: cargo build --locked --release -p latexsnipper-cli --target ${{ matrix.target }}
       - name: Package and test installed archive (Unix)
         if: runner.os != 'Windows'
@@ -88,18 +68,16 @@ jobs:
           mkdir -p target/ga-stage target/ga-install
           cp "target/${{ matrix.target }}/release/snipper" target/ga-stage/
           cp LICENSE README.md target/ga-stage/
-          if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
-            cp -P target/onnxruntime/lib/libonnxruntime*.dylib target/ga-stage/
-            cp target/onnxruntime/LICENSE target/ga-stage/ONNXRUNTIME-LICENSE
-            cp target/onnxruntime/ThirdPartyNotices.txt target/ga-stage/ONNXRUNTIME-ThirdPartyNotices.txt
-            install_name_tool -add_rpath "@executable_path" target/ga-stage/snipper
-            otool -L target/ga-stage/snipper | grep onnxruntime
-          fi
+
           tar -C target/ga-stage -czf "${{ matrix.archive }}" .
+
           tar -C target/ga-install -xzf "${{ matrix.archive }}"
+
           target/ga-install/snipper version
+
           target/ga-install/snipper capabilities --format json \
             > target/ga-install/capabilities.json
+
           python -c 'import json; json.load(open("target/ga-install/capabilities.json", encoding="utf-8"))'
       - name: Package and test installed archive (Windows)
         if: runner.os == 'Windows'
