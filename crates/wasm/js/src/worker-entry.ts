@@ -101,7 +101,20 @@ async function handle(request: WorkerRequest): Promise<void> {
   }
 }
 
+function isTrustedMessageEvent(event: MessageEvent<WorkerRequest>): boolean {
+  const eventOrigin = event.origin;
+  if (!eventOrigin) {
+    return true;
+  }
+
+  return eventOrigin === globalThis.location.origin;
+}
+
 scope.onmessage = (event) => {
+  if (!isTrustedMessageEvent(event)) {
+    return;
+  }
+
   const request = event.data;
   queue = queue.then(() => handle(request)).catch((cause: unknown) => {
     error(request.requestId, "WORKER_QUEUE_FAILED", cause instanceof Error ? cause.message : String(cause));
