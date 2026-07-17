@@ -40,6 +40,111 @@ fn package(path: &Path, parts: &[(&str, &[u8])]) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Unified OOXML helpers
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy)]
+struct RelationshipSpec {
+    id: &'static str,
+    relationship_type: &'static str,
+    target: &'static str,
+}
+
+fn relationships_xml(relationships: &[RelationshipSpec]) -> String {
+    let mut xml = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<Relationships ",
+        "xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+    )
+    .to_string();
+
+    for rel in relationships {
+        xml.push_str(&format!(
+            "<Relationship Id=\"{}\" Type=\"{}\" Target=\"{}\"/>",
+            rel.id, rel.relationship_type, rel.target,
+        ));
+    }
+
+    xml.push_str("</Relationships>");
+    xml
+}
+
+fn root_relationships(main_target: &'static str) -> String {
+    relationships_xml(&[
+        RelationshipSpec {
+            id: "rId1",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+            target: main_target,
+        },
+        RelationshipSpec {
+            id: "rId2",
+            relationship_type:
+                "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties",
+            target: "docProps/core.xml",
+        },
+        RelationshipSpec {
+            id: "rId3",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties",
+            target: "docProps/app.xml",
+        },
+    ])
+}
+
+fn content_types_xml(
+    defaults: &[(&str, &str)],
+    overrides: &[(&str, &str)],
+) -> String {
+    let mut xml = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<Types ",
+        "xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+    )
+    .to_string();
+
+    for (extension, content_type) in defaults {
+        xml.push_str(&format!(
+            "<Default Extension=\"{extension}\" ContentType=\"{content_type}\"/>"
+        ));
+    }
+
+    for (part_name, content_type) in overrides {
+        xml.push_str(&format!(
+            "<Override PartName=\"{part_name}\" ContentType=\"{content_type}\"/>"
+        ));
+    }
+
+    xml.push_str("</Types>");
+    xml
+}
+
+fn core_properties_xml() -> &'static str {
+    concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<cp:coreProperties ",
+        "xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" ",
+        "xmlns:dc=\"http://purl.org/dc/elements/1.1/\">",
+        "<dc:title>Fidelity Fixture</dc:title>",
+        "</cp:coreProperties>"
+    )
+}
+
+fn app_properties_xml() -> &'static str {
+    concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<Properties ",
+        "xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\">",
+        "<Application>LaTeXSnipper</Application>",
+        "</Properties>"
+    )
+}
+
+// ---------------------------------------------------------------------------
+// DOCX
+// ---------------------------------------------------------------------------
+
 fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let document = br#"<?xml version="1.0" encoding="UTF-8"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
@@ -54,17 +159,60 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 <w:p><w:r><w:object><o:OLEObject Type="Embed" ProgID="Package"/></w:object></w:r><c:chart r:id="rIdChart"/></w:p>
 <w:sectPr><w:headerReference r:id="rIdHeader"/><w:footerReference r:id="rIdFooter"/><w:type w:val="nextPage"/></w:sectPr>
 </w:body></w:document>"#;
-    let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage" Target="media/image1.png"/><Relationship Id="rIdHeader" Target="header1.xml"/><Relationship Id="rIdFooter" Target="footer1.xml"/><Relationship Id="rIdChart" Target="charts/chart1.xml"/></Relationships>"#;
-    let root_rels = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>"#;
+
+    let docx_rels = relationships_xml(&[
+        RelationshipSpec {
+            id: "rIdImage",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+            target: "media/image1.png",
+        },
+        RelationshipSpec {
+            id: "rIdHeader",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+            target: "header1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdFooter",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+            target: "footer1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdChart",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
+            target: "charts/chart1.xml",
+        },
+    ]);
+
+    let ct = content_types_xml(
+        &[
+            ("rels", "application/vnd.openxmlformats-package.relationships+xml"),
+            ("xml", "application/xml"),
+        ],
+        &[
+            (
+                "/word/document.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+            ),
+            (
+                "/docProps/core.xml",
+                "application/vnd.openxmlformats-package.core-properties+xml",
+            ),
+            (
+                "/docProps/app.xml",
+                "application/vnd.openxmlformats-officedocument.extended-properties+xml",
+            ),
+        ],
+    );
+
     package(
         path,
         &[
-            ("[Content_Types].xml", br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>"#),
-            ("_rels/.rels", root_rels),
-            ("docProps/core.xml", br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Fidelity Fixture</dc:title></cp:coreProperties>"#),
-            ("docProps/app.xml", br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>LaTeXSnipper</Application></Properties>"#),
+            ("[Content_Types].xml", ct.as_bytes()),
+            ("_rels/.rels", root_relationships("word/document.xml").as_bytes()),
+            ("docProps/core.xml", core_properties_xml().as_bytes()),
+            ("docProps/app.xml", app_properties_xml().as_bytes()),
             ("word/document.xml", document),
-            ("word/_rels/document.xml.rels", rels),
+            ("word/_rels/document.xml.rels", docx_rels.as_bytes()),
             ("word/styles.xml", br#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Heading1"/></w:styles>"#),
             ("word/numbering.xml", br#"<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:num w:numId="1"/></w:numbering>"#),
             ("word/header1.xml", br#"<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Header</w:t></w:r></w:p></w:hdr>"#),
@@ -80,23 +228,83 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     )
 }
 
+// ---------------------------------------------------------------------------
+// PPTX
+// ---------------------------------------------------------------------------
+
 fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let presentation = br#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldMasterIdLst><p:sldMasterId r:id="rIdMaster"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#;
-    let presentation_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="slides/slide1.xml"/><Relationship Id="rIdMaster" Target="slideMasters/slideMaster1.xml"/></Relationships>"#;
+
+    let presentation_rels = relationships_xml(&[
+        RelationshipSpec {
+            id: "rId1",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
+            target: "slides/slide1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdMaster",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
+            target: "slideMasters/slideMaster1.xml",
+        },
+    ]);
+
     let slide = br#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="2" name="Text Box"/></p:nvSpPr><p:spPr><a:prstGeom prst="rect"/></p:spPr><p:txBody><a:p><a:r><a:t>Presentation Fidelity Text Box</a:t></a:r></a:p></p:txBody></p:sp><p:pic><p:blipFill><a:blip r:embed="rIdImage"/></p:blipFill></p:pic><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Table cell</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame><p:graphicFrame><a:graphic><a:graphicData uri="chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rIdChart"/></a:graphicData></a:graphic></p:graphicFrame><p:oleObj r:id="rIdOle"/></p:spTree></p:cSld><p:timing><p:tnLst><p:par/></p:tnLst></p:timing></p:sld>"#;
-    let slide_rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage" Target="../media/image1.png"/><Relationship Id="rIdChart" Target="../charts/chart1.xml"/><Relationship Id="rIdOle" Target="../embeddings/oleObject1.bin"/><Relationship Id="rIdNotes" Target="../notesSlides/notesSlide1.xml"/></Relationships>"#;
-    let root_rels = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>"#;
+
+    let slide_rels = relationships_xml(&[
+        RelationshipSpec {
+            id: "rIdImage",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+            target: "../media/image1.png",
+        },
+        RelationshipSpec {
+            id: "rIdChart",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
+            target: "../charts/chart1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdOle",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
+            target: "../embeddings/oleObject1.bin",
+        },
+        RelationshipSpec {
+            id: "rIdNotes",
+            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
+            target: "../notesSlides/notesSlide1.xml",
+        },
+    ]);
+
+    let ct = content_types_xml(
+        &[
+            ("rels", "application/vnd.openxmlformats-package.relationships+xml"),
+            ("xml", "application/xml"),
+        ],
+        &[
+            (
+                "/ppt/presentation.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
+            ),
+            (
+                "/docProps/core.xml",
+                "application/vnd.openxmlformats-package.core-properties+xml",
+            ),
+            (
+                "/docProps/app.xml",
+                "application/vnd.openxmlformats-officedocument.extended-properties+xml",
+            ),
+        ],
+    );
+
     package(
         path,
         &[
-            ("[Content_Types].xml", br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>"#),
-            ("_rels/.rels", root_rels),
-            ("docProps/core.xml", br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Fidelity Fixture</dc:title></cp:coreProperties>"#),
-            ("docProps/app.xml", br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>LaTeXSnipper</Application></Properties>"#),
+            ("[Content_Types].xml", ct.as_bytes()),
+            ("_rels/.rels", root_relationships("ppt/presentation.xml").as_bytes()),
+            ("docProps/core.xml", core_properties_xml().as_bytes()),
+            ("docProps/app.xml", app_properties_xml().as_bytes()),
             ("ppt/presentation.xml", presentation),
-            ("ppt/_rels/presentation.xml.rels", presentation_rels),
+            ("ppt/_rels/presentation.xml.rels", presentation_rels.as_bytes()),
             ("ppt/slides/slide1.xml", slide),
-            ("ppt/slides/_rels/slide1.xml.rels", slide_rels),
+            ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
             ("ppt/slideMasters/slideMaster1.xml", br#"<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sldMaster>"#),
             ("ppt/slideLayouts/slideLayout1.xml", br#"<p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sldLayout>"#),
             ("ppt/notesSlides/notesSlide1.xml", br#"<p:notes xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree/></p:cSld></p:notes>"#),
@@ -109,20 +317,52 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     )
 }
 
+// ---------------------------------------------------------------------------
+// XLSX
+// ---------------------------------------------------------------------------
+
 fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let workbook = br#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Fidelity" sheetId="1" r:id="rId1"/></sheets></workbook>"#;
-    let rels = br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#;
+
+    let workbook_rels = relationships_xml(&[RelationshipSpec {
+        id: "rId1",
+        relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+        target: "worksheets/sheet1.xml",
+    }]);
+
     let sheet = br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:D3"/><cols><col min="1" max="4" width="18" customWidth="1"/></cols><sheetData><row r="1" ht="24" customHeight="1"><c r="A1" t="inlineStr"><is><t>Workbook Fidelity</t></is></c><c r="B1" t="b"><v>1</v></c><c r="C1" t="n"><v>42</v></c><c r="D1" t="e"><v>#N/A</v></c></row><row r="2"><c r="A2"><f>SUM(C1,8)</f><v>50</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="A3:D3"/></mergeCells><conditionalFormatting sqref="C1"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting><tableParts count="1"><tablePart r:id="rIdTable"/></tableParts><drawing r:id="rIdDrawing"/></worksheet>"#;
-    let root_rels = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>"#;
+
+    let ct = content_types_xml(
+        &[
+            ("rels", "application/vnd.openxmlformats-package.relationships+xml"),
+            ("xml", "application/xml"),
+            ("bin", "application/vnd.ms-office.vbaProject"),
+        ],
+        &[
+            (
+                "/xl/workbook.xml",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+            ),
+            (
+                "/docProps/core.xml",
+                "application/vnd.openxmlformats-package.core-properties+xml",
+            ),
+            (
+                "/docProps/app.xml",
+                "application/vnd.openxmlformats-officedocument.extended-properties+xml",
+            ),
+        ],
+    );
+
     package(
         path,
         &[
-            ("[Content_Types].xml", br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="bin" ContentType="application/vnd.ms-office.vbaProject"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>"#),
-            ("_rels/.rels", root_rels),
-            ("docProps/core.xml", br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Fidelity Fixture</dc:title></cp:coreProperties>"#),
-            ("docProps/app.xml", br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>LaTeXSnipper</Application></Properties>"#),
+            ("[Content_Types].xml", ct.as_bytes()),
+            ("_rels/.rels", root_relationships("xl/workbook.xml").as_bytes()),
+            ("docProps/core.xml", core_properties_xml().as_bytes()),
+            ("docProps/app.xml", app_properties_xml().as_bytes()),
             ("xl/workbook.xml", workbook),
-            ("xl/_rels/workbook.xml.rels", rels),
+            ("xl/_rels/workbook.xml.rels", workbook_rels.as_bytes()),
             ("xl/worksheets/sheet1.xml", sheet),
             ("xl/styles.xml", br#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><b/></font></fonts><cellXfs count="1"><xf fontId="0"/></cellXfs></styleSheet>"#),
             ("xl/tables/table1.xml", br#"<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ref="A1:D3" displayName="FidelityTable"/>"#),
@@ -135,6 +375,10 @@ fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ],
     )
 }
+
+// ---------------------------------------------------------------------------
+// PDF
+// ---------------------------------------------------------------------------
 
 fn write_pdf(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut document = Document::with_version("1.7");
