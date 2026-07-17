@@ -22,6 +22,7 @@ integration state.
 | Package layout | crates, WASM npm package, model/plugin artifacts | no layout change | unchanged |
 | Cargo features | native/WASM/provider feature matrix | no feature removal | unchanged |
 | FFI | current JSON response and pointer/length API | no ABI change | additive version object and numeric response-version exports |
+| Portable visual rendering | Single-format `ExportArtifact` output | Adds `RenderPreference`, `RenderBundle`, SVG validation/normalization, and SVG-to-PNG fallback composition | additive |
 
 ## Serialized-contract audit notes
 
@@ -55,6 +56,9 @@ integration state.
 
 ## Review obligations for later PRs
 
-RC hardening must freeze Rust exports, serialized examples, TypeScript
+GA hardening freezes Rust exports, serialized examples, TypeScript
 declarations, CLI behavior/exit codes, package contents, compatibility adapters,
-WIT, and this inventory together.
+WIT, and this inventory together. `contracts/v3-contract-freeze.json` is checked
+in CI and covers exact contract files plus aggregate hashes for the public Rust
+source trees. An intentional change requires an explicit manifest refresh and
+renewed review.

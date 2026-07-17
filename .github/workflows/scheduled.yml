@@ -25,7 +25,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-audit --locked
-      - run: cargo audit
+      - run: cargo audit --deny warnings
 
   benchmark-regression:
     name: Comparable benchmark snapshot
@@ -38,7 +38,7 @@ jobs:
       - name: Run benchmark suite
         run: |
           mkdir -p target
-          cargo bench -p latexsnipper-tests --bench core_bench | tee target/benchmark-output.txt
+          cargo bench --locked -p latexsnipper-tests --bench core_bench | tee target/benchmark-output.txt
       - name: Build comparable JSON
         run: |
           grep '^benchmark_json=' target/benchmark-output.txt \
@@ -125,7 +125,7 @@ jobs:
       - name: Build Node WASM package
         run: >-
           wasm-pack build crates/wasm --target nodejs --release
-          --out-dir ../../target/wasm-node
+          --out-dir ../../target/wasm-node --locked
       - run: npm ci
         working-directory: crates/wasm/js
       - name: Execute real model and write stable benchmark JSON

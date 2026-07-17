@@ -1,7 +1,7 @@
 # Core 3.0 architecture and delivery status
 
 This document describes the target Core 3.0 architecture and the implemented
-boundaries of the first three stacked changes. Each merged stage records its
+boundaries of the stacked changes. Each merged stage records its
 validated commit and CI evidence in the pull request.
 
 ## Status vocabulary
@@ -120,8 +120,41 @@ Still planned after PR 3:
 
 - public runtime execution integration for verified remote packages;
 - production OCR evidence,
-  Office/PDF fidelity certification, v3 public runtime migration, and release
-  candidate/GA work.
+  Office/PDF fidelity certification, v3 public runtime migration, and GA work.
+
+## PR 4 through PR 6 implementation boundary
+
+The browser/WASM recognition stage added bounded table and handwriting paths,
+readiness projection, real browser tests, and production-derived runtime
+compatibility evidence. The OCR evidence stage added licensed corpus metadata,
+stable metric schemas, explicit gates, model/corpus identity, and scheduled
+artifacts without inventing unavailable accuracy. The Office/PDF stage added
+six independent fidelity dimensions, checked-in golden packages, generated
+capability claims, expected-loss diagnostics, and optional visual/application
+evidence layers.
+
+## PR 7 implementation boundary
+
+The public runtime integration stage added:
+
+- version-aware plugin/model loaders with safe v2 adapters and future-schema
+  rejection;
+- signed-registry package activation routed to the WASI Component host, bound
+  to verified manifest/artifact/snapshot state and rechecked before invocation;
+- CLI v3 capability envelopes, exact option dispositions, stable exit code 11,
+  source-preserving migration commands, and atomic output;
+- callable WASM v3 API/capability/convert exports with plain JavaScript objects,
+  preserved v2 exports, TypeScript declarations, and package/browser tests;
+- additive FFI v3 version metadata and strict warning-free Rust documentation.
+
+## PR 8 hardening boundary
+
+The final unpublished hardening stage freezes contract files and public Rust
+source trees, tracks lockfiles, enforces reviewed dependency-audit exceptions,
+adds a stable-tag-only release guard, stages CLI/Rust/WASM artifacts without
+publishing, tests extracted packages, records checksums/provenance/SBOM inputs,
+and completes operator, plugin, model, fidelity, security, and release guides.
+No alpha, beta, or RC package or tag is created.
 
 ## Stacked delivery sequence
 
@@ -132,7 +165,7 @@ Still planned after PR 3:
 5. production OCR validation and benchmark evidence.
 6. Office/PDF fidelity framework.
 7. public API/CLI integration and compatibility adapters.
-8. security hardening, packaging, and release-candidate audit.
+8. security hardening, package staging, and GA audit (in progress).
 
 Each later change must update this status based on executable evidence rather
 than the presence of a type, enum, manifest field, or test double.

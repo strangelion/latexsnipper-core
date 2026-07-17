@@ -34,12 +34,12 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check isolated WASM engine
         run: >-
-          cargo check -p latexsnipper-engine --no-default-features
+          cargo check --locked -p latexsnipper-engine --no-default-features
           --features wasm --target wasm32-unknown-unknown
       - name: Check WASM package
-        run: cargo check -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown
+        run: cargo check --locked -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown
       - name: Lint WASM package
-        run: cargo clippy -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown -- -D warnings
+        run: cargo clippy --locked -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown -- -D warnings
 
   package:
     name: Build and package WASM
@@ -64,15 +64,15 @@ jobs:
       - name: Build web package
         run: >-
           wasm-pack build crates/wasm --target web --release
-          --out-dir ../../target/wasm-web
+          --out-dir ../../target/wasm-web --locked
       - name: Build bundler package
         run: >-
           wasm-pack build crates/wasm --target bundler --release
-          --out-dir ../../target/wasm-bundler
+          --out-dir ../../target/wasm-bundler --locked
       - name: Build Node package
         run: >-
           wasm-pack build crates/wasm --target nodejs --release
-          --out-dir ../../target/wasm-nodejs
+          --out-dir ../../target/wasm-nodejs --locked
       - name: Include license in generated npm packages
         run: |
           cp LICENSE target/wasm-web/LICENSE
@@ -167,7 +167,7 @@ jobs:
           done
       - name: Execute production TrOCR with the browser runtime
         run: >-
-          cargo test -p latexsnipper-wasm --test production_profiles --
+          cargo test --locked -p latexsnipper-wasm --test production_profiles --
           --exact production_handwriting_profile_executes_with_the_wasm_runtime
           --nocapture
 

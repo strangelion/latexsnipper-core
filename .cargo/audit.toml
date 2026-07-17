@@ -1,0 +1,8 @@
+[advisories]
+# These are unmaintained warnings, not known vulnerabilities. Each exception is
+# reviewed and justified in docs/v3/security-review.md.
+ignore = [
+    "RUSTSEC-2024-0436",
+    "RUSTSEC-2026-0192",
+    "RUSTSEC-2026-0206",
+]

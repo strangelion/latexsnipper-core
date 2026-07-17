@@ -1,7 +1,6 @@
 # Build artifacts
 /target/
 **/*.rs.bk
-Cargo.lock
 
 # IDE
 .vscode/
@@ -34,7 +33,8 @@ models/
 .snipper/
 
 # Cargo local config (mirror settings)
-.cargo/
+.cargo/*
+!.cargo/audit.toml
 
 # Test artifacts
 *.pdb

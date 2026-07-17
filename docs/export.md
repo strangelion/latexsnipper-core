@@ -1,142 +1,176 @@
 # Export Crate
 
-> 导出能力 — RenderTree + Generator
+> Export capability -- RenderTree + SVG/PNG/PDF generators + portable visual rendering
 
-## 核心原则
+## Core principles
 
-1. **Document → RenderTree → Generator → Output**
-2. **RenderTree 避免重复遍历 AST**
-3. **Generator 可插拔，新增格式只需实现 trait**
+1. **Document -> RenderTree -> Generator -> GeneratedContent -> ExportArtifact**
+2. **RenderTree avoids repeated AST traversal**
+3. **Generators are pluggable; new formats only require implementing a trait**
+4. **RenderBundle provides portable visual rendering with policy-enforced SVG validation**
 
-## 架构
+## Architecture
 
 ```
 Document
-  ↓ RenderTree::from_document()
+   |
+   v
 RenderTree
-  ↓ Generator::generate()
-SVG / PDF / Text
+   |
+   v
+Generator
+   |
+   v
+GeneratedContent
+   |
+   v
+ExportArtifact
+
+SVG input / Document
+   |
+   v
+RenderPreference
+   |
+   v
+RenderBundle
+   +-- preferred ExportArtifact
+   +-- fallback ExportArtifact(s)
 ```
 
-## 模块
+## Modules
 
-| 模块 | 文件 | 说明 |
+| Module | File | Description |
 |---|---|---|
-| `render_tree` | render_tree.rs | RenderTree 中间表示 |
+| `render_tree` | render_tree.rs | RenderTree intermediate representation |
 | `generator` | generator.rs | Generator trait |
 | `svg` | svg.rs | SVG Generator |
-| `text` | text.rs | Plain Text Generator |
+| `png` | png.rs | SVG -> PNG deterministic renderer |
 | `pdf` | pdf.rs | PDF Generator (lopdf) |
+| `text` | text.rs | Plain Text Generator |
+| `bundle` | bundle.rs | RenderPreference / RenderBundle / RenderDimensions |
+| `svg_policy` | svg_policy.rs | SVG validation, normalization, vector policy |
+| `service` | service.rs | ExportService unified entry point |
 
-## 关键类型
-
-### RenderNode
-
-```rust
-pub enum RenderNode {
-    Text(String),
-    Formula { latex: String, display_mode: bool },
-    Paragraph(Vec<RenderNode>),
-    Heading { level: u8, nodes: Vec<RenderNode> },
-    Table { rows: Vec<Vec<Vec<RenderNode>>> },
-    List { ordered: bool, items: Vec<Vec<RenderNode>> },
-    Code { language: Option<String>, code: String },
-    Quote(Vec<RenderNode>),
-    HorizontalRule,
-    Page(Vec<RenderNode>),
-}
-```
-
-### RenderTree
-
-```rust
-pub struct RenderTree { pub nodes: Vec<RenderNode> }
-
-impl RenderTree {
-    /// Build from entire document.
-    pub fn from_document(doc: &Document) -> Self;
-
-    /// Build from specific pages (0-based indices).
-    pub fn from_document_pages(doc: &Document, page_indices: &[usize]) -> Self;
-}
-```
+## Key types
 
 ### Generator trait
 
 ```rust
 pub trait Generator {
-    fn generate(&self, tree: &RenderTree) -> Result<String>;
+    fn generate(&self, tree: &RenderTree) -> Result<GeneratedContent>;
     fn extension(&self) -> &str;
     fn mime_type(&self) -> &str;
     fn name(&self) -> &str;
 }
 ```
 
-## PDF Generator
-
-使用 `lopdf 0.44` 直接生成并重新解析校验 PDF 文件。内置 Helvetica、Helvetica Bold 和 Courier Type 1 字体用于文本渲染；超出 WinAnsi 范围的字符当前会以 `?` 降级，因此完整 Unicode 字体嵌入仍属于 GA 前的格式保真工作。
-
-### 支持的文档元素
-
-| 元素 | 渲染方式 |
-|------|---------|
-| 标题 (Heading) | HelveticaBold，字号按级别递减 |
-| 段落 (Paragraph) | Helvetica 11pt |
-| 公式 (Formula) | LaTeX 源码文本显示（$...$ / $$...$$） |
-| 表格 (Table) | 等宽列布局，9pt 字体 |
-| 列表 (List) | 项目符号/编号 |
-| 代码 (Code) | Courier 等宽字体 |
-| 引用 (Quote) | 竖线前缀 |
-| 分隔线 (HR) | 横线字符 |
-
-### 使用示例
+### RenderPreference
 
 ```rust
-use latexsnipper_export::{PdfGenerator, RenderTree};
-use latexsnipper_export::generator::Generator;
-
-let tree = RenderTree::from_document(&doc);
-let generator = PdfGenerator;
-let pdf_bytes = generator.generate(&tree)?;
-std::fs::write("output.pdf", pdf_bytes)?;
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderPreference {
+    #[default]
+    Auto,       // SVG preferred, PNG fallback
+    VectorOnly, // SVG only, reject embedded raster
+    RasterOnly, // PNG only
+}
 ```
 
-## 页面选择
+### RenderBundle
 
-### AST 层方法
+```rust
+pub struct RenderBundle {
+    pub preferred: ExportArtifact,
+    pub fallbacks: Vec<ExportArtifact>,
+    pub dimensions: RenderDimensions,
+}
+```
+
+### SvgContentPolicy
+
+```rust
+pub enum SvgContentPolicy {
+    AllowEmbeddedRaster,
+    VectorOnly,
+}
+```
+
+### ExportService
+
+```rust
+pub struct ExportService;
+
+impl ExportService {
+    // Single-format export
+    pub fn export(doc: &Document, format: VisualFormat) -> Result<ExportArtifact>;
+    pub fn to_svg(doc: &Document) -> Result<ExportArtifact>;
+    pub fn to_pdf(doc: &Document) -> Result<ExportArtifact>;
+    pub fn to_png(doc: &Document) -> Result<ExportArtifact>;
+    pub fn to_text(doc: &Document) -> Result<ExportArtifact>;
+
+    // Portable bundle from Document
+    pub fn render_bundle(doc: &Document, preference: RenderPreference) -> Result<RenderBundle>;
+
+    // Portable bundle from pre-existing SVG (e.g. MathJax)
+    pub fn render_bundle_from_svg(svg: &str, preference: RenderPreference) -> Result<RenderBundle>;
+}
+```
+
+## SVG policy
+
+The `svg_policy` module provides a unified SVG parsing and validation layer:
+
+- `validate_svg()` -- validates SVG input against a content policy
+- `normalize_svg()` -- parses and rewrites SVG into canonical usvg representation
+- External image file references are always rejected (no filesystem access)
+- `VectorOnly` policy rejects embedded raster images (JPEG, PNG, GIF, WebP)
+- Data URL images remain available for self-contained SVG
+
+## PDF Generator
+
+Uses `lopdf 0.44` to generate and re-validate PDF files. Built-in Helvetica,
+Helvetica Bold, and Courier Type 1 fonts are used for text rendering; characters
+outside WinAnsi range currently degrade to `?`, so full Unicode font embedding
+remains a pre-GA fidelity task.
+
+### Supported document elements
+
+| Element | Rendering |
+|---------|-----------|
+| Heading | HelveticaBold, size decreasing by level |
+| Paragraph | Helvetica 11pt |
+| Formula | LaTeX source text display ($...$ / $$...$$) |
+| Table | Equal-width columns, 9pt font |
+| List | Bullet / numbered |
+| Code | Courier monospace |
+| Quote | Vertical line prefix |
+| HR | Horizontal line |
+
+## Page selection
+
+### AST layer methods
 
 ```rust
 impl Document {
-    /// 按 0-based 索引过滤页面
     pub fn filter_pages(&self, indices: &[usize]) -> Document;
-
-    /// 按 1-based 页码过滤
     pub fn filter_page_numbers(&self, numbers: &[u32]) -> Document;
-
-    /// 解析页面范围字符串 "1-3,5,8-10"
     pub fn parse_page_range(range: &str) -> Vec<u32>;
 }
 ```
 
-### Conversion 层方法
+## Tests
 
-```rust
-impl DocumentConverter {
-    /// 转换指定页面
-    pub fn convert_pages(&self, doc: &Document, pages: &[usize]) -> Result<String>;
-}
-```
+- PDF generator: valid PDF header, metadata, all node types
+- PNG generator: valid PNG header, reopenable binary
+- SVG policy: malformed SVG rejection, external image rejection, vector-only validation, normalization roundtrip
+- Service bundle: Auto/VectorOnly/RasterOnly bundle composition
+- RenderBundle: dimensions pt conversion, default preference
 
-## 测试
-
-- PDF 生成器：有效 PDF 头、元数据、所有节点类型
-- RenderTree：从 Document 构建、页面过滤
-- 页面范围解析：`"1-3,5,8-10"` → `[1,2,3,5,8,9,10]`
-
-## 依赖关系
+## Dependencies
 
 ```
 Export
-↑ 依赖 AST, Syntax, lopdf
-↓ 被 Engine 间接依赖
+  depends on AST, Syntax, lopdf, resvg, sha2, serde
+  depended on by Engine (indirectly)
 ```

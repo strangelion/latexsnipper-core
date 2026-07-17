@@ -40,8 +40,8 @@ This does **not** mean that every format, model, or plugin boundary has the same
 | WASM Tract recognition | **Experimental** | Model-gated and asynchronous. Text, projection-structured tables, and TrOCR handwriting execute through the browser pipeline; readiness follows validated loaded artifacts. |
 | Built-in Rust plugins | **Stable host behavior** | Deterministic ordering, typed hooks, transactional patches, failure policies, soft deadlines, and quarantine are implemented. |
 | Isolated native process plugins | **Reviewed local code only** | Hard timeout and resource controls exist, but this is not an OS filesystem/network sandbox. |
-| WASI Component host | **Implemented as a Rust host crate** | WIT v1, manifest/digest verification, typed brokers, hard interruption, and resource limits are tested. Public execution integration remains pending. |
-| Signed remote WASI registry/install | **Implemented, disabled after install** | Ed25519 thresholds, expiry/rollback/freeze checks, bounded HTTPS/ZIP handling, provenance, update, revoke, and rollback are tested. Install never executes or enables code. |
+| WASI Component host | **Implemented and integrated** | WIT v1, manifest/digest verification, typed brokers, hard interruption, resource limits, verified activation, and invocation-time trust checks are tested. |
+| Signed remote WASI registry/install | **Implemented, disabled after install** | Ed25519 thresholds, expiry/rollback/freeze checks, bounded HTTPS/ZIP handling, provenance, update, revoke, rollback, and explicit enable are tested. Install never executes or enables code. |
 | Native dynamic-library ABI | **Unavailable** | Remote/native substitution is rejected; reviewed local process plugins use a separate path. |
 
 The executable source of truth is the capability registry:
@@ -230,7 +230,8 @@ snipper plugin doctor
 snipper plugin uninstall example.plugin
 ```
 
-Remote URL installation remains disabled.
+Unsigned arbitrary-URL installation remains disabled. Signed-registry packages
+remain disabled after installation until an explicit enable operation succeeds.
 
 ---
 
@@ -373,7 +374,6 @@ The versioned process host provides:
 
 Still unavailable:
 
-- public execution of remotely installed WASI Components;
 - stable native dynamic-library plugin ABI;
 - complete native filesystem/network sandboxing.
 
@@ -528,6 +528,12 @@ See the [Core 3 release checklist](docs/release-checklist.md) and [schema versio
 |---|---|
 | [Core 3 architecture](docs/v3/architecture.md) | Stacked delivery status, version boundaries, and trust model |
 | [WASI Component host](docs/v3/wasi-component-host.md) | WIT v1 authority, limits, package boundary, and diagnostics |
+| [WASI plugin guide](docs/v3/wasi-plugin-guide.md) | Component package, permissions, limits, and validation |
+| [Registry operator guide](docs/v3/registry-operator-guide.md) | Signed metadata publication, revocation, and recovery |
+| [Security review record](docs/v3/security-review.md) | Review scope, dependency exceptions, and independent-review status |
+| [Model validation](docs/v3/model-validation.md) | Model identity, evidence tiers, and accuracy requirements |
+| [Format fidelity](docs/v3/format-fidelity.md) | Six-dimensional Office/PDF guarantees and application approval |
+| [Core 3 release notes](docs/v3/release-notes.md) | GA changes, compatibility, and known limitations |
 | [Core 3 migration](docs/v3/migration-from-v2.md) | Strict v2-to-v3 contract migration guidance |
 | [Production capabilities](docs/production-capabilities.md) | Stability, fidelity, and unsupported-feature policy |
 | [WASM adapter](docs/wasm.md) | Browser API, Worker runtime, cache, downloads, and model validation |
@@ -536,7 +542,7 @@ See the [Core 3 release checklist](docs/release-checklist.md) and [schema versio
 | [Export](docs/export.md) | Visual and package export behavior |
 | [Benchmarks](docs/benchmark.md) | Native and browser performance benchmark methodology |
 | [OCR evaluation](docs/ocr-evaluation.md) | Licensed corpora, accuracy metrics, gates, and evidence identity |
-| [Release checklist](docs/release-checklist.md) | RC requirements, GA blockers, and future work |
+| [Release checklist](docs/release-checklist.md) | GA requirements, blockers, and future work |
 | [Architecture](docs/architecture.md) | Core architecture overview |
 | [Pipeline](docs/pipeline.md) | Recognition and processing pipeline |
 | [Testing](docs/testing.md) | Test strategy and fixtures |

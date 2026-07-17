@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -17,11 +16,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  release-guard:
+    name: Stable release guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Require an exact stable version tag
+        shell: bash
+        run: |
+          case "$GITHUB_REF_NAME" in
+            *-*) echo "Prerelease tags are not publishable"; exit 1 ;;
+          esac
+          VERSION="${GITHUB_REF_NAME#v}"
+          python scripts/verify_release_version.py \
+            --expected "$VERSION" --tag "$GITHUB_REF_NAME" --stable
+          python scripts/verify_v3_contract_freeze.py
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+
   # ============================================================
   # Job 1: Build CLI binaries
   # ============================================================
   build-cli:
     name: Build CLI (${{ matrix.target }})
+    needs: release-guard
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -32,10 +51,10 @@ jobs:
             artifact: snipper-linux-amd64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact: snipper-windows-amd64.exe
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact: snipper-macos-amd64
+            artifact: snipper-windows-amd64
+          - target: aarch64-apple-darwin
+            os: macos-15
+            artifact: snipper-macos-arm64
 
     steps:
       - uses: actions/checkout@v6
@@ -49,20 +68,49 @@ jobs:
           key: cli-${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release -p latexsnipper-cli --target ${{ matrix.target }}
+        run: cargo build --locked --release -p latexsnipper-cli --target ${{ matrix.target }}
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
+        shell: bash
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.artifact }}.tar.gz snipper
-          cd ../../..
+          mkdir -p target/release-stage target/release-install
+
+          cp \
+            "target/${{ matrix.target }}/release/snipper" \
+            target/release-stage/
+
+          cp LICENSE README.md target/release-stage/
+
+          tar \
+            -C target/release-stage \
+            -czf "${{ matrix.artifact }}.tar.gz" \
+            .
+
+          tar \
+            -C target/release-install \
+            -xzf "${{ matrix.artifact }}.tar.gz"
+
+          target/release-install/snipper version
+
+          target/release-install/snipper capabilities --format json \
+            > target/release-install/capabilities.json
+
+          python -c \
+            'import json; json.load(open("target/release-install/capabilities.json", encoding="utf-8"))'
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
-          Compress-Archive -Path target/${{ matrix.target }}/release/snipper.exe `
-            -DestinationPath ${{ matrix.artifact }}.zip
+          New-Item -ItemType Directory -Force target/release-stage, target/release-install | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/snipper.exe target/release-stage/
+          Copy-Item LICENSE, README.md target/release-stage/
+          Compress-Archive -Path target/release-stage/* -DestinationPath ${{ matrix.artifact }}.zip
+          Expand-Archive -Path ${{ matrix.artifact }}.zip -DestinationPath target/release-install
+          & target/release-install/snipper.exe version
+          & target/release-install/snipper.exe capabilities --format json `
+            | Set-Content -Encoding utf8 target/release-install/capabilities.json
+          Get-Content -Raw target/release-install/capabilities.json | ConvertFrom-Json | Out-Null
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -72,6 +120,7 @@ jobs:
 
   supply-chain:
     name: SBOM, licenses, and source manifest
+    needs: release-guard
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -92,6 +141,7 @@ jobs:
         run: |
           git ls-files | LC_ALL=C sort > target/source-manifest.txt
           git rev-parse HEAD > target/source-commit.txt
+          cp scripts/model-manifest.template.json target/model-manifest.template.json
       - name: Upload supply-chain metadata
         uses: actions/upload-artifact@v7
         with:
@@ -101,7 +151,66 @@ jobs:
             target/third-party-licenses.json
             target/source-manifest.txt
             target/source-commit.txt
+            target/model-manifest.template.json
             NOTICE
+          if-no-files-found: error
+
+  build-wasm:
+    name: Build installable WASM packages
+    needs: release-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      WASM_PACK_VERSION: 0.13.1
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: crates/wasm/js/package-lock.json
+      - run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
+      - name: Build WASM packages
+        run: |
+          wasm-pack build crates/wasm --target web --release --out-dir ../../target/wasm-web --locked
+          wasm-pack build crates/wasm --target bundler --release --out-dir ../../target/wasm-bundler --locked
+          wasm-pack build crates/wasm --target nodejs --release --out-dir ../../target/wasm-nodejs --locked
+          cp LICENSE target/wasm-web/
+          cp LICENSE target/wasm-bundler/
+          cp LICENSE target/wasm-nodejs/
+      - name: Test TypeScript adapter and target packages
+        working-directory: crates/wasm/js
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm test
+          npm run build
+          npm run build:example
+          npm run smoke:packages
+      - name: Pack and install archives
+        shell: bash
+        run: |
+          mkdir -p target/npm-packages target/npm-consumer
+          package="$(npm pack ./target/wasm-web --pack-destination target/npm-packages | tail -n 1)"
+          mv "target/npm-packages/$package" target/npm-packages/latexsnipper-wasm-web.tgz
+          package="$(npm pack ./target/wasm-bundler --pack-destination target/npm-packages | tail -n 1)"
+          mv "target/npm-packages/$package" target/npm-packages/latexsnipper-wasm-bundler.tgz
+          package="$(npm pack ./target/wasm-nodejs --pack-destination target/npm-packages | tail -n 1)"
+          mv "target/npm-packages/$package" target/npm-packages/latexsnipper-wasm-nodejs.tgz
+          npm pack ./crates/wasm/js --pack-destination target/npm-packages
+          cd target/npm-consumer
+          npm init -y
+          npm install ../npm-packages/latexsnipper-wasm-nodejs.tgz
+          node -e 'const wasm = require("latexsnipper-wasm"); if (!wasm.api_info_v3) process.exit(1)'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wasm-npm-archives
+          path: target/npm-packages/*.tgz
           if-no-files-found: error
 
   # ============================================================
@@ -109,6 +218,7 @@ jobs:
   # ============================================================
   test-sdk:
     name: Test SDK
+    needs: release-guard
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -119,7 +229,7 @@ jobs:
           key: sdk
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --locked --workspace --all-features
 
   # ============================================================
   # Job 2.5: Dry-run publish
@@ -136,11 +246,10 @@ jobs:
         run: |
           for crate in latexsnipper-foundation latexsnipper-ast latexsnipper-tensor; do
             echo "Dry-run: $crate"
-            cargo publish -p $crate --dry-run
+            cargo publish --locked -p "$crate" --dry-run
           done
 
-      - name: Dry-run dependent crates (best-effort)
-        continue-on-error: true
+      - name: Validate dependent crate package contents
         run: |
           for crate in \
             latexsnipper-model latexsnipper-image latexsnipper-runtime \
@@ -148,8 +257,9 @@ jobs:
             latexsnipper-inference latexsnipper-api-types \
             latexsnipper-pipeline latexsnipper-engine
           do
-            echo "Dry-run: $crate"
-            cargo publish -p $crate --dry-run || true
+            echo "Package contents: $crate"
+            cargo package --locked --list -p "$crate" > /tmp/package-list.txt
+            test -s /tmp/package-list.txt
           done
 
   # ============================================================
@@ -157,7 +267,7 @@ jobs:
   # ============================================================
   publish-crates:
     name: Publish to crates.io
-    needs: [test-sdk, dry-run]
+    needs: [test-sdk, dry-run, build-cli, build-wasm, supply-chain]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: crates-io
@@ -180,24 +290,34 @@ jobs:
             CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           publish() {
-              local crate=$1
+              local crate="$1"
+              local attempt=1
+              local max_attempts=4
               echo "=== Publishing $crate ==="
-              set +e
-              cargo publish -p "$crate" 2>&1 | tee /tmp/pub.log
-              exit_code=${PIPESTATUS[0]}
-              set -e
-              if [ $exit_code -eq 0 ]; then
-                echo "Published $crate"
-                sleep 30
-                return 0
-              fi
-              if grep -Ei "already uploaded|already exists|is already uploaded|crate version.*already" /tmp/pub.log; then
-                echo "Skipping $crate — this version is already published"
-                sleep 5
-                return 0
-              fi
-              echo "ERROR: failed to publish $crate"
-              exit $exit_code
+              while [ "$attempt" -le "$max_attempts" ]; do
+                set +e
+                cargo publish --locked -p "$crate" 2>&1 | tee /tmp/pub.log
+                exit_code=${PIPESTATUS[0]}
+                set -e
+                if [ "$exit_code" -eq 0 ]; then
+                  echo "Published $crate"
+                  sleep 45
+                  return 0
+                fi
+                if grep -Ei "already uploaded|already exists|is already uploaded|crate version.*already" /tmp/pub.log; then
+                  echo "Skipping $crate because this version is already published"
+                  sleep 5
+                  return 0
+                fi
+                if [ "$attempt" -eq "$max_attempts" ]; then
+                  echo "ERROR: failed to publish $crate after $max_attempts attempts"
+                  return "$exit_code"
+                fi
+                delay=$((attempt * 30))
+                echo "Publish attempt $attempt failed; retrying in ${delay}s"
+                sleep "$delay"
+                attempt=$((attempt + 1))
+              done
             }
             publish latexsnipper-foundation
             publish latexsnipper-ast
@@ -213,12 +333,55 @@ jobs:
             publish latexsnipper-pipeline
             publish latexsnipper-engine
 
+  verify-published-crates:
+    name: Install published Rust crates
+    needs: publish-crates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install from crates.io in a clean consumer
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p /tmp/latexsnipper-consumer/src
+          cat > /tmp/latexsnipper-consumer/Cargo.toml <<EOF
+          [package]
+          name = "latexsnipper-release-consumer"
+          version = "0.0.0"
+          edition = "2021"
+
+          [dependencies]
+          latexsnipper-engine = { version = "=$VERSION", features = ["native"] }
+          latexsnipper-api-types = "=$VERSION"
+          EOF
+          cat > /tmp/latexsnipper-consumer/src/main.rs <<'EOF'
+          use latexsnipper_api_types::ApiContractVersionsV3;
+
+          fn main() {
+              assert_eq!(ApiContractVersionsV3::current().api_envelope_version, 3);
+          }
+          EOF
+          for attempt in 1 2 3 4 5 6; do
+            if cargo check --manifest-path /tmp/latexsnipper-consumer/Cargo.toml; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 6 ]; then
+              echo "ERROR: published crates were not installable after registry propagation retries"
+              exit 1
+            fi
+            delay=$((attempt * 30))
+            echo "Registry verification attempt $attempt failed; retrying in ${delay}s"
+            sleep "$delay"
+          done
+
   # ============================================================
   # Job 4: Create CLI Release
   # ============================================================
   release-cli:
     name: Release CLI
-    needs: [build-cli, publish-crates, supply-chain]
+    needs: [build-cli, build-wasm, verify-published-crates, supply-chain]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -259,7 +422,7 @@ jobs:
 
             ```toml
             [dependencies]
-            latexsnipper-pipeline = "2.0.0"
+            latexsnipper-pipeline = "3.0.0"
             ```
 
             ## Usage
@@ -277,6 +440,7 @@ jobs:
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
+            artifacts/**/*.tgz
             artifacts/**/*.json
             artifacts/**/*.txt
             artifacts/SHA256SUMS

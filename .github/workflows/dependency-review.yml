@@ -1,0 +1,33 @@
+name: Dependency review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: crates/wasm/js/package-lock.json
+      - name: Validate the locked Rust graph
+        run: |
+          cargo metadata --locked --format-version 1 > /dev/null
+          cargo install cargo-audit --locked
+          cargo audit --deny warnings
+      - name: Audit the locked npm graph
+        working-directory: crates/wasm/js
+        run: |
+          npm ci
+          npm audit --audit-level=high
