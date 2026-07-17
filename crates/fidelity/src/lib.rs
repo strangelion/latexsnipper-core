@@ -142,6 +142,317 @@ impl FidelityFormat {
             Self::Pdf => "pdf",
         }
     }
+
+    const fn ooxml_contract(self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Self::Docx => Some((
+                "word/document.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+            )),
+            Self::Pptx => Some((
+                "ppt/presentation.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
+            )),
+            Self::Xlsx => Some((
+                "xl/workbook.xml",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+            )),
+            Self::Pdf => None,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OPC package structure validation
+// ---------------------------------------------------------------------------
+
+/// Validate that an OOXML ZIP package has the required structural elements:
+/// `[Content_Types].xml`, `_rels/.rels`, the main document part, correct
+/// content type declarations, and valid relationship graphs.
+pub fn validate_ooxml_package_structure(bytes: &[u8], format: FidelityFormat) -> Result<()> {
+    let Some((main_part, main_content_type)) = format.ooxml_contract() else {
+        return Ok(());
+    };
+
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|error| {
+        FidelityError::Package(format!("invalid OOXML ZIP package: {error}"))
+    })?;
+
+    let mut names = BTreeSet::new();
+
+    for index in 0..archive.len() {
+        let name = {
+            let file = archive.by_index(index).map_err(|error| {
+                FidelityError::Package(format!("failed to inspect ZIP entry {index}: {error}"))
+            })?;
+            file.name().to_string()
+        };
+        validate_package_part_name(&name)?;
+        names.insert(name);
+    }
+
+    for required in ["[Content_Types].xml", "_rels/.rels", main_part] {
+        if !names.contains(required) {
+            return Err(FidelityError::Package(format!(
+                "{} package is missing required part '{}'",
+                format.label(),
+                required,
+            )));
+        }
+    }
+
+    let root_rels = read_package_text(&mut archive, "_rels/.rels")?;
+
+    let office_document_type =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
+
+    if !has_xml_element_with_attrs(
+        &root_rels,
+        "Relationship",
+        &[
+            ("Type", office_document_type),
+            ("Target", main_part),
+        ],
+    ) {
+        return Err(FidelityError::Package(format!(
+            "{} package root relationships do not identify '{}'",
+            format.label(),
+            main_part,
+        )));
+    }
+
+    let content_types = read_package_text(&mut archive, "[Content_Types].xml")?;
+
+    let main_part_name = format!("/{main_part}");
+
+    if !has_xml_element_with_attrs(
+        &content_types,
+        "Override",
+        &[
+            ("PartName", main_part_name.as_str()),
+            ("ContentType", main_content_type),
+        ],
+    ) {
+        return Err(FidelityError::Package(format!(
+            "{} package does not declare the correct main content type for '{}'",
+            format.label(),
+            main_part,
+        )));
+    }
+
+    // Every ZIP part must have a Content-Type.
+    for part in &names {
+        if part == "[Content_Types].xml" {
+            continue;
+        }
+
+        let override_name = format!("/{part}");
+
+        let has_override = has_xml_element_with_attrs(
+            &content_types,
+            "Override",
+            &[("PartName", override_name.as_str())],
+        );
+
+        let has_default = part
+            .rsplit_once('.')
+            .map(|(_, extension)| {
+                has_xml_element_with_attrs(
+                    &content_types,
+                    "Default",
+                    &[("Extension", extension)],
+                )
+            })
+            .unwrap_or(false);
+
+        if !has_override && !has_default {
+            return Err(FidelityError::Package(format!(
+                "{} package part '{}' has no content type",
+                format.label(),
+                part,
+            )));
+        }
+    }
+
+    // All relationships must have Id / Type / Target, and internal targets must exist.
+    let relationship_parts: Vec<String> = names
+        .iter()
+        .filter(|name| name.ends_with(".rels"))
+        .cloned()
+        .collect();
+
+    for relationship_part in relationship_parts {
+        let xml = read_package_text(&mut archive, &relationship_part)?;
+        validate_relationship_part(&relationship_part, &xml, &names)?;
+    }
+
+    Ok(())
+}
+
+fn read_package_text(
+    archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
+    name: &str,
+) -> Result<String> {
+    let mut file = archive.by_name(name).map_err(|error| {
+        FidelityError::Package(format!("failed to open package part '{name}': {error}"))
+    })?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    Ok(text)
+}
+
+fn validate_package_part_name(name: &str) -> Result<()> {
+    if name.starts_with('/')
+        || name.contains('\\')
+        || Path::new(name)
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err(FidelityError::Package(format!(
+            "unsafe OOXML package part '{name}'"
+        )));
+    }
+    Ok(())
+}
+
+fn xml_attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let needle = format!("{name}=\"");
+    let start = tag.find(&needle)? + needle.len();
+    let remainder = &tag[start..];
+    let end = remainder.find('"')?;
+    Some(&remainder[..end])
+}
+
+fn has_xml_element_with_attrs(xml: &str, element: &str, attrs: &[(&str, &str)]) -> bool {
+    let needle = format!("<{element} ");
+    xml.split(&needle)
+        .skip(1)
+        .any(|fragment| {
+            let tag = fragment.split('>').next().unwrap_or(fragment);
+            attrs
+                .iter()
+                .all(|(name, expected)| xml_attribute(tag, name) == Some(*expected))
+        })
+}
+
+fn validate_relationship_part(
+    relationship_part: &str,
+    xml: &str,
+    package_parts: &BTreeSet<String>,
+) -> Result<()> {
+    let base_dir = relationship_base_dir(relationship_part)?;
+
+    for fragment in xml.split("<Relationship ").skip(1) {
+        let tag = fragment.split('>').next().unwrap_or(fragment);
+
+        let id = xml_attribute(tag, "Id").ok_or_else(|| {
+            FidelityError::Package(format!(
+                "{relationship_part} contains a relationship without Id"
+            ))
+        })?;
+
+        let relationship_type = xml_attribute(tag, "Type").ok_or_else(|| {
+            FidelityError::Package(format!(
+                "{relationship_part} relationship '{id}' has no Type"
+            ))
+        })?;
+
+        if relationship_type.is_empty() {
+            return Err(FidelityError::Package(format!(
+                "{relationship_part} relationship '{id}' has an empty Type"
+            )));
+        }
+
+        let target = xml_attribute(tag, "Target").ok_or_else(|| {
+            FidelityError::Package(format!(
+                "{relationship_part} relationship '{id}' has no Target"
+            ))
+        })?;
+
+        if xml_attribute(tag, "TargetMode") == Some("External") {
+            continue;
+        }
+
+        let resolved = resolve_relationship_target(&base_dir, target)?;
+
+        if !package_parts.contains(&resolved) {
+            return Err(FidelityError::Package(format!(
+                "{relationship_part} relationship '{id}' targets missing part '{resolved}'"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn relationship_base_dir(relationship_part: &str) -> Result<String> {
+    if relationship_part == "_rels/.rels" {
+        return Ok(String::new());
+    }
+
+    let marker = "/_rels/";
+
+    let marker_index = relationship_part
+        .rfind(marker)
+        .ok_or_else(|| {
+            FidelityError::Package(format!(
+                "invalid relationship part path '{relationship_part}'"
+            ))
+        })?;
+
+    let prefix = &relationship_part[..marker_index];
+
+    let relationship_file = &relationship_part[marker_index + marker.len()..];
+
+    let source_file = relationship_file.strip_suffix(".rels").ok_or_else(|| {
+        FidelityError::Package(format!("invalid relationship file '{relationship_part}'"))
+    })?;
+
+    let source_part = if prefix.is_empty() {
+        source_file.to_string()
+    } else {
+        format!("{prefix}/{source_file}")
+    };
+
+    Ok(source_part
+        .rsplit_once('/')
+        .map(|(directory, _)| directory.to_string())
+        .unwrap_or_default())
+}
+
+fn resolve_relationship_target(base_dir: &str, target: &str) -> Result<String> {
+    let combined = if target.starts_with('/') {
+        target.trim_start_matches('/').to_string()
+    } else if base_dir.is_empty() {
+        target.to_string()
+    } else {
+        format!("{base_dir}/{target}")
+    };
+
+    let mut parts = Vec::new();
+
+    for component in combined.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if parts.pop().is_none() {
+                    return Err(FidelityError::Package(format!(
+                        "relationship target escapes package root: '{target}'"
+                    )));
+                }
+            }
+            other => {
+                if other.contains('\\') {
+                    return Err(FidelityError::Package(format!(
+                        "invalid relationship target '{target}'"
+                    )));
+                }
+                parts.push(other);
+            }
+        }
+    }
+
+    Ok(parts.join("/"))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
