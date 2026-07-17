@@ -460,26 +460,52 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 // ---------------------------------------------------------------------------
 
 fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let workbook = br#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Fidelity" sheetId="1" r:id="rId1"/></sheets></workbook>"#;
+    let root_rels = root_relationships("xl/workbook.xml");
 
-    let workbook_rels = relationships_xml(&[RelationshipSpec {
-        id: "rId1",
-        relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
-        target: "worksheets/sheet1.xml",
-    }]);
-
-    let sheet = br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:D3"/><cols><col min="1" max="4" width="18" customWidth="1"/></cols><sheetData><row r="1" ht="24" customHeight="1"><c r="A1" t="inlineStr"><is><t>Workbook Fidelity</t></is></c><c r="B1" t="b"><v>1</v></c><c r="C1" t="n"><v>42</v></c><c r="D1" t="e"><v>#N/A</v></c></row><row r="2"><c r="A2"><f>SUM(C1,8)</f><v>50</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="A3:D3"/></mergeCells><conditionalFormatting sqref="C1"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting><tableParts count="1"><tablePart r:id="rIdTable"/></tableParts><drawing r:id="rIdDrawing"/></worksheet>"#;
-
-    let ct = content_types_xml(
+    let content_types = content_types_xml(
         &[
-            ("rels", "application/vnd.openxmlformats-package.relationships+xml"),
+            (
+                "rels",
+                "application/vnd.openxmlformats-package.relationships+xml",
+            ),
             ("xml", "application/xml"),
-            ("bin", "application/vnd.ms-office.vbaProject"),
         ],
         &[
             (
                 "/xl/workbook.xml",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+            ),
+            (
+                "/xl/worksheets/sheet1.xml",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+            ),
+            (
+                "/xl/styles.xml",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
+            ),
+            (
+                "/xl/tables/table1.xml",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml",
+            ),
+            (
+                "/xl/drawings/drawing1.xml",
+                "application/vnd.openxmlformats-officedocument.drawing+xml",
+            ),
+            (
+                "/xl/charts/chart1.xml",
+                "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+            ),
+            (
+                "/xl/pivotTables/pivotTable1.xml",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml",
+            ),
+            (
+                "/xl/vbaProject.bin",
+                "application/vnd.ms-office.vbaProject",
+            ),
+            (
+                "/xl/embeddings/oleObject1.bin",
+                "application/vnd.openxmlformats-officedocument.oleObject",
             ),
             (
                 "/docProps/core.xml",
@@ -492,16 +518,51 @@ fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
+    let workbook = br#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Fidelity" sheetId="1" r:id="rId1"/></sheets></workbook>"#;
+
+    let rels = relationships_xml(&[
+        RelationshipSpec {
+            id: "rId1",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+            target: "worksheets/sheet1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdStyles",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
+            target: "styles.xml",
+        },
+    ]);
+
+    let sheet = br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:D3"/><cols><col min="1" max="4" width="18" customWidth="1"/></cols><sheetData><row r="1" ht="24" customHeight="1"><c r="A1" t="inlineStr"><is><t>Workbook Fidelity</t></is></c><c r="B1" t="b"><v>1</v></c><c r="C1" t="n"><v>42</v></c><c r="D1" t="e"><v>#N/A</v></c></row><row r="2"><c r="A2"><f>SUM(C1,8)</f><v>50</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="A3:D3"/></mergeCells><conditionalFormatting sqref="C1"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting><tableParts count="1"><tablePart r:id="rIdTable"/></tableParts><drawing r:id="rIdDrawing"/></worksheet>"#;
+
+    let sheet_rels = relationships_xml(&[
+        RelationshipSpec {
+            id: "rIdTable",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table",
+            target: "../tables/table1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdDrawing",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing",
+            target: "../drawings/drawing1.xml",
+        },
+    ]);
+
     package(
         path,
         &[
-            ("[Content_Types].xml", ct.as_bytes()),
-            ("_rels/.rels", root_relationships("xl/workbook.xml").as_bytes()),
+            ("[Content_Types].xml", content_types.as_bytes()),
+            ("_rels/.rels", root_rels.as_bytes()),
             ("docProps/core.xml", core_properties_xml().as_bytes()),
             ("docProps/app.xml", app_properties_xml().as_bytes()),
             ("xl/workbook.xml", workbook),
-            ("xl/_rels/workbook.xml.rels", workbook_rels.as_bytes()),
+            ("xl/_rels/workbook.xml.rels", rels.as_bytes()),
             ("xl/worksheets/sheet1.xml", sheet),
+            ("xl/worksheets/_rels/sheet1.xml.rels", sheet_rels.as_bytes()),
             ("xl/styles.xml", br#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><b/></font></fonts><cellXfs count="1"><xf fontId="0"/></cellXfs></styleSheet>"#),
             ("xl/tables/table1.xml", br#"<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ref="A1:D3" displayName="FidelityTable"/>"#),
             ("xl/drawings/drawing1.xml", br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><xdr:graphicFrame/></xdr:wsDr>"#),
