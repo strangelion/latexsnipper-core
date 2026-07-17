@@ -1001,10 +1001,6 @@ fn docx_content_types(media: &[MediaPart]) -> String {
 fn pptx_content_types(slides: usize, media: &[MediaPart]) -> String {
     let mut extra = vec![
         (
-            "/ppt/presentation.xml",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
-        ),
-        (
             "/ppt/slideMasters/slideMaster1.xml",
             "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml",
         ),
@@ -1034,13 +1030,22 @@ fn pptx_content_types(slides: usize, media: &[MediaPart]) -> String {
     )
 }
 fn content_types(
-    _main: &str,
-    _main_part: &str,
+    main: &str,
+    main_part: &str,
     media: &[MediaPart],
     extra: &[(&str, &str)],
 ) -> String {
     let mut defaults = HashSet::new();
-    let mut xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/>".to_string();
+
+    let mut xml = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">",
+        "<Default Extension=\"rels\" ",
+        "ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>",
+        "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+    )
+    .to_string();
+
     for part in media {
         if defaults.insert(part.extension.clone()) {
             xml.push_str(&format!(
@@ -1049,21 +1054,70 @@ fn content_types(
             ));
         }
     }
+
+    // Declare the OOXML main document part Content-Type.
+    xml.push_str(&format!(
+        "<Override PartName=\"{main_part}\" ContentType=\"{main}\"/>"
+    ));
+
     for (name, mime) in extra {
         xml.push_str(&format!(
             "<Override PartName=\"{name}\" ContentType=\"{mime}\"/>"
         ));
     }
-    xml.push_str("<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>");
+
+    xml.push_str(concat!(
+        "<Override PartName=\"/docProps/core.xml\" ",
+        "ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/>",
+        "<Override PartName=\"/docProps/app.xml\" ",
+        "ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/>",
+        "</Types>"
+    ));
+
     xml
 }
 
 fn docx_rels(media: &[MediaPart]) -> String {
-    let mut xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rIdStyles\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/><Relationship Id=\"rIdNumbering\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering\" Target=\"numbering.xml\"/><Relationship Id=\"rIdSettings\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings\" Target=\"settings.xml\"/>".to_string();
+    let mut xml = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<Relationships ",
+        "xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
+
+        "<Relationship Id=\"rIdStyles\" ",
+        "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" ",
+        "Target=\"styles.xml\"/>",
+
+        "<Relationship Id=\"rIdNumbering\" ",
+        "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering\" ",
+        "Target=\"numbering.xml\"/>",
+
+        "<Relationship Id=\"rIdSettings\" ",
+        "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings\" ",
+        "Target=\"settings.xml\"/>",
+
+        "<Relationship Id=\"rIdFontTable\" ",
+        "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable\" ",
+        "Target=\"fontTable.xml\"/>",
+
+        "<Relationship Id=\"rIdTheme\" ",
+        "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" ",
+        "Target=\"theme/theme1.xml\"/>"
+    )
+    .to_string();
+
     for part in media {
-        xml.push_str(&format!("<Relationship Id=\"{}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/{}\"/>", part.rid, part.filename));
+        xml.push_str(&format!(
+            concat!(
+                "<Relationship Id=\"{}\" ",
+                "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" ",
+                "Target=\"media/{}\"/>"
+            ),
+            part.rid, part.filename
+        ));
     }
+
     xml.push_str("</Relationships>");
+
     xml
 }
 fn presentation_xml(slides: usize) -> String {
