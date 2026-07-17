@@ -1183,17 +1183,13 @@ fn xlsx_content_types(sheets: usize) -> String {
             "/xl/pivotTables/pivotTable1.xml",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml",
         ),
-        (
-            "/xl/vbaProject.bin",
-            "application/vnd.ms-office.vbaProject",
-        ),
+        ("/xl/vbaProject.bin", "application/vnd.ms-office.vbaProject"),
         (
             "/xl/embeddings/oleObject1.bin",
             "application/vnd.openxmlformats-officedocument.oleObject",
         ),
     ];
-    let sheet_ct =
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
+    let sheet_ct = "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
     for index in 1..=sheets {
         let name = format!("/xl/worksheets/sheet{index}.xml");
         let leaked: &'static str = Box::leak(name.into_boxed_str());
