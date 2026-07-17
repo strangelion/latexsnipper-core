@@ -3,6 +3,7 @@ import {
   type WorkerRequest,
   type WorkerResponse,
 } from "./types.js";
+import { validateWorkerRequest } from "./worker-request-validation.js";
 
 interface WasmApi {
   default?: (wasmUrl?: string) => Promise<unknown>;
@@ -21,7 +22,7 @@ interface WasmApi {
 
 type WorkerScope = typeof globalThis & {
   postMessage(message: WorkerResponse): void;
-  onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
+  onmessage: ((event: MessageEvent<unknown>) => void) | null;
 };
 
 const scope = globalThis as WorkerScope;
@@ -42,11 +43,11 @@ function error(requestId: string, code: string, message: string, details?: unkno
 }
 
 async function handle(request: WorkerRequest): Promise<void> {
-  if (request.protocolVersion !== WORKER_PROTOCOL_VERSION) {
-    error(request.requestId, "WORKER_PROTOCOL_MISMATCH", "Unsupported worker protocol version");
-    return;
-  }
   try {
+    if (request.protocolVersion !== WORKER_PROTOCOL_VERSION) {
+      error(request.requestId, "WORKER_PROTOCOL_MISMATCH", "Unsupported worker protocol version");
+      return;
+    }
     if (request.type === "initialize") {
       const loaded = (await import(request.options.moduleUrl)) as WasmApi;
       if (loaded.default) await loaded.default(request.options.wasmUrl);
@@ -102,7 +103,17 @@ async function handle(request: WorkerRequest): Promise<void> {
 }
 
 scope.onmessage = (event) => {
-  const request = event.data;
+  const validation = validateWorkerRequest(event.data);
+
+  if (!validation.ok) {
+    if (validation.requestId) {
+      error(validation.requestId, validation.code, validation.message);
+    }
+    return;
+  }
+
+  const request = validation.request;
+
   queue = queue.then(() => handle(request)).catch((cause: unknown) => {
     error(request.requestId, "WORKER_QUEUE_FAILED", cause instanceof Error ? cause.message : String(cause));
   });
