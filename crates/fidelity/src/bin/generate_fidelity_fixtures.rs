@@ -40,6 +40,19 @@ fn package(path: &Path, parts: &[(&str, &[u8])]) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+/// A valid 1x1 white PNG image (67 bytes).
+const ONE_PIXEL_PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
+    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, // IHDR
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1
+    0x08, 0x04, 0x00, 0x00, 0x00, 0xb5, 0x1c, 0x0c, // RGBA
+    0x02, 0x00, 0x00, 0x00, 0x0b, 0x49, 0x44, 0x41, // IDAT
+    0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0x0f, 0x00,
+    0x01, 0x05, 0x01, 0x01, 0x27, 0x18, 0xe3, 0x66,
+    0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, // IEND
+    0xae, 0x42, 0x60, 0x82,
+];
+
 // ---------------------------------------------------------------------------
 // Unified OOXML helpers
 // ---------------------------------------------------------------------------
@@ -298,7 +311,7 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("word/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
             ("word/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"/>"#),
             ("word/embeddings/oleObject1.bin", b"OLE fidelity fixture"),
-            ("word/media/image1.png", b"\x89PNG\r\n\x1a\nFIDELITY_IMAGE"),
+            ("word/media/image1.png", ONE_PIXEL_PNG),
             ("customXml/fidelity.xml", b"<fidelity opaque=\"true\">DOCX_OPAQUE_PART</fidelity>"),
         ],
     )
@@ -449,7 +462,7 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("ppt/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
             ("ppt/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram">SMARTART_DATA</dgm:dataModel>"#),
             ("ppt/embeddings/oleObject1.bin", b"PPTX_OLE_OBJECT"),
-            ("ppt/media/image1.png", b"\x89PNG\r\n\x1a\nPPTX_IMAGE"),
+            ("ppt/media/image1.png", ONE_PIXEL_PNG),
             ("ppt/customXml/fidelity.xml", b"<fidelity>PPTX_OPAQUE_PART</fidelity>"),
         ],
     )
