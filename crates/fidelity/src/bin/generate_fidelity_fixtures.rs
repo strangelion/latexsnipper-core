@@ -146,52 +146,57 @@ fn app_properties_xml() -> &'static str {
 // ---------------------------------------------------------------------------
 
 fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let document = br#"<?xml version="1.0" encoding="UTF-8"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
-<w:body>
-<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="336699"/></w:rPr><w:t>Office Fidelity Heading</w:t></w:r><w:r><w:t> styled run</w:t></w:r></w:p>
-<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>List item</w:t></w:r></w:p>
-<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Merged cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
-<m:oMathPara><m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath></m:oMathPara>
-<w:p><w:r><w:drawing><a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="rIdImage"/></w:drawing></w:r></w:p>
-<w:p><w:footnoteReference w:id="1"/><w:commentRangeStart w:id="0"/><w:ins><w:r><w:t>Inserted</w:t></w:r></w:ins><w:del><w:r><w:delText>Deleted</w:delText></w:r></w:del></w:p>
-<mc:AlternateContent><mc:Choice Requires="dgm"><w:p><w:r><w:t>SmartArt preview</w:t></w:r></w:p></mc:Choice></mc:AlternateContent>
-<w:p><w:r><w:object><o:OLEObject Type="Embed" ProgID="Package"/></w:object></w:r><c:chart r:id="rIdChart"/></w:p>
-<w:sectPr><w:headerReference r:id="rIdHeader"/><w:footerReference r:id="rIdFooter"/><w:type w:val="nextPage"/></w:sectPr>
-</w:body></w:document>"#;
+    let root_rels = root_relationships("word/document.xml");
 
-    let docx_rels = relationships_xml(&[
-        RelationshipSpec {
-            id: "rIdImage",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-            target: "media/image1.png",
-        },
-        RelationshipSpec {
-            id: "rIdHeader",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
-            target: "header1.xml",
-        },
-        RelationshipSpec {
-            id: "rIdFooter",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
-            target: "footer1.xml",
-        },
-        RelationshipSpec {
-            id: "rIdChart",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
-            target: "charts/chart1.xml",
-        },
-    ]);
-
-    let ct = content_types_xml(
+    let content_types = content_types_xml(
         &[
-            ("rels", "application/vnd.openxmlformats-package.relationships+xml"),
+            (
+                "rels",
+                "application/vnd.openxmlformats-package.relationships+xml",
+            ),
             ("xml", "application/xml"),
+            ("png", "image/png"),
         ],
         &[
             (
                 "/word/document.xml",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+            ),
+            (
+                "/word/styles.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
+            ),
+            (
+                "/word/numbering.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml",
+            ),
+            (
+                "/word/header1.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml",
+            ),
+            (
+                "/word/footer1.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml",
+            ),
+            (
+                "/word/footnotes.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml",
+            ),
+            (
+                "/word/comments.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml",
+            ),
+            (
+                "/word/charts/chart1.xml",
+                "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+            ),
+            (
+                "/word/diagrams/data1.xml",
+                "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
+            ),
+            (
+                "/word/embeddings/oleObject1.bin",
+                "application/vnd.openxmlformats-officedocument.oleObject",
             ),
             (
                 "/docProps/core.xml",
@@ -204,15 +209,86 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
+    let document = br#"<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+<w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="336699"/></w:rPr><w:t>Office Fidelity Heading</w:t></w:r><w:r><w:t> styled run</w:t></w:r></w:p>
+<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>List item</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Merged cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+<m:oMathPara><m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath></m:oMathPara>
+<w:p><w:r><w:drawing><a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="rIdImage"/></w:drawing></w:r></w:p>
+<w:p><w:footnoteReference w:id="1"/><w:commentRangeStart w:id="0"/><w:ins><w:r><w:t>Inserted</w:t></w:r></w:ins><w:del><w:r><w:delText>Deleted</w:delText></w:r></w:del></w:p>
+<mc:AlternateContent><mc:Choice Requires="dgm"><w:p><w:r><w:t>SmartArt preview</w:t></w:r></w:p></mc:Choice></mc:AlternateContent>
+<w:p><w:r><w:object><o:OLEObject Type="Embed" ProgID="Package" r:id="rIdOle"/></w:object></w:r><c:chart r:id="rIdChart"/></w:p>
+<w:sectPr><w:headerReference r:id="rIdHeader"/><w:footerReference r:id="rIdFooter"/><w:type w:val="nextPage"/></w:sectPr>
+</w:body></w:document>"#;
+
+    let rels = relationships_xml(&[
+        RelationshipSpec {
+            id: "rIdStyles",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
+            target: "styles.xml",
+        },
+        RelationshipSpec {
+            id: "rIdNumbering",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering",
+            target: "numbering.xml",
+        },
+        RelationshipSpec {
+            id: "rIdImage",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+            target: "media/image1.png",
+        },
+        RelationshipSpec {
+            id: "rIdHeader",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+            target: "header1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdFooter",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+            target: "footer1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdFootnotes",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
+            target: "footnotes.xml",
+        },
+        RelationshipSpec {
+            id: "rIdComments",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments",
+            target: "comments.xml",
+        },
+        RelationshipSpec {
+            id: "rIdChart",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
+            target: "charts/chart1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdOle",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
+            target: "embeddings/oleObject1.bin",
+        },
+    ]);
+
     package(
         path,
         &[
-            ("[Content_Types].xml", ct.as_bytes()),
-            ("_rels/.rels", root_relationships("word/document.xml").as_bytes()),
+            ("[Content_Types].xml", content_types.as_bytes()),
+            ("_rels/.rels", root_rels.as_bytes()),
             ("docProps/core.xml", core_properties_xml().as_bytes()),
             ("docProps/app.xml", app_properties_xml().as_bytes()),
             ("word/document.xml", document),
-            ("word/_rels/document.xml.rels", docx_rels.as_bytes()),
+            ("word/_rels/document.xml.rels", rels.as_bytes()),
             ("word/styles.xml", br#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Heading1"/></w:styles>"#),
             ("word/numbering.xml", br#"<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:num w:numId="1"/></w:numbering>"#),
             ("word/header1.xml", br#"<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Header</w:t></w:r></w:p></w:hdr>"#),
