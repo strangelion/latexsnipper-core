@@ -309,55 +309,49 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 // ---------------------------------------------------------------------------
 
 fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let presentation = br#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldMasterIdLst><p:sldMasterId r:id="rIdMaster"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#;
+    let root_rels = root_relationships("ppt/presentation.xml");
 
-    let presentation_rels = relationships_xml(&[
-        RelationshipSpec {
-            id: "rId1",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-            target: "slides/slide1.xml",
-        },
-        RelationshipSpec {
-            id: "rIdMaster",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
-            target: "slideMasters/slideMaster1.xml",
-        },
-    ]);
-
-    let slide = br#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="2" name="Text Box"/></p:nvSpPr><p:spPr><a:prstGeom prst="rect"/></p:spPr><p:txBody><a:p><a:r><a:t>Presentation Fidelity Text Box</a:t></a:r></a:p></p:txBody></p:sp><p:pic><p:blipFill><a:blip r:embed="rIdImage"/></p:blipFill></p:pic><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Table cell</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame><p:graphicFrame><a:graphic><a:graphicData uri="chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rIdChart"/></a:graphicData></a:graphic></p:graphicFrame><p:oleObj r:id="rIdOle"/></p:spTree></p:cSld><p:timing><p:tnLst><p:par/></p:tnLst></p:timing></p:sld>"#;
-
-    let slide_rels = relationships_xml(&[
-        RelationshipSpec {
-            id: "rIdImage",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
-            target: "../media/image1.png",
-        },
-        RelationshipSpec {
-            id: "rIdChart",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
-            target: "../charts/chart1.xml",
-        },
-        RelationshipSpec {
-            id: "rIdOle",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
-            target: "../embeddings/oleObject1.bin",
-        },
-        RelationshipSpec {
-            id: "rIdNotes",
-            relationship_type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
-            target: "../notesSlides/notesSlide1.xml",
-        },
-    ]);
-
-    let ct = content_types_xml(
+    let content_types = content_types_xml(
         &[
-            ("rels", "application/vnd.openxmlformats-package.relationships+xml"),
+            (
+                "rels",
+                "application/vnd.openxmlformats-package.relationships+xml",
+            ),
             ("xml", "application/xml"),
+            ("png", "image/png"),
         ],
         &[
             (
                 "/ppt/presentation.xml",
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
+            ),
+            (
+                "/ppt/slides/slide1.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
+            ),
+            (
+                "/ppt/slideMasters/slideMaster1.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml",
+            ),
+            (
+                "/ppt/slideLayouts/slideLayout1.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
+            ),
+            (
+                "/ppt/notesSlides/notesSlide1.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml",
+            ),
+            (
+                "/ppt/charts/chart1.xml",
+                "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+            ),
+            (
+                "/ppt/diagrams/data1.xml",
+                "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
+            ),
+            (
+                "/ppt/embeddings/oleObject1.bin",
+                "application/vnd.openxmlformats-officedocument.oleObject",
             ),
             (
                 "/docProps/core.xml",
@@ -370,11 +364,77 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
+    let presentation = br#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldMasterIdLst><p:sldMasterId r:id="rIdMaster"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#;
+
+    let presentation_rels = relationships_xml(&[
+        RelationshipSpec {
+            id: "rId1",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
+            target: "slides/slide1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdMaster",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
+            target: "slideMasters/slideMaster1.xml",
+        },
+    ]);
+
+    let slide = br#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="2" name="Text Box"/></p:nvSpPr><p:spPr><a:prstGeom prst="rect"/></p:spPr><p:txBody><a:p><a:r><a:t>Presentation Fidelity Text Box</a:t></a:r></a:p></p:txBody></p:sp><p:pic><p:blipFill><a:blip r:embed="rIdImage"/></p:blipFill></p:pic><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Table cell</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame><p:graphicFrame><a:graphic><a:graphicData uri="chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rIdChart"/></a:graphicData></a:graphic></p:graphicFrame><p:oleObj r:id="rIdOle"/></p:spTree></p:cSld><p:timing><p:tnLst><p:par/></p:tnLst></p:timing></p:sld>"#;
+
+    let slide_rels = relationships_xml(&[
+        RelationshipSpec {
+            id: "rIdLayout",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout",
+            target: "../slideLayouts/slideLayout1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdImage",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+            target: "../media/image1.png",
+        },
+        RelationshipSpec {
+            id: "rIdChart",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
+            target: "../charts/chart1.xml",
+        },
+        RelationshipSpec {
+            id: "rIdOle",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
+            target: "../embeddings/oleObject1.bin",
+        },
+        RelationshipSpec {
+            id: "rIdNotes",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
+            target: "../notesSlides/notesSlide1.xml",
+        },
+    ]);
+
+    let master_rels = relationships_xml(&[RelationshipSpec {
+        id: "rIdLayout",
+        relationship_type:
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout",
+        target: "../slideLayouts/slideLayout1.xml",
+    }]);
+
+    let layout_rels = relationships_xml(&[RelationshipSpec {
+        id: "rIdMaster",
+        relationship_type:
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
+        target: "../slideMasters/slideMaster1.xml",
+    }]);
+
     package(
         path,
         &[
-            ("[Content_Types].xml", ct.as_bytes()),
-            ("_rels/.rels", root_relationships("ppt/presentation.xml").as_bytes()),
+            ("[Content_Types].xml", content_types.as_bytes()),
+            ("_rels/.rels", root_rels.as_bytes()),
             ("docProps/core.xml", core_properties_xml().as_bytes()),
             ("docProps/app.xml", app_properties_xml().as_bytes()),
             ("ppt/presentation.xml", presentation),
@@ -382,7 +442,9 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("ppt/slides/slide1.xml", slide),
             ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
             ("ppt/slideMasters/slideMaster1.xml", br#"<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sldMaster>"#),
+            ("ppt/slideMasters/_rels/slideMaster1.xml.rels", master_rels.as_bytes()),
             ("ppt/slideLayouts/slideLayout1.xml", br#"<p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sldLayout>"#),
+            ("ppt/slideLayouts/_rels/slideLayout1.xml.rels", layout_rels.as_bytes()),
             ("ppt/notesSlides/notesSlide1.xml", br#"<p:notes xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree/></p:cSld></p:notes>"#),
             ("ppt/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
             ("ppt/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram">SMARTART_DATA</dgm:dataModel>"#),
