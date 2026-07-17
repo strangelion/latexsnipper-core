@@ -687,6 +687,7 @@ fn validate_case(case: &CorpusCase, repository_root: &Path) -> Result<()> {
             case.id, case.sha256, actual
         )));
     }
+    validate_ooxml_package_structure(&bytes, case.format)?;
     for feature in &case.features {
         if feature.evidence_token.is_empty()
             || !bytes
@@ -733,6 +734,7 @@ fn run_case(
 ) -> Result<CaseReport> {
     let fixture = confined_path(&options.repository_root, &case.fixture)?;
     let bytes = fs::read(&fixture)?;
+    validate_ooxml_package_structure(&bytes, case.format)?;
     let imported = DocumentImporter::from_bytes(
         &bytes,
         Some(case.format.input()),
@@ -748,6 +750,7 @@ fn run_case(
     let exported = artifact
         .as_bytes()
         .ok_or_else(|| FidelityError::Conversion("export produced no bytes".to_string()))?;
+    validate_ooxml_package_structure(exported, case.format)?;
     let reopened = DocumentImporter::from_bytes(
         exported,
         Some(case.format.input()),

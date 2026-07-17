@@ -2,6 +2,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+use latexsnipper_fidelity::{validate_ooxml_package_structure, FidelityFormat};
 use lopdf::content::{Content, Operation};
 use lopdf::{dictionary, Dictionary, Document, Object, Stream};
 use zip::write::FileOptions;
@@ -29,7 +30,11 @@ fn options() -> FileOptions {
         .unix_permissions(0o644)
 }
 
-fn package(path: &Path, parts: &[(&str, &[u8])]) -> Result<(), Box<dyn std::error::Error>> {
+fn package(
+    path: &Path,
+    format: FidelityFormat,
+    parts: &[(&str, &[u8])],
+) -> Result<(), Box<dyn std::error::Error>> {
     let file = fs::File::create(path)?;
     let mut zip = zip::ZipWriter::new(file);
     for (name, bytes) in parts {
@@ -37,6 +42,11 @@ fn package(path: &Path, parts: &[(&str, &[u8])]) -> Result<(), Box<dyn std::erro
         zip.write_all(bytes)?;
     }
     zip.finish()?;
+
+    // Validate OPC structure immediately after writing.
+    let bytes = fs::read(path)?;
+    validate_ooxml_package_structure(&bytes, format)?;
+
     Ok(())
 }
 
@@ -295,6 +305,7 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
     package(
         path,
+        FidelityFormat::Docx,
         &[
             ("[Content_Types].xml", content_types.as_bytes()),
             ("_rels/.rels", root_rels.as_bytes()),
@@ -445,6 +456,7 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
     package(
         path,
+        FidelityFormat::Pptx,
         &[
             ("[Content_Types].xml", content_types.as_bytes()),
             ("_rels/.rels", root_rels.as_bytes()),
@@ -567,6 +579,7 @@ fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
     package(
         path,
+        FidelityFormat::Xlsx,
         &[
             ("[Content_Types].xml", content_types.as_bytes()),
             ("_rels/.rels", root_rels.as_bytes()),
