@@ -724,18 +724,25 @@ fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "<col min=\"1\" max=\"4\" width=\"18\" customWidth=\"1\"/>",
         "</cols>",
         "<sheetData>",
+        // Row 1: header row (table column names)
         "<row r=\"1\" ht=\"24\" customHeight=\"1\">",
-        "<c r=\"A1\" t=\"inlineStr\"><is><t>Workbook Fidelity</t></is></c>",
-        "<c r=\"B1\" t=\"b\"><v>1</v></c>",
-        "<c r=\"C1\" t=\"n\"><v>42</v></c>",
-        "<c r=\"D1\" t=\"e\"><v>#N/A</v></c>",
+        "<c r=\"A1\" t=\"inlineStr\"><is><t>Column1</t></is></c>",
+        "<c r=\"B1\" t=\"inlineStr\"><is><t>Column2</t></is></c>",
+        "<c r=\"C1\" t=\"inlineStr\"><is><t>Column3</t></is></c>",
+        "<c r=\"D1\" t=\"inlineStr\"><is><t>Column4</t></is></c>",
         "</row>",
+        // Row 2: data row
         "<row r=\"2\">",
-        "<c r=\"A2\"><f>SUM(C1,8)</f><v>50</v></c>",
+        "<c r=\"A2\"><f>SUM(C2,8)</f><v>50</v></c>",
+        "<c r=\"B2\" t=\"b\"><v>1</v></c>",
+        "<c r=\"C2\" t=\"n\"><v>42</v></c>",
+        "<c r=\"D2\" t=\"e\"><v>#N/A</v></c>",
         "</row>",
         "</sheetData>",
+        // Merge outside table range
         "<mergeCells count=\"1\"><mergeCell ref=\"A3:D3\"/></mergeCells>",
-        "<conditionalFormatting sqref=\"C1\">",
+        // Conditional formatting on data row
+        "<conditionalFormatting sqref=\"C2\">",
         "<cfRule type=\"cellIs\" priority=\"1\" operator=\"greaterThan\"><formula>10</formula></cfRule>",
         "</conditionalFormatting>",
         "<tableParts count=\"1\"><tablePart r:id=\"rIdTable\"/></tableParts>",
@@ -749,13 +756,14 @@ fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         target: "../tables/table1.xml",
     }]);
 
+    // Table covers only data rows (A1:D2), not the merged range A3:D3
     let table_xml = concat!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
         "<table ",
         "xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" ",
         "id=\"1\" name=\"FidelityTable\" displayName=\"FidelityTable\" ",
-        "ref=\"A1:D3\" totalsRowShown=\"0\">",
-        "<autoFilter ref=\"A1:D3\"/>",
+        "ref=\"A1:D2\" headerRowCount=\"1\" totalsRowShown=\"0\">",
+        "<autoFilter ref=\"A1:D2\"/>",
         "<tableColumns count=\"4\">",
         "<tableColumn id=\"1\" name=\"Column1\"/>",
         "<tableColumn id=\"2\" name=\"Column2\"/>",

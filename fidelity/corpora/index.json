@@ -75,7 +75,7 @@
       "id": "xlsx-workbook-rich-v1",
       "format": "xlsx",
       "fixture": "fidelity/fixtures/workbook-rich.xlsx",
-      "sha256": "81b2a394c6b7259a350661b1e72f289687d43c6ad6a146d8fcc1f4b68bcc3887",
+      "sha256": "1d9b13fb909b3c5e651f0bad6b5b8eeca3625aba13355ba5492558dfb1652dcb",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
