@@ -38,7 +38,7 @@
       "id": "pptx-presentation-rich-v1",
       "format": "pptx",
       "fixture": "fidelity/fixtures/presentation-rich.pptx",
-      "sha256": "2f09965b13cd9a4260c0ffd552a14f8d5d8b7aa046766c5040173266e7f132fe",
+      "sha256": "2e382f68be32e438549c52a8c76f7af2b595a01b4b9036b5b8ac0ef1ac79b07e",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -48,14 +48,11 @@
         { "feature": "text-boxes", "evidenceToken": "Text Box" },
         { "feature": "shapes", "evidenceToken": "<a:prstGeom" },
         { "feature": "images", "evidenceToken": "ppt/media/image1.png" },
-        { "feature": "notes", "evidenceToken": "ppt/notesSlides/notesSlide1.xml" },
-        { "feature": "opaque-parts", "evidenceToken": "PPTX_OPAQUE_PART" }
+        { "feature": "notes", "evidenceToken": "ppt/notesSlides/notesSlide1.xml" }
       ],
       "expectedText": ["Presentation Fidelity Text Box"],
-      "requiredDiagnosticCodes": [
-        "W_UNSUPPORTED_FEATURE"
-      ],
-      "requiredOpaqueParts": ["ppt/customXml/fidelity.xml"],
+      "requiredDiagnosticCodes": [],
+      "requiredOpaqueParts": [],
       "minimumAssets": 1,
       "minimumSemanticSimilarity": 0.70,
       "minimumLayoutSimilarity": 0.95

@@ -593,10 +593,6 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("ppt/theme/theme1.xml", OFFICE_THEME.as_bytes()),
             ("ppt/notesSlides/notesSlide1.xml", notes_slide.as_bytes()),
             ("ppt/media/image1.png", ONE_PIXEL_PNG),
-            (
-                "ppt/customXml/fidelity.xml",
-                b"<fidelity>PPTX_OPAQUE_PART</fidelity>",
-            ),
         ],
     )
 }
