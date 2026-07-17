@@ -985,29 +985,29 @@ mod tests {
             length: 100,
             sha256: "a".repeat(64),
             execution_class: PluginExecutionClassV3::WasiComponent,
-            core_version_requirement: ">=3.0.0-alpha.1, <4".to_string(),
+            core_version_requirement: ">=3.0.0, <4".to_string(),
             revoked: false,
             revocation_reason: None,
         };
-        base.validate_for_remote("3.0.0-alpha.1", None).unwrap();
+        base.validate_for_remote("3.0.0", None).unwrap();
 
         let mut native = base.clone();
         native.execution_class = PluginExecutionClassV3::IsolatedNativeProcess;
         assert!(matches!(
-            native.validate_for_remote("3.0.0-alpha.1", None),
+            native.validate_for_remote("3.0.0", None),
             Err(RegistryError::RemoteExecutionClass)
         ));
 
         let mut revoked = base.clone();
         revoked.revoked = true;
         assert!(matches!(
-            revoked.validate_for_remote("3.0.0-alpha.1", None),
+            revoked.validate_for_remote("3.0.0", None),
             Err(RegistryError::Revoked(_))
         ));
 
         assert!(matches!(
             base.validate_for_remote(
-                "3.0.0-alpha.1",
+                "3.0.0",
                 Some(("3.0.0", PluginExecutionClassV3::WasiComponent))
             ),
             Err(RegistryError::VersionDowngrade { .. })

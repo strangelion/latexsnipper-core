@@ -15,7 +15,7 @@ fuzz_target!(|data: &[u8]| {
         length: package.len() as u64,
         sha256: hex::encode(Sha256::digest(package)),
         execution_class: PluginExecutionClassV3::WasiComponent,
-        core_version_requirement: ">=3.0.0-alpha.1, <4".to_string(),
+        core_version_requirement: ">=3.0.0, <4".to_string(),
         revoked: false,
         revocation_reason: None,
     };

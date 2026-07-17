@@ -1049,7 +1049,7 @@ mod tests {
             id: "example.plugin".to_string(),
             name: "Example".to_string(),
             version: version.to_string(),
-            core_version_requirement: ">=3.0.0-alpha.1, <4".to_string(),
+            core_version_requirement: ">=3.0.0, <4".to_string(),
             execution_class: PluginExecutionClassV3::WasiComponent,
             interfaces: PluginInterfaceVersionsV3 {
                 plugin_api: PLUGIN_API_VERSION_FOR_MANIFEST_V3,
@@ -1173,7 +1173,7 @@ mod tests {
             length: package.len() as u64,
             sha256: hex::encode(Sha256::digest(package)),
             execution_class: PluginExecutionClassV3::WasiComponent,
-            core_version_requirement: ">=3.0.0-alpha.1, <4".to_string(),
+            core_version_requirement: ">=3.0.0, <4".to_string(),
             revoked: false,
             revocation_reason: None,
         }
@@ -1225,7 +1225,7 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let store = RemotePluginStore::new(temporary.path().join("remote"));
         store
-            .install(&target, &bytes, provenance(&target), "3.0.0-alpha.1")
+            .install(&target, &bytes, provenance(&target), "3.0.0")
             .unwrap();
         let mut matrix = CapabilityMatrix {
             schema_version: "3.0.0".to_string(),
@@ -1314,7 +1314,7 @@ mod tests {
                 &first_target,
                 &first,
                 provenance(&first_target),
-                "3.0.0-alpha.1",
+                "3.0.0",
             )
             .unwrap();
 
@@ -1325,7 +1325,7 @@ mod tests {
                 &second_target,
                 &second,
                 provenance(&second_target),
-                "3.0.0-alpha.1",
+                "3.0.0",
             )
             .unwrap();
         assert_eq!(
@@ -1343,7 +1343,7 @@ mod tests {
                 &first_target,
                 &first,
                 provenance(&first_target),
-                "3.0.0-alpha.1"
+                "3.0.0"
             ),
             Err(RegistryError::VersionDowngrade { .. })
         ));
@@ -1372,7 +1372,7 @@ mod tests {
                 &first_target,
                 &first,
                 provenance(&first_target),
-                "3.0.0-alpha.1",
+                "3.0.0",
             )
             .unwrap();
         let second = package("2.0.0");
@@ -1382,7 +1382,7 @@ mod tests {
                 &second_target,
                 &second,
                 provenance(&second_target),
-                "3.0.0-alpha.1",
+                "3.0.0",
             )
             .unwrap();
         let interrupted = temporary.path().join("staging").join("install-interrupted");
@@ -1402,7 +1402,7 @@ mod tests {
                 &second_target,
                 &second,
                 provenance(&second_target),
-                "3.0.0-alpha.1"
+                "3.0.0"
             ),
             Err(RegistryError::Revoked(id)) if id == "example.plugin"
         ));
@@ -1424,7 +1424,7 @@ mod tests {
             let bytes = Arc::clone(&bytes);
             let target = Arc::clone(&target);
             threads.push(std::thread::spawn(move || {
-                store.install(&target, &bytes, provenance(&target), "3.0.0-alpha.1")
+                store.install(&target, &bytes, provenance(&target), "3.0.0")
             }));
         }
         for thread in threads {

@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn legacy_api_accepts_explicit_v2_contract_during_v3_alpha() {
         let requirement = semver::VersionReq::parse("^2.0.0").unwrap();
-        let current = semver::Version::parse("3.0.0-alpha.1").unwrap();
+        let current = semver::Version::parse("3.0.0").unwrap();
         assert!(legacy_core_requirement_matches(&requirement, &current));
 
         let unsupported = semver::VersionReq::parse("^1.0.0").unwrap();

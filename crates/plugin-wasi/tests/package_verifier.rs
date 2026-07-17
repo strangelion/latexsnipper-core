@@ -25,7 +25,7 @@ fn manifest(component: &[u8]) -> Value {
         "id": "fixture.component",
         "name": "Fixture Component",
         "version": "1.0.0",
-        "coreVersionRequirement": ">=3.0.0-alpha.1, <4.0.0",
+        "coreVersionRequirement": ">=3.0.0, <4.0.0",
         "executionClass": "wasi_component",
         "interfaces": {
             "pluginApi": 2,
@@ -154,7 +154,7 @@ fn write_package(directory: &tempfile::TempDir, component: &[u8], manifest: Valu
 }
 
 fn verifier() -> WasiComponentPackageVerifier {
-    WasiComponentPackageVerifier::new(Version::parse("3.0.0-alpha.1").unwrap())
+    WasiComponentPackageVerifier::new(Version::parse("3.0.0").unwrap())
 }
 
 fn typed_trap_component() -> Vec<u8> {
@@ -447,7 +447,7 @@ fn signed_remote_component_requires_enablement_and_executes_after_activation() {
         length: archive.len() as u64,
         sha256: hex::encode(Sha256::digest(&archive)),
         execution_class: PluginExecutionClassV3::WasiComponent,
-        core_version_requirement: ">=3.0.0-alpha.1, <4.0.0".to_string(),
+        core_version_requirement: ">=3.0.0, <4.0.0".to_string(),
         revoked: false,
         revocation_reason: None,
     };
@@ -462,7 +462,7 @@ fn signed_remote_component_requires_enablement_and_executes_after_activation() {
     let temporary = tempfile::tempdir().unwrap();
     let store = RemotePluginStore::new(temporary.path().join("remote"));
     store
-        .install(&target, &archive, provenance, "3.0.0-alpha.1")
+        .install(&target, &archive, provenance, "3.0.0")
         .unwrap();
 
     let Err(disabled) = ActivatedRemoteWasiPlugin::activate(&store, "fixture.component") else {
