@@ -7,7 +7,7 @@ Each item must be completed and evidence saved before creating the v3.0.0 tag.
 
 ## 1. Scheduled Hardening Workflow
 
-**Status:** [ ] Not run / [ ] Passed / [ ] Failed
+**Status:** [x] Passed
 
 ```bash
 # Trigger the scheduled hardening workflow
