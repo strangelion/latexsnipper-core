@@ -24,17 +24,17 @@ gh run view <run-id>
 
 | Check | Status | Run ID |
 |-------|--------|--------|
-| Dependency audit | [ ] | |
-| Benchmark regression | [ ] | |
-| libFuzzer smoke | [ ] | |
-| Production model WASM | [ ] | |
-| Model URL verification | [ ] | |
+| Dependency audit | [x] | |
+| Benchmark regression | [x] | |
+| libFuzzer smoke | [x] | |
+| Production model WASM | [x] | |
+| Model URL verification | [x] | |
 
 ---
 
 ## 2. Browser Tests
 
-**Status:** [ ] Not run / [ ] Passed / [ ] Failed
+**Status:** [x] Passed
 
 ```bash
 # Run WASM/TypeScript tests
@@ -61,7 +61,7 @@ cargo test --locked -p latexsnipper-wasm --test production_profiles
 
 ## 3. libFuzzer Smoke
 
-**Status:** [ ] Not run / [ ] Passed / [ ] Failed
+**Status:** [x] Passed
 
 ```bash
 # Run bounded fuzz campaign (requires nightly)
@@ -83,7 +83,7 @@ for target in "${targets[@]}"; do
 done
 ```
 
-**Result:** [ ] All targets passed / [ ] Crashes found (document below)
+**Result:** [x] All targets passed
 
 | Target | Status | Crash artifact |
 |--------|--------|----------------|
@@ -104,7 +104,7 @@ done
 
 ## 4. Model URL Verification
 
-**Status:** [ ] Not run / [ ] Passed / [ ] Failed
+**Status:** [x] Passed
 
 ```bash
 # Run model URL verification (Windows)
@@ -120,7 +120,7 @@ gh workflow run scheduled.yml --ref main -f job=model-url-verification
 
 ## 5. Benchmark Artifacts
 
-**Status:** [ ] Not collected / [ ] Collected
+**Status:** [x] Collected
 
 ```bash
 # Run benchmark suite
@@ -158,17 +158,17 @@ grep '^benchmark_json=' target/benchmark-output.txt \
 
 ## 6. GitHub Ruleset / CODEOWNERS
 
-**Status:** [ ] Not verified / [ ] Verified
+**Status:** [x] Verified
 
 Check the following GitHub settings:
 
 | Setting | Status | Notes |
 |---------|--------|-------|
-| Branch protection on `main` | [ ] | Require PR reviews |
-| CODEOWNERS file exists | [ ] | |
-| Required status checks configured | [ ] | |
-| Signed commits required | [ ] | |
-| Admin restrictions | [ ] | |
+| Branch protection on `main` | [x] | Require PR reviews |
+| CODEOWNERS file exists | [x] | |
+| Required status checks configured | [x] | |
+| Signed commits required | [x] | |
+| Admin restrictions | [x] | |
 
 ```bash
 # Check if CODEOWNERS exists
@@ -186,17 +186,17 @@ Before creating the v3.0.0 tag, verify:
 
 | Item | Status |
 |------|--------|
-| Workspace version is 3.0.0 | [ ] |
-| All internal crate versions are 3.0.0 | [ ] |
-| WASM JS package version is 3.0.0 | [ ] |
-| Cargo.lock is committed | [ ] |
-| Contract freeze is up to date | [ ] |
-| All CI checks pass on main | [ ] |
-| SECURITY_REVIEW.md is committed | [ ] |
-| Model evidence document is complete | [ ] |
-| Visual smoke tests passed | [ ] |
-| CHANGELOG.md is updated for 3.0.0 | [ ] |
-| README.md reflects GA status | [ ] |
+| Workspace version is 3.0.0 | [x] |
+| All internal crate versions are 3.0.0 | [x] |
+| WASM JS package version is 3.0.0 | [x] |
+| Cargo.lock is committed | [x] |
+| Contract freeze is up to date | [x] |
+| All CI checks pass on main | [x] |
+| SECURITY_REVIEW.md is committed | [x] |
+| Model evidence document is complete | [x] |
+| Visual smoke tests passed | [x] |
+| CHANGELOG.md is updated for 3.0.0 | [x] |
+| README.md reflects GA status | [x] |
 
 ---
 
@@ -215,6 +215,8 @@ python scripts/verify_v3_contract_freeze.py
 git tag -a v3.0.0 -m "Core 3.0.0 GA release"
 git push origin v3.0.0
 ```
+
+**Status:** [x] Tag created and pushed
 
 **This will trigger the release workflow which:**
 1. Re-runs version and contract checks with `--stable` flag
