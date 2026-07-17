@@ -408,6 +408,10 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
             ),
             (
+                "/ppt/theme/theme1.xml",
+                "application/vnd.openxmlformats-officedocument.theme+xml",
+            ),
+            (
                 "/docProps/core.xml",
                 "application/vnd.openxmlformats-package.core-properties+xml",
             ),

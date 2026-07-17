@@ -5,7 +5,7 @@
     "crates/cli/src/main.rs": "dfcb1dc5f3fcc03b7b5e18172fff50b7151621856e05d721be7b9c1f77a8e775",
     "crates/conversion/src/capability_registry.rs": "8d3dc7a94a3c77ed6f8b2fb26d424a2eb434663b6bb984e9ddd0f66a43a18a24",
     "crates/evaluation/src/schema.rs": "2dd3abc6ec391c5886035917f4cea1c16e8e95046293c8fa386568c1869d9e67",
-    "crates/fidelity/src/lib.rs": "ee1ba2556da87f9f2aacde2537a73dd2c34391eef63cdce5cdc8cd20da0d9c1e",
+    "crates/fidelity/src/lib.rs": "31643b69748e13769a2f4abf942d6537c683e79154ab0bf2f10d0d26ed3cfdc1",
     "crates/model/src/manifest_v3.rs": "7d54cf89ab471daf77f174bd180a76053da5a7093689e5123af5843d8a279ea0",
     "crates/plugin/src/manifest_v3.rs": "4fb41389e3956a849dbe4d59c3c1d3e388f2fd0a5a8a80424c10338356f5ccbb",
     "crates/plugin/src/signed_registry.rs": "3ab061a24eeb038469170a8d7ec7ffbc9c9ddae5f4748cd70adf1dd62ea09464",
@@ -16,7 +16,7 @@
   "publicRustSourceTrees": {
     "crates/api-types/src": "e369249a891db190f7ca6d82086d2d0d93ac02c458f3c7461910ae2b4125f0e0",
     "crates/ast/src": "52bda28931dbe15928f1090ffded6cf28ccfdcbaa82a29619bf392873bc9a717",
-    "crates/conversion/src": "e4e1e00ea402fd64741c49cdfaf76fe2033891f04a01832755f32e0f4032199c",
+    "crates/conversion/src": "bf73de3056deb836c60da59dccd7b32f1197a166824c67e627ef5410989eba9f",
     "crates/engine/src": "0c0c72430b33db8fd45f79e03073dd3ffc9001fc0eae871b7b2a0bef345a88ea",
     "crates/export/src": "85a87b758cba7453e539a09747f8e0322b174c2fd65ea8b28add9312391bd453",
     "crates/ffi/src": "9096deeb3fe4bf673dbd323fd80e1ed6a7e9056fa7e7e76f27b874442021b5ed",

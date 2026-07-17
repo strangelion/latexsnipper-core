@@ -38,7 +38,7 @@
       "id": "pptx-presentation-rich-v1",
       "format": "pptx",
       "fixture": "fidelity/fixtures/presentation-rich.pptx",
-      "sha256": "830616736ee2f7781b454d5b98b78b691f3a1787eef793b3c0bcd4a533767558",
+      "sha256": "6134a3fe85becc203d10c6d6ec2bb40fcf1499ba100857fc3ff03dafcf23916a",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [

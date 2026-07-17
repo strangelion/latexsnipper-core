@@ -269,6 +269,67 @@ pub fn validate_ooxml_package_structure(bytes: &[u8], format: FidelityFormat) ->
         validate_relationship_part(&relationship_part, &xml, &names)?;
     }
 
+    // PPTX-specific: verify critical parts have correct Content-Type overrides.
+    if format == FidelityFormat::Pptx {
+        let required_types: &[(&str, &str)] = &[
+            (
+                "ppt/presentation.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
+            ),
+            (
+                "ppt/presProps.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.presProps+xml",
+            ),
+            (
+                "ppt/slideMasters/slideMaster1.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml",
+            ),
+            (
+                "ppt/slideLayouts/slideLayout1.xml",
+                "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
+            ),
+            (
+                "ppt/theme/theme1.xml",
+                "application/vnd.openxmlformats-officedocument.theme+xml",
+            ),
+        ];
+        for (part, expected_type) in required_types {
+            let part_name = format!("/{part}");
+            if !has_xml_element_with_attrs(
+                &content_types,
+                "Override",
+                &[
+                    ("PartName", part_name.as_str()),
+                    ("ContentType", expected_type),
+                ],
+            ) {
+                return Err(FidelityError::Package(format!(
+                    "PPTX part '{part}' does not declare required content type '{expected_type}'"
+                )));
+            }
+        }
+
+        // PPTX-specific: slideLayoutId must be >= 2147483648.
+        let master_xml = read_package_text(&mut archive, "ppt/slideMasters/slideMaster1.xml")?;
+        validate_pptx_slide_layout_ids(&master_xml)?;
+    }
+
+    Ok(())
+}
+
+fn validate_pptx_slide_layout_ids(master_xml: &str) -> Result<()> {
+    for fragment in master_xml.split("<p:sldLayoutId ").skip(1) {
+        let tag = fragment.split('>').next().unwrap_or(fragment);
+        let id = xml_attribute(tag, "id")
+            .ok_or_else(|| FidelityError::Package("PPTX slide layout id is missing".to_string()))?
+            .parse::<u32>()
+            .map_err(|_| FidelityError::Package("PPTX slide layout id is invalid".to_string()))?;
+        if id < 2_147_483_648 {
+            return Err(FidelityError::Package(format!(
+                "PPTX slide layout id {id} is outside the PowerPoint-compatible range"
+            )));
+        }
+    }
     Ok(())
 }
 
