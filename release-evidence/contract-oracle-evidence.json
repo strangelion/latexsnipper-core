@@ -1,0 +1,407 @@
+{
+  "schemaVersion": 1,
+  "metricSchemaVersion": 1,
+  "tier": "pull_request",
+  "sourceCommit": "bf0385e440037748c2e721c1a90f19a472747a4d",
+  "generatedAtUtc": "2026-07-17T00:00:00Z",
+  "corpora": [
+    {
+      "corpusId": "repository-printed-formula-v1",
+      "corpusSha256": "ae0c44c61928577cf33b200269761d786b008327d09cb633fecc672c6560678a",
+      "task": "printed_formula",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "formula_normalized_exact_match": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        },
+        "formula_structural_similarity": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "formula_normalized_exact_match",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must reproduce the normalized formula reference exactly."
+        },
+        {
+          "metric": "formula_structural_similarity",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve every formula token."
+        }
+      ],
+      "passed": true
+    },
+    {
+      "corpusId": "repository-handwritten-formula-v1",
+      "corpusSha256": "2775966eca15743beb29a633bdd0603147e661ca20c3c5e82a9fc9d48e7b987b",
+      "task": "handwritten_formula",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "formula_normalized_exact_match": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        },
+        "formula_structural_similarity": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "formula_normalized_exact_match",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must reproduce the handwritten reference exactly."
+        },
+        {
+          "metric": "formula_structural_similarity",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve every handwritten formula token."
+        }
+      ],
+      "passed": true
+    },
+    {
+      "corpusId": "repository-latin-text-v1",
+      "corpusSha256": "7783917e286a7687790ffc75b3c31bc55f144b64dc772765c95ff8185279e2a1",
+      "task": "latin_text",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "cer": {
+          "value": 0.0,
+          "unit": "ratio",
+          "sampleCount": 1
+        },
+        "wer": {
+          "value": 0.0,
+          "unit": "ratio",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "cer",
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "maximum",
+          "passed": true,
+          "rationale": "The contract oracle must introduce no character edits."
+        },
+        {
+          "metric": "wer",
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "maximum",
+          "passed": true,
+          "rationale": "The contract oracle must introduce no word edits."
+        }
+      ],
+      "passed": true
+    },
+    {
+      "corpusId": "repository-simplified-chinese-text-v1",
+      "corpusSha256": "eb8060c6385cc4c6c8b1cca86e310c393f1389f69661263370955a1daa404020",
+      "task": "simplified_chinese_text",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "cer": {
+          "value": 0.0,
+          "unit": "ratio",
+          "sampleCount": 1
+        },
+        "wer": {
+          "value": 0.0,
+          "unit": "ratio",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "cer",
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "maximum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve every Chinese character."
+        },
+        {
+          "metric": "wer",
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "maximum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve the complete Chinese reference string."
+        }
+      ],
+      "passed": true
+    },
+    {
+      "corpusId": "repository-mixed-cjk-latin-text-v1",
+      "corpusSha256": "13e9c351709c7ea24a9981dfcf43964038210da9527a195ab35bddceb3925938",
+      "task": "mixed_cjk_latin_text",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "cer": {
+          "value": 0.0,
+          "unit": "ratio",
+          "sampleCount": 1
+        },
+        "wer": {
+          "value": 0.0,
+          "unit": "ratio",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "cer",
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "maximum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve every mixed-script character."
+        },
+        {
+          "metric": "wer",
+          "actual": 0.0,
+          "threshold": 0.0,
+          "direction": "maximum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve mixed-script token boundaries."
+        }
+      ],
+      "passed": true
+    },
+    {
+      "corpusId": "repository-mixed-formula-text-v1",
+      "corpusSha256": "1b93c4981c46003875c5ad0972a353a78884f98abe19cafa9aee665af699e6ad",
+      "task": "mixed_formula_text",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "document_block_semantics_f1": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        },
+        "document_reading_order_similarity": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "document_block_semantics_f1",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve block kind and normalized content."
+        },
+        {
+          "metric": "document_reading_order_similarity",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve the complete block reading order."
+        }
+      ],
+      "passed": true
+    },
+    {
+      "corpusId": "repository-document-layout-v1",
+      "corpusSha256": "33cb015725018a695169bae5f3c3c15898b899ce02312b923e4c745a921b1bcc",
+      "task": "document_layout",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "layout_macro_f1": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "layout_macro_f1",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve class-aware layout regions."
+        }
+      ],
+      "passed": true
+    },
+    {
+      "corpusId": "repository-table-structure-v1",
+      "corpusSha256": "1fbef5b4cc699924980cfbde7a8cba3538f1945688f935cb623e65d7d52753a3",
+      "task": "table_structure",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "table_structure_f1": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        },
+        "table_tree_similarity": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "table_structure_f1",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve every logical cell and span."
+        },
+        {
+          "metric": "table_tree_similarity",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve the complete ordered table token tree."
+        }
+      ],
+      "passed": true
+    },
+    {
+      "corpusId": "repository-orientation-v1",
+      "corpusSha256": "d2744372f198e1f24abc6ceef8bbc6978fc8f58ac8c88f8edea1f34b08477322",
+      "task": "orientation",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "metrics": {
+        "orientation_accuracy": {
+          "value": 1.0,
+          "unit": "score",
+          "sampleCount": 1
+        }
+      },
+      "gates": [
+        {
+          "metric": "orientation_accuracy",
+          "actual": 1.0,
+          "threshold": 1.0,
+          "direction": "minimum",
+          "passed": true,
+          "rationale": "The contract oracle must preserve the orientation label."
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "passed": true
+}

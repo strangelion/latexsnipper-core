@@ -1,0 +1,473 @@
+{
+  "schemaVersion": 1,
+  "tier": "pull_request",
+  "runs": [
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-printed-formula-v1",
+      "corpusSha256": "ae0c44c61928577cf33b200269761d786b008327d09cb633fecc672c6560678a",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "printed-formula-001",
+          "prediction": {
+            "kind": "formula",
+            "latex": "E=mc^2\\;\\;\\int_0^\\infty e^{-x^2}\\,dx=\\frac{\\sqrt{\\pi}}{2}\\;\\;\\frac{a+b}{c}=d"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-handwritten-formula-v1",
+      "corpusSha256": "2775966eca15743beb29a633bdd0603147e661ca20c3c5e82a9fc9d48e7b987b",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "handwritten-formula-001",
+          "prediction": {
+            "kind": "formula",
+            "latex": "x^2+y^2=1"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-latin-text-v1",
+      "corpusSha256": "7783917e286a7687790ffc75b3c31bc55f144b64dc772765c95ff8185279e2a1",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "latin-text-001",
+          "prediction": {
+            "kind": "text",
+            "text": "Hello World OCR Test"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-simplified-chinese-text-v1",
+      "corpusSha256": "eb8060c6385cc4c6c8b1cca86e310c393f1389f69661263370955a1daa404020",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "simplified-chinese-text-001",
+          "prediction": {
+            "kind": "text",
+            "text": "中文识别测试"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-mixed-cjk-latin-text-v1",
+      "corpusSha256": "13e9c351709c7ea24a9981dfcf43964038210da9527a195ab35bddceb3925938",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "mixed-cjk-latin-text-001",
+          "prediction": {
+            "kind": "text",
+            "text": "English 中文混合 Mixed Text 测试"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-mixed-formula-text-v1",
+      "corpusSha256": "1b93c4981c46003875c5ad0972a353a78884f98abe19cafa9aee665af699e6ad",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "mixed-formula-text-001",
+          "prediction": {
+            "kind": "document",
+            "blocks": [
+              {
+                "id": "b01",
+                "kind": "heading",
+                "text": "Abstract"
+              },
+              {
+                "id": "b02",
+                "kind": "paragraph",
+                "text": "We present a novel approach to solving the heat equation using Fourier analysis."
+              },
+              {
+                "id": "b03",
+                "kind": "paragraph",
+                "text": "The solution can be expressed as:"
+              },
+              {
+                "id": "b04",
+                "kind": "formula",
+                "text": "u(x,t)=\\sum_{n=1}^{\\infty}B_n\\sin\\left(\\frac{n\\pi x}{L}\\right)e^{-\\alpha(n\\pi/L)^2t}"
+              },
+              {
+                "id": "b05",
+                "kind": "paragraph",
+                "text": "where alpha is the thermal diffusivity and L is the length of the domain."
+              },
+              {
+                "id": "b06",
+                "kind": "heading",
+                "text": "Boundary Conditions"
+              },
+              {
+                "id": "b07",
+                "kind": "paragraph",
+                "text": "For Dirichlet boundary conditions:"
+              },
+              {
+                "id": "b08",
+                "kind": "formula",
+                "text": "u(0,t)=u(L,t)=0"
+              },
+              {
+                "id": "b09",
+                "kind": "paragraph",
+                "text": "The coefficients B_n are determined by the initial condition:"
+              },
+              {
+                "id": "b10",
+                "kind": "formula",
+                "text": "B_n=\\frac{2}{L}\\int_0^L u(x,0)\\sin\\left(\\frac{n\\pi x}{L}\\right)dx"
+              },
+              {
+                "id": "b11",
+                "kind": "heading",
+                "text": "Numerical Results"
+              },
+              {
+                "id": "b12",
+                "kind": "paragraph",
+                "text": "We tested with L=1, alpha=0.01, and initial condition u(x,0)=sin(pi x)."
+              },
+              {
+                "id": "b13",
+                "kind": "paragraph",
+                "text": "The solution converges to zero as t approaches infinity, as expected."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-document-layout-v1",
+      "corpusSha256": "33cb015725018a695169bae5f3c3c15898b899ce02312b923e4c745a921b1bcc",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "document-layout-001",
+          "prediction": {
+            "kind": "layout",
+            "regions": [
+              {
+                "class": "heading",
+                "bbox": [
+                  75.0,
+                  65.0,
+                  575.0,
+                  70.0
+                ]
+              },
+              {
+                "class": "paragraph",
+                "bbox": [
+                  75.0,
+                  140.0,
+                  1375.0,
+                  60.0
+                ]
+              },
+              {
+                "class": "formula",
+                "bbox": [
+                  700.0,
+                  220.0,
+                  260.0,
+                  75.0
+                ]
+              },
+              {
+                "class": "paragraph",
+                "bbox": [
+                  75.0,
+                  310.0,
+                  790.0,
+                  65.0
+                ]
+              },
+              {
+                "class": "heading",
+                "bbox": [
+                  75.0,
+                  405.0,
+                  210.0,
+                  65.0
+                ]
+              },
+              {
+                "class": "paragraph",
+                "bbox": [
+                  75.0,
+                  465.0,
+                  715.0,
+                  65.0
+                ]
+              },
+              {
+                "class": "formula",
+                "bbox": [
+                  590.0,
+                  545.0,
+                  510.0,
+                  155.0
+                ]
+              },
+              {
+                "class": "heading",
+                "bbox": [
+                  75.0,
+                  730.0,
+                  330.0,
+                  70.0
+                ]
+              },
+              {
+                "class": "paragraph",
+                "bbox": [
+                  75.0,
+                  790.0,
+                  625.0,
+                  70.0
+                ]
+              },
+              {
+                "class": "formula",
+                "bbox": [
+                  650.0,
+                  875.0,
+                  390.0,
+                  90.0
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-table-structure-v1",
+      "corpusSha256": "1fbef5b4cc699924980cfbde7a8cba3538f1945688f935cb623e65d7d52753a3",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "table-structure-001",
+          "prediction": {
+            "kind": "table",
+            "cells": [
+              {
+                "row": 0,
+                "col": 0,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "Name"
+              },
+              {
+                "row": 0,
+                "col": 1,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "Age"
+              },
+              {
+                "row": 0,
+                "col": 2,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "City"
+              },
+              {
+                "row": 1,
+                "col": 0,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "Alice"
+              },
+              {
+                "row": 1,
+                "col": 1,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "30"
+              },
+              {
+                "row": 1,
+                "col": 2,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "Beijing"
+              },
+              {
+                "row": 2,
+                "col": 0,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "Bob"
+              },
+              {
+                "row": 2,
+                "col": 1,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "25"
+              },
+              {
+                "row": 2,
+                "col": 2,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "Shanghai"
+              },
+              {
+                "row": 3,
+                "col": 0,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "Carol"
+              },
+              {
+                "row": 3,
+                "col": 1,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "35"
+              },
+              {
+                "row": 3,
+                "col": 2,
+                "rowspan": 1,
+                "colspan": 1,
+                "text": "Guangzhou"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "corpusId": "repository-orientation-v1",
+      "corpusSha256": "d2744372f198e1f24abc6ceef8bbc6978fc8f58ac8c88f8edea1f34b08477322",
+      "model": {
+        "id": "evaluation-contract-oracle-v1",
+        "sha256": "6a5ccfefc9f0b7593a4859e1721c9e63146e01f68563500da418a0247e6bb94c"
+      },
+      "execution": {
+        "runtime": "evaluation-contract-oracle-v1",
+        "provider": "deterministic-fixture",
+        "platform": "portable",
+        "preprocessingVersion": "corpus-reference-v1",
+        "postprocessingVersion": "none"
+      },
+      "predictions": [
+        {
+          "sampleId": "orientation-001",
+          "prediction": {
+            "kind": "orientation",
+            "degrees": 90
+          }
+        }
+      ]
+    }
+  ]
+}
