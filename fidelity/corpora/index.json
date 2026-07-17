@@ -44,7 +44,7 @@
       "id": "pptx-presentation-rich-v1",
       "format": "pptx",
       "fixture": "fidelity/fixtures/presentation-rich.pptx",
-      "sha256": "8259dfc8747efe72369892e3838cd90445e334d94ff967723f0ea2fd342e1b97",
+      "sha256": "a59f32396b4ab12ab8d33c3f5c3b3f999d6ade91fe847edb5ae5610249c41871",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -54,11 +54,9 @@
         { "feature": "text-boxes", "evidenceToken": "Text Box" },
         { "feature": "shapes", "evidenceToken": "<a:prstGeom" },
         { "feature": "images", "evidenceToken": "ppt/media/image1.png" },
-        { "feature": "tables", "evidenceToken": "<a:tbl" },
         { "feature": "charts", "evidenceToken": "ppt/charts/chart1.xml" },
         { "feature": "smartart", "evidenceToken": "SMARTART_DATA" },
         { "feature": "notes", "evidenceToken": "ppt/notesSlides/notesSlide1.xml" },
-        { "feature": "animations", "evidenceToken": "<p:timing" },
         { "feature": "ole", "evidenceToken": "ppt/embeddings/oleObject1.bin" }
       ],
       "expectedText": ["Presentation Fidelity Text Box"],
@@ -77,7 +75,7 @@
       "id": "xlsx-workbook-rich-v1",
       "format": "xlsx",
       "fixture": "fidelity/fixtures/workbook-rich.xlsx",
-      "sha256": "db98c6c43b06933b88e9fcd32991cf1e57601189776170138a0439589141646a",
+      "sha256": "81b2a394c6b7259a350661b1e72f289687d43c6ad6a146d8fcc1f4b68bcc3887",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [

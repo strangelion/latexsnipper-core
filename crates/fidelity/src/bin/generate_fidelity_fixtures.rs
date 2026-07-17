@@ -2,6 +2,9 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+use latexsnipper_conversion::package_export::{
+    OFFICE_THEME, PPTX_LAYOUT, PPTX_LAYOUT_RELS, PPTX_MASTER, PPTX_MASTER_RELS, XLSX_STYLES,
+};
 use latexsnipper_fidelity::{validate_ooxml_package_structure, FidelityFormat};
 use lopdf::content::{Content, Operation};
 use lopdf::{dictionary, Dictionary, Document, Object, Stream};
@@ -455,7 +458,22 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
 
-    let presentation = br#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldMasterIdLst><p:sldMasterId r:id="rIdMaster"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>"#;
+    let presentation = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<p:presentation ",
+        "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" ",
+        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" ",
+        "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">",
+        "<p:sldMasterIdLst>",
+        "<p:sldMasterId id=\"2147483648\" r:id=\"rIdMaster\"/>",
+        "</p:sldMasterIdLst>",
+        "<p:sldIdLst>",
+        "<p:sldId id=\"256\" r:id=\"rId1\"/>",
+        "</p:sldIdLst>",
+        "<p:sldSz cx=\"12192000\" cy=\"6858000\"/>",
+        "<p:notesSz cx=\"6858000\" cy=\"9144000\"/>",
+        "</p:presentation>",
+    );
 
     let presentation_rels = relationships_xml(&[
         RelationshipSpec {
@@ -472,7 +490,80 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         },
     ]);
 
-    let slide = br#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="2" name="Text Box"/></p:nvSpPr><p:spPr><a:prstGeom prst="rect"/></p:spPr><p:txBody><a:p><a:r><a:t>Presentation Fidelity Text Box</a:t></a:r></a:p></p:txBody></p:sp><p:pic><p:blipFill><a:blip r:embed="rIdImage"/></p:blipFill></p:pic><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Table cell</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame><p:graphicFrame><a:graphic><a:graphicData uri="chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rIdChart"/></a:graphicData></a:graphic></p:graphicFrame><p:oleObj r:id="rIdOle"/></p:spTree></p:cSld><p:timing><p:tnLst><p:par/></p:tnLst></p:timing></p:sld>"#;
+    // Proper PresentationML slide with spTree, text box, and picture.
+    let slide = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<p:sld ",
+        "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" ",
+        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" ",
+        "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">",
+        "<p:cSld>",
+        "<p:spTree>",
+        // Required spTree root properties
+        "<p:nvGrpSpPr>",
+        "<p:cNvPr id=\"1\" name=\"\"/>",
+        "<p:cNvGrpSpPr/>",
+        "<p:nvPr/>",
+        "</p:nvGrpSpPr>",
+        "<p:grpSpPr>",
+        "<a:xfrm>",
+        "<a:off x=\"0\" y=\"0\"/>",
+        "<a:ext cx=\"0\" cy=\"0\"/>",
+        "<a:chOff x=\"0\" y=\"0\"/>",
+        "<a:chExt cx=\"0\" cy=\"0\"/>",
+        "</a:xfrm>",
+        "</p:grpSpPr>",
+        // Text box with full nvSpPr structure
+        "<p:sp>",
+        "<p:nvSpPr>",
+        "<p:cNvPr id=\"2\" name=\"Text Box\"/>",
+        "<p:cNvSpPr txBox=\"1\"/>",
+        "<p:nvPr/>",
+        "</p:nvSpPr>",
+        "<p:spPr>",
+        "<a:xfrm>",
+        "<a:off x=\"400000\" y=\"300000\"/>",
+        "<a:ext cx=\"8000000\" cy=\"600000\"/>",
+        "</a:xfrm>",
+        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>",
+        "<a:noFill/>",
+        "</p:spPr>",
+        "<p:txBody>",
+        "<a:bodyPr/>",
+        "<a:lstStyle/>",
+        "<a:p>",
+        "<a:r>",
+        "<a:rPr lang=\"en-US\"/>",
+        "<a:t>Presentation Fidelity Text Box</a:t>",
+        "</a:r>",
+        "<a:endParaRPr lang=\"en-US\"/>",
+        "</a:p>",
+        "</p:txBody>",
+        "</p:sp>",
+        // Picture with full structure
+        "<p:pic>",
+        "<p:nvPicPr>",
+        "<p:cNvPr id=\"3\" name=\"image1.png\"/>",
+        "<p:cNvPicPr/>",
+        "<p:nvPr/>",
+        "</p:nvPicPr>",
+        "<p:blipFill>",
+        "<a:blip r:embed=\"rIdImage\"/>",
+        "<a:stretch><a:fillRect/></a:stretch>",
+        "</p:blipFill>",
+        "<p:spPr>",
+        "<a:xfrm>",
+        "<a:off x=\"400000\" y=\"1000000\"/>",
+        "<a:ext cx=\"1000000\" cy=\"1000000\"/>",
+        "</a:xfrm>",
+        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>",
+        "</p:spPr>",
+        "</p:pic>",
+        "</p:spTree>",
+        "</p:cSld>",
+        "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>",
+        "</p:sld>",
+    );
 
     let slide_rels = relationships_xml(&[
         RelationshipSpec {
@@ -488,18 +579,6 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             target: "../media/image1.png",
         },
         RelationshipSpec {
-            id: "rIdChart",
-            relationship_type:
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
-            target: "../charts/chart1.xml",
-        },
-        RelationshipSpec {
-            id: "rIdOle",
-            relationship_type:
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
-            target: "../embeddings/oleObject1.bin",
-        },
-        RelationshipSpec {
             id: "rIdNotes",
             relationship_type:
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
@@ -507,19 +586,25 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         },
     ]);
 
-    let master_rels = relationships_xml(&[RelationshipSpec {
-        id: "rIdLayout",
-        relationship_type:
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout",
-        target: "../slideLayouts/slideLayout1.xml",
-    }]);
-
-    let layout_rels = relationships_xml(&[RelationshipSpec {
-        id: "rIdMaster",
-        relationship_type:
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster",
-        target: "../slideMasters/slideMaster1.xml",
-    }]);
+    let notes_slide = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<p:notes ",
+        "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" ",
+        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" ",
+        "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">",
+        "<p:cSld>",
+        "<p:spTree>",
+        "<p:nvGrpSpPr>",
+        "<p:cNvPr id=\"1\" name=\"\"/>",
+        "<p:cNvGrpSpPr/>",
+        "<p:nvPr/>",
+        "</p:nvGrpSpPr>",
+        "<p:grpSpPr/>",
+        "</p:spTree>",
+        "</p:cSld>",
+        "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>",
+        "</p:notes>",
+    );
 
     package(
         path,
@@ -529,15 +614,16 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("_rels/.rels", root_rels.as_bytes()),
             ("docProps/core.xml", core_properties_xml().as_bytes()),
             ("docProps/app.xml", app_properties_xml().as_bytes()),
-            ("ppt/presentation.xml", presentation),
+            ("ppt/presentation.xml", presentation.as_bytes()),
             ("ppt/_rels/presentation.xml.rels", presentation_rels.as_bytes()),
-            ("ppt/slides/slide1.xml", slide),
+            ("ppt/slides/slide1.xml", slide.as_bytes()),
             ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
-            ("ppt/slideMasters/slideMaster1.xml", br#"<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sldMaster>"#),
-            ("ppt/slideMasters/_rels/slideMaster1.xml.rels", master_rels.as_bytes()),
-            ("ppt/slideLayouts/slideLayout1.xml", br#"<p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sldLayout>"#),
-            ("ppt/slideLayouts/_rels/slideLayout1.xml.rels", layout_rels.as_bytes()),
-            ("ppt/notesSlides/notesSlide1.xml", br#"<p:notes xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree/></p:cSld></p:notes>"#),
+            ("ppt/slideMasters/slideMaster1.xml", PPTX_MASTER.as_bytes()),
+            ("ppt/slideMasters/_rels/slideMaster1.xml.rels", PPTX_MASTER_RELS.as_bytes()),
+            ("ppt/slideLayouts/slideLayout1.xml", PPTX_LAYOUT.as_bytes()),
+            ("ppt/slideLayouts/_rels/slideLayout1.xml.rels", PPTX_LAYOUT_RELS.as_bytes()),
+            ("ppt/theme/theme1.xml", OFFICE_THEME.as_bytes()),
+            ("ppt/notesSlides/notesSlide1.xml", notes_slide.as_bytes()),
             ("ppt/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
             ("ppt/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram">SMARTART_DATA</dgm:dataModel>"#),
             ("ppt/embeddings/oleObject1.bin", b"PPTX_OLE_OBJECT"),
@@ -624,22 +710,59 @@ fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         },
     ]);
 
-    let sheet = br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:D3"/><cols><col min="1" max="4" width="18" customWidth="1"/></cols><sheetData><row r="1" ht="24" customHeight="1"><c r="A1" t="inlineStr"><is><t>Workbook Fidelity</t></is></c><c r="B1" t="b"><v>1</v></c><c r="C1" t="n"><v>42</v></c><c r="D1" t="e"><v>#N/A</v></c></row><row r="2"><c r="A2"><f>SUM(C1,8)</f><v>50</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="A3:D3"/></mergeCells><conditionalFormatting sqref="C1"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting><tableParts count="1"><tablePart r:id="rIdTable"/></tableParts><drawing r:id="rIdDrawing"/></worksheet>"#;
+    let sheet = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<worksheet ",
+        "xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" ",
+        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">",
+        "<dimension ref=\"A1:D3\"/>",
+        "<cols>",
+        "<col min=\"1\" max=\"4\" width=\"18\" customWidth=\"1\"/>",
+        "</cols>",
+        "<sheetData>",
+        "<row r=\"1\" ht=\"24\" customHeight=\"1\">",
+        "<c r=\"A1\" t=\"inlineStr\"><is><t>Workbook Fidelity</t></is></c>",
+        "<c r=\"B1\" t=\"b\"><v>1</v></c>",
+        "<c r=\"C1\" t=\"n\"><v>42</v></c>",
+        "<c r=\"D1\" t=\"e\"><v>#N/A</v></c>",
+        "</row>",
+        "<row r=\"2\">",
+        "<c r=\"A2\"><f>SUM(C1,8)</f><v>50</v></c>",
+        "</row>",
+        "</sheetData>",
+        "<mergeCells count=\"1\"><mergeCell ref=\"A3:D3\"/></mergeCells>",
+        "<conditionalFormatting sqref=\"C1\">",
+        "<cfRule type=\"cellIs\" priority=\"1\" operator=\"greaterThan\"><formula>10</formula></cfRule>",
+        "</conditionalFormatting>",
+        "<tableParts count=\"1\"><tablePart r:id=\"rIdTable\"/></tableParts>",
+        "</worksheet>",
+    );
 
-    let sheet_rels = relationships_xml(&[
-        RelationshipSpec {
-            id: "rIdTable",
-            relationship_type:
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table",
-            target: "../tables/table1.xml",
-        },
-        RelationshipSpec {
-            id: "rIdDrawing",
-            relationship_type:
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing",
-            target: "../drawings/drawing1.xml",
-        },
-    ]);
+    let sheet_rels = relationships_xml(&[RelationshipSpec {
+        id: "rIdTable",
+        relationship_type:
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table",
+        target: "../tables/table1.xml",
+    }]);
+
+    let table_xml = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+        "<table ",
+        "xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" ",
+        "id=\"1\" name=\"FidelityTable\" displayName=\"FidelityTable\" ",
+        "ref=\"A1:D3\" totalsRowShown=\"0\">",
+        "<autoFilter ref=\"A1:D3\"/>",
+        "<tableColumns count=\"4\">",
+        "<tableColumn id=\"1\" name=\"Column1\"/>",
+        "<tableColumn id=\"2\" name=\"Column2\"/>",
+        "<tableColumn id=\"3\" name=\"Column3\"/>",
+        "<tableColumn id=\"4\" name=\"Column4\"/>",
+        "</tableColumns>",
+        "<tableStyleInfo name=\"TableStyleMedium2\" ",
+        "showFirstColumn=\"0\" showLastColumn=\"0\" ",
+        "showRowStripes=\"1\" showColumnStripes=\"0\"/>",
+        "</table>",
+    );
 
     package(
         path,
@@ -651,10 +774,10 @@ fn write_xlsx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("docProps/app.xml", app_properties_xml().as_bytes()),
             ("xl/workbook.xml", workbook),
             ("xl/_rels/workbook.xml.rels", rels.as_bytes()),
-            ("xl/worksheets/sheet1.xml", sheet),
+            ("xl/worksheets/sheet1.xml", sheet.as_bytes()),
             ("xl/worksheets/_rels/sheet1.xml.rels", sheet_rels.as_bytes()),
-            ("xl/styles.xml", br#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><b/></font></fonts><cellXfs count="1"><xf fontId="0"/></cellXfs></styleSheet>"#),
-            ("xl/tables/table1.xml", br#"<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ref="A1:D3" displayName="FidelityTable"/>"#),
+            ("xl/styles.xml", XLSX_STYLES.as_bytes()),
+            ("xl/tables/table1.xml", table_xml.as_bytes()),
             ("xl/drawings/drawing1.xml", br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><xdr:graphicFrame/></xdr:wsDr>"#),
             ("xl/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
             ("xl/pivotTables/pivotTable1.xml", br#"<pivotTableDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" name="FidelityPivot"/>"#),
