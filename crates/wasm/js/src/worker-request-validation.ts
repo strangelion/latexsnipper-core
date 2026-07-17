@@ -15,6 +15,7 @@ export type WorkerRequestValidationResult =
 const MAX_REQUEST_ID_LENGTH = 256;
 const MAX_NAME_LENGTH = 256;
 const MAX_URL_LENGTH = 8_192;
+const MAX_MODE_LENGTH = 128;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -83,7 +84,7 @@ function validateRecognize(value: Record<string, unknown>): WorkerRequestValidat
   if (!(input.pixels instanceof Uint8Array)) {
     return invalid(value, "Recognition pixels must be a Uint8Array");
   }
-  if (!isNonEmptyString(input.mode, 128)) {
+  if (!isNonEmptyString(input.mode, MAX_MODE_LENGTH)) {
     return invalid(value, "Recognition mode must be a non-empty string");
   }
   const pixelCount = (input.width as number) * (input.height as number);
