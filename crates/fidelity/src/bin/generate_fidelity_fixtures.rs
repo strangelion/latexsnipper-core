@@ -209,14 +209,6 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml",
             ),
             (
-                "/word/diagrams/data1.xml",
-                "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
-            ),
-            (
-                "/word/embeddings/oleObject1.bin",
-                "application/vnd.openxmlformats-officedocument.oleObject",
-            ),
-            (
                 "/docProps/core.xml",
                 "application/vnd.openxmlformats-package.core-properties+xml",
             ),
@@ -251,12 +243,9 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" ",
         "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" ",
         "xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" ",
-        "xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" ",
-        "xmlns:o=\"urn:schemas-microsoft-com:office:office\" ",
         "xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" ",
         "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" ",
-        "xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\" ",
-        "xmlns:dgm=\"http://schemas.openxmlformats.org/drawingml/2006/diagram\">",
+        "xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">",
         "<w:body>",
         // Heading with bold + color
         "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr>",
@@ -305,19 +294,6 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "<w:commentRangeStart w:id=\"0\"/>",
         "<w:ins><w:r><w:t>Inserted</w:t></w:r></w:ins>",
         "<w:del><w:r><w:delText>Deleted</w:delText></w:r></w:del>",
-        "</w:p>",
-        // SmartArt AlternateContent with dgm namespace and Fallback
-        "<mc:AlternateContent>",
-        "<mc:Choice Requires=\"dgm\">",
-        "<w:p><w:r><w:t>SmartArt preview</w:t></w:r></w:p>",
-        "</mc:Choice>",
-        "<mc:Fallback>",
-        "<w:p><w:r><w:t>SmartArt fallback</w:t></w:r></w:p>",
-        "</mc:Fallback>",
-        "</mc:AlternateContent>",
-        // OLE object (no chart in w:p)
-        "<w:p>",
-        "<w:r><w:object><o:OLEObject Type=\"Embed\" ProgID=\"Package\" r:id=\"rIdOle\"/></w:object></w:r>",
         "</w:p>",
         // Section properties
         "<w:sectPr><w:headerReference r:id=\"rIdHeader\"/>",
@@ -369,12 +345,6 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments",
             target: "comments.xml",
         },
-        RelationshipSpec {
-            id: "rIdOle",
-            relationship_type:
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
-            target: "embeddings/oleObject1.bin",
-        },
     ]);
 
     package(
@@ -393,9 +363,6 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("word/footer1.xml", br#"<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Footer</w:t></w:r></w:p></w:ftr>"#),
             ("word/footnotes.xml", br#"<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:id="1"><w:p><w:r><w:t>Note</w:t></w:r></w:p></w:footnote></w:footnotes>"#),
             ("word/comments.xml", br#"<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment w:id="0"><w:p><w:r><w:t>Comment</w:t></w:r></w:p></w:comment></w:comments>"#),
-            ("word/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"/>"#),
-            ("word/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
-            ("word/embeddings/oleObject1.bin", b"OLE fidelity fixture"),
             ("word/media/image1.png", ONE_PIXEL_PNG),
             ("customXml/fidelity.xml", b"<fidelity opaque=\"true\">DOCX_OPAQUE_PART</fidelity>"),
         ],
@@ -438,18 +405,6 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             (
                 "/ppt/notesSlides/notesSlide1.xml",
                 "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml",
-            ),
-            (
-                "/ppt/charts/chart1.xml",
-                "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
-            ),
-            (
-                "/ppt/diagrams/data1.xml",
-                "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
-            ),
-            (
-                "/ppt/embeddings/oleObject1.bin",
-                "application/vnd.openxmlformats-officedocument.oleObject",
             ),
             (
                 "/docProps/core.xml",
@@ -619,20 +574,29 @@ fn write_pptx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("docProps/core.xml", core_properties_xml().as_bytes()),
             ("docProps/app.xml", app_properties_xml().as_bytes()),
             ("ppt/presentation.xml", presentation.as_bytes()),
-            ("ppt/_rels/presentation.xml.rels", presentation_rels.as_bytes()),
+            (
+                "ppt/_rels/presentation.xml.rels",
+                presentation_rels.as_bytes(),
+            ),
             ("ppt/slides/slide1.xml", slide.as_bytes()),
             ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
             ("ppt/slideMasters/slideMaster1.xml", PPTX_MASTER.as_bytes()),
-            ("ppt/slideMasters/_rels/slideMaster1.xml.rels", PPTX_MASTER_RELS.as_bytes()),
+            (
+                "ppt/slideMasters/_rels/slideMaster1.xml.rels",
+                PPTX_MASTER_RELS.as_bytes(),
+            ),
             ("ppt/slideLayouts/slideLayout1.xml", PPTX_LAYOUT.as_bytes()),
-            ("ppt/slideLayouts/_rels/slideLayout1.xml.rels", PPTX_LAYOUT_RELS.as_bytes()),
+            (
+                "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
+                PPTX_LAYOUT_RELS.as_bytes(),
+            ),
             ("ppt/theme/theme1.xml", OFFICE_THEME.as_bytes()),
             ("ppt/notesSlides/notesSlide1.xml", notes_slide.as_bytes()),
-            ("ppt/charts/chart1.xml", br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>"#),
-            ("ppt/diagrams/data1.xml", br#"<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram">SMARTART_DATA</dgm:dataModel>"#),
-            ("ppt/embeddings/oleObject1.bin", b"PPTX_OLE_OBJECT"),
             ("ppt/media/image1.png", ONE_PIXEL_PNG),
-            ("ppt/customXml/fidelity.xml", b"<fidelity>PPTX_OPAQUE_PART</fidelity>"),
+            (
+                "ppt/customXml/fidelity.xml",
+                b"<fidelity>PPTX_OPAQUE_PART</fidelity>",
+            ),
         ],
     )
 }

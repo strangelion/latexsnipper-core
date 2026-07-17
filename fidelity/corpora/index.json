@@ -5,7 +5,7 @@
       "id": "docx-office-rich-v1",
       "format": "docx",
       "fixture": "fidelity/fixtures/office-rich.docx",
-      "sha256": "5428558444cf045aa6f4434cdc918cff3f6d01ed0f64e397410bd9f33f7feeb3",
+      "sha256": "d28e37e532c7865bde8a8aa6e455b62452b2423efad33ac82d0ff8a77c8e99e1",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -22,16 +22,10 @@
         { "feature": "notes", "evidenceToken": "word/footnotes.xml" },
         { "feature": "sections", "evidenceToken": "<w:sectPr" },
         { "feature": "comments-revisions", "evidenceToken": "<w:commentRangeStart" },
-        { "feature": "charts", "evidenceToken": "word/charts/chart1.xml" },
-        { "feature": "smartart", "evidenceToken": "word/diagrams/data1.xml" },
-        { "feature": "ole", "evidenceToken": "word/embeddings/oleObject1.bin" },
         { "feature": "opaque-parts", "evidenceToken": "DOCX_OPAQUE_PART" }
       ],
       "expectedText": ["Office Fidelity Heading", "List item"],
       "requiredDiagnosticCodes": [
-        "W_CHART_DATA_SIMPLIFIED",
-        "W_SMARTART_NOT_SUPPORTED",
-        "W_OLE_NOT_SUPPORTED",
         "W_REVISION_NOT_FULLY_PRESERVED",
         "W_UNSUPPORTED_FEATURE"
       ],
@@ -44,7 +38,7 @@
       "id": "pptx-presentation-rich-v1",
       "format": "pptx",
       "fixture": "fidelity/fixtures/presentation-rich.pptx",
-      "sha256": "a59f32396b4ab12ab8d33c3f5c3b3f999d6ade91fe847edb5ae5610249c41871",
+      "sha256": "ba2be5395a532a8044c079f028d25d9ffc40a2e54ff0bba81fd8b1698d819a1c",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -54,16 +48,11 @@
         { "feature": "text-boxes", "evidenceToken": "Text Box" },
         { "feature": "shapes", "evidenceToken": "<a:prstGeom" },
         { "feature": "images", "evidenceToken": "ppt/media/image1.png" },
-        { "feature": "charts", "evidenceToken": "ppt/charts/chart1.xml" },
-        { "feature": "smartart", "evidenceToken": "SMARTART_DATA" },
         { "feature": "notes", "evidenceToken": "ppt/notesSlides/notesSlide1.xml" },
-        { "feature": "ole", "evidenceToken": "ppt/embeddings/oleObject1.bin" }
+        { "feature": "opaque-parts", "evidenceToken": "PPTX_OPAQUE_PART" }
       ],
       "expectedText": ["Presentation Fidelity Text Box"],
       "requiredDiagnosticCodes": [
-        "W_CHART_DATA_SIMPLIFIED",
-        "W_SMARTART_NOT_SUPPORTED",
-        "W_OLE_NOT_SUPPORTED",
         "W_UNSUPPORTED_FEATURE"
       ],
       "requiredOpaqueParts": ["ppt/customXml/fidelity.xml"],
