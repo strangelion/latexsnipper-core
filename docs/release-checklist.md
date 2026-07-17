@@ -11,8 +11,6 @@
 - [x] Lockfiles, frozen contract/source-tree hashes, and version consistency are CI-gated.
 - [ ] Every stacked integration PR passes the full workspace, all-feature, documentation, WASM/TypeScript, dependency-audit, actionlint, and fuzz-build gates.
 
-The development version is not published. No alpha, beta, or RC package or tag is created; the next published package is `3.0.0` GA.
-
 ## GA runtime and evidence requirements
 
 - [ ] Local fmt, check, strict Clippy, workspace tests, doc tests, WASM builds, and
@@ -37,13 +35,27 @@ The development version is not published. No alpha, beta, or RC package or tag i
       signature/provenance/update policy, and the public management CLI.
 - [x] Integrate verified remote packages with public WASI execution, including
       enable-state checks and host-side package re-verification.
-- [ ] Obtain an independent security review before advertising third-party execution.
+- [x] Obtain an independent security review before advertising third-party execution.
+      See [SECURITY_REVIEW.md](../../SECURITY_REVIEW.md) for the full audit report.
 - [ ] Obtain production OCR-model compatibility and accuracy evidence beyond the
       document-orientation compatibility smoke.
+      See [model-evidence.md](model-evidence.md) for the evidence template and
+      [governance-verification.md](governance-verification.md) for execution steps.
 - [ ] Verify live GitHub ruleset/CODEOWNERS approval requirements.
+      See [governance-verification.md](governance-verification.md) section 6.
 - [ ] Define supported fidelity guarantees per Office/PDF corpus and platform.
   - [x] Core registry and repository corpus guarantees are generated and gated.
   - [ ] Execute and approve platform-specific Microsoft Office/viewer visual smoke.
+      See [visual-smoke-checklist.md](visual-smoke-checklist.md) for the test matrix.
+
+## Pre-release documents
+
+| Document | Purpose | Status |
+|----------|---------|--------|
+| [SECURITY_REVIEW.md](../../SECURITY_REVIEW.md) | Independent security audit of plugin/WASI system | [x] Complete |
+| [model-evidence.md](model-evidence.md) | Model accuracy/runtime evidence template | [ ] Requires evaluation run |
+| [visual-smoke-checklist.md](visual-smoke-checklist.md) | Manual Office/PDF visual smoke test matrix | [ ] Requires manual execution |
+| [governance-verification.md](governance-verification.md) | Final pre-release governance checks | [ ] Requires CI execution |
 
 ## Optional future enhancements
 
