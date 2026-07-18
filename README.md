@@ -7,7 +7,8 @@
 [![CI](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml)
 [![WASM](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88.0-orange?logo=rust)](Cargo.toml)
-[![Workspace](https://img.shields.io/badge/workspace-3.0.0--alpha.1-blue)](Cargo.toml)
+[![Workspace](https://img.shields.io/badge/workspace-3.0.0-blue)](Cargo.toml)
+[![Release](https://img.shields.io/github/v/release/strangelion/latexsnipper-core)](https://github.com/strangelion/latexsnipper-core/releases/latest)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20WASM-lightgrey)]()
 
@@ -23,7 +24,20 @@
 
 ## Project status
 
-The workspace uses **3.0.0-alpha.1** only as an unpublished development identifier while the stacked Core 3 changes are integrated. The contract foundation, default-deny WASI Component host, signed registry, disabled-by-default remote installation, verified remote activation, version-aware model/plugin loaders, callable WASM v3 API, capability v3 projection, and additive FFI v3 query are implemented. The Worker transport remains independently versioned at protocol v1. No alpha, beta, or RC package is published; the next package release is 3.0.0 GA after every release gate passes. See the [Core 3 architecture and delivery status](docs/v3/architecture.md).
+**LaTeXSnipper Core 3.0.0 is the first stable Core 3 release.**
+
+Core 3 provides the stable v3 API envelope and capability contracts, a unified document AST,
+native and WebAssembly execution paths, signed and version-aware model/plugin infrastructure,
+a default-deny WASI Component host, multi-format import and export, and the official CLI and
+Rust SDK surfaces.
+
+The Worker transport remains independently versioned at protocol v1 for compatibility.
+Individual formats, OCR models, exporters, and plugin boundaries may have different maturity
+levels; consult the capability registry and the status matrix below for the authoritative
+runtime view.
+
+See the [Core 3 architecture](docs/v3/architecture.md) and
+[production capability and fidelity policy](docs/production-capabilities.md).
 
 This does **not** mean that every format, model, or plugin boundary has the same maturity.
 
@@ -241,7 +255,8 @@ Inside this workspace, enable the native engine feature:
 
 ```toml
 [dependencies]
-latexsnipper-engine = { path = "crates/engine", features = ["native"] }
+latexsnipper-engine = { version = "3.0.0", features = ["native"] }
+latexsnipper-api-types = "3.0.0"
 ```
 
 ### One-line image recognition
