@@ -394,6 +394,7 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "crate_version=${VERSION#v}" >> $GITHUB_OUTPUT
           echo "Release version: $VERSION"
 
       - name: Download artifacts
@@ -424,7 +425,7 @@ jobs:
 
             ```toml
             [dependencies]
-            latexsnipper-pipeline = "3.0.0"
+            latexsnipper-pipeline = "${{ steps.version.outputs.crate_version }}"
             ```
 
             ## Usage
@@ -446,6 +447,5 @@ jobs:
             artifacts/**/*.json
             artifacts/**/*.txt
             artifacts/SHA256SUMS
-            artifacts/ARTIFACTS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
