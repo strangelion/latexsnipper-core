@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0-alpha.1] - Unreleased
+## [3.0.0] - Unreleased
 
 ### Added
 
@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   execution bridge for signed remote WASI plugins. Activation binds the registry
   snapshot to the host-verified manifest and artifact; every invocation rejects
   plugins disabled, revoked, updated, or replaced after activation.
+- Portable `RenderBundle` rendering APIs with vector/raster preference and SVG validation.
+- Runtime validation for untrusted Web Worker request messages.
+- Fidelity corpus and structural validation for DOCX, PPTX, and XLSX packages.
+- Stable release validation, artifact verification, supply-chain metadata, and publication gates.
 
 ### Changed
 
@@ -50,12 +54,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fix for dimension tensors represented as typed `I64` values.
 - The generated capability matrix now uses schema `3.0.0`; CLI JSON output defaults
   to the v3 envelope and requires `--api-version 2` for the legacy shape.
+- Workspace crates and supported package surfaces are released as version `3.0.0`.
+- Official GA binary targets are Windows x86_64, Linux x86_64, and Apple Silicon macOS.
+- Office Open XML exporters use corrected package relationships, content types, themes,
+  slide layouts, spreadsheet styles, and block-level OMML placement.
 
 ### Fixed
 
 - WASM v3 envelopes serialize JSON maps as plain JavaScript objects, matching
   the TypeScript declarations and making fields such as `data.schemaVersion`
   available through normal property access in browsers and Node.js.
+- Fixed DOCX block-level display OMML placement that could prevent Word from opening generated files.
+- Fixed XLSX table/header/merged-cell structures that caused Excel repair prompts.
+- Fixed PPTX theme content types, presentation properties, slide-layout IDs, master/layout
+  structure, and related package validity issues that caused PowerPoint repair prompts.
+- Fixed malformed Worker messages being trusted as `WorkerRequest` values at runtime.
 
 ### Compatibility
 
@@ -64,8 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no alpha, beta, or RC package is required or published on the path to 3.0.0 GA.
 - Synchronous WASM recognition remains on its asynchronous v2 endpoint because its
   Worker progress/cancellation protocol is independently versioned and unchanged.
+- Worker protocol remains version 1.
+- Existing explicitly retained v2 WASM compatibility APIs remain available.
+- Document schema version remains independently versioned.
 
-## [Unreleased]
+## [2.0.0]
 
 ### Added
 
