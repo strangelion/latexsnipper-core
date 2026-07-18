@@ -27,10 +27,10 @@
     "crates/pipeline/src": "59ccb1904d40219a5dd17ce4d2afbb2a357f67f9a0c1224e16e654743f911241",
     "crates/plugin-wasi/src": "7c5bb16b853f03d4bb4bb5d14f0a21fff4cdd41cb9afdf34a59ae8c168f08061",
     "crates/plugin/src": "23a1f93571b477dfbc9453fc99af022d96b30320e6ccc213ecdf318982b3cbd7",
-    "crates/runtime/src": "9616931188c8a976aa0611dfb6df08701425c74c18dcc7eda37c513d22806e9a",
+    "crates/runtime/src": "d916037b6f69fd047296f84d889430b951f68dea5969f1ddbcce3499c7b3445b",
     "crates/syntax/src": "dc7af7e429413ee5b61d495a71db727091302c6988df8fe9e608a5a2ea2dc000",
     "crates/tensor/src": "98266db23dfa8ec987d697af68f3aa23ab7cb149693195015dd569ec223b16f3",
-    "crates/wasm/src": "00fcdd88b6f0786222dd5c3d00a19ed076078fe9a7b7ca9a3c5d8e9bd941d6de"
+    "crates/wasm/src": "ede5ad3b157cffec104e4e545acc3f5fa860bb00a2351ccdef4164f1ce48affd"
   },
   "schemaVersion": 1
 }
