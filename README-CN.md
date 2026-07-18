@@ -7,7 +7,8 @@
 [![CI](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/ci.yml)
 [![WASM](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml/badge.svg)](https://github.com/strangelion/latexsnipper-core/actions/workflows/wasm.yml)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88.0-orange?logo=rust)](Cargo.toml)
-[![Workspace](https://img.shields.io/badge/workspace-3.0.0--alpha.1-blue)](Cargo.toml)
+[![Workspace](https://img.shields.io/badge/workspace-3.0.0-blue)](Cargo.toml)
+[![Release](https://img.shields.io/github/v/release/strangelion/latexsnipper-core)](https://github.com/strangelion/latexsnipper-core/releases/latest)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20WASM-lightgrey)]()
 
@@ -23,7 +24,18 @@
 
 ## 项目状态
 
-workspace 使用 **3.0.0-alpha.1** 作为未发布的内部开发标识。契约基础、default-deny WASI Component host、signed registry、安装后默认禁用的远程 WASI、已验证远程激活、版本感知模型/插件 loader、可调用 WASM v3 API、能力 v3 投影和增量 FFI v3 查询均已实现。Worker transport 独立保持 protocol v1。不会发布 alpha、beta 或 RC 包；所有 release gate 通过后，下一次公开发包直接是 3.0.0 GA。详见 [Core 3 架构与交付状态](docs/v3/architecture.md)。
+**LaTeXSnipper Core 3.0.0 是 Core 3 系列的首个正式稳定版本。**
+
+Core 3 提供稳定的 v3 API envelope 与 capability 契约、统一文档 AST、
+原生与 WebAssembly 执行路径、带签名和版本感知的模型/插件基础设施、
+default-deny WASI Component host、多格式导入导出，以及正式的 CLI 和 Rust SDK 接口。
+
+Worker transport 为保持兼容性，仍独立使用 protocol v1。
+不同文档格式、OCR 模型、导出器和插件边界的成熟度并不完全相同；
+实际运行时能力应以 capability registry 和下方能力状态表为准。
+
+详见 [Core 3 架构](docs/v3/architecture.md)与
+[生产能力与保真策略](docs/production-capabilities.md)。
 
 这并不表示所有格式、模型和插件边界具有相同成熟度。
 
