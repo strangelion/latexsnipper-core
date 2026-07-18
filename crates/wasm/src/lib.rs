@@ -886,20 +886,13 @@ fn validate_model_artifact(name: &str, bytes: &[u8]) -> Result<(), WasmError> {
     if !name.to_ascii_lowercase().ends_with(".onnx") {
         return Ok(());
     }
-    let backend = TractBackend::new(None);
-    backend
-        .create_session(
-            &ModelHandle::with_bytes(name, bytes.to_vec()),
-            AccelerationMode::Cpu,
+    TractBackend::validate_model_bytes(bytes).map_err(|error| {
+        WasmError::new(
+            WasmErrorCode::ModelArtifactInvalid,
+            format!("Invalid or unsupported ONNX artifact '{name}': {error}"),
         )
-        .map(|_| ())
-        .map_err(|error| {
-            WasmError::new(
-                WasmErrorCode::ModelArtifactInvalid,
-                format!("Invalid or unsupported ONNX artifact '{name}': {error}"),
-            )
-            .at_stage("model-validation")
-        })
+        .at_stage("model-validation")
+    })
 }
 
 fn api_diagnostic(diagnostic: &latexsnipper_ast::Diagnostic) -> ApiDiagnostic {

@@ -6,6 +6,7 @@ use latexsnipper_inference::{
     recognize_table_transformer_with_max_edge, RecognitionParams,
 };
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend};
+use latexsnipper_tensor::Tensor;
 use latexsnipper_tract::TractBackend;
 
 fn models_dir() -> PathBuf {
@@ -27,6 +28,53 @@ fn require(path: PathBuf) -> Option<PathBuf> {
         path.display()
     );
     None
+}
+
+#[test]
+fn production_formula_detector_artifact_decodes() {
+    let Some(model_path) = require(models_dir().join("formula-det/yolov8-mfd/mathcraft-mfd.onnx"))
+    else {
+        return;
+    };
+    TractBackend::validate_model_bytes(&std::fs::read(model_path).unwrap()).unwrap();
+}
+
+#[test]
+#[ignore = "the 80 MB detector's full Tract session is an opt-in performance test"]
+fn production_formula_detector_executes_with_the_wasm_runtime() {
+    let Some(model_path) = require(models_dir().join("formula-det/yolov8-mfd/mathcraft-mfd.onnx"))
+    else {
+        return;
+    };
+    let backend = TractBackend::new(None);
+    let load_started = std::time::Instant::now();
+    eprintln!("loading production formula detector with Tract");
+    let session = backend
+        .create_session(
+            &ModelHandle::with_bytes("formula-det/yolov8-mfd", std::fs::read(model_path).unwrap())
+                .with_input_shape(vec![1, 3, 768, 768]),
+            AccelerationMode::Cpu,
+        )
+        .unwrap();
+    eprintln!("formula detector loaded in {:?}", load_started.elapsed());
+    let side = 768usize;
+    let inference_started = std::time::Instant::now();
+    let outputs = session
+        .run(&[Tensor::float32(
+            "images",
+            vec![1, 3, side, side],
+            vec![1.0; 3 * side * side],
+        )])
+        .unwrap();
+    eprintln!(
+        "formula detector inference completed in {:?}",
+        inference_started.elapsed()
+    );
+    assert_eq!(outputs.len(), 1);
+    assert!(!outputs[0].shape().is_empty());
+    assert!(outputs[0]
+        .as_f32_slice()
+        .is_some_and(|values| !values.is_empty() && values.iter().all(|value| value.is_finite())));
 }
 
 #[test]

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-07-19
+
+### Fixed
+
+- Normalize PyTorch-exported `floor(...)` ONNX dimension annotations into
+  Tract-compatible integer expressions, including nested feature-pyramid shapes.
+- Read concrete input shapes from model-package `config.json` in the in-memory
+  resolver, without coupling the runtime to a model category, variant, or size.
+- Keep dynamic and partially unknown third-party model shapes dynamic.
+- Decode browser ONNX artifacts without prematurely importing and optimizing
+  their graphs before the package metadata has been committed.
+
 ## [3.0.0] - 2026-07-18
 
 ### Added

@@ -247,6 +247,36 @@ impl MemoryModelResolver {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    fn attach_package_input_shape(&self, id: &ModelId, handle: ModelHandle) -> ModelHandle {
+        let config_key = format!("{}/config.json", id.composite_key());
+        let Some(config_bytes) = self.get(&config_key) else {
+            return handle;
+        };
+        let Ok(config) = serde_json::from_slice::<serde_json::Value>(&config_bytes) else {
+            return handle;
+        };
+        let Some(dimensions) = config
+            .pointer("/input/shape")
+            .and_then(serde_json::Value::as_array)
+        else {
+            return handle;
+        };
+        let shape: Option<Vec<usize>> = dimensions
+            .iter()
+            .map(|dimension| {
+                dimension
+                    .as_i64()
+                    .filter(|value| *value > 0)
+                    .and_then(|value| usize::try_from(value).ok())
+            })
+            .collect();
+        if let Some(shape) = shape {
+            handle.with_input_shape(shape)
+        } else {
+            handle
+        }
+    }
 }
 
 impl Default for MemoryModelResolver {
@@ -261,19 +291,19 @@ impl ModelResolver for MemoryModelResolver {
 
         // Try exact key first
         if let Some(bytes) = self.get(&key) {
-            return Ok(ModelHandle::with_bytes(key, bytes));
+            return Ok(self.attach_package_input_shape(id, ModelHandle::with_bytes(key, bytes)));
         }
 
         // Try category only
         if let Some(bytes) = self.get(&id.category) {
-            return Ok(ModelHandle::with_bytes(key, bytes));
+            return Ok(self.attach_package_input_shape(id, ModelHandle::with_bytes(key, bytes)));
         }
 
         // Try with common suffixes
         for suffix in &["model.onnx", "model_int8.onnx", "inference.onnx"] {
             let full_key = format!("{}/{}", key, suffix);
             if let Some(bytes) = self.get(&full_key) {
-                return Ok(ModelHandle::with_bytes(key, bytes));
+                return Ok(self.attach_package_input_shape(id, ModelHandle::with_bytes(key, bytes)));
             }
         }
 
@@ -290,7 +320,7 @@ impl ModelResolver for MemoryModelResolver {
     fn resolve_artifact(&self, id: &ModelId, artifact: &str) -> Result<ModelHandle> {
         let key = format!("{}/{}", id.composite_key(), artifact);
         if let Some(bytes) = self.get(&key) {
-            return Ok(ModelHandle::with_bytes(key, bytes));
+            return Ok(self.attach_package_input_shape(id, ModelHandle::with_bytes(key, bytes)));
         }
 
         Err(SnipperError::Model(format!(
@@ -311,3 +341,36 @@ impl ModelResolver for MemoryModelResolver {
 
 /// A shared model resolver that can be used across the pipeline.
 pub type SharedModelResolver = Arc<dyn ModelResolver>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_resolver_attaches_static_input_shape_from_package_config() {
+        let resolver = MemoryModelResolver::new();
+        let id = ModelId::new("third-party-det", "custom-640");
+        resolver.store(
+            "third-party-det/custom-640/config.json",
+            br#"{"input":{"shape":[1,3,640,960]}}"#.to_vec(),
+        );
+        resolver.store("third-party-det/custom-640/model.onnx", vec![1, 2, 3]);
+
+        let handle = resolver.resolve_artifact(&id, "model.onnx").unwrap();
+        assert_eq!(handle.input_shape(), Some([1, 3, 640, 960].as_slice()));
+    }
+
+    #[test]
+    fn memory_resolver_preserves_dynamic_package_shapes() {
+        let resolver = MemoryModelResolver::new();
+        let id = ModelId::new("third-party-det", "dynamic");
+        resolver.store(
+            "third-party-det/dynamic/config.json",
+            br#"{"input":{"shape":[1,3,-1,-1]}}"#.to_vec(),
+        );
+        resolver.store("third-party-det/dynamic/model.onnx", vec![1, 2, 3]);
+
+        let handle = resolver.resolve_artifact(&id, "model.onnx").unwrap();
+        assert_eq!(handle.input_shape(), None);
+    }
+}

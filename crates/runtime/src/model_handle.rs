@@ -12,6 +12,8 @@ pub struct ModelHandle {
     model_path: Option<PathBuf>,
     #[serde(skip)]
     model_bytes: Option<Vec<u8>>,
+    #[serde(skip)]
+    input_shape: Option<Vec<usize>>,
 }
 
 impl ModelHandle {
@@ -26,6 +28,7 @@ impl ModelHandle {
             variant: variant.into(),
             model_path: None,
             model_bytes: None,
+            input_shape: None,
         }
     }
 
@@ -42,6 +45,7 @@ impl ModelHandle {
             variant: file_stem,
             model_path: Some(path),
             model_bytes: None,
+            input_shape: None,
         }
     }
 
@@ -53,7 +57,15 @@ impl ModelHandle {
             variant: String::new(),
             model_path: None,
             model_bytes: Some(bytes),
+            input_shape: None,
         }
+    }
+
+    /// Attach a concrete input shape declared by the model package.
+    /// Dynamic or partially unknown shapes should be omitted.
+    pub fn with_input_shape(mut self, input_shape: Vec<usize>) -> Self {
+        self.input_shape = Some(input_shape);
+        self
     }
 
     pub fn id(&self) -> &str {
@@ -70,6 +82,9 @@ impl ModelHandle {
     }
     pub fn model_bytes(&self) -> Option<&[u8]> {
         self.model_bytes.as_deref()
+    }
+    pub fn input_shape(&self) -> Option<&[usize]> {
+        self.input_shape.as_deref()
     }
 }
 
