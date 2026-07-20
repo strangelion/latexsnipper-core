@@ -59,8 +59,19 @@ cargo run -p latexsnipper-benchmark -- --golden-case benchmark/golden/incrementa
 ```
 
 The versioned benchmark contract may link to an existing `corpusTask` from
-`latexsnipper-evaluation`. Its initial runners are `formula_conversion` (P50/P95
-conversion latency) and `formula_incremental` (incremental edits with full-reconcile
-equivalence). Golden cases additionally assert the final serialized `Document` and the
-expected touched-node metrics. OCR, PDF, and Office runners will reuse these contracts
-with the existing `evaluation/` and `fidelity/` corpora.
+`latexsnipper-evaluation`. Its runners include `formula_conversion` (P50/P95
+conversion latency), `formula_incremental` (local edits with full-parse
+equivalence), and `incremental_scale`. The scale runner executes: last-formula
+fast-path edit, beginning-of-document insertion plus reconcile, then 100 edits
+of the same formula. Checked-in cases cover 10, 100, 1,000, and 10,000 formulas:
+
+```powershell
+cargo run -p latexsnipper-benchmark -- --case benchmark/cases/incremental-scale-1000.json
+```
+
+It records touched/reparsed/converted/rendered nodes, cache hits/misses/
+evictions/bytes, and reconciliation matched/replaced node counts. No fixed
+latency threshold is asserted. Golden cases additionally assert the final
+serialized `Document` and expected touched-node metrics. OCR, PDF, and Office
+runners will reuse these contracts with the existing `evaluation/` and
+`fidelity/` corpora.

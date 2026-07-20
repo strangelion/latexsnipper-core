@@ -13,6 +13,7 @@ publish = false
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 latexsnipper-conversion.workspace = true
+latexsnipper-ast.workspace = true
 latexsnipper-evaluation.workspace = true
 latexsnipper-incremental.workspace = true
 serde.workspace = true

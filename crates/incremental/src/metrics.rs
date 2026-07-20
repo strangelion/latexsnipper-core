@@ -9,4 +9,10 @@ pub struct SessionMetrics {
     pub semantic_cache_misses: u64,
     pub render_cache_hits: u64,
     pub render_cache_misses: u64,
+    pub semantic_cache_evictions: u64,
+    pub render_cache_evictions: u64,
+    pub semantic_cache_bytes: u64,
+    pub render_cache_bytes: u64,
+    pub reconcile_matched_nodes: u64,
+    pub reconcile_replaced_nodes: u64,
 }

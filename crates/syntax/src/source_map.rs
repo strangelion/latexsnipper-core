@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use latexsnipper_ast::{Document, Span};
 
-/// Maps stable AST identities to their original UTF-8 byte ranges.
+/// Maps caller-managed `SourceInfo.stable_id` values to UTF-8 byte ranges.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SourceMap {
     by_stable_id: HashMap<String, Span>,
@@ -18,6 +18,19 @@ impl SourceMap {
         let stable_id = stable_id.into();
         self.by_stable_id.insert(stable_id.clone(), span);
         self.by_span.push((span, stable_id));
+    }
+
+    /// Rebuild a map from the source-bearing block identities in a document.
+    pub fn from_document(document: &Document) -> Self {
+        let mut map = Self::new();
+        for block in document.all_blocks() {
+            if let Some(source) = block.source() {
+                if let (Some(stable_id), Some(span)) = (&source.stable_id, source.span) {
+                    map.insert(stable_id.clone(), span);
+                }
+            }
+        }
+        map
     }
 
     pub fn span_for(&self, stable_id: &str) -> Option<Span> {

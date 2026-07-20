@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "incremental-scale-10000",
+  "category": "performance",
+  "runner": "incremental_scale",
+  "iterations": 1,
+  "formulaCount": 10000
+}

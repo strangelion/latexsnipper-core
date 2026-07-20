@@ -42,4 +42,12 @@ impl NodeIndex {
     pub fn len(&self) -> usize {
         self.by_stable_id.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.by_stable_id.is_empty()
+    }
+
+    pub fn contains(&self, stable_id: &str) -> bool {
+        self.by_stable_id.contains_key(stable_id)
+    }
 }

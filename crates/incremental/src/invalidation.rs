@@ -6,6 +6,8 @@ pub struct InvalidationState {
     pub dirty_nodes: BTreeSet<String>,
     pub semantic_invalidated: BTreeSet<String>,
     pub render_invalidated: BTreeSet<String>,
+    /// Runtime dependency outputs affected by the edit (for example page layout).
+    pub dependent_outputs: BTreeSet<String>,
     pub full_reconcile_required: bool,
 }
 

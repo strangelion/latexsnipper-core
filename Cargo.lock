@@ -2075,6 +2075,7 @@ name = "latexsnipper-benchmark"
 version = "3.0.1"
 dependencies = [
  "clap",
+ "latexsnipper-ast",
  "latexsnipper-conversion",
  "latexsnipper-evaluation",
  "latexsnipper-incremental",

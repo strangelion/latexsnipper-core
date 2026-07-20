@@ -8,7 +8,7 @@
   "initialLatex": "$x^2$",
   "edits": [
     {
-      "stableId": "latex:formula:0",
+      "stableId": "session:formula-incremental-basic:node:0",
       "latex": "y^3"
     }
   ]

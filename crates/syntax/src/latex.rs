@@ -11,7 +11,7 @@ use crate::{ParsedDocument, SourceMap};
 pub struct LatexParser;
 
 impl LatexParser {
-    /// Parse LaTeX while preserving source spans and stable block identities.
+    /// Parse LaTeX while preserving source spans and parser-local provisional IDs.
     ///
     /// This additive API intentionally leaves the `Parser` trait unchanged.
     pub fn parse_with_source_map(&self, input: &str) -> Result<ParsedDocument> {
@@ -20,6 +20,10 @@ impl LatexParser {
 }
 
 /// Parse LaTeX content and retain a byte-accurate source map.
+///
+/// The `latex:<kind>:<index>` values placed in `SourceInfo.stable_id` here are
+/// parser-local provisional identities. Stateful callers must reconcile them
+/// into their own persistent identities before exposing a session API.
 pub fn parse_latex_with_source_map(input: &str) -> Result<ParsedDocument> {
     let (blocks, source_map) = parse_latex_content_with_source_map(input);
     Ok(ParsedDocument {
@@ -112,9 +116,11 @@ fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
 
     while cursor < input.len() {
         let remaining = &input[cursor..];
-        // Try to find display math $$...$$
-        if let Some(start) = remaining.find("$$") {
-            if remaining.find('$') == Some(start) {
+        // Check the first delimiter before searching for a matching display
+        // delimiter. Searching the entire remaining source for `$$` on every
+        // inline formula would make large fragment parses quadratic.
+        if let Some(start) = remaining.find('$') {
+            if start + 1 < remaining.len() && remaining.as_bytes()[start + 1] == b'$' {
                 let after_start = &remaining[start + 2..];
                 if let Some(end) = after_start.find("$$") {
                     let formula_start = cursor + start + 2;
@@ -122,7 +128,7 @@ fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
                     let formula = after_start[..end].trim().to_string();
                     // Add any text before the formula
                     if let Some((start, end)) = trim_byte_range(input, cursor, cursor + start) {
-                        let stable_id = next_stable_id(&mut block_index, "paragraph");
+                        let stable_id = next_provisional_id(&mut block_index, "paragraph");
                         let source = SourceInfo::new()
                             .with_stable_id(stable_id.clone())
                             .with_span(Span::new(start, end));
@@ -134,7 +140,7 @@ fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
                             style: None,
                         }));
                     }
-                    let stable_id = next_stable_id(&mut block_index, "formula");
+                    let stable_id = next_provisional_id(&mut block_index, "formula");
                     let span = Span::new(cursor + start, formula_end + 2);
                     let source = SourceInfo::new()
                         .with_stable_id(stable_id.clone())
@@ -150,6 +156,23 @@ fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
                     }));
                     cursor = formula_end + 2;
                     continue;
+                } else {
+                    // This lightweight fragment parser must never advance past
+                    // an unmatched delimiter and silently lose source text.
+                    if let Some((start, end)) = trim_byte_range(input, cursor, input.len()) {
+                        let stable_id = next_provisional_id(&mut block_index, "paragraph");
+                        let source = SourceInfo::new()
+                            .with_stable_id(stable_id.clone())
+                            .with_span(Span::new(start, end));
+                        source_map.insert(stable_id, Span::new(start, end));
+                        blocks.push(Block::Paragraph(ParagraphBlock {
+                            inlines: vec![Inline::Text(TextRun::new(&input[start..end]))],
+                            geometry: None,
+                            source: Some(source),
+                            style: None,
+                        }));
+                    }
+                    break;
                 }
             }
         }
@@ -168,7 +191,7 @@ fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
                 let formula_end = formula_start + end;
                 let formula = after_start[..end].trim().to_string();
                 if let Some((start, end)) = trim_byte_range(input, cursor, cursor + start) {
-                    let stable_id = next_stable_id(&mut block_index, "paragraph");
+                    let stable_id = next_provisional_id(&mut block_index, "paragraph");
                     let source = SourceInfo::new()
                         .with_stable_id(stable_id.clone())
                         .with_span(Span::new(start, end));
@@ -180,7 +203,7 @@ fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
                         style: None,
                     }));
                 }
-                let stable_id = next_stable_id(&mut block_index, "formula");
+                let stable_id = next_provisional_id(&mut block_index, "formula");
                 let span = Span::new(cursor + start, formula_end + 1);
                 let source = SourceInfo::new()
                     .with_stable_id(stable_id.clone())
@@ -205,7 +228,7 @@ fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
 
         // No more math, treat rest as text
         if let Some((start, end)) = trim_byte_range(input, cursor, input.len()) {
-            let stable_id = next_stable_id(&mut block_index, "paragraph");
+            let stable_id = next_provisional_id(&mut block_index, "paragraph");
             let source = SourceInfo::new()
                 .with_stable_id(stable_id.clone())
                 .with_span(Span::new(start, end));
@@ -223,7 +246,7 @@ fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
     (blocks, source_map)
 }
 
-fn next_stable_id(block_index: &mut usize, kind: &str) -> String {
+fn next_provisional_id(block_index: &mut usize, kind: &str) -> String {
     let id = format!("latex:{kind}:{}", *block_index);
     *block_index += 1;
     id
@@ -257,5 +280,16 @@ mod tests {
             Some(Span::new(display_start, input.len()))
         );
         assert_eq!(parsed.document.pages[0].blocks.len(), 4);
+    }
+
+    #[test]
+    fn malformed_display_delimiter_is_preserved_as_text() {
+        let input = "abc $$ x";
+        let parsed = parse_latex_with_source_map(input).unwrap();
+        assert_eq!(parsed.document.pages[0].blocks.len(), 1);
+        assert_eq!(
+            parsed.source_map.span_for("latex:paragraph:0"),
+            Some(Span::new(0, input.len()))
+        );
     }
 }
