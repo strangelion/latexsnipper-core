@@ -18,7 +18,16 @@ Semantic and render fragment caches are bounded approximate-LRU caches keyed by
 stable ID, content hash, output format, and cache format version. Reconcile
 preserves entries only for unchanged matched nodes and invalidates changed nodes
 plus their semantic/render dependency descendants. ArtifactGraph remains
-provenance/lineage, while DependencyGraph is the document dependency authority.
+immutable provenance/lineage, while `latest_artifact_ids` identifies currently
+valid artifact versions and `stale_artifact_ids` records invalidated derived
+artifacts without deleting history. Derived artifact edges always originate from
+the real latest source artifact ID. DependencyGraph is the document dependency
+authority; removed nodes retain their old dependency outputs in the reconcile
+outcome so that page-layout invalidation is not lost.
+
+External ID binding is accepted only at revision zero before semantic or render
+artifacts exist. This prevents a public identity rebinding operation from
+silently orphaning cache, render-tree, or provenance sidecars.
 
 `ReplaceParagraphSource` only accepts a ParagraphBlock containing TextRun
 inlines. Paragraphs with formula, formatting, links, annotations, or any other

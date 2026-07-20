@@ -34,6 +34,7 @@ pub struct ReconcileOutcome {
     pub preserved_stable_ids: Vec<String>,
     pub replaced_stable_ids: Vec<String>,
     pub invalidated_stable_ids: Vec<String>,
+    pub invalidated_dependency_outputs: Vec<String>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -61,6 +62,7 @@ pub struct DocumentSession {
     identities: IdentityRegistry,
     artifact_graph: ArtifactGraph,
     latest_artifact_ids: BTreeMap<String, ArtifactId>,
+    stale_artifact_ids: BTreeSet<ArtifactId>,
     semantic_cache: BoundedCache<String>,
     render_cache: BoundedCache<ExportArtifact>,
     mapped_renders: MappedRenderTree,
@@ -105,6 +107,7 @@ impl DocumentSession {
             identities,
             artifact_graph: ArtifactGraph::default(),
             latest_artifact_ids: BTreeMap::new(),
+            stale_artifact_ids: BTreeSet::new(),
             semantic_cache: BoundedCache::new(cache_limits),
             render_cache: BoundedCache::new(cache_limits),
             mapped_renders: MappedRenderTree::default(),
@@ -134,6 +137,7 @@ impl DocumentSession {
         session.bind_external_stable_id(&generated_id, stable_id)?;
         session.artifact_graph = ArtifactGraph::default();
         session.latest_artifact_ids.clear();
+        session.stale_artifact_ids.clear();
         session.record_source_artifacts();
         Ok(session)
     }
@@ -151,6 +155,23 @@ impl DocumentSession {
         {
             return Err(SessionError::DuplicateStableId(external_stable_id));
         }
+        if external_stable_id == current_stable_id {
+            return Ok(());
+        }
+        if self.revision != 0
+            || self
+                .latest_artifact_ids
+                .contains_key(&format!("semantic:{current_stable_id}"))
+            || self
+                .latest_artifact_ids
+                .contains_key(&format!("render:{current_stable_id}"))
+        {
+            return Err(SessionError::IdentityBindingLocked);
+        }
+        let previous_source = self
+            .latest_artifact_ids
+            .remove(&format!("source:{current_stable_id}"));
+        self.remove_cached(current_stable_id);
         let path = self
             .node_index
             .get(current_stable_id)
@@ -170,6 +191,18 @@ impl DocumentSession {
             .and_then(|source| source.stable_id.clone())
             .expect("bound block has stable id");
         self.record_source_artifact(&bound_id);
+        if let (Some(previous_source), Some(current_source)) = (
+            previous_source,
+            self.latest_artifact_ids
+                .get(&format!("source:{bound_id}"))
+                .cloned(),
+        ) {
+            self.artifact_graph.link(
+                previous_source,
+                current_source,
+                ArtifactEdgeKind::ReplacedBy,
+            );
+        }
         Ok(())
     }
 
@@ -200,6 +233,11 @@ impl DocumentSession {
     }
     pub fn artifact_trace(&self) -> ArtifactTrace {
         self.artifact_graph.trace()
+    }
+    /// Immutable provenance remains available; this set marks derived artifacts
+    /// that no longer represent the current source revision.
+    pub fn stale_artifact_ids(&self) -> &BTreeSet<ArtifactId> {
+        &self.stale_artifact_ids
     }
     pub fn mapped_renders(&self) -> &MappedRenderTree {
         &self.mapped_renders
@@ -382,7 +420,11 @@ impl DocumentSession {
         self.replace_text(span, &replacement)?;
         let outcome = self.reconcile_current_source(self.revision)?;
         self.metrics.reparsed_nodes += self.document.block_count() as u64;
-        Ok(self.invalidate_stable_ids(outcome.invalidated_stable_ids))
+        let mut invalidation = self.invalidate_stable_ids(outcome.invalidated_stable_ids);
+        invalidation
+            .dependent_outputs
+            .extend(outcome.invalidated_dependency_outputs);
+        Ok(invalidation)
     }
 
     fn replace_paragraph_source(
@@ -504,14 +546,20 @@ impl DocumentSession {
         self.dependencies = build_dependencies(&self.document);
         let changed = !document_equivalent(&old_document, &self.document)?;
         // Old dependency descendants are accounted for even when a source node disappeared.
+        let old_node_ids: BTreeSet<String> = old_nodes
+            .iter()
+            .map(|node| node.stable_id.clone())
+            .collect();
         let mut all_invalidated = invalidated;
+        let mut invalidated_dependency_outputs = BTreeSet::new();
         for stable_id in &replaced {
-            all_invalidated.extend(
-                old_dependencies
-                    .invalidate(stable_id)
-                    .into_iter()
-                    .filter(|id| !id.contains(':')),
-            );
+            for dependency in old_dependencies.invalidate(stable_id) {
+                if old_node_ids.contains(&dependency) {
+                    all_invalidated.insert(dependency);
+                } else {
+                    invalidated_dependency_outputs.insert(dependency);
+                }
+            }
         }
         Ok(ReconcileOutcome {
             changed,
@@ -520,6 +568,7 @@ impl DocumentSession {
             preserved_stable_ids: preserved.into_iter().collect(),
             replaced_stable_ids: replaced.into_iter().collect(),
             invalidated_stable_ids: all_invalidated.into_iter().collect(),
+            invalidated_dependency_outputs: invalidated_dependency_outputs.into_iter().collect(),
             diagnostics: Vec::new(),
         })
     }
@@ -603,14 +652,16 @@ impl DocumentSession {
         self.mapped_renders.remove(stable_id);
     }
 
-    fn invalidate_artifact_descendants(&self, stable_id: &str) {
-        for record in self
-            .artifact_graph
-            .records()
-            .filter(|record| record.stable_id.as_deref() == Some(stable_id))
-        {
-            let _ = self.artifact_graph.descendants_of(&record.id);
+    fn invalidate_artifact_descendants(&mut self, stable_id: &str) {
+        let source_key = format!("source:{stable_id}");
+        if let Some(source_id) = self.latest_artifact_ids.get(&source_key) {
+            self.stale_artifact_ids
+                .extend(self.artifact_graph.descendants_of(source_id));
         }
+        self.latest_artifact_ids
+            .remove(&format!("semantic:{stable_id}"));
+        self.latest_artifact_ids
+            .remove(&format!("render:{stable_id}"));
     }
 
     fn adjust_document_spans(document: &mut Document, replaced: Span, replacement_len: usize) {
@@ -728,11 +779,13 @@ impl DocumentSession {
                 .link(prior, id.clone(), ArtifactEdgeKind::ReplacedBy);
         }
         if kind_label != "source" {
-            self.artifact_graph.link(
-                format!("source:{stable_id}:{}", self.revision),
-                id,
-                edge_kind,
-            );
+            if let Some(source_id) = self
+                .latest_artifact_ids
+                .get(&format!("source:{stable_id}"))
+                .cloned()
+            {
+                self.artifact_graph.link(source_id, id, edge_kind);
+            }
         }
     }
 }
@@ -978,6 +1031,20 @@ fn offset(value: usize, delta: isize) -> usize {
 mod tests {
     use super::*;
 
+    fn formula_id(session: &DocumentSession, latex: &str) -> String {
+        session
+            .document
+            .all_blocks()
+            .into_iter()
+            .find_map(|block| match block {
+                Block::Formula(formula) if formula.formula.as_latex() == latex => {
+                    block.source().and_then(|source| source.stable_id.clone())
+                }
+                _ => None,
+            })
+            .unwrap()
+    }
+
     #[test]
     fn paragraph_fast_path_rejects_non_text_inline_structure() {
         let mut session = DocumentSession::from_latex("paragraph-safety", "Before").unwrap();
@@ -1039,5 +1106,100 @@ mod tests {
             .unwrap();
         session.convert_formula(&y, OutputFormat::OMML).unwrap();
         assert_eq!(session.metrics.semantic_cache_misses, 2);
+    }
+
+    #[test]
+    fn derived_artifacts_link_to_the_latest_real_source_artifact() {
+        let mut session = DocumentSession::from_latex("artifact-source", "$x$ $y$").unwrap();
+        let y = formula_id(&session, "y");
+        session
+            .apply_edit(SessionEdit::ReplaceSourceRange {
+                expected_revision: 0,
+                span: Span::new(0, 0),
+                replacement: "$z$ ".to_string(),
+            })
+            .unwrap();
+        session.render_formula(&y, VisualFormat::Svg).unwrap();
+        let source_id = session
+            .latest_artifact_ids
+            .get(&format!("source:{y}"))
+            .cloned()
+            .unwrap();
+        let render_id = session
+            .latest_artifact_ids
+            .get(&format!("render:{y}"))
+            .cloned()
+            .unwrap();
+        assert!(session
+            .artifact_graph
+            .edges()
+            .iter()
+            .any(|edge| edge.from == source_id && edge.to == render_id));
+        assert!(session.artifact_graph.get(&source_id).is_some());
+    }
+
+    #[test]
+    fn invalidation_marks_derived_artifacts_stale_without_erasing_lineage() {
+        let mut session = DocumentSession::from_latex("artifact-stale", "$x$").unwrap();
+        let x = formula_id(&session, "x");
+        session.convert_formula(&x, OutputFormat::OMML).unwrap();
+        session.render_formula(&x, VisualFormat::Svg).unwrap();
+        let semantic = session
+            .latest_artifact_ids
+            .get(&format!("semantic:{x}"))
+            .cloned()
+            .unwrap();
+        let render = session
+            .latest_artifact_ids
+            .get(&format!("render:{x}"))
+            .cloned()
+            .unwrap();
+        session
+            .apply_edit(SessionEdit::ReplaceFormulaSource {
+                expected_revision: 0,
+                stable_id: x,
+                latex: "y".to_string(),
+            })
+            .unwrap();
+        assert!(session.stale_artifact_ids().contains(&semantic));
+        assert!(session.stale_artifact_ids().contains(&render));
+        assert!(session.artifact_graph.get(&semantic).is_some());
+        assert!(session.artifact_graph.get(&render).is_some());
+    }
+
+    #[test]
+    fn deleted_node_preserves_old_dependency_outputs_in_invalidation() {
+        let mut session = DocumentSession::from_latex("deleted-dependency", "A").unwrap();
+        let paragraph_id = session.document.pages[0].blocks[0]
+            .source()
+            .and_then(|source| source.stable_id.clone())
+            .unwrap();
+        let span = session.source_map.span_for(&paragraph_id).unwrap();
+        let outcome = session
+            .apply_edit(SessionEdit::ReplaceSourceRange {
+                expected_revision: 0,
+                span,
+                replacement: String::new(),
+            })
+            .unwrap();
+        assert!(outcome
+            .invalidation
+            .dependent_outputs
+            .contains("page-layout:0"));
+        assert!(outcome
+            .invalidation
+            .dependent_outputs
+            .contains(&format!("paragraph-output:{paragraph_id}")));
+    }
+
+    #[test]
+    fn external_binding_rejects_existing_derived_sidecars() {
+        let mut session = DocumentSession::from_latex("bound-sidecar", "$x$").unwrap();
+        let x = formula_id(&session, "x");
+        session.convert_formula(&x, OutputFormat::OMML).unwrap();
+        let error = session
+            .bind_external_stable_id(&x, "office:formula:7")
+            .unwrap_err();
+        assert!(matches!(error, SessionError::IdentityBindingLocked));
     }
 }

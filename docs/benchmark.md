@@ -75,3 +75,11 @@ latency threshold is asserted. Golden cases additionally assert the final
 serialized `Document` and expected touched-node metrics. OCR, PDF, and Office
 runners will reuse these contracts with the existing `evaluation/` and
 `fidelity/` corpora.
+
+`incremental_formula_edit_scale` isolates one last-formula fast-path edit from
+the structural reconcile workload. Its 10/100/1,000/10,000 cases assert
+`reparsed_nodes == 1`, making the touched-node contract independently visible:
+
+```powershell
+cargo run -p latexsnipper-benchmark -- --case benchmark/cases/incremental-formula-edit-scale-10000.json
+```

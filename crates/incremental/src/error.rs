@@ -8,6 +8,8 @@ pub enum SessionError {
     UnknownStableId(String),
     #[error("stable id is empty or already bound: {0}")]
     DuplicateStableId(String),
+    #[error("external identity binding is only allowed before derived artifacts or edits")]
+    IdentityBindingLocked,
     #[error("invalid source range")]
     InvalidRange,
     #[error("edit is unsupported for this node kind")]

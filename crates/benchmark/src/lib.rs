@@ -231,6 +231,11 @@ pub fn validate_case(case: &BenchmarkCase) -> Result<(), BenchmarkError> {
                 return Err(BenchmarkError::MissingField("formulaCount"));
             }
         }
+        "incremental_formula_edit_scale" => {
+            if case.formula_count.is_none_or(|count| count == 0) {
+                return Err(BenchmarkError::MissingField("formulaCount"));
+            }
+        }
         other => return Err(BenchmarkError::UnsupportedRunner(other.to_string())),
     }
     Ok(())
@@ -242,6 +247,7 @@ pub fn run_case(case: &BenchmarkCase) -> Result<BenchmarkResult, BenchmarkError>
         "formula_conversion" => run_formula_conversion(case),
         "formula_incremental" => run_formula_incremental(case),
         "incremental_scale" => run_incremental_scale(case),
+        "incremental_formula_edit_scale" => run_incremental_formula_edit_scale(case),
         other => Err(BenchmarkError::UnsupportedRunner(other.to_string())),
     }
 }
@@ -390,6 +396,54 @@ fn run_incremental_scale(case: &BenchmarkCase) -> Result<BenchmarkResult, Benchm
     {
         return Err(BenchmarkError::Execution(
             "incremental scale result diverged from full parse".to_string(),
+        ));
+    }
+    let mut metrics = latency_metrics(&[started.elapsed()]);
+    metrics.insert(
+        "formula_count".to_string(),
+        count_metric(formula_count as u64),
+    );
+    insert_incremental_metrics(&mut metrics, session.metrics());
+    Ok(BenchmarkResult {
+        id: case.id.clone(),
+        category: case.category,
+        runner: case.runner.clone(),
+        iterations: case.iterations,
+        passed: true,
+        metrics,
+    })
+}
+
+fn run_incremental_formula_edit_scale(
+    case: &BenchmarkCase,
+) -> Result<BenchmarkResult, BenchmarkError> {
+    let formula_count = case
+        .formula_count
+        .ok_or(BenchmarkError::MissingField("formulaCount"))?;
+    let initial_latex = (0..formula_count)
+        .map(|index| format!("$x_{{{index}}}$"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let started = Instant::now();
+    let mut session = DocumentSession::from_latex(&case.id, initial_latex)
+        .map_err(|error| BenchmarkError::Execution(error.to_string()))?;
+    let last_id = formula_ids(&session)
+        .last()
+        .cloned()
+        .ok_or_else(|| BenchmarkError::Execution("scale source has no formulas".to_string()))?;
+    session
+        .apply_edit(SessionEdit::ReplaceFormulaSource {
+            expected_revision: 0,
+            stable_id: last_id,
+            latex: format!("y_{{{formula_count}}}"),
+        })
+        .map_err(|error| BenchmarkError::Execution(error.to_string()))?;
+    if !session
+        .verify_full_equivalence()
+        .map_err(|error| BenchmarkError::Execution(error.to_string()))?
+    {
+        return Err(BenchmarkError::Execution(
+            "formula fast path diverged from full parse".to_string(),
         ));
     }
     let mut metrics = latency_metrics(&[started.elapsed()]);
@@ -585,5 +639,24 @@ mod tests {
         .unwrap();
         assert!(result.metrics["semantic_cache_hits"].value >= 1.0);
         assert!(result.metrics.contains_key("reconcile_matched_nodes"));
+    }
+
+    #[test]
+    fn formula_edit_scale_touches_one_reparsed_node() {
+        let result = run_case(&BenchmarkCase {
+            schema_version: BENCHMARK_CASE_SCHEMA_VERSION,
+            id: "formula-edit-scale-10".to_string(),
+            category: BenchmarkCategory::Performance,
+            corpus_task: None,
+            runner: "incremental_formula_edit_scale".to_string(),
+            iterations: 1,
+            formula: None,
+            output_format: None,
+            initial_latex: None,
+            edits: Vec::new(),
+            formula_count: Some(10),
+        })
+        .unwrap();
+        assert_eq!(result.metrics["reparsed_nodes"].value, 1.0);
     }
 }
