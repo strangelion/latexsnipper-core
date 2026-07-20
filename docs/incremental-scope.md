@@ -18,9 +18,13 @@ Semantic and render fragment caches are bounded approximate-LRU caches keyed by
 stable ID, content hash, output format, and cache format version. Reconcile
 preserves entries only for unchanged matched nodes and invalidates changed nodes
 plus their semantic/render dependency descendants. ArtifactGraph remains
-immutable provenance/lineage, while `latest_artifact_ids` identifies currently
-valid artifact versions and `stale_artifact_ids` records invalidated derived
-artifacts without deleting history. Derived artifact edges always originate from
+immutable provenance/lineage, while `latest_artifact_ids` is keyed by artifact
+kind, stable ID, and output format so simultaneous OMML / Typst and SVG / PNG
+results cannot collide. `stale_artifact_ids` records invalidated derived
+artifacts without deleting history. Runtime history defaults to
+`ArtifactHistoryPolicy::Full`; sessions that do not need complete lineage can
+select `Bounded { max_revisions }`, which keeps current artifacts plus the most
+recent revisions and removes older runtime graph records. Derived artifact edges always originate from
 the real latest source artifact ID. DependencyGraph is the document dependency
 authority; removed nodes retain their old dependency outputs in the reconcile
 outcome so that page-layout invalidation is not lost.

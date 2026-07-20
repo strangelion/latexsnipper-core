@@ -80,6 +80,10 @@ runners will reuse these contracts with the existing `evaluation/` and
 the structural reconcile workload. Its 10/100/1,000/10,000 cases assert
 `reparsed_nodes == 1`, making the touched-node contract independently visible:
 
+The runner reports `setup_latency_ns`, `edit_latency_ns`, and
+`verify_latency_ns` separately. Its latency percentiles use only the edit
+window; full-equivalence verification runs afterwards as a correctness oracle.
+
 ```powershell
 cargo run -p latexsnipper-benchmark -- --case benchmark/cases/incremental-formula-edit-scale-10000.json
 ```

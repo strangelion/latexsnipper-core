@@ -424,13 +424,15 @@ fn run_incremental_formula_edit_scale(
         .map(|index| format!("$x_{{{index}}}$"))
         .collect::<Vec<_>>()
         .join(" ");
-    let started = Instant::now();
+    let setup_started = Instant::now();
     let mut session = DocumentSession::from_latex(&case.id, initial_latex)
         .map_err(|error| BenchmarkError::Execution(error.to_string()))?;
     let last_id = formula_ids(&session)
         .last()
         .cloned()
         .ok_or_else(|| BenchmarkError::Execution("scale source has no formulas".to_string()))?;
+    let setup_elapsed = setup_started.elapsed();
+    let edit_started = Instant::now();
     session
         .apply_edit(SessionEdit::ReplaceFormulaSource {
             expected_revision: 0,
@@ -438,6 +440,8 @@ fn run_incremental_formula_edit_scale(
             latex: format!("y_{{{formula_count}}}"),
         })
         .map_err(|error| BenchmarkError::Execution(error.to_string()))?;
+    let edit_elapsed = edit_started.elapsed();
+    let verify_started = Instant::now();
     if !session
         .verify_full_equivalence()
         .map_err(|error| BenchmarkError::Execution(error.to_string()))?
@@ -446,7 +450,17 @@ fn run_incremental_formula_edit_scale(
             "formula fast path diverged from full parse".to_string(),
         ));
     }
-    let mut metrics = latency_metrics(&[started.elapsed()]);
+    let verify_elapsed = verify_started.elapsed();
+    let mut metrics = latency_metrics(&[edit_elapsed]);
+    metrics.insert(
+        "setup_latency_ns".to_string(),
+        duration_metric(setup_elapsed),
+    );
+    metrics.insert("edit_latency_ns".to_string(), duration_metric(edit_elapsed));
+    metrics.insert(
+        "verify_latency_ns".to_string(),
+        duration_metric(verify_elapsed),
+    );
     metrics.insert(
         "formula_count".to_string(),
         count_metric(formula_count as u64),
@@ -541,6 +555,13 @@ fn count_metric(value: u64) -> BenchmarkMetric {
     BenchmarkMetric {
         value: value as f64,
         unit: "count".to_string(),
+    }
+}
+
+fn duration_metric(value: Duration) -> BenchmarkMetric {
+    BenchmarkMetric {
+        value: value.as_nanos() as f64,
+        unit: "ns".to_string(),
     }
 }
 

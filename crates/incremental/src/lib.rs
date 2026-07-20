@@ -27,7 +27,7 @@ pub use latexsnipper_syntax::{ParsedDocument, SourceMap};
 pub use mapped_render_tree::MappedRenderTree;
 pub use metrics::SessionMetrics;
 pub use node_index::{NodeIndex, NodePath};
-pub use session::{DocumentSession, EditOutcome, ReconcileOutcome};
+pub use session::{ArtifactHistoryPolicy, DocumentSession, EditOutcome, ReconcileOutcome};
 pub use source_snapshot::SourceSnapshot;
 
 #[cfg(test)]

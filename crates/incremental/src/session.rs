@@ -38,6 +38,16 @@ pub struct ReconcileOutcome {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// Runtime retention policy for processing provenance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ArtifactHistoryPolicy {
+    /// Keep every runtime artifact for the lifetime of the session.
+    #[default]
+    Full,
+    /// Retain current artifacts and at most this many recent revisions of history.
+    Bounded { max_revisions: u64 },
+}
+
 #[derive(Debug, Clone)]
 struct NodeDescriptor {
     stable_id: String,
@@ -63,6 +73,7 @@ pub struct DocumentSession {
     artifact_graph: ArtifactGraph,
     latest_artifact_ids: BTreeMap<String, ArtifactId>,
     stale_artifact_ids: BTreeSet<ArtifactId>,
+    artifact_history_policy: ArtifactHistoryPolicy,
     semantic_cache: BoundedCache<String>,
     render_cache: BoundedCache<ExportArtifact>,
     mapped_renders: MappedRenderTree,
@@ -108,6 +119,7 @@ impl DocumentSession {
             artifact_graph: ArtifactGraph::default(),
             latest_artifact_ids: BTreeMap::new(),
             stale_artifact_ids: BTreeSet::new(),
+            artifact_history_policy: ArtifactHistoryPolicy::default(),
             semantic_cache: BoundedCache::new(cache_limits),
             render_cache: BoundedCache::new(cache_limits),
             mapped_renders: MappedRenderTree::default(),
@@ -161,10 +173,12 @@ impl DocumentSession {
         if self.revision != 0
             || self
                 .latest_artifact_ids
-                .contains_key(&format!("semantic:{current_stable_id}"))
+                .keys()
+                .any(|key| key.starts_with(&format!("semantic:{current_stable_id}:")))
             || self
                 .latest_artifact_ids
-                .contains_key(&format!("render:{current_stable_id}"))
+                .keys()
+                .any(|key| key.starts_with(&format!("render:{current_stable_id}:")))
         {
             return Err(SessionError::IdentityBindingLocked);
         }
@@ -239,6 +253,13 @@ impl DocumentSession {
     pub fn stale_artifact_ids(&self) -> &BTreeSet<ArtifactId> {
         &self.stale_artifact_ids
     }
+    pub fn artifact_history_policy(&self) -> ArtifactHistoryPolicy {
+        self.artifact_history_policy
+    }
+    pub fn set_artifact_history_policy(&mut self, policy: ArtifactHistoryPolicy) {
+        self.artifact_history_policy = policy;
+        self.compact_artifact_history();
+    }
     pub fn mapped_renders(&self) -> &MappedRenderTree {
         &self.mapped_renders
     }
@@ -300,6 +321,7 @@ impl DocumentSession {
         self.record_artifact(
             stable_id,
             ArtifactKind::SemanticFragment,
+            format.name(),
             &output,
             ArtifactEdgeKind::ConvertedFrom,
         );
@@ -335,6 +357,7 @@ impl DocumentSession {
         self.record_artifact_with_checksum(
             stable_id,
             ArtifactKind::RenderFragment,
+            format.extension(),
             checksum,
             ArtifactEdgeKind::RenderedFrom,
         );
@@ -659,9 +682,9 @@ impl DocumentSession {
                 .extend(self.artifact_graph.descendants_of(source_id));
         }
         self.latest_artifact_ids
-            .remove(&format!("semantic:{stable_id}"));
+            .retain(|key, _| !key.starts_with(&format!("semantic:{stable_id}:")));
         self.latest_artifact_ids
-            .remove(&format!("render:{stable_id}"));
+            .retain(|key, _| !key.starts_with(&format!("render:{stable_id}:")));
     }
 
     fn adjust_document_spans(document: &mut Document, replaced: Span, replacement_len: usize) {
@@ -726,6 +749,7 @@ impl DocumentSession {
         self.record_artifact(
             stable_id,
             ArtifactKind::SourceFormula,
+            "source",
             &content,
             ArtifactEdgeKind::DerivedFrom,
         );
@@ -735,12 +759,14 @@ impl DocumentSession {
         &mut self,
         stable_id: &str,
         kind: ArtifactKind,
+        artifact_format: &str,
         content: &str,
         edge_kind: ArtifactEdgeKind,
     ) {
         self.record_artifact_with_checksum(
             stable_id,
             kind,
+            artifact_format,
             checksum(content.as_bytes()),
             edge_kind,
         );
@@ -750,6 +776,7 @@ impl DocumentSession {
         &mut self,
         stable_id: &str,
         kind: ArtifactKind,
+        artifact_format: &str,
         checksum: String,
         edge_kind: ArtifactEdgeKind,
     ) {
@@ -761,8 +788,20 @@ impl DocumentSession {
             }
             _ => "artifact",
         };
-        let id = format!("{kind_label}:{stable_id}:{}", self.revision);
-        let artifact_key = format!("{kind_label}:{stable_id}");
+        let (id, artifact_key) = if kind_label == "source" {
+            (
+                format!("source:{stable_id}:{}", self.revision),
+                format!("source:{stable_id}"),
+            )
+        } else {
+            (
+                format!(
+                    "{kind_label}:{stable_id}:{artifact_format}:{}",
+                    self.revision
+                ),
+                format!("{kind_label}:{stable_id}:{artifact_format}"),
+            )
+        };
         let prior = self
             .latest_artifact_ids
             .insert(artifact_key, ArtifactId::from(id.clone()));
@@ -787,6 +826,21 @@ impl DocumentSession {
                 self.artifact_graph.link(source_id, id, edge_kind);
             }
         }
+        self.compact_artifact_history();
+    }
+
+    fn compact_artifact_history(&mut self) {
+        let ArtifactHistoryPolicy::Bounded { max_revisions } = self.artifact_history_policy else {
+            return;
+        };
+        let cutoff = self.revision.saturating_sub(max_revisions);
+        let current: BTreeSet<ArtifactId> = self.latest_artifact_ids.values().cloned().collect();
+        self.artifact_graph.retain_artifacts(|record| {
+            current.contains(&record.id)
+                || artifact_revision(&record.id).is_some_and(|revision| revision >= cutoff)
+        });
+        self.stale_artifact_ids
+            .retain(|id| self.artifact_graph.get(id).is_some());
     }
 }
 
@@ -1006,6 +1060,10 @@ fn checksum(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+fn artifact_revision(id: &ArtifactId) -> Option<u64> {
+    id.0.rsplit_once(':')?.1.parse().ok()
+}
+
 fn adjust_span(span: Option<&mut Span>, replaced: Span, delta: isize) {
     let Some(span) = span else { return };
     if span.end <= replaced.start {
@@ -1127,7 +1185,7 @@ mod tests {
             .unwrap();
         let render_id = session
             .latest_artifact_ids
-            .get(&format!("render:{y}"))
+            .get(&format!("render:{y}:svg"))
             .cloned()
             .unwrap();
         assert!(session
@@ -1146,12 +1204,12 @@ mod tests {
         session.render_formula(&x, VisualFormat::Svg).unwrap();
         let semantic = session
             .latest_artifact_ids
-            .get(&format!("semantic:{x}"))
+            .get(&format!("semantic:{x}:omml"))
             .cloned()
             .unwrap();
         let render = session
             .latest_artifact_ids
-            .get(&format!("render:{x}"))
+            .get(&format!("render:{x}:svg"))
             .cloned()
             .unwrap();
         session
@@ -1201,5 +1259,61 @@ mod tests {
             .bind_external_stable_id(&x, "office:formula:7")
             .unwrap_err();
         assert!(matches!(error, SessionError::IdentityBindingLocked));
+    }
+
+    #[test]
+    fn format_specific_artifacts_do_not_collide_within_a_revision() {
+        let mut session = DocumentSession::from_latex("artifact-formats", "$x$").unwrap();
+        let x = formula_id(&session, "x");
+        session.convert_formula(&x, OutputFormat::OMML).unwrap();
+        session.convert_formula(&x, OutputFormat::Typst).unwrap();
+        session.render_formula(&x, VisualFormat::Svg).unwrap();
+        session.render_formula(&x, VisualFormat::Png).unwrap();
+        let expected = [
+            format!("semantic:{x}:omml:0"),
+            format!("semantic:{x}:typst:0"),
+            format!("render:{x}:svg:0"),
+            format!("render:{x}:png:0"),
+        ];
+        for id in &expected {
+            assert!(session
+                .artifact_graph
+                .get(&ArtifactId::from(id.clone()))
+                .is_some());
+        }
+        assert_eq!(
+            session
+                .artifact_graph
+                .edges()
+                .iter()
+                .filter(|edge| edge.kind == ArtifactEdgeKind::ReplacedBy)
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn bounded_artifact_history_keeps_current_records_and_compacts_old_revisions() {
+        let mut session = DocumentSession::from_latex("artifact-history", "$x$").unwrap();
+        session.set_artifact_history_policy(ArtifactHistoryPolicy::Bounded { max_revisions: 1 });
+        let x = formula_id(&session, "x");
+        session.render_formula(&x, VisualFormat::Svg).unwrap();
+        let old_render = ArtifactId::from(format!("render:{x}:svg:0"));
+        for (revision, latex) in [(0, "y"), (1, "z")] {
+            session
+                .apply_edit(SessionEdit::ReplaceFormulaSource {
+                    expected_revision: revision,
+                    stable_id: x.clone(),
+                    latex: latex.to_string(),
+                })
+                .unwrap();
+            session.render_formula(&x, VisualFormat::Svg).unwrap();
+        }
+        assert!(session.artifact_graph.get(&old_render).is_none());
+        let current_source = session
+            .latest_artifact_ids
+            .get(&format!("source:{x}"))
+            .unwrap();
+        assert!(session.artifact_graph.get(current_source).is_some());
     }
 }

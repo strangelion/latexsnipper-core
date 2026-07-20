@@ -160,6 +160,16 @@ impl ArtifactGraph {
         }
         descendants
     }
+
+    /// Compact a runtime-only lineage view while retaining a valid graph.
+    /// Callers own the retention policy; historical exports can use `trace()`
+    /// before compaction when a complete audit trail is required.
+    pub fn retain_artifacts(&mut self, mut retain: impl FnMut(&ArtifactRecord) -> bool) {
+        self.artifacts.retain(|_, record| retain(record));
+        self.edges.retain(|edge| {
+            self.artifacts.contains_key(&edge.from) && self.artifacts.contains_key(&edge.to)
+        });
+    }
 }
 
 #[cfg(test)]
