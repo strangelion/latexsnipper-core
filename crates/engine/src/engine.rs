@@ -153,7 +153,7 @@ impl SnipperEngine {
             RecognizeMode::FormulaLayout => PipelineProfile::FormulaLayout,
             _ => return PipelineGraph::new(format!("{:?}_pipeline", mode)),
         };
-        PipelinePlanner::default()
+        PipelinePlanner
             .plan(profile, self.config.parse_mode)
             .build_graph()
     }
