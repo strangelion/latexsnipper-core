@@ -1,5 +1,5 @@
 use latexsnipper_pipeline::DocumentParseMode;
-use latexsnipper_runtime::AccelerationMode;
+use latexsnipper_runtime::{AccelerationMode, SelectionPreference};
 use std::path::PathBuf;
 
 /// Engine configuration.
@@ -97,5 +97,14 @@ impl EngineConfig {
     pub fn set_parse_mode(mut self, mode: DocumentParseMode) -> Self {
         self.parse_mode = mode;
         self
+    }
+
+    /// Get the model selection preference based on acceleration mode.
+    /// Gpu → Accuracy (optimize for quality), Cpu/Auto → Balanced.
+    pub fn model_selection_preference(&self) -> SelectionPreference {
+        match self.acceleration {
+            AccelerationMode::Gpu => SelectionPreference::Accuracy,
+            _ => SelectionPreference::Balanced,
+        }
     }
 }

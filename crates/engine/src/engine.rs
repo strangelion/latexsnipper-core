@@ -16,7 +16,10 @@ use latexsnipper_pipeline::{
 };
 #[cfg(feature = "native")]
 use latexsnipper_runtime::FsModelResolver;
-use latexsnipper_runtime::{ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver};
+use latexsnipper_runtime::{
+    AccelerationMode, ModelPackage, ModelRegistry, ModelSelectionDecision, ModelSelectionPolicy,
+    ModelSelectionRequest, ModelTask, RuntimeBackend, SharedModelResolver,
+};
 
 use crate::config::EngineConfig;
 use crate::job::JobQueue;
@@ -34,6 +37,10 @@ pub struct SnipperEngine {
     job_queue: JobQueue,
     /// Registered model packages for type-safe inference.
     model_packages: HashMap<ModelTask, Arc<dyn ModelPackage>>,
+    /// Model selection policy for choosing the best model per task.
+    model_selection: ModelSelectionPolicy,
+    /// Model registry for discovering available models.
+    model_registry: ModelRegistry,
 }
 
 impl SnipperEngine {
@@ -54,6 +61,8 @@ impl SnipperEngine {
             model_manager,
             job_queue: JobQueue::new(),
             model_packages: HashMap::new(),
+            model_selection: ModelSelectionPolicy::default(),
+            model_registry: ModelRegistry::new(),
         }
     }
 
@@ -73,6 +82,8 @@ impl SnipperEngine {
             model_manager,
             job_queue: JobQueue::new(),
             model_packages: HashMap::new(),
+            model_selection: ModelSelectionPolicy::default(),
+            model_registry: ModelRegistry::new(),
         }
     }
 
@@ -101,6 +112,80 @@ impl SnipperEngine {
     /// Get a registered model package for a specific task.
     pub fn get_model_package(&self, task: &ModelTask) -> Option<Arc<dyn ModelPackage>> {
         self.model_packages.get(task).cloned()
+    }
+
+    // ========================================================================
+    // Model Selection API
+    // ========================================================================
+
+    /// Get a mutable reference to the model selection policy.
+    pub fn model_selection_mut(&mut self) -> &mut ModelSelectionPolicy {
+        &mut self.model_selection
+    }
+
+    /// Get a reference to the model registry.
+    pub fn model_registry(&self) -> &ModelRegistry {
+        &self.model_registry
+    }
+
+    /// Get a mutable reference to the model registry.
+    pub fn model_registry_mut(&mut self) -> &mut ModelRegistry {
+        &mut self.model_registry
+    }
+
+    /// Select the best model for a given task using the ModelSelectionPolicy.
+    ///
+    /// This is the bridge between the declarative selection policy and the
+    /// engine's runtime model packages. It queries the registry for candidates,
+    /// applies the selection policy, and returns the decision with explanations.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let decision = engine.select_model(ModelTask::FormulaDetection, None, None, None);
+    /// if let Some(selected) = &decision.selected {
+    ///     // Use the selected model ID
+    /// }
+    /// ```
+    pub fn select_model(
+        &self,
+        task: ModelTask,
+        backend: Option<latexsnipper_runtime::ModelBackend>,
+        acceleration: Option<AccelerationMode>,
+        language: Option<String>,
+    ) -> ModelSelectionDecision {
+        let request = ModelSelectionRequest {
+            task,
+            backend,
+            acceleration,
+            language,
+            preference: self.config.model_selection_preference(),
+        };
+        self.model_selection
+            .select_registry(&self.model_registry, &request)
+    }
+
+    /// Select and register the best model for a task into the pipeline context.
+    ///
+    /// Combines model selection with model package registration, so pipeline
+    /// nodes can immediately use the selected model via `ctx.get_model_package()`.
+    pub fn select_and_register_model(
+        &self,
+        ctx: &mut PipelineContext,
+        task: ModelTask,
+    ) -> Option<String> {
+        let decision = self.select_model(task, None, None, None);
+        if let Some(ref model_id) = decision.selected {
+            // Check if we have a pre-registered package for this task
+            if let Some(package) = self.model_packages.get(&task) {
+                ctx.register_model_package(task, package.clone());
+            }
+            // Also set the model variant hint in context for nodes that use
+            // model_variants for model discovery
+            let category = format!("{:?}", task).to_lowercase();
+            ctx.model_variants
+                .insert(category, model_id.clone());
+        }
+        decision.selected.clone()
     }
 
     // ========================================================================
