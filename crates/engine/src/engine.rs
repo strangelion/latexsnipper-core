@@ -11,7 +11,9 @@ use latexsnipper_image::pdf::{decode_pdf, PdfSource};
 use latexsnipper_image::SnipperImage;
 #[cfg(feature = "native")]
 use latexsnipper_model::ModelManager;
-use latexsnipper_pipeline::{DocumentParseMode, PipelineContext, PipelineGraph};
+use latexsnipper_pipeline::{
+    DocumentParseMode, PipelineContext, PipelineGraph, PipelinePlanner, PipelineProfile,
+};
 #[cfg(feature = "native")]
 use latexsnipper_runtime::FsModelResolver;
 use latexsnipper_runtime::{ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver};
@@ -142,6 +144,24 @@ impl SnipperEngine {
 
     /// Build a PipelineGraph for the given recognition mode.
     pub fn build_pipeline(&self, mode: RecognizeMode) -> PipelineGraph {
+        let profile = match mode {
+            RecognizeMode::Formula => PipelineProfile::Formula,
+            RecognizeMode::Text => PipelineProfile::Text,
+            RecognizeMode::Mixed => PipelineProfile::Mixed,
+            RecognizeMode::Handwriting => PipelineProfile::Handwriting,
+            RecognizeMode::Table => PipelineProfile::Table,
+            RecognizeMode::FormulaLayout => PipelineProfile::FormulaLayout,
+            _ => return PipelineGraph::new(format!("{:?}_pipeline", mode)),
+        };
+        PipelinePlanner::default()
+            .plan(profile, self.config.parse_mode)
+            .build_graph()
+    }
+
+    /// Legacy graph assembly retained temporarily as a behavior oracle while
+    /// profiles are migrated to the declarative planner.
+    #[allow(dead_code)]
+    fn build_pipeline_legacy(&self, mode: RecognizeMode) -> PipelineGraph {
         let mut graph = PipelineGraph::new(format!("{:?}_pipeline", mode));
 
         match mode {

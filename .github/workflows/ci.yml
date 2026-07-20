@@ -78,6 +78,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo bench --locked -p latexsnipper-tests --bench core_bench
 
+  incremental-contract:
+    name: Incremental contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p latexsnipper-benchmark
+      - run: >-
+          cargo run --locked -p latexsnipper-benchmark --
+          --golden-case benchmark/golden/incremental/formula-edit-v1
+
   ocr-evidence-contract:
     name: OCR evidence contract
     runs-on: ubuntu-latest
@@ -237,6 +250,10 @@ jobs:
       - run: cargo check --locked -p latexsnipper-runtime --no-default-features
       - run: cargo check --locked -p latexsnipper-runtime --features remote-api
       - run: cargo check --locked -p latexsnipper-cli --all-targets
+      - run: cargo check --locked -p latexsnipper-engine --no-default-features
+      - run: >-
+          cargo check --locked -p latexsnipper-engine --no-default-features
+          --features experimental-incremental
 
   real-model-windows:
     name: Real models (Windows CPU)

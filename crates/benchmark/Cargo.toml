@@ -1,0 +1,24 @@
+[package]
+name = "latexsnipper-benchmark"
+description = "Executable OCR and document benchmark contracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+latexsnipper-conversion.workspace = true
+latexsnipper-evaluation.workspace = true
+latexsnipper-incremental.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[[bin]]
+name = "latexsnipper-benchmark"
+path = "src/main.rs"

@@ -22,6 +22,12 @@ pub use latexsnipper_pipeline::DocumentParseMode;
 pub use metrics::{MetricsBuilder, RecognitionMetrics, SerializableMetrics};
 pub use service::{Service, ServiceStatus};
 
+/// Experimental source-aware incremental document sessions.
+///
+/// This remains behind an opt-in feature while the session contract evolves.
+#[cfg(feature = "experimental-incremental")]
+pub use latexsnipper_incremental as incremental;
+
 #[cfg(feature = "remote-api")]
 pub use chart_understanding::{ChartUnderstandingResult, ChartUnderstandingService};
 #[cfg(feature = "remote-api")]

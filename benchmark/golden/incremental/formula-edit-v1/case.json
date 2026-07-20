@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "formula-edit-v1",
+  "initialSourceFile": "initial.tex",
+  "editsFile": "edits.json",
+  "expectedDocumentFile": "expected-final-document.json",
+  "expectedChangedNodesFile": "expected-changed-nodes.json"
+}

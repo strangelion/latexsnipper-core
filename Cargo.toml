@@ -26,6 +26,9 @@ members = [
     "crates/tract",
     "crates/evaluation",
     "crates/fidelity",
+    "crates/incremental",
+    "crates/artifact",
+    "crates/benchmark",
 ]
 
 [workspace.package]
@@ -68,6 +71,10 @@ latexsnipper-wasm = { path = "crates/wasm", version = "3.0.1" }
 latexsnipper-cli = { path = "crates/cli", version = "3.0.1" }
 latexsnipper-tests = { path = "crates/tests", version = "3.0.1" }
 latexsnipper-fidelity = { path = "crates/fidelity", version = "3.0.1" }
+latexsnipper-incremental = { path = "crates/incremental", version = "3.0.1" }
+latexsnipper-artifact = { path = "crates/artifact", version = "3.0.1" }
+latexsnipper-benchmark = { path = "crates/benchmark", version = "3.0.1" }
+latexsnipper-evaluation = { path = "crates/evaluation", version = "3.0.1" }
 sha2 = "0.10"
 cap-std = "=4.0.2"
 cap-fs-ext = "=4.0.2"

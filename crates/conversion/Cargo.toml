@@ -14,6 +14,7 @@ latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
 latexsnipper-export = { workspace = true, optional = true }
 latexsnipper-syntax.workspace = true
+latexsnipper-inference.workspace = true
 log.workspace = true
 serde.workspace = true
 serde_json.workspace = true

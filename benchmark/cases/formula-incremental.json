@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "formula-incremental-basic",
+  "category": "incremental",
+  "corpusTask": "printed_formula",
+  "runner": "formula_incremental",
+  "iterations": 1,
+  "initialLatex": "$x^2$",
+  "edits": [
+    {
+      "stableId": "latex:formula:0",
+      "latex": "y^3"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+[package]
+name = "latexsnipper-artifact"
+description = "Runtime artifact lineage for LaTeXSnipper processing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+latexsnipper-ast.workspace = true
+serde.workspace = true
+serde_json.workspace = true

@@ -20,6 +20,7 @@ latexsnipper-inference.workspace = true
 latexsnipper-model.workspace = true
 latexsnipper-conversion = { workspace = true, optional = true }
 latexsnipper-tensor.workspace = true
+latexsnipper-artifact.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true

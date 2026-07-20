@@ -39,3 +39,28 @@ first/warm inference, pipeline postprocessing, AST construction, and conversion 
 the relevant layer exposes timing. Scheduled artifacts are comparable by schema and
 commit, but regression decisions require repeated samples rather than one shared-runner
 observation.
+
+## OCR and Incremental Document Contracts
+
+`latexsnipper-benchmark` complements `latexsnipper-evaluation`: evaluation measures
+prediction quality against OCR corpora, while benchmark cases measure execution behavior
+and incremental equivalence.
+
+Run the included incremental performance case:
+
+```powershell
+cargo run -p latexsnipper-benchmark -- --case benchmark/cases/formula-incremental.json
+```
+
+Run the checked-in incremental golden case:
+
+```powershell
+cargo run -p latexsnipper-benchmark -- --golden-case benchmark/golden/incremental/formula-edit-v1
+```
+
+The versioned benchmark contract may link to an existing `corpusTask` from
+`latexsnipper-evaluation`. Its initial runners are `formula_conversion` (P50/P95
+conversion latency) and `formula_incremental` (incremental edits with full-reconcile
+equivalence). Golden cases additionally assert the final serialized `Document` and the
+expected touched-node metrics. OCR, PDF, and Office runners will reuse these contracts
+with the existing `evaluation/` and `fidelity/` corpora.

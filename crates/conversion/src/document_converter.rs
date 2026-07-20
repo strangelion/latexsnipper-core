@@ -1,6 +1,6 @@
 use latexsnipper_ast::{
-    Block, Document, ExportArtifact, Formula, FormulaBlock, FormulaSource, GeneratedContent,
-    NodeIdGenerator, Page,
+    Block, Document, ExportArtifact, Formula, FormulaBlock, FormulaLayout, FormulaSource,
+    GeneratedContent, NodeIdGenerator, Page,
 };
 #[cfg(feature = "native")]
 use latexsnipper_export::render_tree::RenderTree;
@@ -110,6 +110,71 @@ impl DocumentConverter {
             OutputFormat::Html => Box::new(HtmlConverter),
         };
         converter.convert(doc)
+    }
+
+    /// Convert one formula through the existing document conversion pipeline.
+    ///
+    /// The fragment is intentionally represented as a minimal Document so all
+    /// current converters retain their existing behavior.
+    pub fn convert_formula(formula: &Formula, format: OutputFormat) -> Result<String> {
+        let block = Block::Formula(FormulaBlock {
+            formula: formula.clone(),
+            label: None,
+            number: None,
+            environment: None,
+            geometry: None,
+            source: None,
+        });
+        Self::convert_block(&Document::new(), &block, format)
+    }
+
+    /// Build the shared structural layout from any supported source format.
+    pub fn formula_layout(formula: &Formula) -> Result<FormulaLayout> {
+        formula
+            .layout
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(|| crate::parse_formula_source_to_layout(&formula.source))
+    }
+
+    /// Convert an existing layout through its canonical LaTeX projection.
+    ///
+    /// This is additive; source-first conversion remains the default until
+    /// cross-format round-trip fidelity gates are established.
+    pub fn convert_formula_layout(layout: &FormulaLayout, format: OutputFormat) -> Result<String> {
+        Self::convert_latex_string(&layout.canonical_latex(), format)
+    }
+
+    /// Convert one block while preserving the document metadata and assets
+    /// required by existing converters.
+    pub fn convert_block(
+        document: &Document,
+        block: &Block,
+        format: OutputFormat,
+    ) -> Result<String> {
+        let fragment = Self::fragment_document(document, block.clone());
+        Self::new(format).convert(&fragment)
+    }
+
+    /// Build the minimal document used by fragment conversion APIs.
+    pub fn fragment_document(document: &Document, block: Block) -> Document {
+        Document {
+            metadata: document.metadata.clone(),
+            pages: vec![Page {
+                width: 0.0,
+                height: 0.0,
+                blocks: vec![block],
+                page_number: None,
+                layout: None,
+                background_asset_id: None,
+            }],
+            assets: document.assets.clone(),
+            diagnostics: Vec::new(),
+            id_gen: NodeIdGenerator::new(),
+            schema_version: document.schema_version.clone(),
+            notes: document.notes.clone(),
+            outline: None,
+        }
     }
 
     /// Convert specific pages (0-based indices) of a Document.
@@ -255,6 +320,31 @@ mod tests {
         let result = converter.convert(&doc).unwrap();
         assert!(result.contains("\\section{Math Document}"));
         assert!(result.contains("\\frac{a}{b}"));
+    }
+
+    #[test]
+    fn formula_layout_adapter_supports_all_formula_sources() {
+        let sources = [
+            FormulaSource::Latex("\\frac{a}{b}".to_string()),
+            FormulaSource::MathML("<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>".to_string()),
+            FormulaSource::Typst("frac(a, b)".to_string()),
+        ];
+        for source in sources {
+            let formula = Formula {
+                source,
+                display_mode: true,
+                confidence: 1.0,
+                source_info: None,
+                layout: None,
+            };
+            let layout = DocumentConverter::formula_layout(&formula).unwrap();
+            assert_eq!(layout.canonical_latex(), "\\frac{a}{b}");
+            assert!(
+                DocumentConverter::convert_formula_layout(&layout, OutputFormat::MathML)
+                    .unwrap()
+                    .contains("mfrac")
+            );
+        }
     }
 
     #[test]

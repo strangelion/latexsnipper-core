@@ -9,6 +9,7 @@ pub mod model_resolver;
 pub mod model_validation;
 pub mod plugin_loader;
 pub mod providers;
+pub mod selection_policy;
 pub mod session;
 
 pub use acceleration::AccelerationMode;
@@ -44,4 +45,9 @@ pub use providers::onnx::{Acceleration, Platform};
 #[cfg(feature = "remote-api")]
 pub use providers::remote::{RemoteApiProvider, RemoteApiResult};
 pub use providers::stub::StubRuntime;
+pub use selection_policy::{
+    ModelBackend, ModelCandidate, ModelCapability, ModelEvidence, ModelReadiness,
+    ModelSelectionDecision, ModelSelectionMetadata, ModelSelectionPolicy, ModelSelectionRequest,
+    SelectionPreference, SelectionReason,
+};
 pub use session::InferenceSession;

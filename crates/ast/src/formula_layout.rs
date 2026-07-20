@@ -12,11 +12,43 @@ pub struct FormulaLayout {
     pub root: FormulaNode,
     /// Total number of symbols in the formula.
     pub symbol_count: usize,
+    /// Optional semantic facts about existing layout nodes.
+    ///
+    /// Annotations deliberately do not duplicate the structural tree.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub semantic_annotations: Vec<SemanticAnnotation>,
+}
+
+/// Semantic classification attached to an existing `FormulaNode`.
+///
+/// `node_path` is a producer-defined path through the layout tree. Consumers
+/// must preserve unrecognized annotations instead of reconstructing a second
+/// mathematical tree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SemanticAnnotation {
+    pub node_path: Vec<usize>,
+    pub role: SemanticRole,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canonical: Option<String>,
+}
+
+/// Higher-level mathematical meaning that cannot be inferred from node shape
+/// alone without introducing a parallel AST.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticRole {
+    FunctionCall,
+    Relation,
+    NaryOperator,
+    Fence,
+    Accent,
+    Matrix,
+    Cases,
 }
 
 /// A node in the formula tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "value")]
 pub enum FormulaNode {
     /// A single symbol (number, letter, operator, etc.).
     Symbol(SymbolInfo),
@@ -121,6 +153,7 @@ impl FormulaLayout {
         Self {
             root: FormulaNode::Text(String::new()),
             symbol_count: 0,
+            semantic_annotations: Vec::new(),
         }
     }
 
@@ -129,7 +162,64 @@ impl FormulaLayout {
         Self {
             root: FormulaNode::Text(text.into()),
             symbol_count: 0,
+            semantic_annotations: Vec::new(),
         }
+    }
+
+    /// Add semantic metadata without changing the structural representation.
+    pub fn with_annotation(mut self, annotation: SemanticAnnotation) -> Self {
+        self.semantic_annotations.push(annotation);
+        self
+    }
+
+    /// Emit a deterministic LaTeX projection of the structural layout.
+    ///
+    /// This is a canonicalization aid, not a lossless replacement for
+    /// `FormulaSource`. Callers must retain the original source for fallback
+    /// and fidelity diagnostics.
+    pub fn canonical_latex(&self) -> String {
+        canonical_latex(&self.root)
+    }
+}
+
+fn canonical_latex(node: &FormulaNode) -> String {
+    match node {
+        FormulaNode::Symbol(symbol) => symbol.latex.clone(),
+        FormulaNode::Command(command) => {
+            let args: String = command
+                .args
+                .iter()
+                .map(|argument| format!("{{{}}}", canonical_latex(argument)))
+                .collect();
+            format!("\\{}{}", command.name, args)
+        }
+        FormulaNode::Group(nodes) => nodes.iter().map(canonical_latex).collect(),
+        FormulaNode::Environment(environment) => {
+            let rows: Vec<String> = environment
+                .content
+                .iter()
+                .map(|row| row.iter().map(canonical_latex).collect::<String>())
+                .collect();
+            format!(
+                "\\begin{{{}}}{}\\end{{{}}}",
+                environment.name,
+                rows.join("\\\\"),
+                environment.name
+            )
+        }
+        FormulaNode::Superscript { base, exp } => {
+            format!("{}^{{{}}}", canonical_latex(base), canonical_latex(exp))
+        }
+        FormulaNode::Subscript { base, sub } => {
+            format!("{}_{{{}}}", canonical_latex(base), canonical_latex(sub))
+        }
+        FormulaNode::Fraction { num, den } => format!(
+            "\\frac{{{}}}{{{}}}",
+            canonical_latex(num),
+            canonical_latex(den)
+        ),
+        FormulaNode::SquareRoot { content } => format!("\\sqrt{{{}}}", canonical_latex(content)),
+        FormulaNode::Text(text) => text.clone(),
     }
 }
 
@@ -239,6 +329,48 @@ mod tests {
     fn test_formula_layout_empty() {
         let layout = FormulaLayout::empty();
         assert_eq!(layout.symbol_count, 0);
+        assert!(layout.semantic_annotations.is_empty());
+    }
+
+    #[test]
+    fn semantic_annotations_are_optional_in_the_wire_shape() {
+        let empty = serde_json::to_value(FormulaLayout::empty()).unwrap();
+        assert!(empty.get("semantic_annotations").is_none());
+
+        let annotated = FormulaLayout::text("sin x").with_annotation(SemanticAnnotation {
+            node_path: vec![0],
+            role: SemanticRole::FunctionCall,
+            canonical: Some("sin".to_string()),
+        });
+        let value = serde_json::to_value(annotated).unwrap();
+        assert_eq!(value["semantic_annotations"][0]["role"], "function_call");
+    }
+
+    #[test]
+    fn canonical_latex_is_deterministic_for_structural_nodes() {
+        let layout = FormulaLayout {
+            root: FormulaNode::Fraction {
+                num: Box::new(FormulaNode::Superscript {
+                    base: Box::new(FormulaNode::Symbol(SymbolInfo::new(
+                        "x",
+                        SymbolCategory::Letter,
+                    ))),
+                    exp: Box::new(FormulaNode::Symbol(SymbolInfo::new(
+                        "2",
+                        SymbolCategory::Number,
+                    ))),
+                }),
+                den: Box::new(FormulaNode::SquareRoot {
+                    content: Box::new(FormulaNode::Symbol(SymbolInfo::new(
+                        "y",
+                        SymbolCategory::Letter,
+                    ))),
+                }),
+            },
+            symbol_count: 3,
+            semantic_annotations: Vec::new(),
+        };
+        assert_eq!(layout.canonical_latex(), "\\frac{x^{2}}{\\sqrt{y}}");
     }
 
     #[test]

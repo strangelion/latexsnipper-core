@@ -1,18 +1,29 @@
 use latexsnipper_ast::{
-    Block, Document, Formula, FormulaBlock, Inline, Page, ParagraphBlock, TextRun,
+    Block, Document, Formula, FormulaBlock, Inline, Page, ParagraphBlock, SourceInfo, Span, TextRun,
 };
 use latexsnipper_foundation::Result;
 
 use crate::parser::Parser;
 use crate::renderer::Renderer;
+use crate::{ParsedDocument, SourceMap};
 
 /// LaTeX parser — converts LaTeX string to Document AST.
 pub struct LatexParser;
 
-impl Parser for LatexParser {
-    fn parse(&self, input: &str) -> Result<Document> {
-        let blocks = parse_latex_content(input);
-        Ok(Document {
+impl LatexParser {
+    /// Parse LaTeX while preserving source spans and stable block identities.
+    ///
+    /// This additive API intentionally leaves the `Parser` trait unchanged.
+    pub fn parse_with_source_map(&self, input: &str) -> Result<ParsedDocument> {
+        parse_latex_with_source_map(input)
+    }
+}
+
+/// Parse LaTeX content and retain a byte-accurate source map.
+pub fn parse_latex_with_source_map(input: &str) -> Result<ParsedDocument> {
+    let (blocks, source_map) = parse_latex_content_with_source_map(input);
+    Ok(ParsedDocument {
+        document: Document {
             metadata: latexsnipper_ast::Metadata::default(),
             pages: vec![Page {
                 width: 0.0,
@@ -28,7 +39,14 @@ impl Parser for LatexParser {
             schema_version: "1.0.0".to_string(),
             notes: Vec::new(),
             outline: None,
-        })
+        },
+        source_map,
+    })
+}
+
+impl Parser for LatexParser {
+    fn parse(&self, input: &str) -> Result<Document> {
+        Ok(parse_latex_with_source_map(input)?.document)
     }
 
     fn name(&self) -> &str {
@@ -85,37 +103,54 @@ impl Renderer for LatexRenderer {
     }
 }
 
-/// Parse LaTeX content into blocks.
-fn parse_latex_content(input: &str) -> Vec<Block> {
+/// Parse LaTeX content into blocks while retaining source information.
+fn parse_latex_content_with_source_map(input: &str) -> (Vec<Block>, SourceMap) {
     let mut blocks = Vec::new();
-    let mut remaining = input;
+    let mut source_map = SourceMap::new();
+    let mut cursor = 0;
+    let mut block_index = 0;
 
-    while !remaining.is_empty() {
+    while cursor < input.len() {
+        let remaining = &input[cursor..];
         // Try to find display math $$...$$
         if let Some(start) = remaining.find("$$") {
-            let after_start = &remaining[start + 2..];
-            if let Some(end) = after_start.find("$$") {
-                let formula = after_start[..end].trim().to_string();
-                // Add any text before the formula
-                let before = remaining[..start].trim();
-                if !before.is_empty() {
-                    blocks.push(Block::Paragraph(ParagraphBlock {
-                        inlines: vec![Inline::Text(TextRun::new(before))],
+            if remaining.find('$') == Some(start) {
+                let after_start = &remaining[start + 2..];
+                if let Some(end) = after_start.find("$$") {
+                    let formula_start = cursor + start + 2;
+                    let formula_end = formula_start + end;
+                    let formula = after_start[..end].trim().to_string();
+                    // Add any text before the formula
+                    if let Some((start, end)) = trim_byte_range(input, cursor, cursor + start) {
+                        let stable_id = next_stable_id(&mut block_index, "paragraph");
+                        let source = SourceInfo::new()
+                            .with_stable_id(stable_id.clone())
+                            .with_span(Span::new(start, end));
+                        source_map.insert(stable_id, Span::new(start, end));
+                        blocks.push(Block::Paragraph(ParagraphBlock {
+                            inlines: vec![Inline::Text(TextRun::new(&input[start..end]))],
+                            geometry: None,
+                            source: Some(source),
+                            style: None,
+                        }));
+                    }
+                    let stable_id = next_stable_id(&mut block_index, "formula");
+                    let span = Span::new(cursor + start, formula_end + 2);
+                    let source = SourceInfo::new()
+                        .with_stable_id(stable_id.clone())
+                        .with_span(span);
+                    source_map.insert(stable_id, span);
+                    blocks.push(Block::Formula(FormulaBlock {
+                        formula: Formula::latex(formula).with_source_info(source.clone()),
+                        label: None,
+                        number: None,
+                        environment: None,
                         geometry: None,
-                        source: None,
-                        style: None,
+                        source: Some(source),
                     }));
+                    cursor = formula_end + 2;
+                    continue;
                 }
-                blocks.push(Block::Formula(FormulaBlock {
-                    formula: Formula::latex(formula),
-                    label: None,
-                    number: None,
-                    environment: None,
-                    geometry: None,
-                    source: None,
-                }));
-                remaining = &after_start[end + 2..];
-                continue;
             }
         }
 
@@ -124,24 +159,36 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
             // Make sure it's not $$
             if start + 1 < remaining.len() && remaining.as_bytes()[start + 1] == b'$' {
                 // Skip $$, will be handled above
-                remaining = &remaining[start + 2..];
+                cursor += start + 2;
                 continue;
             }
             let after_start = &remaining[start + 1..];
             if let Some(end) = after_start.find('$') {
+                let formula_start = cursor + start + 1;
+                let formula_end = formula_start + end;
                 let formula = after_start[..end].trim().to_string();
-                let before = remaining[..start].trim();
-                if !before.is_empty() {
+                if let Some((start, end)) = trim_byte_range(input, cursor, cursor + start) {
+                    let stable_id = next_stable_id(&mut block_index, "paragraph");
+                    let source = SourceInfo::new()
+                        .with_stable_id(stable_id.clone())
+                        .with_span(Span::new(start, end));
+                    source_map.insert(stable_id, Span::new(start, end));
                     blocks.push(Block::Paragraph(ParagraphBlock {
-                        inlines: vec![Inline::Text(TextRun::new(before))],
+                        inlines: vec![Inline::Text(TextRun::new(&input[start..end]))],
                         geometry: None,
-                        source: None,
+                        source: Some(source),
                         style: None,
                     }));
                 }
+                let stable_id = next_stable_id(&mut block_index, "formula");
+                let span = Span::new(cursor + start, formula_end + 1);
+                let source = SourceInfo::new()
+                    .with_stable_id(stable_id.clone())
+                    .with_span(span);
+                source_map.insert(stable_id, span);
                 blocks.push(Block::Formula(FormulaBlock {
                     formula: {
-                        let mut f = Formula::latex(formula);
+                        let mut f = Formula::latex(formula).with_source_info(source.clone());
                         f.display_mode = false;
                         f
                     },
@@ -149,25 +196,66 @@ fn parse_latex_content(input: &str) -> Vec<Block> {
                     number: None,
                     environment: None,
                     geometry: None,
-                    source: None,
+                    source: Some(source),
                 }));
-                remaining = &after_start[end + 1..];
+                cursor = formula_end + 1;
                 continue;
             }
         }
 
         // No more math, treat rest as text
-        let text = remaining.trim().to_string();
-        if !text.is_empty() {
+        if let Some((start, end)) = trim_byte_range(input, cursor, input.len()) {
+            let stable_id = next_stable_id(&mut block_index, "paragraph");
+            let source = SourceInfo::new()
+                .with_stable_id(stable_id.clone())
+                .with_span(Span::new(start, end));
+            source_map.insert(stable_id, Span::new(start, end));
             blocks.push(Block::Paragraph(ParagraphBlock {
-                inlines: vec![Inline::Text(TextRun::new(text))],
+                inlines: vec![Inline::Text(TextRun::new(&input[start..end]))],
                 geometry: None,
-                source: None,
+                source: Some(source),
                 style: None,
             }));
         }
         break;
     }
 
-    blocks
+    (blocks, source_map)
+}
+
+fn next_stable_id(block_index: &mut usize, kind: &str) -> String {
+    let id = format!("latex:{kind}:{}", *block_index);
+    *block_index += 1;
+    id
+}
+
+fn trim_byte_range(input: &str, start: usize, end: usize) -> Option<(usize, usize)> {
+    let segment = &input[start..end];
+    let leading = segment.len() - segment.trim_start().len();
+    let trimmed_end = start + segment.trim_end().len();
+    let trimmed_start = start + leading;
+    (trimmed_start < trimmed_end).then_some((trimmed_start, trimmed_end))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_aware_parser_preserves_inline_and_display_formula_spans() {
+        let input = "前言 $x^2$ 后文\n\n$$\ny\n$$";
+        let parsed = parse_latex_with_source_map(input).unwrap();
+
+        let inline_start = input.find("$x^2$").unwrap();
+        let display_start = input.find("$$\ny\n$$").unwrap();
+        assert_eq!(
+            parsed.source_map.span_for("latex:formula:1"),
+            Some(Span::new(inline_start, inline_start + "$x^2$".len()))
+        );
+        assert_eq!(
+            parsed.source_map.span_for("latex:formula:3"),
+            Some(Span::new(display_start, input.len()))
+        );
+        assert_eq!(parsed.document.pages[0].blocks.len(), 4);
+    }
 }

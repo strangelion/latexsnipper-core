@@ -1,4 +1,7 @@
-use latexsnipper_ast::{Diagnostic, Document, ExportArtifact, GeneratedContent};
+use latexsnipper_ast::{
+    Block, Diagnostic, Document, ExportArtifact, Formula, FormulaBlock, GeneratedContent,
+    NodeIdGenerator, Page,
+};
 use latexsnipper_foundation::{Result, SnipperError};
 use sha2::{Digest, Sha256};
 
@@ -118,6 +121,35 @@ impl ExportService {
         };
 
         Ok(Self::build_artifact(format, content, tree.diagnostics))
+    }
+
+    /// Export a single formula through the existing document render pipeline.
+    pub fn export_formula(formula: &Formula, format: VisualFormat) -> Result<ExportArtifact> {
+        let document = Document {
+            metadata: latexsnipper_ast::Metadata::default(),
+            pages: vec![Page {
+                width: 0.0,
+                height: 0.0,
+                blocks: vec![Block::Formula(FormulaBlock {
+                    formula: formula.clone(),
+                    label: None,
+                    number: None,
+                    environment: None,
+                    geometry: None,
+                    source: None,
+                })],
+                page_number: None,
+                layout: None,
+                background_asset_id: None,
+            }],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
+            id_gen: NodeIdGenerator::new(),
+            schema_version: latexsnipper_ast::DOCUMENT_SCHEMA_VERSION.to_string(),
+            notes: Vec::new(),
+            outline: None,
+        };
+        Self::export(&document, format)
     }
 
     /// Export a Document to SVG (convenience method).

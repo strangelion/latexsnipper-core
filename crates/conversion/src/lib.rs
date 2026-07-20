@@ -9,6 +9,7 @@ pub mod document_converter;
 #[cfg(feature = "native")]
 pub mod docx_reader;
 pub mod export_format;
+pub mod formula_layout_adapter;
 pub mod html;
 pub mod html_parser;
 #[cfg(feature = "native")]
@@ -61,6 +62,7 @@ pub use document_cleaner::{clean_document, CleanResult, CleanerOptions};
 pub use document_converter::{DocumentConverter, OutputFormat};
 #[cfg(feature = "native")]
 pub use docx_reader::{read_docx, read_docx_bytes};
+pub use formula_layout_adapter::parse_formula_source_to_layout;
 pub use html::HtmlConverter;
 pub use html_parser::parse_html_to_document;
 #[cfg(feature = "native")]

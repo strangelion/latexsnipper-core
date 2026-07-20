@@ -3,6 +3,7 @@ use log::info;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
+use crate::{ArtifactEdgeKind, ArtifactId, ArtifactKind, ArtifactRecord};
 
 /// A node entry in the pipeline graph with its dependencies.
 struct NodeEntry {
@@ -80,6 +81,41 @@ impl PipelineGraph {
 
             info!("Pipeline '{}' executing node {}: {}", self.name, i, name);
             entry.node.process(ctx).await?;
+            let stage_id = ArtifactId(format!("pipeline:{}:{}", self.name, name));
+            ctx.artifacts.artifact_graph.insert(ArtifactRecord {
+                id: stage_id.clone(),
+                kind: ArtifactKind::PipelineStage,
+                stable_id: None,
+                content_ref: Some(name.clone()),
+                checksum: None,
+                provenance: Vec::new(),
+            });
+            for dependency in &entry.depends_on {
+                ctx.artifacts.artifact_graph.link(
+                    ArtifactId(format!("pipeline:{}:{}", self.name, dependency)),
+                    stage_id.clone(),
+                    ArtifactEdgeKind::DerivedFrom,
+                );
+            }
+        }
+
+        if !ctx.cancelled {
+            let document_id = ArtifactId(format!("document:{}", self.name));
+            ctx.artifacts.artifact_graph.insert(ArtifactRecord {
+                id: document_id.clone(),
+                kind: ArtifactKind::DocumentAst,
+                stable_id: None,
+                content_ref: Some("Document".to_string()),
+                checksum: None,
+                provenance: Vec::new(),
+            });
+            for name in self.terminal_node_names() {
+                ctx.artifacts.artifact_graph.link(
+                    ArtifactId(format!("pipeline:{}:{}", self.name, name)),
+                    document_id.clone(),
+                    ArtifactEdgeKind::DerivedFrom,
+                );
+            }
         }
 
         info!("Pipeline '{}' completed", self.name);
@@ -176,6 +212,52 @@ impl PipelineGraph {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    fn terminal_node_names(&self) -> Vec<&str> {
+        self.entries
+            .iter()
+            .filter(|entry| {
+                !self.entries.iter().any(|candidate| {
+                    candidate
+                        .depends_on
+                        .iter()
+                        .any(|dependency| dependency == &entry.name)
+                })
+            })
+            .map(|entry| entry.name.as_str())
+            .collect()
+    }
 }
 
 use std::collections::HashMap;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TransformNode;
+
+    #[tokio::test]
+    async fn run_records_stage_and_document_lineage() {
+        let mut graph = PipelineGraph::new("lineage");
+        graph.add_node(Box::new(TransformNode::new("source", |_| Ok(()))));
+        graph.add_node_with_deps(
+            Box::new(TransformNode::new("recognize", |_| Ok(()))),
+            vec!["source".to_string()],
+        );
+
+        let mut context = PipelineContext::new();
+        graph.run(&mut context).await.unwrap();
+
+        assert!(context
+            .artifacts
+            .artifact_graph
+            .get(&ArtifactId::from("pipeline:lineage:source"))
+            .is_some());
+        assert!(context
+            .artifacts
+            .artifact_graph
+            .get(&ArtifactId::from("document:lineage"))
+            .is_some());
+        assert_eq!(context.artifacts.artifact_graph.edges().len(), 2);
+    }
+}

@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "language": null,
+    "created_at": null,
+    "ocr_model": null,
+    "ocr_version": null,
+    "ocr_time_ms": null
+  },
+  "pages": [
+    {
+      "width": 0.0,
+      "height": 0.0,
+      "blocks": [
+        {
+          "type": "Formula",
+          "formula": {
+            "source": {
+              "format": "Latex",
+              "content": "y^3"
+            },
+            "display_mode": false,
+            "confidence": 1.0,
+            "source_info": {
+              "stable_id": "latex:formula:0",
+              "span": {
+                "start": 0,
+                "end": 5
+              }
+            }
+          },
+          "source": {
+            "stable_id": "latex:formula:0",
+            "span": {
+              "start": 0,
+              "end": 5
+            }
+          }
+        }
+      ],
+      "page_number": null
+    }
+  ],
+  "assets": [],
+  "diagnostics": [],
+  "schema_version": "1.0.0",
+  "notes": []
+}

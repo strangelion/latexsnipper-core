@@ -2053,12 +2053,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "latexsnipper-artifact"
+version = "3.0.1"
+dependencies = [
+ "latexsnipper-ast",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "latexsnipper-ast"
 version = "3.0.1"
 dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "latexsnipper-benchmark"
+version = "3.0.1"
+dependencies = [
+ "clap",
+ "latexsnipper-conversion",
+ "latexsnipper-evaluation",
+ "latexsnipper-incremental",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2100,6 +2122,7 @@ dependencies = [
  "latexsnipper-ast",
  "latexsnipper-export",
  "latexsnipper-foundation",
+ "latexsnipper-inference",
  "latexsnipper-syntax",
  "log",
  "lopdf",
@@ -2142,6 +2165,7 @@ dependencies = [
  "latexsnipper-export",
  "latexsnipper-foundation",
  "latexsnipper-image",
+ "latexsnipper-incremental",
  "latexsnipper-inference",
  "latexsnipper-mock",
  "latexsnipper-model",
@@ -2162,6 +2186,7 @@ version = "3.0.1"
 dependencies = [
  "clap",
  "image",
+ "latexsnipper-artifact",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -2247,6 +2272,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "latexsnipper-incremental"
+version = "3.0.1"
+dependencies = [
+ "latexsnipper-artifact",
+ "latexsnipper-ast",
+ "latexsnipper-conversion",
+ "latexsnipper-export",
+ "latexsnipper-foundation",
+ "latexsnipper-syntax",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "latexsnipper-inference"
 version = "3.0.1"
 dependencies = [
@@ -2302,6 +2343,7 @@ version = "3.0.1"
 dependencies = [
  "async-trait",
  "env_logger",
+ "latexsnipper-artifact",
  "latexsnipper-ast",
  "latexsnipper-conversion",
  "latexsnipper-foundation",

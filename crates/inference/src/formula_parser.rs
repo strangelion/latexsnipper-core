@@ -16,7 +16,11 @@ pub fn parse_formula_latex(latex: &str) -> Result<FormulaLayout> {
     let root = parser.parse()?;
     let symbol_count = count_symbols(&root);
 
-    Ok(FormulaLayout { root, symbol_count })
+    Ok(FormulaLayout {
+        root,
+        symbol_count,
+        semantic_annotations: Vec::new(),
+    })
 }
 
 /// Internal parser state.

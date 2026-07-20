@@ -1,0 +1,22 @@
+[package]
+name = "latexsnipper-incremental"
+description = "Experimental source-aware incremental document sessions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+latexsnipper-ast.workspace = true
+latexsnipper-artifact.workspace = true
+latexsnipper-conversion.workspace = true
+latexsnipper-export.workspace = true
+latexsnipper-foundation.workspace = true
+latexsnipper-syntax.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true

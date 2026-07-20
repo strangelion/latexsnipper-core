@@ -1,10 +1,15 @@
 pub mod artifacts;
+pub mod capability;
 pub mod context;
 pub mod graph;
 pub mod manifest;
 pub mod node;
 pub mod nodes;
 pub mod opendoc_hybrid;
+pub mod pdf_fusion;
+pub mod plan;
+pub mod planner;
+pub mod profile;
 pub mod reading_order;
 pub mod region_graph;
 #[deprecated(
@@ -18,8 +23,12 @@ pub mod text_recognition_service;
 
 pub use crate::opendoc_hybrid::DocumentParseMode;
 pub use artifacts::{CropRegion, PipelineArtifacts, RecognizedTable};
+pub use capability::PipelineCapability;
 pub use context::PipelineContext;
 pub use graph::PipelineGraph;
+pub use latexsnipper_artifact::{
+    ArtifactEdge, ArtifactEdgeKind, ArtifactGraph, ArtifactId, ArtifactKind, ArtifactRecord,
+};
 pub use manifest::PipelineManifest;
 pub use node::{PipelineNode, TransformNode};
 pub use nodes::crop_node::CropNode;
@@ -36,6 +45,13 @@ pub use nodes::region_resolve_node::RegionResolveNode;
 pub use nodes::resize_node::ResizeNode;
 pub use nodes::table_recognizer_node::TableRecognizerNode;
 pub use nodes::table_structure_node::TableStructureNode;
+pub use pdf_fusion::{
+    fuse_pdf_regions, PdfFusionDecision, PdfFusionPolicy, PdfFusionReason, PdfRegionCandidate,
+    PdfRegionSource,
+};
+pub use plan::{PipelineDependency, PipelineNodeSpec, PipelinePlan};
+pub use planner::PipelinePlanner;
+pub use profile::PipelineProfile;
 #[allow(deprecated)]
 #[cfg(feature = "native")]
 pub use sdk::Snipper;

@@ -1,3 +1,4 @@
+use latexsnipper_artifact::{ArtifactGraph, ArtifactTrace};
 use latexsnipper_ast::{Block, Rect};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_inference::{DetectionBox, GridCell};
@@ -8,6 +9,8 @@ use crate::region_graph::{RecognitionTarget, RegionCandidate, ResolvedRegion};
 /// Replaces string-keyed metadata for type safety.
 #[derive(Debug, Clone, Default)]
 pub struct PipelineArtifacts {
+    /// Runtime-only lineage for debugging, evaluation, and incremental reuse.
+    pub artifact_graph: ArtifactGraph,
     // Detections (from detector nodes)
     pub formula_detections: Vec<DetectionBox>,
     pub text_detections: Vec<DetectionBox>,
@@ -64,6 +67,11 @@ pub struct CropRegion {
 }
 
 impl PipelineArtifacts {
+    /// Deterministic runtime lineage for debug bundles and evaluation evidence.
+    pub fn debug_trace(&self) -> ArtifactTrace {
+        self.artifact_graph.trace()
+    }
+
     /// Get all blocks from all sources.
     pub fn all_blocks(&self) -> Vec<Block> {
         let mut blocks = Vec::new();
