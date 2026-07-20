@@ -1,4 +1,4 @@
-﻿use quick_xml::events::Event;
+use quick_xml::events::Event;
 use quick_xml::Reader;
 
 /// Parse OMML XML string into a LaTeX string.
@@ -146,7 +146,12 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                 }
             }
             Ok(Event::Eof) => break,
-            Ok(Event::Comment(_)) | Ok(Event::CData(_)) | Ok(Event::Decl(_)) | Ok(Event::PI(_)) | Ok(Event::DocType(_)) | Ok(Event::GeneralRef(_)) => continue,
+            Ok(Event::Comment(_))
+            | Ok(Event::CData(_))
+            | Ok(Event::Decl(_))
+            | Ok(Event::PI(_))
+            | Ok(Event::DocType(_))
+            | Ok(Event::GeneralRef(_)) => continue,
             Err(e) => return Err(format!("OMML parse error: {}", e)),
         }
         buf.clear();
@@ -705,7 +710,12 @@ fn parse_omml_node_to_layout(xml: &str) -> Result<latexsnipper_ast::FormulaNode,
                 current_text.clear();
             }
             Ok(Event::Eof) => break,
-            Ok(Event::Comment(_)) | Ok(Event::CData(_)) | Ok(Event::Decl(_)) | Ok(Event::PI(_)) | Ok(Event::DocType(_)) | Ok(Event::GeneralRef(_)) => continue,
+            Ok(Event::Comment(_))
+            | Ok(Event::CData(_))
+            | Ok(Event::Decl(_))
+            | Ok(Event::PI(_))
+            | Ok(Event::DocType(_))
+            | Ok(Event::GeneralRef(_)) => continue,
             Err(e) => return Err(format!("XML parse error: {}", e)),
         }
     }
