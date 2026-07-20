@@ -146,6 +146,7 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                 }
             }
             Ok(Event::Eof) => break,
+            Ok(_) => continue,
             Err(e) => return Err(format!("OMML parse error: {}", e)),
             _ => {}
         }
@@ -652,6 +653,232 @@ mod structural_tests {
     }
 }
 
+/// Parse OMML XML directly into a FormulaLayout (Math IR).
+///
+/// This bypasses the LaTeX intermediate format, providing direct OMML -> FormulaLayout
+/// conversion for higher-fidelity round-trips.
+pub fn parse_omml_to_layout(xml: &str) -> Result<latexsnipper_ast::FormulaLayout, String> {
+    let math_xml = extract_o_math(xml).unwrap_or_else(|| xml.to_string());
+    let cleaned = strip_xml_declaration(&math_xml);
+    let root = parse_omml_node_to_layout(&cleaned)?;
+    let symbol_count = count_symbols(&root);
+    Ok(latexsnipper_ast::FormulaLayout {
+        root,
+        symbol_count,
+        semantic_annotations: Vec::new(),
+    })
+}
+
+fn parse_omml_node_to_layout(xml: &str) -> Result<latexsnipper_ast::FormulaNode, String> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    let mut stack: Vec<(String, Vec<latexsnipper_ast::FormulaNode>)> = Vec::new();
+    let mut current_text = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                let tag = local(e.name().as_ref()).to_lowercase();
+                stack.push((tag, Vec::new()));
+                current_text.clear();
+            }
+            Ok(Event::Text(e)) => {
+                let t = crate::xml_util::decode_and_unescape_text(&e).unwrap_or_default();
+                current_text.push_str(&t);
+            }
+            Ok(Event::Empty(e)) => {
+                let text = String::new();
+                let node = make_symbol_from_text(&text);
+                if let Some((_, ref mut children)) = stack.last_mut() {
+                    children.push(node);
+                }
+            }
+            Ok(Event::End(_)) => {
+                if let Some((tag, children)) = stack.pop() {
+                    let node = build_omml_layout_node(&tag, &children, &current_text);
+                    if let Some((_, ref mut parent)) = stack.last_mut() {
+                        parent.push(node);
+                    } else {
+                        return Ok(node);
+                    }
+                }
+                current_text.clear();
+            }
+            Ok(Event::Eof) => break,
+            Ok(_) => continue,
+            Err(e) => return Err(format!("XML parse error: {}", e)),
+        }
+    }
+
+    stack
+        .pop()
+        .map(|(_, children)| {
+            if children.len() == 1 {
+                children.into_iter().next().unwrap()
+            } else {
+                latexsnipper_ast::FormulaNode::Group(children)
+            }
+        })
+        .ok_or_else(|| "Empty OMML document".to_string())
+}
+
+fn build_omml_layout_node(
+    tag: &str,
+    children: &[latexsnipper_ast::FormulaNode],
+    text: &str,
+) -> latexsnipper_ast::FormulaNode {
+    use latexsnipper_ast::{CommandInfo, FormulaNode, SymbolCategory, SymbolInfo};
+
+    match tag {
+        "r" => {
+            if !text.is_empty() {
+                FormulaNode::Symbol(SymbolInfo {
+                    latex: text.to_string(),
+                    category: SymbolCategory::Letter,
+                    rect: None,
+                    confidence: 1.0,
+                })
+            } else if children.len() == 1 {
+                children[0].clone()
+            } else {
+                FormulaNode::Group(children.to_vec())
+            }
+        }
+        "f" => {
+            let (num, den) = get_two_children(children);
+            FormulaNode::Fraction {
+                num: Box::new(num),
+                den: Box::new(den),
+            }
+        }
+        "rad" => {
+            let (radicand, _index) = get_two_children(children);
+            FormulaNode::SquareRoot {
+                content: Box::new(radicand),
+            }
+        }
+        "nary" => {
+            let chr = find_nary_chr(children);
+            let (_lower, _upper, body) = get_three_children(children);
+            FormulaNode::Command(CommandInfo {
+                name: chr,
+                args: vec![body],
+            })
+        }
+        "sSup" => {
+            let (base, exp) = get_two_children(children);
+            FormulaNode::Superscript {
+                base: Box::new(base),
+                exp: Box::new(exp),
+            }
+        }
+        "sSub" => {
+            let (base, sub) = get_two_children(children);
+            FormulaNode::Subscript {
+                base: Box::new(base),
+                sub: Box::new(sub),
+            }
+        }
+        "oMath" | "oMathPara" => {
+            if children.len() == 1 {
+                children[0].clone()
+            } else {
+                FormulaNode::Group(children.to_vec())
+            }
+        }
+        _ => {
+            if children.is_empty() && !text.is_empty() {
+                FormulaNode::Symbol(SymbolInfo {
+                    latex: text.to_string(),
+                    category: SymbolCategory::Letter,
+                    rect: None,
+                    confidence: 1.0,
+                })
+            } else if children.len() == 1 {
+                children[0].clone()
+            } else {
+                FormulaNode::Group(children.to_vec())
+            }
+        }
+    }
+}
+
+fn get_two_children(
+    children: &[latexsnipper_ast::FormulaNode],
+) -> (latexsnipper_ast::FormulaNode, latexsnipper_ast::FormulaNode) {
+    let empty = || latexsnipper_ast::FormulaNode::Text(String::new());
+    match children.len() {
+        0 => (empty(), empty()),
+        1 => (children[0].clone(), empty()),
+        _ => (children[0].clone(), children[1].clone()),
+    }
+}
+
+fn get_three_children(
+    children: &[latexsnipper_ast::FormulaNode],
+) -> (
+    latexsnipper_ast::FormulaNode,
+    latexsnipper_ast::FormulaNode,
+    latexsnipper_ast::FormulaNode,
+) {
+    let empty = || latexsnipper_ast::FormulaNode::Text(String::new());
+    match children.len() {
+        0 => (empty(), empty(), empty()),
+        1 => (empty(), empty(), children[0].clone()),
+        2 => (children[0].clone(), empty(), children[1].clone()),
+        _ => (
+            children[0].clone(),
+            children[1].clone(),
+            children[2].clone(),
+        ),
+    }
+}
+
+fn find_nary_chr(children: &[latexsnipper_ast::FormulaNode]) -> String {
+    for child in children {
+        if let latexsnipper_ast::FormulaNode::Group(group) = child {
+            for node in group {
+                if let latexsnipper_ast::FormulaNode::Symbol(s) = node {
+                    if s.latex.len() == 1 && !s.latex.starts_with('\\') {
+                        return s.latex.clone();
+                    }
+                }
+            }
+        }
+    }
+    "∑".to_string()
+}
+
+fn make_symbol_from_text(text: &str) -> latexsnipper_ast::FormulaNode {
+    use latexsnipper_ast::{SymbolCategory, SymbolInfo};
+    latexsnipper_ast::FormulaNode::Symbol(SymbolInfo {
+        latex: text.to_string(),
+        category: SymbolCategory::Letter,
+        rect: None,
+        confidence: 1.0,
+    })
+}
+
+fn count_symbols(node: &latexsnipper_ast::FormulaNode) -> usize {
+    use latexsnipper_ast::FormulaNode;
+    match node {
+        FormulaNode::Symbol(_) => 1,
+        FormulaNode::Command(c) => c
+            .args
+            .iter()
+            .map(count_symbols)
+            .sum::<usize>()
+            .saturating_add(1),
+        FormulaNode::Group(children) => children.iter().map(count_symbols).sum(),
+        FormulaNode::Environment(env) => env.content.iter().flatten().map(count_symbols).sum(),
+        FormulaNode::Superscript { base, exp } => count_symbols(base) + count_symbols(exp),
+        FormulaNode::Subscript { base, sub } => count_symbols(base) + count_symbols(sub),
+        FormulaNode::Fraction { num, den } => count_symbols(num) + count_symbols(den),
+        FormulaNode::SquareRoot { content } => count_symbols(content),
+        FormulaNode::Text(t) => t.chars().count(),
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

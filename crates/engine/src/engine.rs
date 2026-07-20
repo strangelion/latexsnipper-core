@@ -182,8 +182,7 @@ impl SnipperEngine {
             // Also set the model variant hint in context for nodes that use
             // model_variants for model discovery
             let category = format!("{:?}", task).to_lowercase();
-            ctx.model_variants
-                .insert(category, model_id.clone());
+            ctx.model_variants.insert(category, model_id.clone());
         }
         decision.selected.clone()
     }
