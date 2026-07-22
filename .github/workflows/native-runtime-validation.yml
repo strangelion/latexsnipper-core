@@ -1,0 +1,177 @@
+name: Native Runtime Validation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 0"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Level 1: Contract ────────────────────────────────────────────
+  # Always executes. Validates that every runtime crate compiles and
+  # its public API tests pass without requiring an actual SDK.
+
+  contracts:
+    name: Runtime contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Each runtime crate ships contract tests that verify the public
+      # factory, session, and error types are well-formed.
+      - run: cargo test --locked -p latexsnipper-runtime-paddle
+      - run: cargo test --locked -p latexsnipper-runtime-executorch
+      - run: cargo test --locked -p latexsnipper-runtime-tensorrt
+      - run: cargo test --locked -p latexsnipper-runtime-plugin-api
+
+  coreml:
+    name: Core ML contract
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - run: >
+          cargo test --locked
+          -p latexsnipper-runtime-coreml
+          --all-targets
+
+  # ── Level 2: Runtime parity ──────────────────────────────────────
+  # Executes only when the SDK archive URL is configured in repository
+  # variables. Verifies that real SDK-backed inference produces the
+  # expected outputs for a known model and input.
+
+  paddle-parity:
+    name: Paddle Inference parity
+    if: ${{ vars.PADDLE_RUNTIME_URL != '' && vars.PPFN_MODEL_URL != '' }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Download Paddle Runtime SDK
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            --output paddle_runtime.zip "$PADDLE_RUNTIME_URL"
+          unzip -q paddle_runtime.zip -d target/paddle-runtime
+          echo "PADDLE_RUNTIME_HOME=${{ github.workspace }}/target/paddle-runtime" >> "$GITHUB_ENV"
+      - name: Download PP-FormulaNet-S model
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            --output ppfn_model.zip "$PPFN_MODEL_URL"
+          mkdir -p test-models/formula-rec/pp-formulanet-s
+          unzip -q ppfn_model.zip -d test-models/formula-rec/pp-formulanet-s
+      - name: Run PP-FormulaNet Paddle parity
+        run: >
+          cargo test --locked
+          -p latexsnipper-inference
+          --features paddle
+          paddle_parity_matches_expected_tokens
+          -- --nocapture
+
+  executorch-parity:
+    name: ExecuTorch parity
+    if: ${{ vars.EXECUTORCH_RUNTIME_URL != '' && vars.EXECUTORCH_TEST_MODEL_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Download ExecuTorch SDK
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            --output executorch.tar.gz "$EXECUTORCH_RUNTIME_URL"
+          mkdir -p target/executorch-runtime
+          tar xzf executorch.tar.gz -C target/executorch-runtime
+          echo "LATEXSNIPPER_EXECUTORCH_HOME=${{ github.workspace }}/target/executorch-runtime" >> "$GITHUB_ENV"
+      - name: Download .pte program
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            --output test-model.pte "$EXECUTORCH_TEST_MODEL_URL"
+          echo "LATEXSNIPPER_EXECUTORCH_PROGRAM=${{ github.workspace }}/test-model.pte" >> "$GITHUB_ENV"
+      - name: Run ExecuTorch smoke
+        run: >
+          cargo test --locked
+          -p latexsnipper-runtime-executorch
+          --features executorch
+          -- --nocapture
+
+  # ── Level 3: Hardware parity ─────────────────────────────────────
+  # Only executes on self-hosted runners with the required GPU/NPU.
+  # Skipped (not failed) when the runner is not available.
+
+  tensorrt-hardware:
+    name: TensorRT on GPU
+    if: ${{ vars.ENABLE_TENSORRT_SELF_HOSTED == 'true' }}
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - nvidia
+      - gpu
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify GPU health
+        run: nvidia-smi
+      - name: Run TensorRT hardware test
+        run: >
+          cargo test --locked
+          -p latexsnipper-engine
+          --features tensorrt
+          engine_resolves_and_executes_native_tensorrt_when_test_runtime_is_configured
+          -- --nocapture
+
+  tensorrt-rtx-hardware:
+    name: TensorRT-RTX on GPU
+    if: ${{ vars.ENABLE_TENSORRT_SELF_HOSTED == 'true' }}
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - nvidia
+      - gpu
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify GPU health
+        run: nvidia-smi
+      - name: Run TensorRT-RTX hardware test
+        run: >
+          cargo test --locked
+          -p latexsnipper-engine
+          --features tensorrt-rtx
+          engine_resolves_and_executes_native_tensorrt_rtx_when_test_runtime_is_configured
+          -- --nocapture
+
+  # ── Catalog integrity ────────────────────────────────────────────
+  # Always runs. Statically validates the official model manifest.
+
+  catalog:
+    name: Model catalog integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - run: >
+          cargo test --locked
+          -p latexsnipper-runtime
+          --test model_catalog_runtime_variants

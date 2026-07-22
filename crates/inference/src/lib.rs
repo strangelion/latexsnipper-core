@@ -38,6 +38,7 @@ pub use handwriting_detector::{
 pub use handwriting_postprocess::postprocess_handwriting;
 pub use language::{Language, LanguageDetector};
 pub use latex_repair::{has_severe_latex_issue, latex_quality_flags, repair_latex};
+#[allow(deprecated)]
 pub use pp_formulanet::PPFormulaNetBackend;
 pub use pp_formulanet_adapter::PPFormulaNetAdapter;
 pub use symbol_detector::{detect_symbols, SymbolDetParams, SymbolDetection};

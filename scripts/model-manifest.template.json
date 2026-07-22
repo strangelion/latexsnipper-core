@@ -1,222 +1,412 @@
 {
-    "sourceId":  "official",
-    "sourceLabel":  "LaTeXSnipper Official",
-    "version":  "2.0.1",
-    "releaseTag":  "models-v2.0.0",
-    "baseUrl":  "https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0",
-    "mirrors":  [
-                    "https://gh.zwy.one/https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0",
-                    "https://gh.xxooo.cf/https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0"
-                ],
-    "checksums":  {
-                      "latexsnipper-formula-det.zip":  "08a22f896bdc2b4dd05aa021c5c0a2e9018dfc4058cb5f9ca1e716db497653f1",
-                      "latexsnipper-table-det.zip":  "0afc9756285345a93e74e11ef646dcc4192f6341966700b03f29f1b27479b7bf",
-                      "latexsnipper-text-rec.zip":  "15bf74c2029e4d2a79faa23d83c943e5265c6489e021946591c4b4e13f3048da",
-                      "latexsnipper-table-struct.zip":  "2912e08871aff986c0c2ba5a6dc29809f8f23a79c22ae7b14e94cb2745db3d1e",
-                      "latexsnipper-text-det.zip":  "0ba7532d2ea54f7e0f6dff892cbb679622cd1f2bb1f809e49cd208b11253cbd5",
-                      "latexsnipper-formula-rec.zip":  "fdcc414b9073c73325614faafc6473ddd7e91a80305cdc55f7267195de152a21"
-                  },
-    "testAssets":  {
-                       "orientation":  {
-                                           "fileName":  "PP-LCNet_x1_0_doc_ori_inference.onnx",
-                                           "sha256":  "af9a0a4f317ff0709ce752067807f819cb15d883f8ecad89f28df1c6ee2d9c92",
-                                           "destination":  "PP-LCNet_x1_0_doc_ori_infer/inference.onnx",
-                                           "sourceRevision":  "7330ab7039123e46af2dc03154b9969aa412c61d",
-                                           "license":  "Apache-2.0",
-                                           "sources":  [
-                                                           "https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_doc_ori_onnx/resolve/7330ab7039123e46af2dc03154b9969aa412c61d/inference.onnx"
-                                                       ]
-                                       }
-                   },
-    "categories":  {
-                       "formula-det":  {
-                                           "label":  "Formula Detection",
-                                           "required":  true,
-                                           "default":  "yolov8-mfd",
-                                           "variants":  [
-                                                            {
-                                                                "id":  "yolov8-mfd",
-                                                                "label":  "YOLOv8 Formula Detection",
-                                                                "adapter":  "yolov8-detection-v1",
-                                                                "modelType":  "yolov8",
-                                                                "files":  [
-                                                                              "mathcraft-mfd.onnx",
-                                                                              "config.json"
-                                                                          ],
-                                                                "zipFile":  "latexsnipper-formula-det.zip"
-                                                            }
-                                                        ]
-                                       },
-                       "formula-rec":  {
-                                           "label":  "Formula Recognition",
-                                           "required":  true,
-                                           "default":  "trocr-deit",
-                                           "variants":  [
-                                                            {
-                                                                "id":  "trocr-deit",
-                                                                "label":  "TrOCR Formula Recognition",
-                                                                "adapter":  "trocr-recognition-v1",
-                                                                "modelType":  "trocr",
-                                                                "files":  [
-                                                                              "encoder_model.onnx",
-                                                                              "decoder_model.onnx",
-                                                                              "tokenizer.json",
-                                                                              "config.json"
-                                                                          ],
-                                                                "zipFile":  "latexsnipper-formula-rec.zip"
-                                                            }
-                                                        ]
-                                       },
-                        "text-det":  {
-                                         "label":  "Text Detection",
-                                         "required":  false,
-                                         "default":  "v6-small",
-                                         "variants":  [
-                                                          {
-                                                              "id":  "v6-small",
-                                                              "label":  "PP-OCRv6 Text Detection",
-                                                              "adapter":  "dbnet-detection-v1",
-                                                              "modelType":  "dbnet",
-                                                              "files":  [
-                                                                            "inference.onnx",
-                                                                            "inference.yml",
-                                                                            "config.json"
-                                                                        ],
-                                                              "zipFile":  "latexsnipper-text-det.zip"
-                                                          },
-                                                          {
-                                                              "id":  "openocr-mobile",
-                                                              "label":  "OpenOCR Mobile Text Detection",
-                                                              "adapter":  "dbnet-detection-v1",
-                                                              "modelType":  "dbnet",
-                                                              "source":  "Topdu/OpenOCR",
-                                                              "license":  "Apache-2.0",
-                                                              "files":  [
-                                                                            "model.onnx",
-                                                                            "inference.yml",
-                                                                            "inference.json",
-                                                                            "config.json"
-                                                                        ],
-                                                              "zipFile":  "latexsnipper-openocr-text-det.zip"
-                                                          }
-                                                       ]
-                                     },
-                        "text-rec":  {
-                                         "label":  "Text Recognition",
-                                         "required":  false,
-                                         "default":  "v6-small",
-                                         "variants":  [
-                                                          {
-                                                              "id":  "v6-small",
-                                                              "label":  "PP-OCRv6 Text Recognition",
-                                                              "adapter":  "ctc-recognition-v1",
-                                                              "modelType":  "crnn_ctc",
-                                                              "files":  [
-                                                                            "inference.onnx",
-                                                                            "inference.yml",
-                                                                            "config.json"
-                                                                        ],
-                                                              "zipFile":  "latexsnipper-text-rec.zip"
-                                                          },
-                                                          {
-                                                              "id":  "openocr-mobile",
-                                                              "label":  "OpenOCR Mobile Text Recognition",
-                                                              "adapter":  "ctc-recognition-v1",
-                                                              "modelType":  "crnn_ctc",
-                                                              "source":  "Topdu/OpenOCR",
-                                                              "license":  "Apache-2.0",
-                                                              "files":  [
-                                                                            "model.onnx",
-                                                                            "inference.yml",
-                                                                            "inference.json",
-                                                                            "config.json"
-                                                                        ],
-                                                              "zipFile":  "latexsnipper-openocr-text-rec.zip"
-                                                          }
-                                                       ]
-                                     },
-                       "table-det":  {
-                                          "label":  "Table Detection",
-                                          "required":  false,
-                                          "default":  "tatr-detection",
-                                          "description":  "Detect table regions in document images.",
-                                          "variants":  [
-                                                           {
-                                                               "id":  "tatr-detection",
-                                                               "label":  "TATR Detection (Microsoft Table Transformer)",
-                                                               "adapter":  "detr-detection-v1",
-                                                               "modelType":  "tatr",
-                                                               "source":  "microsoft/table-transformer-detection",
-                                                               "license":  "MIT",
-                                                               "files":  [
-                                                                             "model.onnx",
-                                                                             "model.onnx.data",
-                                                                             "config.json"
-                                                                         ],
-                                                               "zipFile":  "latexsnipper-table-det.zip",
-                                                               "notes":  "DETR-based detection. Best for academic PDFs."
-                                                           }
-                                                       ]
-                                      },
-                        "table-struct":  {
-                                             "label":  "Table Structure Recognition",
-                                             "required":  false,
-                                             "default":  "tatr-structure",
-                                             "description":  "Parse table structure - rows, columns, headers, cells. Critical for Word/Excel/HTML export.",
-                                             "variants":  [
-                                                              {
-                                                                  "id":  "tatr-structure",
-                                                                  "label":  "TATR Structure (Microsoft Table Transformer)",
-                                                                  "adapter":  "detr-structure-v1",
-                                                                  "modelType":  "detr",
-                                                                  "source":  "microsoft/table-transformer-structure-recognition",
-                                                                  "license":  "MIT",
-                                                                  "files":  [
-                                                                                "model.onnx",
-                                                                                "model.onnx.data",
-                                                                                "config.json"
-                                                                            ],
-                                                                  "zipFile":  "latexsnipper-table-struct.zip",
-                                                                  "notes":  "DETR-based. Outputs 7 classes: table, column, row, column_header, row_header, spanning_cell, no_object. Best for academic PDFs."
-                                                              },
-                                                              {
-                                                                  "id":  "slanet-plus",
-                                                                  "label":  "SLANet Plus Table Structure",
-                                                                  "adapter":  "slanet-structure-v1",
-                                                                  "modelType":  "slanet",
-                                                                  "source":  "RapidAI/RapidTable",
-                                                                  "license":  "Apache-2.0",
-                                                                  "files":  [
-                                                                                "model.onnx",
-                                                                                "inference.yml",
-                                                                                "paddle_config.json",
-                                                                                "config.json"
-                                                                            ],
-                                                                  "zipFile":  "latexsnipper-slanet-plus.zip",
-                                                                  "notes":  "PaddleOCR/PP-Structure table structure backend used by OpenOCR/OpenDoc-style parsing."
-                                                              }
-                                                          ]
-                                         },
-                        "layout":  {
-                                       "label":  "Layout Analysis",
-                                       "required":  false,
-                                       "default":  "pp-layout-cdla",
-                                       "description":  "Document layout analysis - detects text, title, figure, table, equation regions.",
-                                       "variants":  [
-                                                        {
-                                                            "id":  "pp-layout-cdla",
-                                                            "label":  "PP-Layout CDLA (PicoDet)",
-                                                            "adapter":  "picodet-layout-v1",
-                                                            "modelType":  "picodet_layout",
-                                                            "source":  "RapidAI/RapidLayout",
-                                                            "license":  "Apache-2.0",
-                                                             "files":  [
-                                                                           "model.onnx",
-                                                                           "config.json"
-                                                                       ],
-                                                            "zipFile":  "latexsnipper-layout-cdla.zip"
-                                                        }
-                                                    ]
-                                   }
-                    }
+    "sourceId": "official",
+    "sourceLabel": "LaTeXSnipper Official",
+    "version": "3.0.0",
+    "releaseTag": "models-v3.0.0",
+    "baseUrl": "https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.0.0",
+    "mirrors": [
+        "https://gh.zwy.one/https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.0.0",
+        "https://gh.xxooo.cf/https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.0.0"
+    ],
+    "checksums": {},
+    "testAssets": {
+        "orientation": {
+            "fileName": "PP-LCNet_x1_0_doc_ori_inference.onnx",
+            "sha256": "af9a0a4f317ff0709ce752067807f819cb15d883f8ecad89f28df1c6ee2d9c92",
+            "destination": "PP-LCNet_x1_0_doc_ori_infer/inference.onnx",
+            "sourceRevision": "7330ab7039123e46af2dc03154b9969aa412c61d",
+            "license": "Apache-2.0",
+            "sources": [
+                "https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_doc_ori_onnx/resolve/7330ab7039123e46af2dc03154b9969aa412c61d/inference.onnx"
+            ]
+        }
+    },
+    "categories": {
+        "formula-det": {
+            "label": "Formula Detection",
+            "required": true,
+            "default": "yolov8-mfd",
+            "variants": [
+                {
+                    "id": "yolov8-mfd",
+                    "label": "YOLOv8 Formula Detection",
+                    "adapter": "yolov8-detection-v1",
+                    "modelType": "yolov8",
+                    "files": [
+                        "mathcraft-mfd.onnx",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "mathcraft-mfd.onnx",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-formula-det.zip"
+                }
+            ]
+        },
+        "formula-rec": {
+            "label": "Formula Recognition",
+            "required": true,
+            "default": "trocr-deit",
+            "variants": [
+                {
+                    "id": "trocr-deit",
+                    "label": "TrOCR Formula Recognition",
+                    "adapter": "trocr-recognition-v1",
+                    "modelType": "trocr",
+                    "files": [
+                        "encoder_model.onnx",
+                        "decoder_model.onnx",
+                        "tokenizer.json",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "encoder": "encoder_model.onnx",
+                                "decoder": "decoder_model.onnx",
+                                "tokenizer": "tokenizer.json",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": ["encoder-decoder"],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-formula-rec.zip"
+                },
+                {
+                    "id": "pp-formulanet-s",
+                    "label": "PP-FormulaNet-S",
+                    "adapter": "pp-formulanet-v1",
+                    "modelType": "pp_formulanet",
+                    "source": "PaddlePaddle/PaddleOCR",
+                    "license": "Apache-2.0",
+                    "files": [
+                        "inference.json",
+                        "inference.pdiparams",
+                        "tokenizer.json",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "paddle-native",
+                            "runtime": "paddle-inference",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "inference.json",
+                                "params": "inference.pdiparams",
+                                "tokenizer": "tokenizer.json",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [
+                                "full-inference-program",
+                                "control-flow",
+                                "kv-cache",
+                                "parallel-generation"
+                            ],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-pp-formulanet-s.zip",
+                    "notes": "Paddle Inference native full graph only. No ONNX fallback. Requires Paddle Runtime SDK."
+                }
+            ]
+        },
+        "text-det": {
+            "label": "Text Detection",
+            "required": false,
+            "default": "v6-small",
+            "variants": [
+                {
+                    "id": "v6-small",
+                    "label": "PP-OCRv6 Text Detection",
+                    "adapter": "dbnet-detection-v1",
+                    "modelType": "dbnet",
+                    "files": [
+                        "inference.onnx",
+                        "inference.yml",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "inference.onnx",
+                                "inferenceConfig": "inference.yml",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-text-det.zip"
+                },
+                {
+                    "id": "openocr-mobile",
+                    "label": "OpenOCR Mobile Text Detection",
+                    "adapter": "dbnet-detection-v1",
+                    "modelType": "dbnet",
+                    "source": "Topdu/OpenOCR",
+                    "license": "Apache-2.0",
+                    "files": [
+                        "model.onnx",
+                        "inference.yml",
+                        "inference.json",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "model.onnx",
+                                "inferenceConfig": "inference.yml",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-openocr-text-det.zip"
+                }
+            ]
+        },
+        "text-rec": {
+            "label": "Text Recognition",
+            "required": false,
+            "default": "v6-small",
+            "variants": [
+                {
+                    "id": "v6-small",
+                    "label": "PP-OCRv6 Text Recognition",
+                    "adapter": "ctc-recognition-v1",
+                    "modelType": "crnn_ctc",
+                    "files": [
+                        "inference.onnx",
+                        "inference.yml",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "inference.onnx",
+                                "inferenceConfig": "inference.yml",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-text-rec.zip"
+                },
+                {
+                    "id": "openocr-mobile",
+                    "label": "OpenOCR Mobile Text Recognition",
+                    "adapter": "ctc-recognition-v1",
+                    "modelType": "crnn_ctc",
+                    "source": "Topdu/OpenOCR",
+                    "license": "Apache-2.0",
+                    "files": [
+                        "model.onnx",
+                        "inference.yml",
+                        "inference.json",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "model.onnx",
+                                "inferenceConfig": "inference.yml",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-openocr-text-rec.zip"
+                }
+            ]
+        },
+        "table-det": {
+            "label": "Table Detection",
+            "required": false,
+            "default": "tatr-detection",
+            "description": "Detect table regions in document images.",
+            "variants": [
+                {
+                    "id": "tatr-detection",
+                    "label": "TATR Detection (Microsoft Table Transformer)",
+                    "adapter": "detr-detection-v1",
+                    "modelType": "tatr",
+                    "source": "microsoft/table-transformer-detection",
+                    "license": "MIT",
+                    "files": [
+                        "model.onnx",
+                        "model.onnx.data",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "model.onnx",
+                                "externalData": "model.onnx.data",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-table-det.zip",
+                    "notes": "DETR-based detection. Best for academic PDFs."
+                }
+            ]
+        },
+        "table-struct": {
+            "label": "Table Structure Recognition",
+            "required": false,
+            "default": "tatr-structure",
+            "description": "Parse table structure - rows, columns, headers, cells. Critical for Word/Excel/HTML export.",
+            "variants": [
+                {
+                    "id": "tatr-structure",
+                    "label": "TATR Structure (Microsoft Table Transformer)",
+                    "adapter": "detr-structure-v1",
+                    "modelType": "detr",
+                    "source": "microsoft/table-transformer-structure-recognition",
+                    "license": "MIT",
+                    "files": [
+                        "model.onnx",
+                        "model.onnx.data",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "model.onnx",
+                                "externalData": "model.onnx.data",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-table-struct.zip",
+                    "notes": "DETR-based. Outputs 7 classes: table, column, row, column_header, row_header, spanning_cell, no_object. Best for academic PDFs."
+                },
+                {
+                    "id": "slanet-plus",
+                    "label": "SLANet Plus Table Structure",
+                    "adapter": "slanet-structure-v1",
+                    "modelType": "slanet",
+                    "source": "RapidAI/RapidTable",
+                    "license": "Apache-2.0",
+                    "files": [
+                        "model.onnx",
+                        "inference.yml",
+                        "paddle_config.json",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "model.onnx",
+                                "inferenceConfig": "inference.yml",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-slanet-plus.zip",
+                    "notes": "PaddleOCR/PP-Structure table structure backend used by OpenOCR/OpenDoc-style parsing."
+                }
+            ]
+        },
+        "layout": {
+            "label": "Layout Analysis",
+            "required": false,
+            "default": "pp-layout-cdla",
+            "description": "Document layout analysis - detects text, title, figure, table, equation regions.",
+            "variants": [
+                {
+                    "id": "pp-layout-cdla",
+                    "label": "PP-Layout CDLA (PicoDet)",
+                    "adapter": "picodet-layout-v1",
+                    "modelType": "picodet_layout",
+                    "source": "RapidAI/RapidLayout",
+                    "license": "Apache-2.0",
+                    "files": [
+                        "model.onnx",
+                        "config.json"
+                    ],
+                    "runtimeVariants": [
+                        {
+                            "id": "onnx",
+                            "runtime": "onnx-runtime",
+                            "status": "stable",
+                            "priority": 100,
+                            "artifacts": {
+                                "model": "model.onnx",
+                                "config": "config.json"
+                            },
+                            "platforms": [],
+                            "capabilities": [],
+                            "fallbacks": []
+                        }
+                    ],
+                    "zipFile": "latexsnipper-layout-cdla.zip"
+                }
+            ]
+        }
+    }
 }

@@ -3,7 +3,9 @@
 use std::path::Path;
 
 use latexsnipper_foundation::Result;
-use latexsnipper_runtime::{providers::onnx_factory::OnnxRuntimeFactory, RuntimeRegistry};
+#[cfg(not(target_arch = "wasm32"))]
+use latexsnipper_runtime::providers::onnx_factory::OnnxRuntimeFactory;
+use latexsnipper_runtime::RuntimeRegistry;
 #[cfg(feature = "runtime-plugins")]
 use latexsnipper_runtime_plugin_api::{
     RuntimePluginDiscovery, RuntimePluginDiscoveryReport, RuntimePluginTrustStore,
@@ -14,7 +16,13 @@ use latexsnipper_runtime_plugin_api::{
 /// dynamic SDK is absent; runtime-variant resolution will then follow only
 /// manifest-declared fallbacks.
 pub fn default_runtime_registry(models_dir: &Path) -> Result<RuntimeRegistry> {
+    #[cfg(not(target_arch = "wasm32"))]
     let registry = RuntimeRegistry::with_factory(OnnxRuntimeFactory::new(models_dir.to_path_buf()));
+    #[cfg(target_arch = "wasm32")]
+    let registry = {
+        let _ = models_dir;
+        RuntimeRegistry::default()
+    };
     #[cfg(feature = "paddle")]
     let registry = {
         let mut registry = registry;
@@ -70,6 +78,7 @@ mod tests {
 
     use super::*;
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn default_registry_always_contains_onnx() {
         let registry = default_runtime_registry(Path::new("models")).unwrap();

@@ -31,7 +31,7 @@ serde_yaml = "0.9"
 [features]
 default = ["native"]
 native = ["dep:latexsnipper-conversion", "latexsnipper-conversion/native"]
-wasm = []
+wasm = ["latexsnipper-inference/wasm"]
 
 [dev-dependencies]
 env_logger = "0.11"

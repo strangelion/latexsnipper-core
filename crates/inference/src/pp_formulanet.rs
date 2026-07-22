@@ -32,6 +32,13 @@ use crate::formula_backend::{BackendConfig, FormulaBackend};
 use crate::types::RecognitionResult;
 
 /// PP-FormulaNet-S inference backend using fullseq decoder ONNX.
+#[deprecated(
+    since = "3.1.0",
+    note = "Use PPFormulaNetAdapter with RuntimeRegistry. \
+            PPFormulaNetBackend always uses the legacy reconstructed ONNX path. \
+            The official production path is Paddle Inference native via \
+            PPFormulaNetAdapter::from_resolved_variant()."
+)]
 pub struct PPFormulaNetBackend {
     name: String,
     encoder: Arc<Box<dyn InferenceSession>>,
@@ -41,12 +48,14 @@ pub struct PPFormulaNetBackend {
     tokenizer: tokenizers::Tokenizer,
 }
 
+#[allow(deprecated)]
 impl PPFormulaNetBackend {
     /// Load from model directory.
     ///
     /// Prefers `decoder_fullseq_parallel.onnx` (official block-wise parallel
     /// causal mask) when available, falls back to `decoder_fullseq.onnx`
     /// (no mask, legacy).
+    #[allow(deprecated)]
     pub fn load(
         model_dir: &Path,
         runtime: &dyn latexsnipper_runtime::RuntimeBackend,
@@ -167,6 +176,7 @@ impl PPFormulaNetBackend {
     }
 }
 
+#[allow(deprecated)]
 impl FormulaBackend for PPFormulaNetBackend {
     fn recognize(&self, image: &SnipperImage) -> Result<RecognitionResult> {
         // 1. Official UniMERNet preprocessing and normalization.

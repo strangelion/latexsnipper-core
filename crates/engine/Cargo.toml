@@ -48,7 +48,10 @@ native = [
     "latexsnipper-model/native",
     "latexsnipper-pipeline/native",
 ]
-wasm = ["latexsnipper-pipeline/wasm"]
+wasm = [
+    "latexsnipper-pipeline/wasm",
+    "latexsnipper-inference/wasm"
+]
 remote-api = ["latexsnipper-runtime/remote-api"]
 paddle = ["dep:latexsnipper-runtime-paddle"]
 executorch = ["dep:latexsnipper-runtime-executorch"]
