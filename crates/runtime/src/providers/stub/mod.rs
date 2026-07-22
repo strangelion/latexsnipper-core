@@ -1,7 +1,6 @@
 use crate::acceleration::AccelerationMode;
-use crate::backend::RuntimeBackend;
+use crate::legacy::{InferenceSession, RuntimeBackend};
 use crate::model_handle::ModelHandle;
-use crate::session::InferenceSession;
 use latexsnipper_foundation::Result;
 use latexsnipper_tensor::Tensor;
 

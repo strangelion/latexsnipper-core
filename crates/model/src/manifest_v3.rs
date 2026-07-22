@@ -394,6 +394,7 @@ impl ModelManifestV3 {
                     source: Some(profile.source.clone()),
                     license: Some(profile.license.clone()),
                     files,
+                    runtime_variants: Vec::new(),
                     zip_file: package,
                     notes: profile.notes.clone(),
                 });
@@ -523,6 +524,7 @@ mod tests {
                         source: Some("fixture-source".to_string()),
                         license: Some("Apache-2.0".to_string()),
                         files: vec!["model.onnx".to_string()],
+                        runtime_variants: Vec::new(),
                         zip_file: None,
                         notes: None,
                     }],

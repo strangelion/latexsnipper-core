@@ -1,6 +1,8 @@
 use crate::model_package::{ModelPackage, ModelTask};
+use crate::{ResolvedRuntimeVariant, RuntimeRegistry, RuntimeResolver};
 use latexsnipper_foundation::{Result, SnipperError};
-use std::collections::HashMap;
+use latexsnipper_model::{RuntimeVariant, VariantStatus};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 /// A manifest file describing a model package.
@@ -18,7 +20,9 @@ pub struct ModelManifest {
     pub input: ManifestTensorSpec,
     /// Output specification.
     pub output: Vec<ManifestTensorSpec>,
-    /// Model file paths relative to manifest directory.
+    /// Legacy model file paths relative to manifest directory.
+    /// For new manifests using `runtimeVariants`, this can be empty.
+    #[serde(default)]
     pub files: ModelFiles,
     /// Preprocessing configuration.
     #[serde(default)]
@@ -29,6 +33,10 @@ pub struct ModelManifest {
     /// SHA-256 checksums for model files.
     #[serde(default)]
     pub checksums: HashMap<String, String>,
+    /// Multiple runtime variants. If absent and `files` is present,
+    /// an implicit ONNX variant is derived from `files`.
+    #[serde(default, rename = "runtimeVariants")]
+    pub runtime_variants: Vec<RuntimeVariant>,
 }
 
 /// Tensor specification in manifest.
@@ -260,6 +268,78 @@ impl ModelRegistry {
     /// Check if a model is available.
     pub fn has(&self, id: &str) -> bool {
         self.models.contains_key(id)
+    }
+}
+
+// ─── Runtime variant resolution ───────────────────────────────────
+
+impl ModelManifest {
+    /// Resolve the best available runtime variant.
+    ///
+    /// New manifests use their declared variants. Legacy manifests derive one
+    /// implicit ONNX variant from `files`. Availability failures only traverse
+    /// explicitly declared fallback ids.
+    pub fn resolve_runtime(
+        &self,
+        registry: &RuntimeRegistry,
+        model_dir: &Path,
+    ) -> Result<ResolvedRuntimeVariant> {
+        self.resolve_runtime_variant(registry, model_dir, None)
+    }
+
+    pub fn resolve_runtime_variant(
+        &self,
+        registry: &RuntimeRegistry,
+        model_dir: &Path,
+        preferred_variant: Option<&str>,
+    ) -> Result<ResolvedRuntimeVariant> {
+        let variants = self.all_variants(model_dir);
+        RuntimeResolver::new(registry).resolve(&self.id, &variants, model_dir, preferred_variant)
+    }
+
+    /// Build an implicit ONNX Runtime variant from legacy `files` field.
+    fn implicit_onnx_variant(&self, _model_dir: &Path) -> Option<RuntimeVariant> {
+        let mut artifacts = BTreeMap::new();
+        if let Some(ref p) = self.files.primary {
+            artifacts.insert("model".to_string(), p.clone());
+        }
+        if let Some(ref e) = self.files.encoder {
+            artifacts.insert("encoder".to_string(), e.clone());
+        }
+        if let Some(ref d) = self.files.decoder {
+            artifacts.insert("decoder".to_string(), d.clone());
+        }
+        if let Some(ref t) = self.files.tokenizer {
+            artifacts.insert("tokenizer".to_string(), t.clone());
+        }
+        if let Some(ref c) = self.files.config {
+            artifacts.insert("config".to_string(), c.clone());
+        }
+        if artifacts.is_empty() {
+            return None;
+        }
+        Some(RuntimeVariant {
+            id: "onnx-default".to_string(),
+            runtime: "onnx-runtime".to_string(),
+            status: VariantStatus::Stable,
+            priority: 0,
+            artifacts,
+            options: None,
+            platforms: Vec::new(),
+            capabilities: Vec::new(),
+            fallbacks: Vec::new(),
+        })
+    }
+
+    /// List all variants, including the implicit one for legacy manifests.
+    pub fn all_variants(&self, model_dir: &Path) -> Vec<RuntimeVariant> {
+        if !self.runtime_variants.is_empty() {
+            self.runtime_variants.clone()
+        } else if let Some(v) = self.implicit_onnx_variant(model_dir) {
+            vec![v]
+        } else {
+            vec![]
+        }
     }
 }
 

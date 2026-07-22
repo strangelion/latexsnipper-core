@@ -148,11 +148,29 @@ pub struct VariantInfo {
     pub source: Option<String>,
     #[serde(default)]
     pub license: Option<String>,
+    #[serde(default)]
     pub files: Vec<String>,
+    /// Executable variants for different runtimes. Empty means derive an
+    /// implicit ONNX variant from `files` for legacy catalogs.
+    #[serde(default)]
+    pub runtime_variants: Vec<crate::RuntimeVariant>,
     #[serde(default)]
     pub zip_file: Option<String>,
     #[serde(default)]
     pub notes: Option<String>,
+}
+
+impl VariantInfo {
+    /// Complete deterministic package file list across legacy and runtime
+    /// variants. Runtime artifacts may include directories such as `.mlpackage`.
+    pub fn artifact_paths(&self) -> Vec<String> {
+        let mut paths = std::collections::BTreeSet::new();
+        paths.extend(self.files.iter().cloned());
+        for variant in &self.runtime_variants {
+            paths.extend(variant.artifacts.values().cloned());
+        }
+        paths.into_iter().collect()
+    }
 }
 
 impl ModelManifest {

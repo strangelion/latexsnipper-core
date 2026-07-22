@@ -1,46 +1,86 @@
+//! The canonical named-tensor runtime session API.
+
+use std::collections::BTreeMap;
+
 use latexsnipper_foundation::Result;
 use latexsnipper_tensor::Tensor;
+use serde::{Deserialize, Serialize};
 
-/// An inference session for running models.
-pub trait InferenceSession: Send + Sync {
-    /// Run inference with input tensors, return output tensors.
-    fn run(&self, inputs: &[Tensor]) -> Result<Vec<Tensor>>;
+use crate::RuntimeKind;
 
-    /// Get input names expected by the model.
-    fn input_names(&self) -> Vec<String>;
+pub type TensorMap = BTreeMap<String, Tensor>;
 
-    /// Get output names produced by the model.
-    fn output_names(&self) -> Vec<String>;
-
-    /// Get character list from model metadata (for text recognition models).
-    /// Returns None if the model doesn't have embedded characters.
-    fn get_character_list(&self) -> Option<Vec<String>> {
-        None
-    }
-
-    /// Release resources.
-    fn release(&mut self);
+#[derive(Debug, Clone)]
+pub struct RunRequest {
+    pub method: Option<String>,
+    pub inputs: TensorMap,
+    pub requested_outputs: Option<Vec<String>>,
 }
 
-/// Blanket implementation for `Box<dyn InferenceSession>`.
-impl InferenceSession for Box<dyn InferenceSession> {
-    fn run(&self, inputs: &[Tensor]) -> Result<Vec<Tensor>> {
-        (**self).run(inputs)
+impl RunRequest {
+    pub fn new(inputs: TensorMap) -> Self {
+        Self {
+            method: None,
+            inputs,
+            requested_outputs: None,
+        }
     }
 
-    fn input_names(&self) -> Vec<String> {
-        (**self).input_names()
+    pub fn with_method(mut self, method: impl Into<String>) -> Self {
+        self.method = Some(method.into());
+        self
     }
 
-    fn output_names(&self) -> Vec<String> {
-        (**self).output_names()
+    pub fn requesting(mut self, outputs: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.requested_outputs = Some(outputs.into_iter().map(Into::into).collect());
+        self
     }
 
-    fn get_character_list(&self) -> Option<Vec<String>> {
-        (**self).get_character_list()
+    /// Compatibility helper for positional callers. Tensor names remain the
+    /// source of truth; duplicate names are rejected by overwriting only in
+    /// legacy code paths that already lacked a way to distinguish them.
+    pub fn from_tensors(tensors: &[Tensor]) -> Self {
+        Self::new(
+            tensors
+                .iter()
+                .map(|tensor| (tensor.name().to_owned(), tensor.clone()))
+                .collect(),
+        )
     }
+}
 
-    fn release(&mut self) {
-        (**self).release()
+#[derive(Debug, Clone)]
+pub struct RunResponse {
+    pub outputs: TensorMap,
+}
+
+impl RunResponse {
+    pub fn first_output(&self) -> Option<&Tensor> {
+        self.outputs.values().next()
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMetadata {
+    pub runtime: RuntimeKind,
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub methods: Vec<String>,
+    pub inputs: Vec<TensorSpec>,
+    pub outputs: Vec<TensorSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TensorSpec {
+    pub name: String,
+    pub shape: Vec<Option<i64>>,
+    pub dtype: String,
+}
+
+/// Runtime-neutral inference session. Model-specific preprocessing,
+/// generation, tokenization, and postprocessing remain in model adapters.
+pub trait RuntimeSession: Send + Sync {
+    fn metadata(&self) -> &SessionMetadata;
+    fn run(&self, request: RunRequest) -> Result<RunResponse>;
 }

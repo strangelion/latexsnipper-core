@@ -6,9 +6,8 @@ use ort::{environment::Environment, session::Session, value::Value};
 
 use super::platform::{Acceleration, Platform};
 use crate::acceleration::AccelerationMode;
-use crate::backend::RuntimeBackend;
+use crate::legacy::{InferenceSession, RuntimeBackend};
 use crate::model_handle::ModelHandle;
-use crate::session::InferenceSession;
 use latexsnipper_ast::{Diagnostic, DiagnosticLevel, W_GPU_PROVIDER_FALLBACK};
 use latexsnipper_foundation::{Result, SnipperError};
 

@@ -23,8 +23,13 @@ use latexsnipper_inference::{
     DetectionParams, RecognitionParams,
 };
 #[cfg(target_os = "windows")]
-use latexsnipper_runtime::{AccelerationMode, ModelHandle, OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_runtime::{
+    providers::onnx_factory::OnnxRuntimeFactory, AccelerationMode, ModelHandle,
+    RegistryRuntimeBackend, RuntimeBackend, RuntimeKind, RuntimeRegistry,
+};
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "windows")]
+use std::sync::Arc;
 
 /// Main entry point for LaTeXSnipper SDK.
 pub struct Snipper {
@@ -72,8 +77,10 @@ impl Snipper {
             let models = find_models_dir()?;
             log::info!("Using models from {:?}", models);
 
-            let backend = OnnxRuntimeBackend::new(models.clone())
-                .map_err(|e| SnipperError::Runtime(e.to_string()))?;
+            let registry = Arc::new(RuntimeRegistry::with_factory(OnnxRuntimeFactory::new(
+                models.clone(),
+            )));
+            let backend = RegistryRuntimeBackend::new(registry, RuntimeKind::OnnxRuntime);
 
             // Detect formulas
             let det_config =

@@ -707,6 +707,7 @@ mod tests {
             outputs: None,
             extra: None,
             pipeline: None,
+            runtime_variants: Vec::new(),
         };
 
         let params = TextDetParams::from_config(&config);
@@ -781,6 +782,7 @@ mod tests {
             outputs: None,
             extra: None,
             pipeline: None,
+            runtime_variants: Vec::new(),
         };
 
         let params = TextDetParams::from_config(&config);

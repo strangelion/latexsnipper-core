@@ -69,6 +69,7 @@ fn test_registry_create_package() {
         preprocessing: None,
         decoding: None,
         checksums: Default::default(),
+        runtime_variants: Vec::new(),
     };
 
     let result = registry.create_package(&manifest, Path::new("."));
@@ -100,6 +101,7 @@ fn test_registry_unknown_adapter() {
         preprocessing: None,
         decoding: None,
         checksums: Default::default(),
+        runtime_variants: Vec::new(),
     };
 
     let result = registry.create_package(&manifest, Path::new("."));
@@ -198,6 +200,7 @@ fn test_manifest_adapter() {
         }),
         decoding: None,
         checksums: Default::default(),
+        runtime_variants: Vec::new(),
     };
 
     let adapter = ManifestAdapter::new(&manifest);

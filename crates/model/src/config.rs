@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::Path;
 
+use crate::RuntimeVariant;
+
 /// DBNet output box type: quad (4-point polygon) or poly (full contour).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -133,6 +135,11 @@ pub struct ModelConfig {
     /// Pipeline-specific configuration — tells the pipeline how to use this model.
     #[serde(default)]
     pub pipeline: Option<PipelineConfig>,
+
+    /// Runtime-specific artifact variants for this model package. Empty keeps
+    /// the legacy ONNX discovery behavior.
+    #[serde(default, alias = "runtimeVariants")]
+    pub runtime_variants: Vec<RuntimeVariant>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -431,6 +438,7 @@ impl ModelConfig {
             outputs: None,
             extra: None,
             pipeline: None,
+            runtime_variants: Vec::new(),
         }
     }
 
@@ -497,6 +505,7 @@ impl ModelConfig {
             outputs: None,
             extra: None,
             pipeline: None,
+            runtime_variants: Vec::new(),
         })
     }
 

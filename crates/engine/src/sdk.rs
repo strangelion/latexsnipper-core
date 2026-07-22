@@ -20,9 +20,9 @@ use latexsnipper_foundation::SnipperError;
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::SnipperImage;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use latexsnipper_runtime::OnnxRuntimeBackend;
 use latexsnipper_runtime::StubRuntime;
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use latexsnipper_runtime::{providers::onnx_factory::OnnxRuntimeFactory, RuntimeRegistry};
 use std::path::Path;
 
 use crate::{DocumentParseMode, EngineConfig, RecognizeMode, SnipperEngine};
@@ -150,9 +150,10 @@ impl Snipper {
         {
             let path = path.as_ref().to_path_buf();
             std::thread::spawn(move || {
-                let backend = OnnxRuntimeBackend::new(config.models_dir.clone())
-                    .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-                let engine = SnipperEngine::new(config, Box::new(backend));
+                let registry = RuntimeRegistry::with_factory(OnnxRuntimeFactory::new(
+                    config.models_dir.clone(),
+                ));
+                let engine = SnipperEngine::with_runtime_registry(config, registry)?;
                 let runtime = tokio::runtime::Runtime::new()
                     .map_err(|e| SnipperError::Runtime(e.to_string()))?;
                 let document = runtime
@@ -186,9 +187,10 @@ impl Snipper {
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         {
             std::thread::spawn(move || {
-                let backend = OnnxRuntimeBackend::new(config.models_dir.clone())
-                    .map_err(|e| SnipperError::Runtime(e.to_string()))?;
-                let engine = SnipperEngine::new(config, Box::new(backend));
+                let registry = RuntimeRegistry::with_factory(OnnxRuntimeFactory::new(
+                    config.models_dir.clone(),
+                ));
+                let engine = SnipperEngine::with_runtime_registry(config, registry)?;
                 let runtime = tokio::runtime::Runtime::new()
                     .map_err(|e| SnipperError::Runtime(e.to_string()))?;
                 let document = runtime

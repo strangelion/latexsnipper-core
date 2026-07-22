@@ -4,7 +4,7 @@ use crate::text_recognition_service::TextRecognitionService;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::{
-    InferenceSession, ModelPackage, ModelTask, RuntimeBackend, SharedModelResolver,
+    InferenceSession, ModelPackage, ModelTask, RuntimeBackend, RuntimeRegistry, SharedModelResolver,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -69,7 +69,11 @@ pub struct PipelineContext {
     /// Models directory path.
     pub models_dir: Option<std::path::PathBuf>,
     /// Runtime backend for inference sessions (injected by engine).
+    /// Compatibility view over `runtime_registry`; it never owns an
+    /// independent runtime implementation.
     pub backend: Option<Arc<dyn RuntimeBackend>>,
+    /// Canonical runtime registry used by manifest-aware model adapters.
+    pub runtime_registry: Option<Arc<RuntimeRegistry>>,
     /// Model resolver for loading models (injects backend-specific loading).
     pub model_resolver: Option<SharedModelResolver>,
     /// Model packages for type-safe inference (indexed by ModelTask).
@@ -106,6 +110,7 @@ impl PipelineContext {
             cancelled: false,
             models_dir: None,
             backend: None,
+            runtime_registry: None,
             model_resolver: None,
             model_packages: HashMap::new(),
             model_variants: HashMap::new(),

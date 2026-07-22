@@ -3,6 +3,7 @@ pub mod config;
 pub mod manager;
 pub mod manifest;
 pub mod manifest_v3;
+pub mod runtime_variant;
 
 pub use config::{
     CtcOutputLayout, DbNetBoxType, DbNetScoreMode, DecoderConfig, DecodingConfig, EncoderConfig,
@@ -16,3 +17,4 @@ pub use manifest_v3::{
     ModelArtifactKindV3, ModelArtifactV3, ModelCategoryV3, ModelEvidenceStatusV3, ModelEvidenceV3,
     ModelManifestV3, ModelManifestV3Error, ModelProfileV3, MODEL_MANIFEST_SCHEMA_VERSION_V3,
 };
+pub use runtime_variant::{RuntimeVariant, VariantStatus};

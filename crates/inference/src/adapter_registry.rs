@@ -113,6 +113,7 @@ fn manifest_to_config(manifest: &ModelManifest) -> latexsnipper_model::ModelConf
         outputs: None,
         extra: None,
         pipeline: None,
+        runtime_variants: manifest.runtime_variants.clone(),
     }
 }
 
@@ -336,6 +337,7 @@ mod tests {
             }),
             decoding: None,
             checksums: Default::default(),
+            runtime_variants: Vec::new(),
         };
 
         let config = manifest_to_config(&manifest);

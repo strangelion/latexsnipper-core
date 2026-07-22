@@ -490,14 +490,27 @@ impl ModelManager {
         best.ok_or_else(|| SnipperError::Model("No extracted directory found".into()))
     }
 
-    /// Check if a directory contains ONNX model files or config.json.
+    /// Check if a directory contains a supported model artifact or config.
     fn dir_contains_model_files(&self, dir: &Path) -> bool {
         std::fs::read_dir(dir)
             .map(|entries| {
                 entries.filter_map(|e| e.ok()).any(|e| {
                     let name = e.file_name();
                     let name = name.to_string_lossy();
-                    name.ends_with(".onnx") || name == "config.json"
+                    [
+                        ".onnx",
+                        ".pdmodel",
+                        ".pdiparams",
+                        ".pte",
+                        ".engine",
+                        ".plan",
+                        ".mlmodel",
+                        ".mlpackage",
+                        ".mlmodelc",
+                    ]
+                    .iter()
+                    .any(|extension| name.ends_with(extension))
+                        || name == "config.json"
                 })
             })
             .unwrap_or(false)
@@ -533,6 +546,7 @@ impl ModelManager {
 
             if let Some(variant) = variant {
                 if let Some(ref zip_file) = variant.zip_file {
+                    let expected_files = variant.artifact_paths();
                     let url = format!("{}/{}", manifest.base_url, zip_file);
                     let expected_sha256 = manifest.checksums.get(zip_file).map(|s| s.as_str());
                     let path = self.download_with_progress(
@@ -540,7 +554,7 @@ impl ModelManager {
                         category,
                         &variant.id,
                         expected_sha256,
-                        &variant.files,
+                        &expected_files,
                         None,
                     )?;
                     paths.push(path);

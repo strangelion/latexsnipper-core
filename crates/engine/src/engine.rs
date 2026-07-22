@@ -1,6 +1,5 @@
 use log::info;
 use std::collections::HashMap;
-#[cfg(feature = "native")]
 use std::path::Path;
 use std::sync::Arc;
 
@@ -18,7 +17,9 @@ use latexsnipper_pipeline::{
 use latexsnipper_runtime::FsModelResolver;
 use latexsnipper_runtime::{
     AccelerationMode, ModelPackage, ModelRegistry, ModelSelectionDecision, ModelSelectionPolicy,
-    ModelSelectionRequest, ModelTask, RuntimeBackend, SharedModelResolver,
+    ModelSelectionRequest, ModelTask, RegistryRuntimeBackend, ResolvedRuntimeVariant,
+    RuntimeBackend, RuntimeFactory, RuntimeKind, RuntimeRegistry, RuntimeSession,
+    SharedModelResolver,
 };
 
 use crate::config::EngineConfig;
@@ -30,7 +31,10 @@ pub use latexsnipper_api_types::{RecognizeMode, RecognizeRequest, RecognizeRespo
 /// Engine only assembles PipelineGraph and runs it — all logic lives in Nodes.
 pub struct SnipperEngine {
     config: EngineConfig,
-    runtime: Arc<dyn RuntimeBackend>,
+    /// Canonical and only runtime ownership graph.
+    runtime_registry: Arc<RuntimeRegistry>,
+    /// Runtime selected for legacy ModelHandle calls.
+    default_runtime: RuntimeKind,
     model_resolver: Option<SharedModelResolver>,
     #[cfg(feature = "native")]
     model_manager: ModelManager,
@@ -43,6 +47,17 @@ pub struct SnipperEngine {
     model_registry: ModelRegistry,
 }
 
+fn legacy_runtime_registry(
+    runtime: Box<dyn RuntimeBackend>,
+) -> (Arc<RuntimeRegistry>, RuntimeKind) {
+    let runtime: Arc<dyn RuntimeBackend> = Arc::from(runtime);
+    let default_runtime = RuntimeKind::from_id(runtime.name());
+    let registry = RuntimeRegistry::with_factory(
+        latexsnipper_runtime::providers::legacy_adapter::LegacyRuntimeAdapter::new(runtime),
+    );
+    (Arc::new(registry), default_runtime)
+}
+
 impl SnipperEngine {
     /// Create a new engine with the given config and runtime backend.
     pub fn new(config: EngineConfig, runtime: Box<dyn RuntimeBackend>) -> Self {
@@ -53,9 +68,13 @@ impl SnipperEngine {
             Some(Arc::new(FsModelResolver::new(config.models_dir.clone())));
         #[cfg(not(feature = "native"))]
         let model_resolver = None;
+
+        let (runtime_registry, default_runtime) = legacy_runtime_registry(runtime);
+
         Self {
             config,
-            runtime: Arc::from(runtime),
+            runtime_registry,
+            default_runtime,
             model_resolver,
             #[cfg(feature = "native")]
             model_manager,
@@ -74,9 +93,13 @@ impl SnipperEngine {
     ) -> Self {
         #[cfg(feature = "native")]
         let model_manager = ModelManager::new(config.models_dir.clone());
+
+        let (runtime_registry, default_runtime) = legacy_runtime_registry(runtime);
+
         Self {
             config,
-            runtime: Arc::from(runtime),
+            runtime_registry,
+            default_runtime,
             model_resolver: Some(resolver),
             #[cfg(feature = "native")]
             model_manager,
@@ -87,8 +110,100 @@ impl SnipperEngine {
         }
     }
 
-    pub fn runtime(&self) -> &dyn RuntimeBackend {
-        &*self.runtime
+    /// Construct an engine directly from the canonical runtime registry.
+    pub fn with_runtime_registry(config: EngineConfig, registry: RuntimeRegistry) -> Result<Self> {
+        let default_runtime = if registry.is_available(&RuntimeKind::OnnxRuntime) {
+            RuntimeKind::OnnxRuntime
+        } else {
+            registry
+                .available_runtimes()
+                .into_iter()
+                .next()
+                .ok_or_else(|| {
+                    latexsnipper_foundation::SnipperError::Runtime(
+                        "cannot create engine: runtime registry has no available runtime"
+                            .to_owned(),
+                    )
+                })?
+        };
+
+        #[cfg(feature = "native")]
+        let model_manager = ModelManager::new(config.models_dir.clone());
+        #[cfg(feature = "native")]
+        let model_resolver: Option<SharedModelResolver> =
+            Some(Arc::new(FsModelResolver::new(config.models_dir.clone())));
+        #[cfg(not(feature = "native"))]
+        let model_resolver = None;
+
+        Ok(Self {
+            config,
+            runtime_registry: Arc::new(registry),
+            default_runtime,
+            model_resolver,
+            #[cfg(feature = "native")]
+            model_manager,
+            job_queue: JobQueue::new(),
+            model_packages: HashMap::new(),
+            model_selection: ModelSelectionPolicy::default(),
+            model_registry: ModelRegistry::new(),
+        })
+    }
+
+    /// Compatibility view. The returned backend delegates every operation to
+    /// the canonical RuntimeRegistry and does not form a second execution path.
+    pub fn runtime(&self) -> Arc<dyn RuntimeBackend> {
+        Arc::new(RegistryRuntimeBackend::new(
+            self.runtime_registry.clone(),
+            self.default_runtime.clone(),
+        ))
+    }
+
+    /// Access the runtime registry (for registering additional runtimes).
+    pub fn runtime_registry(&self) -> &RuntimeRegistry {
+        &self.runtime_registry
+    }
+
+    /// Mutably access the runtime registry.
+    pub fn runtime_registry_mut(&mut self) -> &mut RuntimeRegistry {
+        Arc::make_mut(&mut self.runtime_registry)
+    }
+
+    /// Register a runtime factory.
+    pub fn register_runtime(&mut self, factory: impl RuntimeFactory + 'static) -> Result<()> {
+        Arc::make_mut(&mut self.runtime_registry).register(factory)
+    }
+
+    /// Resolve a model manifest through the same resolver used by execution.
+    pub fn resolve_model_runtime(
+        &self,
+        manifest: &latexsnipper_runtime::ModelManifest,
+        model_dir: &Path,
+        preferred_variant: Option<&str>,
+    ) -> Result<ResolvedRuntimeVariant> {
+        manifest.resolve_runtime_variant(&self.runtime_registry, model_dir, preferred_variant)
+    }
+
+    /// Resolve and create a canonical named-tensor session in one operation.
+    pub fn create_model_runtime_session(
+        &self,
+        manifest: &latexsnipper_runtime::ModelManifest,
+        model_dir: &Path,
+        preferred_variant: Option<&str>,
+    ) -> Result<(ResolvedRuntimeVariant, Box<dyn RuntimeSession>)> {
+        let mut resolved = self.resolve_model_runtime(manifest, model_dir, preferred_variant)?;
+        if resolved.options.max_threads == 0 {
+            resolved.options.max_threads = self.config.max_threads;
+        }
+        if resolved.options.providers.is_empty()
+            && resolved.options.device == latexsnipper_runtime::DeviceKind::Auto
+        {
+            let compatibility_options =
+                latexsnipper_runtime::RuntimeOptions::from(self.config.acceleration);
+            resolved.options.device = compatibility_options.device;
+            resolved.options.providers = compatibility_options.providers;
+        }
+        let session = self.runtime_registry.create_resolved_session(&resolved)?;
+        Ok((resolved, session))
     }
     #[cfg(feature = "native")]
     pub fn model_manager(&self) -> &ModelManager {
@@ -195,14 +310,14 @@ impl SnipperEngine {
     /// Next inference call will create fresh sessions with the new model files.
     pub fn reload_model(&self, session_key: &str) -> Result<()> {
         info!("Reloading model: {}", session_key);
-        self.runtime.clear_sessions();
+        self.runtime_registry.clear_sessions();
         Ok(())
     }
 
     /// Reload all cached sessions, forcing fresh model loads on next inference.
     pub fn reload_all_models(&self) -> Result<()> {
         info!("Reloading all models");
-        self.runtime.clear_sessions();
+        self.runtime_registry.clear_sessions();
         Ok(())
     }
 
@@ -778,7 +893,8 @@ impl SnipperEngine {
     /// Configure a pipeline context with engine config (shared by image and PDF paths).
     fn configure_context(&self, mut ctx: PipelineContext) -> PipelineContext {
         ctx.models_dir = Some(self.config.models_dir.clone());
-        ctx.backend = Some(self.runtime.clone());
+        ctx.runtime_registry = Some(self.runtime_registry.clone());
+        ctx.backend = Some(self.runtime());
         ctx.model_resolver = self.model_resolver.clone();
         ctx.acceleration = self.config.acceleration;
         ctx.max_threads = self.config.max_threads;

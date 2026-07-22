@@ -10,7 +10,9 @@ use latexsnipper_conversion::{
 use latexsnipper_engine::{sdk::Snipper, DocumentParseMode, EngineConfig, RecognizeMode};
 use latexsnipper_export::VisualFormat;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use latexsnipper_runtime::{OnnxRuntimeBackend, RuntimeBackend};
+use latexsnipper_runtime::{
+    providers::onnx_factory::OnnxRuntimeFactory, RuntimeKind, RuntimeRegistry,
+};
 use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use std::io::{self, Read, Write};
@@ -913,9 +915,9 @@ fn main() {
             let current_dir = std::env::current_dir().unwrap_or_default();
             let models_dir = current_dir.join("models");
             #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-            let runtime = OnnxRuntimeBackend::new(models_dir.clone())
-                .ok()
-                .map(|backend| backend.runtime_diagnostics());
+            let runtime =
+                RuntimeRegistry::with_factory(OnnxRuntimeFactory::new(models_dir.clone()))
+                    .probe(&RuntimeKind::OnnxRuntime);
             #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let runtime: Option<serde_json::Value> = None;
             let (capabilities, capability_registry_error) = match build_capability_matrix() {
@@ -989,9 +991,10 @@ fn main() {
                 "markdown" | "md" => print_capabilities_markdown(&filtered),
                 "json" => {
                     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-                    let runtime = OnnxRuntimeBackend::new(std::path::PathBuf::from("models"))
-                        .ok()
-                        .map(|backend| backend.runtime_diagnostics());
+                    let runtime = RuntimeRegistry::with_factory(OnnxRuntimeFactory::new(
+                        std::path::PathBuf::from("models"),
+                    ))
+                    .probe(&RuntimeKind::OnnxRuntime);
                     #[cfg(not(any(
                         target_os = "windows",
                         target_os = "linux",
