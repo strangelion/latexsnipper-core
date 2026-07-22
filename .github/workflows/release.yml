@@ -254,9 +254,13 @@ jobs:
       - name: Validate dependent crate package contents
         run: |
           for crate in \
-            latexsnipper-model latexsnipper-image latexsnipper-runtime \
-            latexsnipper-syntax latexsnipper-export latexsnipper-conversion \
-            latexsnipper-inference latexsnipper-api-types \
+            latexsnipper-artifact latexsnipper-syntax latexsnipper-model \
+            latexsnipper-image latexsnipper-runtime \
+            latexsnipper-inference latexsnipper-api-types latexsnipper-export \
+            latexsnipper-runtime-paddle latexsnipper-runtime-executorch \
+            latexsnipper-runtime-tensorrt latexsnipper-runtime-coreml \
+            latexsnipper-runtime-plugin-api \
+            latexsnipper-conversion latexsnipper-incremental \
             latexsnipper-pipeline latexsnipper-engine
           do
             echo "Package contents: $crate"
@@ -324,14 +328,21 @@ jobs:
             publish latexsnipper-foundation
             publish latexsnipper-ast
             publish latexsnipper-tensor
+            publish latexsnipper-artifact
+            publish latexsnipper-syntax
             publish latexsnipper-model
             publish latexsnipper-image
             publish latexsnipper-runtime
-            publish latexsnipper-syntax
-            publish latexsnipper-export
-            publish latexsnipper-conversion
             publish latexsnipper-inference
             publish latexsnipper-api-types
+            publish latexsnipper-export
+            publish latexsnipper-runtime-paddle
+            publish latexsnipper-runtime-executorch
+            publish latexsnipper-runtime-tensorrt
+            publish latexsnipper-runtime-coreml
+            publish latexsnipper-runtime-plugin-api
+            publish latexsnipper-conversion
+            publish latexsnipper-incremental
             publish latexsnipper-pipeline
             publish latexsnipper-engine
 
