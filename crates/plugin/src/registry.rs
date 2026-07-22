@@ -123,7 +123,7 @@ impl PluginRuntimeState {
         }
         if self
             .outstanding
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                 (current < self.max_concurrent).then_some(current + 1)
             })
             .is_err()
