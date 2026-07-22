@@ -2323,6 +2323,7 @@ dependencies = [
  "latexsnipper-model",
  "latexsnipper-pipeline",
  "latexsnipper-runtime",
+ "latexsnipper-runtime-executorch",
  "latexsnipper-runtime-paddle",
  "latexsnipper-syntax",
  "latexsnipper-tensor",
@@ -2583,6 +2584,18 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "toml",
+]
+
+[[package]]
+name = "latexsnipper-runtime-executorch"
+version = "3.0.1"
+dependencies = [
+ "latexsnipper-foundation",
+ "latexsnipper-runtime",
+ "latexsnipper-tensor",
+ "libloading",
+ "log",
+ "serde_json",
 ]
 
 [[package]]

@@ -17,6 +17,12 @@ pub fn default_runtime_registry(models_dir: &Path) -> Result<RuntimeRegistry> {
         registry.register(latexsnipper_runtime_paddle::PaddleInferenceFactory::new())?;
         registry
     };
+    #[cfg(feature = "executorch")]
+    let registry = {
+        let mut registry = registry;
+        registry.register(latexsnipper_runtime_executorch::ExecuTorchFactory::new())?;
+        registry
+    };
     Ok(registry)
 }
 
@@ -37,5 +43,12 @@ mod tests {
     fn paddle_feature_registers_factory_even_when_sdk_is_absent() {
         let registry = default_runtime_registry(Path::new("models")).unwrap();
         assert!(registry.get(&RuntimeKind::PaddleInference).is_some());
+    }
+
+    #[cfg(feature = "executorch")]
+    #[test]
+    fn executorch_feature_registers_factory_even_when_sdk_is_absent() {
+        let registry = default_runtime_registry(Path::new("models")).unwrap();
+        assert!(registry.get(&RuntimeKind::ExecuTorch).is_some());
     }
 }

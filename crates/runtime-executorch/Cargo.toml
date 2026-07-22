@@ -1,0 +1,21 @@
+[package]
+name = "latexsnipper-runtime-executorch"
+description = "ExecuTorch runtime backend for LaTeXSnipper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+latexsnipper-foundation.workspace = true
+latexsnipper-tensor.workspace = true
+latexsnipper-runtime.workspace = true
+libloading = "0.8"
+serde_json.workspace = true
+log.workspace = true
+
+[features]
+default = []

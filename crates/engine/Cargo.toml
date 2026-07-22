@@ -15,6 +15,7 @@ latexsnipper-ast.workspace = true
 latexsnipper-image = { workspace = true, default-features = false }
 latexsnipper-runtime.workspace = true
 latexsnipper-runtime-paddle = { workspace = true, optional = true }
+latexsnipper-runtime-executorch = { workspace = true, optional = true }
 latexsnipper-inference.workspace = true
 latexsnipper-pipeline = { workspace = true, default-features = false }
 latexsnipper-model.workspace = true
@@ -47,6 +48,7 @@ native = [
 wasm = ["latexsnipper-pipeline/wasm"]
 remote-api = ["latexsnipper-runtime/remote-api"]
 paddle = ["dep:latexsnipper-runtime-paddle"]
+executorch = ["dep:latexsnipper-runtime-executorch"]
 experimental-incremental = ["dep:latexsnipper-incremental"]
 
 [dev-dependencies]
