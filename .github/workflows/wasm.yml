@@ -112,10 +112,27 @@ jobs:
       - name: Install pinned wasm-pack
         run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
       - name: Run headless browser tests with one retry
+        shell: bash
         run: |
+          set -o pipefail
+          mkdir -p target/browser-test-logs
+
           for attempt in 1 2; do
-            wasm-pack test --headless --${{ matrix.browser }} crates/wasm && exit 0
-            test "$attempt" = 1 || exit 1
+            log="target/browser-test-logs/${{ matrix.browser }}-attempt-${attempt}.log"
+
+            if wasm-pack test \
+                --release \
+                --headless \
+                --${{ matrix.browser }} \
+                crates/wasm \
+                2>&1 | tee "$log"; then
+              exit 0
+            fi
+
+            if [ "$attempt" = "2" ]; then
+              exit 1
+            fi
+
             echo "Retrying ${{ matrix.browser }} after first failure"
           done
       - name: Upload browser diagnostics
@@ -124,7 +141,7 @@ jobs:
         with:
           name: wasm-${{ matrix.browser }}-diagnostics-${{ github.run_id }}
           path: |
-            target/wasm32-unknown-unknown/debug
+            target/browser-test-logs
             target/wasm-bindgen-test*
           if-no-files-found: warn
           retention-days: 14
