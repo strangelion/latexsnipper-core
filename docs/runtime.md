@@ -2,6 +2,11 @@
 
 > 推理运行时抽象 — Session, Tensor, Acceleration
 
+当前架构通过 `RuntimeRegistry → RuntimeResolver → RuntimeSession` 分离模型格式、Runtime
+和硬件加速。ONNX Runtime 是默认实现；Paddle Inference 是默认关闭的独立 Native
+Runtime，安装与打包见 [Paddle Inference Runtime](paddle-runtime.md)。下文的
+`RuntimeBackend` / `InferenceSession` 是保留的旧 ONNX 兼容 API。
+
 ## 核心原则
 
 1. **Runtime 只管 Session/Tensor/Device，不管 Pipeline**

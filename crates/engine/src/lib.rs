@@ -3,6 +3,7 @@ pub mod config;
 pub mod engine;
 pub mod job;
 pub mod metrics;
+pub mod runtime_registry;
 pub mod service;
 
 #[cfg(feature = "native")]
@@ -20,6 +21,7 @@ pub use engine::{RecognizeMode, RecognizeRequest, RecognizeResponse, SnipperEngi
 pub use job::{Job, JobQueue, JobStatus};
 pub use latexsnipper_pipeline::DocumentParseMode;
 pub use metrics::{MetricsBuilder, RecognitionMetrics, SerializableMetrics};
+pub use runtime_registry::default_runtime_registry;
 pub use service::{Service, ServiceStatus};
 
 /// Experimental source-aware incremental document sessions.

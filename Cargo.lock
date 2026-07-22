@@ -2323,6 +2323,7 @@ dependencies = [
  "latexsnipper-model",
  "latexsnipper-pipeline",
  "latexsnipper-runtime",
+ "latexsnipper-runtime-paddle",
  "latexsnipper-syntax",
  "latexsnipper-tensor",
  "log",
@@ -2452,6 +2453,7 @@ dependencies = [
  "latexsnipper-tensor",
  "log",
  "ndarray 0.16.1",
+ "regex",
  "serde",
  "serde_json",
  "tokenizers",
@@ -2565,6 +2567,7 @@ name = "latexsnipper-runtime"
 version = "3.0.1"
 dependencies = [
  "base64 0.22.1",
+ "half",
  "hex",
  "latexsnipper-ast",
  "latexsnipper-foundation",
@@ -2586,14 +2589,18 @@ dependencies = [
 name = "latexsnipper-runtime-paddle"
 version = "3.0.1"
 dependencies = [
- "bytemuck",
  "latexsnipper-foundation",
+ "latexsnipper-image",
+ "latexsnipper-inference",
+ "latexsnipper-model",
  "latexsnipper-runtime",
  "latexsnipper-tensor",
+ "libloading",
  "log",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokenizers",
 ]
 
 [[package]]
@@ -2613,6 +2620,7 @@ dependencies = [
 name = "latexsnipper-tensor"
 version = "3.0.1"
 dependencies = [
+ "half",
  "serde",
  "serde_json",
 ]
@@ -2717,6 +2725,16 @@ checksum = "a9fd2f41a1cba099f79a0b6b6c35656cf7c03351a7bae8ff0f28f25270f929d2"
 dependencies = [
  "arbitrary",
  "cc",
+]
+
+[[package]]
+name = "libloading"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
+dependencies = [
+ "cfg-if",
+ "windows-link",
 ]
 
 [[package]]
@@ -3301,6 +3319,7 @@ version = "2.0.0-rc.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7de3af33d24a745ffb8fab904b13478438d1cd52868e6f17735ef6e1f8bf133"
 dependencies = [
+ "half",
  "ndarray 0.17.2",
  "ort-sys",
  "smallvec",

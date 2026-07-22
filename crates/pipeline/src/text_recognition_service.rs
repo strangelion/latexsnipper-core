@@ -71,24 +71,11 @@ impl TextRecognitionService {
 
         let model_path = config.pipeline_model_path(&variant_dir)?;
 
-        // Create or use provided backend
-        let session: Box<dyn InferenceSession> = match backend {
-            Some(b) => {
-                let handle = ModelHandle::with_path("text-rec", model_path);
-                b.create_session(&handle, acceleration).ok()?
-            }
-            #[cfg(target_os = "windows")]
-            None => {
-                let b = latexsnipper_runtime::providers::onnx::OnnxRuntimeBackend::new(
-                    models_dir.to_path_buf(),
-                )
-                .ok()?;
-                let handle = ModelHandle::with_path("text-rec", model_path);
-                b.create_session(&handle, acceleration).ok()?
-            }
-            #[cfg(not(target_os = "windows"))]
-            None => return None,
-        };
+        // Backend is required — caller (PipelineContext) always provides one
+        // via the engine's configured RuntimeBackend.
+        let b = backend?;
+        let handle = ModelHandle::with_path("text-rec", model_path);
+        let session: Box<dyn InferenceSession> = b.create_session(&handle, acceleration).ok()?;
 
         let params = TextRecParams::from_config(&config);
 

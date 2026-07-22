@@ -21,11 +21,11 @@ use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::{decode, ImageSource};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::StubRuntime;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use latexsnipper_runtime::{providers::onnx_factory::OnnxRuntimeFactory, RuntimeRegistry};
 use std::path::Path;
 
-use crate::{DocumentParseMode, EngineConfig, RecognizeMode, SnipperEngine};
+use crate::{
+    default_runtime_registry, DocumentParseMode, EngineConfig, RecognizeMode, SnipperEngine,
+};
 
 /// Main entry point for LaTeXSnipper SDK.
 pub struct Snipper {
@@ -150,9 +150,7 @@ impl Snipper {
         {
             let path = path.as_ref().to_path_buf();
             std::thread::spawn(move || {
-                let registry = RuntimeRegistry::with_factory(OnnxRuntimeFactory::new(
-                    config.models_dir.clone(),
-                ));
+                let registry = default_runtime_registry(&config.models_dir)?;
                 let engine = SnipperEngine::with_runtime_registry(config, registry)?;
                 let runtime = tokio::runtime::Runtime::new()
                     .map_err(|e| SnipperError::Runtime(e.to_string()))?;
@@ -187,9 +185,7 @@ impl Snipper {
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         {
             std::thread::spawn(move || {
-                let registry = RuntimeRegistry::with_factory(OnnxRuntimeFactory::new(
-                    config.models_dir.clone(),
-                ));
+                let registry = default_runtime_registry(&config.models_dir)?;
                 let engine = SnipperEngine::with_runtime_registry(config, registry)?;
                 let runtime = tokio::runtime::Runtime::new()
                     .map_err(|e| SnipperError::Runtime(e.to_string()))?;

@@ -1,5 +1,6 @@
 pub mod adapter_registry;
 pub mod adapters;
+pub mod formula_backend;
 pub mod formula_detector;
 pub mod formula_lines;
 pub mod formula_parser;
@@ -8,6 +9,8 @@ pub mod handwriting_detector;
 pub mod handwriting_postprocess;
 pub mod language;
 pub mod latex_repair;
+pub mod pp_formulanet;
+pub mod pp_formulanet_adapter;
 pub mod symbol_detector;
 pub mod table_detector;
 pub mod table_structure;
@@ -20,6 +23,8 @@ pub mod types;
 pub mod yolo_utils;
 
 pub use adapter_registry::register_builtin_adapters;
+pub use adapters::formula_backend_adapter::FormulaBackendPackage;
+pub use formula_backend::{BackendConfig, FormulaBackend, OnnxFormulaBackend};
 pub use formula_detector::{
     detect_formulas, filter_formula_detections, group_formula_detections, DetectionParams,
 };
@@ -33,6 +38,8 @@ pub use handwriting_detector::{
 pub use handwriting_postprocess::postprocess_handwriting;
 pub use language::{Language, LanguageDetector};
 pub use latex_repair::{has_severe_latex_issue, latex_quality_flags, repair_latex};
+pub use pp_formulanet::PPFormulaNetBackend;
+pub use pp_formulanet_adapter::PPFormulaNetAdapter;
 pub use symbol_detector::{detect_symbols, SymbolDetParams, SymbolDetection};
 pub use table_detector::{detect_tables, filter_table_detections, TableDetParams};
 pub use table_structure::{

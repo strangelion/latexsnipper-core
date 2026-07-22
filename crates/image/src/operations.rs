@@ -25,6 +25,60 @@ pub fn resize(image: &SnipperImage, target_w: u32, target_h: u32) -> SnipperImag
     SnipperImage::new(target_w, target_h, image.format(), pixels)
 }
 
+/// Resize an image with bilinear interpolation.
+pub fn resize_bilinear(image: &SnipperImage, target_w: u32, target_h: u32) -> SnipperImage {
+    resize_filtered(
+        image,
+        target_w,
+        target_h,
+        image::imageops::FilterType::Triangle,
+    )
+}
+
+/// Resize an image with bicubic interpolation.
+pub fn resize_bicubic(image: &SnipperImage, target_w: u32, target_h: u32) -> SnipperImage {
+    resize_filtered(
+        image,
+        target_w,
+        target_h,
+        image::imageops::FilterType::CatmullRom,
+    )
+}
+
+fn resize_filtered(
+    image: &SnipperImage,
+    target_w: u32,
+    target_h: u32,
+    filter: image::imageops::FilterType,
+) -> SnipperImage {
+    assert!(
+        target_w > 0 && target_h > 0,
+        "resize target must be non-zero"
+    );
+    let pixels = match image.bytes_per_pixel() {
+        1 => {
+            let source =
+                image::GrayImage::from_raw(image.width(), image.height(), image.pixels().to_vec())
+                    .expect("SnipperImage gray buffer length is validated at construction");
+            image::imageops::resize(&source, target_w, target_h, filter).into_raw()
+        }
+        3 => {
+            let source =
+                image::RgbImage::from_raw(image.width(), image.height(), image.pixels().to_vec())
+                    .expect("SnipperImage RGB buffer length is validated at construction");
+            image::imageops::resize(&source, target_w, target_h, filter).into_raw()
+        }
+        4 => {
+            let source =
+                image::RgbaImage::from_raw(image.width(), image.height(), image.pixels().to_vec())
+                    .expect("SnipperImage RGBA buffer length is validated at construction");
+            image::imageops::resize(&source, target_w, target_h, filter).into_raw()
+        }
+        channels => unreachable!("unsupported pixel channel count {channels}"),
+    };
+    SnipperImage::new(target_w, target_h, image.format(), pixels)
+}
+
 /// Resize to fit within max_side, preserving aspect ratio.
 pub fn resize_to_fit(image: &SnipperImage, max_side: u32) -> SnipperImage {
     let w = image.width();

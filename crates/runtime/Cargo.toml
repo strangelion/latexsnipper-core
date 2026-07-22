@@ -22,6 +22,7 @@ ndarray = "0.16"
 toml = "0.8"
 sha2 = "0.10"
 hex = "0.4"
+half.workspace = true
 
 # Remote API provider (optional)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
@@ -32,13 +33,13 @@ default = []
 remote-api = ["reqwest", "base64"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
-ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "download-binaries", "tls-native", "api-20", "cuda", "directml"] }
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-20", "cuda", "directml"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "download-binaries", "tls-rustls", "api-20", "cuda"] }
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-rustls", "api-20", "cuda"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "download-binaries", "tls-native", "api-20", "coreml"] }
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-20", "coreml"] }
 
 [dev-dependencies]
 latexsnipper-image.workspace = true

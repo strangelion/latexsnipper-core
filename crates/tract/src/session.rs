@@ -73,6 +73,17 @@ impl InferenceSession for TractSession {
                         })?;
                     arr.into_tensor()
                 }
+                TensorData::Float16(data) => {
+                    let values: Vec<f16> = data.iter().copied().map(f16::from_bits).collect();
+                    let arr =
+                        ndarray::Array::from_shape_vec(shape.as_slice(), values).map_err(|e| {
+                            SnipperError::Inference(format!(
+                                "Failed to create tract tensor from input {}: {}",
+                                i, e
+                            ))
+                        })?;
+                    arr.into_tensor()
+                }
                 TensorData::Int64(data) => {
                     let arr = ndarray::Array::from_shape_vec(shape.as_slice(), data.clone())
                         .map_err(|e| {
@@ -94,6 +105,16 @@ impl InferenceSession for TractSession {
                     arr.into_tensor()
                 }
                 TensorData::UInt8(data) => {
+                    let arr = ndarray::Array::from_shape_vec(shape.as_slice(), data.clone())
+                        .map_err(|e| {
+                            SnipperError::Inference(format!(
+                                "Failed to create tract tensor from input {}: {}",
+                                i, e
+                            ))
+                        })?;
+                    arr.into_tensor()
+                }
+                TensorData::Bool(data) => {
                     let arr = ndarray::Array::from_shape_vec(shape.as_slice(), data.clone())
                         .map_err(|e| {
                             SnipperError::Inference(format!(
@@ -126,6 +147,15 @@ impl InferenceSession for TractSession {
                     let shape = tensor.shape().to_vec();
                     result.push(Tensor::float32(name, shape, arr.to_vec()));
                 }
+                DatumType::F16 => {
+                    let arr = extract_slice::<f16>(&tensor, &name)?;
+                    let shape = tensor.shape().to_vec();
+                    result.push(Tensor::float16_bits(
+                        name,
+                        shape,
+                        arr.iter().map(|value| value.to_bits()).collect(),
+                    ));
+                }
                 DatumType::I64 => {
                     let arr = extract_slice::<i64>(&tensor, &name)?;
                     let shape = tensor.shape().to_vec();
@@ -140,6 +170,11 @@ impl InferenceSession for TractSession {
                     let arr = extract_slice::<u8>(&tensor, &name)?;
                     let shape = tensor.shape().to_vec();
                     result.push(Tensor::u8(name, shape, arr.to_vec()));
+                }
+                DatumType::Bool => {
+                    let arr = extract_slice::<bool>(&tensor, &name)?;
+                    let shape = tensor.shape().to_vec();
+                    result.push(Tensor::boolean(name, shape, arr.to_vec()));
                 }
                 other => {
                     return Err(SnipperError::Inference(format!(

@@ -5,9 +5,12 @@ use latexsnipper_image::operations;
 use latexsnipper_inference::formula_lines::split_formula_line_groups;
 use latexsnipper_inference::{
     load_keys, load_tokenizer_from_str, recognize_formula, recognize_formula_with_tokenizer,
-    recognize_text_with_keys, RecognitionParams, TextRecParams,
+    recognize_text_with_keys, FormulaBackend, PPFormulaNetAdapter, RecognitionParams,
+    RecognitionResult, TextRecParams,
 };
-use latexsnipper_runtime::{InferenceContext, ModelId, ModelInput, ModelOutput, ModelTask};
+use latexsnipper_runtime::{
+    InferenceContext, ModelId, ModelInput, ModelOutput, ModelTask, RuntimeResolver,
+};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -65,9 +68,20 @@ impl PipelineNode for RecognizerNode {
     }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
-        // Try using ModelPackage if available
+        // Try using ModelPackage if available (FormulaBackend path)
         if let Some(package) = ctx.get_model_package(&self.task) {
-            return self.recognize_via_package(ctx, &*package).await;
+            match self.recognize_via_package(ctx, &*package).await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    // Package-based recognition failed (e.g., missing vocab).
+                    // Fall through to the legacy direct function path.
+                    log::warn!(
+                        "ModelPackage recognition failed for {:?}: {}. Falling back to direct path.",
+                        self.task,
+                        e
+                    );
+                }
+            }
         }
 
         // Fall back to direct function calls
@@ -215,6 +229,38 @@ impl RecognizerNode {
 
         let (rec_config, _primary_path, rec_dir) = resolve_variant(ctx, models, "formula-rec")
             .map_err(|_| SnipperError::Model("Formula recognition model not found".into()))?;
+
+        if rec_config.model_type == "pp_formulanet" && !rec_config.runtime_variants.is_empty() {
+            let registry = ctx.runtime_registry.clone().ok_or_else(|| {
+                SnipperError::Runtime(
+                    "PP-FormulaNet runtime variants require RuntimeRegistry".to_owned(),
+                )
+            })?;
+            let model_id = ctx
+                .model_variants
+                .get("formula-rec")
+                .map_or("formula-rec/pp-formulanet-s", String::as_str);
+            let resolved = RuntimeResolver::new(&registry).resolve(
+                model_id,
+                &rec_config.runtime_variants,
+                &rec_dir,
+                None,
+            )?;
+            let adapter = PPFormulaNetAdapter::from_resolved_variant(
+                &registry,
+                &resolved,
+                &rec_dir,
+                &rec_config,
+            )?;
+            log::info!(
+                "PP-FormulaNet selected runtime variant '{}' ({})",
+                resolved.variant_id,
+                resolved.runtime
+            );
+            return self
+                .recognize_formula_regions(ctx, detections, |image| adapter.recognize(image));
+        }
+
         let model_files = rec_config
             .pipeline
             .as_ref()
@@ -282,8 +328,16 @@ impl RecognizerNode {
                 )
             }
         };
-        let mut blocks = Vec::new();
+        self.recognize_formula_regions(ctx, detections, recognize_crop)
+    }
 
+    fn recognize_formula_regions(
+        &self,
+        ctx: &mut PipelineContext,
+        detections: Vec<latexsnipper_inference::types::DetectionBox>,
+        recognize_crop: impl Fn(&latexsnipper_image::SnipperImage) -> Result<RecognitionResult>,
+    ) -> Result<()> {
+        let mut blocks = Vec::new();
         for det in detections {
             let x = det.rect.x as u32;
             let y = det.rect.y as u32;

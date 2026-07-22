@@ -1,0 +1,120 @@
+[
+  {
+    "desc": "ascii tokens",
+    "ids": [
+      237,
+      142,
+      358
+    ],
+    "decoded_skip": "\u001a� con",
+    "decoded_raw": "\u001a� con"
+  },
+  {
+    "desc": "LaTeX fraction (no special)",
+    "ids": [
+      0,
+      82,
+      707,
+      113,
+      39,
+      115,
+      113,
+      40,
+      115,
+      2
+    ],
+    "decoded_skip": "\\frac{1}{2}",
+    "decoded_raw": "<s>\\frac{1}{2}</s>"
+  },
+  {
+    "desc": "LaTeX array",
+    "ids": [
+      0,
+      82,
+      2722,
+      113,
+      2502,
+      115,
+      113,
+      89,
+      115,
+      59,
+      51,
+      20161,
+      84,
+      113,
+      40,
+      115,
+      82,
+      493,
+      113,
+      2502,
+      115,
+      2
+    ],
+    "decoded_skip": "\\begin{array}{c}E=mc^{2}\\end{array}",
+    "decoded_raw": "<s>\\begin{array}{c}E=mc^{2}\\end{array}</s>"
+  },
+  {
+    "desc": "plain text",
+    "ids": [
+      0,
+      16414,
+      101,
+      3523,
+      2
+    ],
+    "decoded_skip": "hello world",
+    "decoded_raw": "<s>hello world</s>"
+  },
+  {
+    "desc": "greek letters",
+    "ids": [
+      0,
+      82,
+      1027,
+      33,
+      82,
+      1452,
+      2
+    ],
+    "decoded_skip": "\\alpha+\\beta",
+    "decoded_raw": "<s>\\alpha+\\beta</s>"
+  },
+  {
+    "desc": "special tokens only",
+    "ids": [
+      0,
+      0,
+      0,
+      1,
+      2,
+      2
+    ],
+    "decoded_skip": "",
+    "decoded_raw": "<s><s><s><pad></s></s>"
+  },
+  {
+    "desc": "empty list",
+    "ids": [],
+    "decoded_skip": "",
+    "decoded_raw": ""
+  },
+  {
+    "desc": "BOS + fraction + EOS (truncated)",
+    "ids": [
+      0,
+      82,
+      707,
+      113,
+      87,
+      115,
+      113,
+      88,
+      115,
+      2
+    ],
+    "decoded_skip": "\\frac{a}{b}",
+    "decoded_raw": "<s>\\frac{a}{b}</s>"
+  }
+]

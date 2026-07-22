@@ -403,6 +403,21 @@ impl InferenceSession for OnnxSession {
                         .into();
                     input_values.push((name, value));
                 }
+                latexsnipper_tensor::TensorData::Float16(data) => {
+                    let shape: Vec<usize> = input.shape().to_vec();
+                    let boxed: Box<[half::f16]> = data
+                        .iter()
+                        .copied()
+                        .map(half::f16::from_bits)
+                        .collect::<Vec<_>>()
+                        .into();
+                    let value: Value = Value::from_array((shape, boxed))
+                        .map_err(|e| {
+                            SnipperError::Inference(format!("Failed to create tensor: {}", e))
+                        })?
+                        .into();
+                    input_values.push((name, value));
+                }
                 latexsnipper_tensor::TensorData::Int64(data) => {
                     let shape: Vec<usize> = input.shape().to_vec();
                     let boxed: Box<[i64]> = data.clone().into();
@@ -433,6 +448,16 @@ impl InferenceSession for OnnxSession {
                         .into();
                     input_values.push((name, value));
                 }
+                latexsnipper_tensor::TensorData::Bool(data) => {
+                    let shape: Vec<usize> = input.shape().to_vec();
+                    let boxed: Box<[bool]> = data.clone().into();
+                    let value: Value = Value::from_array((shape, boxed))
+                        .map_err(|e| {
+                            SnipperError::Inference(format!("Failed to create tensor: {}", e))
+                        })?
+                        .into();
+                    input_values.push((name, value));
+                }
             }
         }
 
@@ -449,6 +474,20 @@ impl InferenceSession for OnnxSession {
         for (name, value) in outputs {
             let shape: Vec<usize> = value.shape().iter().map(|&s| s as usize).collect();
             let tensor = match value.dtype() {
+                ort::value::ValueType::Tensor {
+                    ty: ort::value::TensorElementType::Float16,
+                    ..
+                } => {
+                    let (_shape_out, data) =
+                        value.try_extract_tensor::<half::f16>().map_err(|e| {
+                            SnipperError::Inference(format!("Failed to extract output: {}", e))
+                        })?;
+                    latexsnipper_tensor::Tensor::float16_bits(
+                        name,
+                        shape,
+                        data.iter().map(|value| value.to_bits()).collect(),
+                    )
+                }
                 ort::value::ValueType::Tensor {
                     ty: ort::value::TensorElementType::Float32,
                     ..
@@ -484,6 +523,15 @@ impl InferenceSession for OnnxSession {
                         SnipperError::Inference(format!("Failed to extract output: {}", e))
                     })?;
                     latexsnipper_tensor::Tensor::u8(name, shape, data.to_vec())
+                }
+                ort::value::ValueType::Tensor {
+                    ty: ort::value::TensorElementType::Bool,
+                    ..
+                } => {
+                    let (_shape_out, data) = value.try_extract_tensor::<bool>().map_err(|e| {
+                        SnipperError::Inference(format!("Failed to extract output: {}", e))
+                    })?;
+                    latexsnipper_tensor::Tensor::boolean(name, shape, data.to_vec())
                 }
                 _ => return Err(SnipperError::Inference("Unsupported output dtype".into())),
             };

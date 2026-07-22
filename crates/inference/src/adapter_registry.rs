@@ -7,8 +7,8 @@
 use latexsnipper_runtime::{ModelId, ModelManifest, ModelRegistry};
 
 use crate::adapters::{
-    CrnnTextRecognizerPackage, DbNetTextDetectorPackage, LayoutDetectorPackage,
-    TrOcrFormulaPackage, YoloV8DetectorPackage,
+    CrnnTextRecognizerPackage, DbNetTextDetectorPackage, FormulaBackendPackage,
+    LayoutDetectorPackage, TrOcrFormulaPackage, YoloV8DetectorPackage,
 };
 
 /// Convert a ModelManifest to a ModelConfig.
@@ -287,6 +287,24 @@ pub fn register_builtin_adapters(registry: &mut ModelRegistry) {
 
         Ok(Box::new(package))
     });
+
+    // Generic ONNX formula backend (encoder + decoder ONNX + vocab)
+    registry.register_adapter("onnx-formula-v1", |manifest, model_dir| {
+        let model_id = ModelId::from_composite_key(&manifest.id);
+        let config_exists = model_dir.join("config.json").exists();
+
+        let config = if config_exists {
+            latexsnipper_model::ModelConfig::load(model_dir).ok()
+        } else {
+            Some(manifest_to_config(manifest))
+        };
+
+        let config = config.unwrap_or_else(latexsnipper_model::ModelConfig::minimal);
+
+        let package =
+            FormulaBackendPackage::from_config(&config, model_id, model_dir.to_path_buf());
+        Ok(Box::new(package))
+    });
 }
 
 #[cfg(test)]
@@ -305,6 +323,7 @@ mod tests {
         assert!(adapters.contains(&"picodet-layout-v1"));
         assert!(adapters.contains(&"trocr-recognition-v1"));
         assert!(adapters.contains(&"ctc-recognition-v1"));
+        assert!(adapters.contains(&"onnx-formula-v1"));
     }
 
     #[test]
