@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20WASM-lightgrey)]()
 
-**Native ONNX inference · Tract/WASM · CLI · Rust SDK · verified local plugins**
+**Multi-runtime · ONNX / Paddle / ExecuTorch / TensorRT · Tract/WASM · CLI · Rust SDK · verified local plugins**
 
 [![About](assets/About.png)](assets/About.png)
 
@@ -56,7 +56,7 @@ This does **not** mean that every format, model, or plugin boundary has the same
 | Isolated native process plugins | **Reviewed local code only** | Hard timeout and resource controls exist, but this is not an OS filesystem/network sandbox. |
 | WASI Component host | **Implemented and integrated** | WIT v1, manifest/digest verification, typed brokers, hard interruption, resource limits, verified activation, and invocation-time trust checks are tested. |
 | Signed remote WASI registry/install | **Implemented, disabled after install** | Ed25519 thresholds, expiry/rollback/freeze checks, bounded HTTPS/ZIP handling, provenance, update, revoke, rollback, and explicit enable are tested. Install never executes or enables code. |
-| Native dynamic-library ABI | **Unavailable** | Remote/native substitution is rejected; reviewed local process plugins use a separate path. |
+| Native dynamic-library ABI | **Available** | Frozen C ABI v1 for third-party hardware runtimes (NPU, DSP, FPGA). SHA-256 enrollment + explicit enable trust model. See [Custom Runtime Plugin ABI v1](docs/runtime-plugin-api.md). |
 
 The executable source of truth is the capability registry:
 
@@ -80,7 +80,7 @@ LaTeXSnipper Core is more than an image-to-LaTeX wrapper. It provides a shared d
 - **Model-driven recognition** — formula, text, mixed-document, layout, orientation, table, and handwriting building blocks selected through model profiles and pipeline modes.
 - **Multi-format import and conversion** — semantic formats, raster assets, PDF, SVG, and Office Open XML packages.
 - **Binary-safe export** — text and binary artifacts use distinct representations with MIME type, SHA-256, byte length, assets, and diagnostics.
-- **Native and browser execution** — ONNX Runtime on supported desktop targets and Tract in WebAssembly.
+- **Native and browser execution** — ONNX Runtime, Paddle Inference, ExecuTorch, TensorRT, and Core ML on desktop; Tract in WebAssembly.
 - **Operational tooling** — CLI, SDK, capability inspection, model management, plugin package management, diagnostics, batch reports, shell completions, and man pages.
 - **Security-oriented parsing** — signature-first detection, bounded archive/XML processing, safe package paths, checksum verification, and structured failures.
 

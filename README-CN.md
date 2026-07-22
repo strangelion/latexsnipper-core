@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20WASM-lightgrey)]()
 
-**原生 ONNX 推理 · Tract/WASM · CLI · Rust SDK · 已校验本地插件**
+**多 Runtime · ONNX / Paddle / ExecuTorch / TensorRT · Tract/WASM · CLI · Rust SDK · 已校验本地插件**
 
 [![About](assets/About.png)](assets/About.png)
 
@@ -54,7 +54,7 @@ Worker transport 为保持兼容性，仍独立使用 protocol v1。
 | 隔离 native process 插件 | **仅限经过审核的本地代码** | 支持 hard timeout 和资源控制，但不是操作系统文件/网络沙箱。 |
 | WASI Component host | **已实现并完成运行时接入** | WIT v1、manifest/digest 校验、typed broker、硬中断、资源限制、已验证激活和调用时信任检查已有真实组件测试。 |
 | signed 远程 WASI registry/install | **已实现，安装后禁用** | 已测试 Ed25519 threshold、过期/rollback/freeze、受限 HTTPS/ZIP、provenance、update、revoke、rollback 与显式 enable；安装不会执行或启用代码。 |
-| native 动态库 ABI | **不可用** | 会拒绝远程 native 替换；经过审核的本地 process plugin 使用独立路径。 |
+| native 动态库 ABI | **可用** | 冻结 C ABI v1，支持第三方硬件 Runtime（NPU、DSP、FPGA）。SHA-256 enrollment + 显式 enable 信任模型。详见 [Custom Runtime Plugin ABI v1](docs/runtime-plugin-api.md)。 |
 
 可执行能力注册表是事实来源：
 
@@ -78,7 +78,7 @@ LaTeXSnipper Core 不只是一个“图片转 LaTeX”封装。它为桌面应�
 - **模型驱动识别** — 通过模型 profile 和流水线模式组合公式、文本、混合文档、版式、方向、表格和手写组件。
 - **多格式导入与转换** — 语义格式、栅格资产、PDF、SVG 与 Office Open XML 包。
 - **二进制安全导出** — 文本与二进制产物使用不同表示，并携带 MIME、SHA-256、字节长度、资产和诊断。
-- **原生与浏览器执行** — 支持桌面 target 的 ONNX Runtime，以及 WebAssembly 中的 Tract。
+- **原生与浏览器执行** — 桌面端支持 ONNX Runtime、Paddle Inference、ExecuTorch、TensorRT 与 Core ML；WebAssembly 中使用 Tract。
 - **完整操作工具** — CLI、SDK、能力查询、模型管理、插件包管理、诊断、批处理报告、shell 补全和 man page。
 - **安全导向解析** — 签名优先检测、有界 archive/XML 处理、安全包路径、checksum 校验和结构化失败。
 
@@ -386,7 +386,6 @@ JavaScript 包还提供：
 
 仍不可用：
 
-- 稳定 native 动态库插件 ABI；
 - 完整 native 文件系统/网络沙箱。
 
 详见 [Plugin system](docs/plugin.md)。
