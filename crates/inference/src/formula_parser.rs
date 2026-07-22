@@ -1,7 +1,7 @@
 use latexsnipper_ast::{
     categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SymbolCategory, SymbolInfo,
 };
-use latexsnipper_foundation::Result;
+use latexsnipper_foundation::{Result, SnipperError};
 
 /// Parse a LaTeX formula string into a structured FormulaLayout.
 ///
@@ -42,9 +42,17 @@ impl FormulaParser {
     }
 
     fn parse_expression(&mut self) -> Result<FormulaNode> {
+        self.parse_expression_until(false)
+    }
+
+    fn parse_expression_until(&mut self, environment_delimiter: bool) -> Result<FormulaNode> {
         let mut nodes = Vec::new();
 
         while self.pos < self.input.len() {
+            if environment_delimiter && self.at_environment_delimiter() {
+                break;
+            }
+
             let ch = self.input[self.pos];
 
             match ch {
@@ -142,16 +150,19 @@ impl FormulaParser {
             return Ok(FormulaNode::Text("\\".to_string()));
         }
 
-        // Read command name
-        let start = self.pos;
-        while self.pos < self.input.len() && self.input[self.pos].is_alphabetic() {
+        // TeX control words are alphabetic; control symbols consume exactly one
+        // non-alphabetic character (for example `\,` and `\!`).
+        let cmd = if self.input[self.pos].is_alphabetic() {
+            let start = self.pos;
+            while self.pos < self.input.len() && self.input[self.pos].is_alphabetic() {
+                self.pos += 1;
+            }
+            self.input[start..self.pos].iter().collect()
+        } else {
+            let command_symbol = self.input[self.pos];
             self.pos += 1;
-        }
-        let cmd: String = self.input[start..self.pos].iter().collect();
-
-        if cmd.is_empty() {
-            return Ok(FormulaNode::Text("\\".to_string()));
-        }
+            command_symbol.to_string()
+        };
 
         // Match known commands
         match cmd.as_str() {
@@ -166,18 +177,20 @@ impl FormulaParser {
             }
             "sqrt" => {
                 // Optional argument: \sqrt[n]{x}
-                let (_opt_arg, content) = self.parse_command_with_braces()?;
+                let (opt_arg, content) = self.parse_command_with_braces()?;
+                let index = opt_arg.map(Box::new);
                 Ok(FormulaNode::SquareRoot {
+                    index,
                     content: Box::new(content),
                 })
             }
             "begin" => {
                 let env_name = self.parse_group()?;
                 let env_name_str = extract_text(&env_name);
-                let content = self.parse_environment_content()?;
-                Ok(FormulaNode::Environment(
-                    EnvInfo::new(env_name_str).with_row(content),
-                ))
+                let rows = self.parse_environment_content(&env_name_str)?;
+                let env = EnvInfo::new(env_name_str);
+                let env = rows.into_iter().fold(env, |e, row| e.with_row(row));
+                Ok(FormulaNode::Environment(env))
             }
             "end" => {
                 let _env_name = self.parse_group()?;
@@ -216,6 +229,79 @@ impl FormulaParser {
                 Ok(FormulaNode::Command(
                     CommandInfo::new(&cmd).with_arg(content),
                 ))
+            }
+
+            // Style commands (displaystyle, textstyle, etc.)
+            "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
+                let content = self.parse_atom()?;
+                Ok(FormulaNode::Command(
+                    CommandInfo::new(&cmd).with_arg(content),
+                ))
+            }
+
+            // Phantom commands
+            "phantom" | "vphantom" | "hphantom" => {
+                let content = self.parse_atom()?;
+                Ok(FormulaNode::Command(
+                    CommandInfo::new(&cmd).with_arg(content),
+                ))
+            }
+
+            // Boxed content
+            "boxed" => {
+                let content = self.parse_atom()?;
+                Ok(FormulaNode::Command(
+                    CommandInfo::new(&cmd).with_arg(content),
+                ))
+            }
+
+            // Equation tag
+            "tag" => {
+                let tag = self.parse_group()?;
+                Ok(FormulaNode::Command(CommandInfo::new(&cmd).with_arg(tag)))
+            }
+
+            // Common single-argument math macros.
+            "abs" | "norm" | "ceil" | "floor" => {
+                let content = self.parse_atom()?;
+                Ok(FormulaNode::Command(
+                    CommandInfo::new(&cmd).with_arg(content),
+                ))
+            }
+
+            // Named delimiters are symbols and must not consume the next atom.
+            "lvert" | "rvert" | "lVert" | "rVert" | "lceil" | "rceil" | "lfloor" | "rfloor" => {
+                Ok(FormulaNode::Symbol(SymbolInfo::new(
+                    format!("\\{}", cmd),
+                    SymbolCategory::Delimiter,
+                )))
+            }
+
+            "operatorname" => {
+                let name = self.parse_group()?;
+                Ok(FormulaNode::Command(CommandInfo::new(&cmd).with_arg(name)))
+            }
+
+            // Spacing commands
+            "quad" | "qquad" | "," | ";" | ":" | "!" => Ok(FormulaNode::Symbol(SymbolInfo::new(
+                format!("\\{}", cmd),
+                SymbolCategory::Unknown,
+            ))),
+
+            // Underbrace/Overbrace (standalone)
+            "underbrace" => {
+                let content = self.parse_atom()?;
+                let mut node = FormulaNode::Command(CommandInfo::new(&cmd).with_arg(content));
+                // Check for _{label}
+                node = self.parse_command_with_subsup(node);
+                Ok(node)
+            }
+            "overbrace" => {
+                let content = self.parse_atom()?;
+                let mut node = FormulaNode::Command(CommandInfo::new(&cmd).with_arg(content));
+                // Check for ^{label}
+                node = self.parse_command_with_subsup(node);
+                Ok(node)
             }
 
             // Greek letters
@@ -484,7 +570,9 @@ impl FormulaParser {
             match ch {
                 '{' => {
                     self.pos += 1;
-                    let _ = self.parse_group(); // skip nested
+                    if let Ok(group) = self.parse_group() {
+                        nodes.push(group);
+                    }
                 }
                 '\\' => {
                     let cmd = self.parse_command();
@@ -493,15 +581,19 @@ impl FormulaParser {
                     }
                 }
                 _ => {
-                    nodes.push(FormulaNode::Text(ch.to_string()));
+                    let latex = ch.to_string();
+                    nodes.push(FormulaNode::Symbol(SymbolInfo::new(
+                        &latex,
+                        categorize_symbol(&latex),
+                    )));
                     self.pos += 1;
                 }
             }
         }
-        if nodes.is_empty() {
-            FormulaNode::Text(String::new())
-        } else {
-            FormulaNode::Group(nodes)
+        match nodes.len() {
+            0 => FormulaNode::Text(String::new()),
+            1 => nodes.pop().unwrap(),
+            _ => FormulaNode::Group(nodes),
         }
     }
 
@@ -554,33 +646,66 @@ impl FormulaParser {
         node
     }
 
-    fn parse_environment_content(&mut self) -> Result<Vec<FormulaNode>> {
-        let mut nodes = Vec::new();
+    fn parse_environment_content(&mut self, expected_name: &str) -> Result<Vec<Vec<FormulaNode>>> {
+        let mut rows = Vec::new();
+        let mut current_row = Vec::new();
 
         while self.pos < self.input.len() {
-            let ch = self.input[self.pos];
-
-            if ch == '\\' && self.peek_str(3) == "end" {
+            if self.at_command("end") {
+                self.pos += "\\end".chars().count();
+                let actual_name = extract_text(&self.parse_group()?);
+                if actual_name != expected_name {
+                    return Err(SnipperError::Inference(format!(
+                        "mismatched LaTeX environment: expected \\end{{{expected_name}}}, found \\end{{{actual_name}}}"
+                    )));
+                }
                 break;
             }
 
-            if ch == '\\' && self.peek_at(self.pos + 1) == Some(&'\\') {
+            if self.input[self.pos] == '\\' && self.peek_at(self.pos + 1) == Some(&'\\') {
                 // Row separator \\
                 self.pos += 2;
+                rows.push(std::mem::take(&mut current_row));
                 continue;
             }
 
-            let node = self.parse_expression()?;
-            nodes.push(node);
+            if self.input[self.pos] == '&' {
+                // FormulaLayout stores rows rather than cells, so retain the
+                // column separator explicitly for canonical LaTeX projection.
+                self.pos += 1;
+                current_row.push(FormulaNode::Text("&".to_string()));
+                continue;
+            }
+
+            let node = self.parse_expression_until(true)?;
+            if !matches!(&node, FormulaNode::Text(text) if text.is_empty()) {
+                current_row.push(node);
+            }
         }
 
-        Ok(nodes)
+        if !current_row.is_empty() || rows.is_empty() {
+            rows.push(current_row);
+        }
+
+        Ok(rows)
     }
 
-    fn peek_str(&self, len: usize) -> String {
-        let start = self.pos;
-        let end = (start + len).min(self.input.len());
-        self.input[start..end].iter().collect()
+    fn at_environment_delimiter(&self) -> bool {
+        self.input.get(self.pos) == Some(&'&')
+            || (self.input.get(self.pos) == Some(&'\\')
+                && (self.input.get(self.pos + 1) == Some(&'\\') || self.at_command("end")))
+    }
+
+    fn at_command(&self, name: &str) -> bool {
+        if self.input.get(self.pos) != Some(&'\\') {
+            return false;
+        }
+
+        let name: Vec<char> = name.chars().collect();
+        let start = self.pos + 1;
+        let end = start + name.len();
+        self.input.get(start..end) == Some(name.as_slice())
+            && self.input.get(end).is_none_or(|ch| !ch.is_alphabetic())
     }
 
     fn peek_at(&self, pos: usize) -> Option<&char> {
@@ -609,7 +734,9 @@ fn count_symbols(node: &FormulaNode) -> usize {
         FormulaNode::Superscript { base, exp } => count_symbols(base) + count_symbols(exp),
         FormulaNode::Subscript { base, sub } => count_symbols(base) + count_symbols(sub),
         FormulaNode::Fraction { num, den } => count_symbols(num) + count_symbols(den),
-        FormulaNode::SquareRoot { content } => count_symbols(content),
+        FormulaNode::SquareRoot { index, content } => {
+            index.as_deref().map(count_symbols).unwrap_or_default() + count_symbols(content)
+        }
         FormulaNode::Text(_) => 0,
     }
 }
@@ -693,7 +820,7 @@ mod tests {
         let layout = parse_formula_latex("\\sqrt{x}").unwrap();
         assert_eq!(layout.symbol_count, 1);
         match &layout.root {
-            FormulaNode::SquareRoot { content } => match content.as_ref() {
+            FormulaNode::SquareRoot { content, .. } => match content.as_ref() {
                 FormulaNode::Symbol(s) => assert_eq!(s.latex, "x"),
                 _ => panic!("Expected Symbol"),
             },
@@ -702,8 +829,60 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_square_root_with_index() {
+        let layout = parse_formula_latex("\\sqrt[3]{x}").unwrap();
+        assert_eq!(layout.symbol_count, 2);
+        assert_eq!(layout.canonical_latex(), "\\sqrt[3]{x}");
+        match &layout.root {
+            FormulaNode::SquareRoot { index, content } => {
+                assert!(index.is_some(), "Expected index for sqrt[3]{{x}}");
+                match content.as_ref() {
+                    FormulaNode::Symbol(s) => assert_eq!(s.latex, "x"),
+                    _ => panic!("Expected Symbol"),
+                }
+            }
+            _ => panic!("Expected SquareRoot"),
+        }
+    }
+
+    #[test]
     fn test_parse_greek() {
         let layout = parse_formula_latex("\\alpha + \\beta").unwrap();
         assert_eq!(layout.symbol_count, 3);
+    }
+
+    #[test]
+    fn test_parse_matrix_rows_and_columns() {
+        let layout = parse_formula_latex("\\begin{matrix}a&b\\\\c&d\\end{matrix}").unwrap();
+
+        assert_eq!(
+            layout.canonical_latex(),
+            "\\begin{matrix}a&b\\\\c&d\\end{matrix}"
+        );
+        match &layout.root {
+            FormulaNode::Environment(environment) => {
+                assert_eq!(environment.name, "matrix");
+                assert_eq!(environment.content.len(), 2);
+            }
+            _ => panic!("Expected Environment"),
+        }
+    }
+
+    #[test]
+    fn test_rejects_mismatched_environment_end() {
+        let error = parse_formula_latex("\\begin{matrix}x\\end{cases}").unwrap_err();
+        assert!(error.to_string().contains("mismatched LaTeX environment"));
+    }
+
+    #[test]
+    fn test_named_delimiters_do_not_consume_following_atom() {
+        let layout = parse_formula_latex("\\lvert x\\rvert").unwrap();
+        assert_eq!(layout.canonical_latex(), "\\lvertx\\rvert");
+    }
+
+    #[test]
+    fn test_control_symbol_spacing_is_preserved() {
+        let layout = parse_formula_latex("a\\,b").unwrap();
+        assert_eq!(layout.canonical_latex(), "a\\,b");
     }
 }

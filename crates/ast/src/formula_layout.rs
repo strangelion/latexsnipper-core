@@ -79,8 +79,11 @@ pub enum FormulaNode {
         /// Denominator.
         den: Box<FormulaNode>,
     },
-    /// Square root: \sqrt{content}.
+    /// Square root: \sqrt{content} or \sqrt[n]{content}.
     SquareRoot {
+        /// Optional index for roots like \sqrt[n]{x}.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<Box<FormulaNode>>,
         /// Content under the radical.
         content: Box<FormulaNode>,
     },
@@ -218,7 +221,18 @@ fn canonical_latex(node: &FormulaNode) -> String {
             canonical_latex(num),
             canonical_latex(den)
         ),
-        FormulaNode::SquareRoot { content } => format!("\\sqrt{{{}}}", canonical_latex(content)),
+        FormulaNode::SquareRoot {
+            index: Some(idx),
+            content,
+        } => format!(
+            "\\sqrt[{}]{{{}}}",
+            canonical_latex(idx),
+            canonical_latex(content)
+        ),
+        FormulaNode::SquareRoot {
+            index: None,
+            content,
+        } => format!("\\sqrt{{{}}}", canonical_latex(content)),
         FormulaNode::Text(text) => text.clone(),
     }
 }
@@ -361,6 +375,7 @@ mod tests {
                     ))),
                 }),
                 den: Box::new(FormulaNode::SquareRoot {
+                    index: None,
                     content: Box::new(FormulaNode::Symbol(SymbolInfo::new(
                         "y",
                         SymbolCategory::Letter,
@@ -371,6 +386,20 @@ mod tests {
             semantic_annotations: Vec::new(),
         };
         assert_eq!(layout.canonical_latex(), "\\frac{x^{2}}{\\sqrt{y}}");
+    }
+
+    #[test]
+    fn canonical_latex_preserves_root_index() {
+        let layout = FormulaLayout {
+            root: FormulaNode::SquareRoot {
+                index: Some(Box::new(FormulaNode::Text("3".to_string()))),
+                content: Box::new(FormulaNode::Text("x+1".to_string())),
+            },
+            symbol_count: 3,
+            semantic_annotations: Vec::new(),
+        };
+
+        assert_eq!(layout.canonical_latex(), "\\sqrt[3]{x+1}");
     }
 
     #[test]

@@ -762,8 +762,21 @@ fn build_omml_layout_node(
             }
         }
         "rad" => {
-            let (radicand, _index) = get_two_children(children);
+            // `radPr` and a hidden/empty `deg` are represented by empty nodes
+            // in this lightweight layout parser. Filter those wrappers so an
+            // explicit degree is preserved and the radicand remains last.
+            let meaningful: Vec<_> = children
+                .iter()
+                .filter(|child| !is_empty_layout_node(child))
+                .cloned()
+                .collect();
+            let (index, radicand) = match meaningful.as_slice() {
+                [] => (None, FormulaNode::Text(String::new())),
+                [radicand] => (None, radicand.clone()),
+                [index, rest @ ..] => (Some(Box::new(index.clone())), rest.last().unwrap().clone()),
+            };
             FormulaNode::SquareRoot {
+                index,
                 content: Box::new(radicand),
             }
         }
@@ -869,6 +882,16 @@ fn make_symbol_from_text(text: &str) -> latexsnipper_ast::FormulaNode {
     })
 }
 
+fn is_empty_layout_node(node: &latexsnipper_ast::FormulaNode) -> bool {
+    use latexsnipper_ast::FormulaNode;
+    match node {
+        FormulaNode::Symbol(symbol) => symbol.latex.is_empty(),
+        FormulaNode::Text(text) => text.is_empty(),
+        FormulaNode::Group(children) => children.iter().all(is_empty_layout_node),
+        _ => false,
+    }
+}
+
 fn count_symbols(node: &latexsnipper_ast::FormulaNode) -> usize {
     use latexsnipper_ast::FormulaNode;
     match node {
@@ -884,7 +907,9 @@ fn count_symbols(node: &latexsnipper_ast::FormulaNode) -> usize {
         FormulaNode::Superscript { base, exp } => count_symbols(base) + count_symbols(exp),
         FormulaNode::Subscript { base, sub } => count_symbols(base) + count_symbols(sub),
         FormulaNode::Fraction { num, den } => count_symbols(num) + count_symbols(den),
-        FormulaNode::SquareRoot { content } => count_symbols(content),
+        FormulaNode::SquareRoot { index, content } => {
+            index.as_deref().map(count_symbols).unwrap_or_default() + count_symbols(content)
+        }
         FormulaNode::Text(t) => t.chars().count(),
     }
 }
@@ -925,6 +950,15 @@ mod tests {
         let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:rad><m:radPr/><m:deg><m:r><m:t>3</m:t></m:r></m:deg><m:e><m:r><m:t>x</m:t></m:r></m:e></m:rad></m:oMath>"#;
         let result = parse_omml_to_latex(xml).unwrap();
         assert_eq!(result, "\\sqrt[3]{x}");
+    }
+
+    #[test]
+    fn layout_preserves_square_root_degree() {
+        let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:rad><m:radPr/><m:deg><m:r><m:t>3</m:t></m:r></m:deg><m:e><m:r><m:t>x</m:t></m:r></m:e></m:rad></m:oMath>"#;
+        let layout = parse_omml_to_layout(xml).unwrap();
+
+        assert_eq!(layout.canonical_latex(), "\\sqrt[3]{x}");
+        assert_eq!(layout.symbol_count, 2);
     }
 
     #[test]

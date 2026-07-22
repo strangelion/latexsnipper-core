@@ -407,6 +407,78 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let text = extract_text_from_args(args);
                     format!("<m:r><m:t>{}</m:t></m:r>", " ".repeat(text.len()))
                 }
+                "vphantom" | "hphantom" => {
+                    "<m:r><m:t></m:t></m:r>".to_string()
+                }
+                "boxed" => {
+                    if let Some(arg) = args.first() {
+                        let inner = ast_to_omml(arg);
+                        format!("<m:borderBox><m:e>{}</m:e></m:borderBox>", inner)
+                    } else {
+                        String::new()
+                    }
+                }
+                // OMML has no standalone display-style element. Preserve the
+                // expression rather than emitting an invalid run property.
+                "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
+                    if let Some(arg) = args.first() {
+                        ast_to_omml(arg)
+                    } else {
+                        String::new()
+                    }
+                }
+                "tag" => {
+                    if let Some(arg) = args.first() {
+                        let text = extract_text_from_args(std::slice::from_ref(arg));
+                        wrap_normal_mtext(&format!("({text})"))
+                    } else {
+                        String::new()
+                    }
+                }
+                "abs" => {
+                    if let Some(arg) = args.first() {
+                        let inner = ast_to_omml(arg);
+                        format!(
+                            "<m:d>\n  <m:dPr><m:begChr m:val=\"|\"/><m:endChr m:val=\"|\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+                            inner
+                        )
+                    } else {
+                        String::new()
+                    }
+                }
+                "norm" => {
+                    if let Some(arg) = args.first() {
+                        let inner = ast_to_omml(arg);
+                        format!(
+                            "<m:d>\n  <m:dPr><m:begChr m:val=\"‖\"/><m:endChr m:val=\"‖\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+                            inner
+                        )
+                    } else {
+                        String::new()
+                    }
+                }
+                "floor" => {
+                    if let Some(arg) = args.first() {
+                        let inner = ast_to_omml(arg);
+                        format!(
+                            "<m:d>\n  <m:dPr><m:begChr m:val=\"⌊\"/><m:endChr m:val=\"⌋\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+                            inner
+                        )
+                    } else {
+                        String::new()
+                    }
+                }
+                "ceil" => {
+                    if let Some(arg) = args.first() {
+                        let inner = ast_to_omml(arg);
+                        format!(
+                            "<m:d>\n  <m:dPr><m:begChr m:val=\"⌈\"/><m:endChr m:val=\"⌉\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+                            inner
+                        )
+                    } else {
+                        String::new()
+                    }
+                }
                 _ => {
                     // Unknown command — render arguments as sequence
                     let parts: Vec<String> = args.iter().map(ast_to_omml).collect();
@@ -1510,6 +1582,27 @@ mod tests {
                 "nary output for {} has {} self-closing <m:e/>, Word will render boxes: {}",
                 latex, self_close_e_count, r
             );
+        }
+    }
+
+    #[test]
+    fn layout_and_delimiter_commands_emit_valid_structures() {
+        let boxed = latex_to_omml("\\boxed{x}");
+        assert!(boxed.contains("<m:borderBox><m:e>"), "boxed: {boxed}");
+
+        let tag = latex_to_omml("E=mc^2\\tag{1}");
+        assert!(tag.contains("<m:t>(1)</m:t>"), "tag: {tag}");
+        assert!(!tag.contains("<m:eqNum>"), "tag: {tag}");
+
+        for (latex, open, close) in [
+            ("\\abs{x}", "|", "|"),
+            ("\\norm{x}", "‖", "‖"),
+            ("\\floor{x}", "⌊", "⌋"),
+            ("\\ceil{x}", "⌈", "⌉"),
+        ] {
+            let output = latex_to_omml(latex);
+            assert!(output.contains(&format!("m:begChr m:val=\"{open}\"")));
+            assert!(output.contains(&format!("m:endChr m:val=\"{close}\"")));
         }
     }
 }

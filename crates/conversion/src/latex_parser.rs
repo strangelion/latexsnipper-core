@@ -444,6 +444,14 @@ impl LatexParser {
                 };
                 Some(LatexNode::Command { name: cmd, args })
             }
+            // Single-argument layout and convenience commands.
+            "phantom" | "vphantom" | "hphantom" | "boxed" | "tag" | "abs" | "norm" | "floor"
+            | "ceil" | "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
+                Some(LatexNode::Command {
+                    name: cmd,
+                    args: vec![self.parse_single()],
+                })
+            }
             // Footnote
             "footnote" => {
                 let content = self.parse_single();

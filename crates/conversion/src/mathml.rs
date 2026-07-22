@@ -313,7 +313,6 @@ fn latex_to_mathml(latex: &str) -> String {
             latex_to_mathml(content)
         );
     }
-
     if let Some(rendered) = render_nary_limits(latex) {
         return rendered;
     }
@@ -852,6 +851,52 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
                 pos = after_inner;
                 found_style = true;
             }
+            "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
+                let (inner, after_inner) = read_braced_group(&chars, cmd_end)
+                    .unwrap_or_else(|| (chars[cmd_end..].iter().collect(), chars.len()));
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&math_style_mathml(
+                    command.as_str(),
+                    &latex_to_mathml(&inner),
+                ));
+                pos = after_inner;
+                found_style = true;
+            }
+            "phantom" | "vphantom" | "hphantom" | "boxed" | "tag" | "abs" | "norm" | "floor"
+            | "ceil" => {
+                let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                let inner = latex_to_mathml(&inner);
+                let rendered = match command.as_str() {
+                    "phantom" => format!(
+                        "<mpadded width=\"0\" height=\"0\" depth=\"0\"><mrow>{inner}</mrow></mpadded>"
+                    ),
+                    "vphantom" => {
+                        format!("<mpadded width=\"0\"><mrow>{inner}</mrow></mpadded>")
+                    }
+                    "hphantom" => format!(
+                        "<mpadded height=\"0\" depth=\"0\"><mrow>{inner}</mrow></mpadded>"
+                    ),
+                    "boxed" => {
+                        format!("<menclosed notation=\"box\"><mrow>{inner}</mrow></menclosed>")
+                    }
+                    "tag" => format!(
+                        "<mo lspace=\"0em\" rspace=\"0em\">(</mo><mrow>{inner}</mrow><mo lspace=\"0em\" rspace=\"0em\">)</mo>"
+                    ),
+                    "abs" => delimiter_mathml("|", "|", &inner),
+                    "norm" => delimiter_mathml("‖", "‖", &inner),
+                    "floor" => delimiter_mathml("⌊", "⌋", &inner),
+                    "ceil" => delimiter_mathml("⌈", "⌉", &inner),
+                    _ => unreachable!("command match is exhaustive"),
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&rendered);
+                pos = after_inner;
+                found_style = true;
+            }
             "tiny" | "scriptsize" | "footnotesize" | "small" | "normalsize" | "large" | "Large"
             | "LARGE" | "huge" | "Huge" => {
                 let Some((inner, after_inner)) = read_braced_group(&chars, cmd_end) else {
@@ -916,6 +961,25 @@ fn flush_mathml_plain(output: &mut String, plain: &mut String) {
         output.push_str(&latex_to_mathml(text));
     }
     plain.clear();
+}
+
+fn delimiter_mathml(open: &str, close: &str, inner: &str) -> String {
+    format!(
+        "<mo lspace=\"0em\" rspace=\"0em\">{open}</mo><mrow>{inner}</mrow><mo lspace=\"0em\" rspace=\"0em\">{close}</mo>"
+    )
+}
+
+fn math_style_mathml(style: &str, inner: &str) -> String {
+    let (displaystyle, scriptlevel) = match style {
+        "displaystyle" => ("true", "0"),
+        "textstyle" => ("false", "0"),
+        "scriptstyle" => ("false", "1"),
+        "scriptscriptstyle" => ("false", "2"),
+        _ => unreachable!("caller only passes supported math styles"),
+    };
+    format!(
+        "<mstyle displaystyle=\"{displaystyle}\" scriptlevel=\"{scriptlevel}\"><mrow>{inner}</mrow></mstyle>"
+    )
 }
 
 fn latex_size_to_mathml(name: &str) -> &str {
@@ -1062,4 +1126,36 @@ fn aligned_to_mathml(content: &str) -> String {
         rows_xml.push(format!("  <mtr>\n{}\n  </mtr>", cells.join("\n")));
     }
     format!("<mtable>\n{}\n</mtable>", rows_xml.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grouped_layout_commands_preserve_trailing_expression() {
+        let boxed = latex_to_mathml("\\boxed{x}+y");
+        assert!(boxed.contains("<menclosed notation=\"box\">") && boxed.contains("<mi>y</mi>"));
+
+        let phantom = latex_to_mathml("a+\\vphantom{b}+c");
+        assert!(phantom.contains("<mpadded width=\"0\">") && phantom.contains("<mi>c</mi>"));
+    }
+
+    #[test]
+    fn math_delimiter_macros_have_explicit_delimiters() {
+        assert!(latex_to_mathml("\\abs{x}").contains(">|</mo>"));
+        assert!(latex_to_mathml("\\norm{x}").contains(">‖</mo>"));
+        assert!(latex_to_mathml("\\floor{x}").contains(">⌊</mo>"));
+        assert!(latex_to_mathml("\\ceil{x}").contains(">⌈</mo>"));
+    }
+
+    #[test]
+    fn math_style_declarations_apply_to_the_remaining_expression() {
+        let display = latex_to_mathml("\\displaystyle \\sum_{i=1}^{n} x_i");
+        assert!(display.starts_with("<mstyle displaystyle=\"true\" scriptlevel=\"0\">"));
+        assert!(display.contains("∑"));
+
+        let script = latex_to_mathml("\\scriptstyle{x}");
+        assert!(script.contains("displaystyle=\"false\" scriptlevel=\"1\""));
+    }
 }

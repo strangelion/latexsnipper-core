@@ -358,6 +358,61 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
                 String::new()
             }
         }
+        // Displaystyle / textstyle (no direct Typst equivalent, pass through content)
+        "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
+            if let Some(arg) = args.first() {
+                latex_ast_to_typst(arg)
+            } else {
+                String::new()
+            }
+        }
+        // Vphantom / hphantom
+        "vphantom" | "hphantom" => {
+            if let Some(arg) = args.first() {
+                format!("phantom({})", latex_ast_to_typst(arg))
+            } else {
+                String::new()
+            }
+        }
+        // Typst equation numbering is configured outside the math expression;
+        // retain an inline visual marker instead of emitting a nonexistent
+        // `tag(...)` math function.
+        "tag" => {
+            if let Some(arg) = args.first() {
+                format!("({})", latex_ast_to_typst(arg))
+            } else {
+                String::new()
+            }
+        }
+        // Math macros: abs, norm, floor, ceil
+        "abs" => {
+            if let Some(arg) = args.first() {
+                format!("abs({})", latex_ast_to_typst(arg))
+            } else {
+                String::new()
+            }
+        }
+        "norm" => {
+            if let Some(arg) = args.first() {
+                format!("norm({})", latex_ast_to_typst(arg))
+            } else {
+                String::new()
+            }
+        }
+        "floor" => {
+            if let Some(arg) = args.first() {
+                format!("floor({})", latex_ast_to_typst(arg))
+            } else {
+                String::new()
+            }
+        }
+        "ceil" => {
+            if let Some(arg) = args.first() {
+                format!("ceil({})", latex_ast_to_typst(arg))
+            } else {
+                String::new()
+            }
+        }
         // Underline/overline
         "underline" => {
             if let Some(arg) = args.first() {
@@ -944,5 +999,19 @@ mod tests {
         assert_eq!(convert_delimiter(")"), ")");
         assert_eq!(convert_delimiter("["), "[");
         assert_eq!(convert_delimiter("|"), "|");
+    }
+
+    #[test]
+    fn test_layout_and_delimiter_commands() {
+        assert_eq!(latex_ast_to_typst(&parse_latex("\\boxed{x}")), "box(x)");
+        assert_eq!(
+            latex_ast_to_typst(&parse_latex("\\vphantom{x}")),
+            "phantom(x)"
+        );
+        assert_eq!(latex_ast_to_typst(&parse_latex("\\tag{1}")), "(1)");
+        assert_eq!(latex_ast_to_typst(&parse_latex("\\abs{x}")), "abs(x)");
+        assert_eq!(latex_ast_to_typst(&parse_latex("\\norm{x}")), "norm(x)");
+        assert_eq!(latex_ast_to_typst(&parse_latex("\\floor{x}")), "floor(x)");
+        assert_eq!(latex_ast_to_typst(&parse_latex("\\ceil{x}")), "ceil(x)");
     }
 }

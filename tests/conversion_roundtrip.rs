@@ -7,6 +7,7 @@ const FORMULAS: &[(&str, &str)] = &[
     ("nested_frac", r"\frac{\frac{1}{2}}{\frac{3}{4}}"),
     ("sqrt", r"\sqrt{x^2 + y^2}"),
     ("sqrt_degree", r"\sqrt[3]{x+y}"),
+    ("sqrt_fourth", r"\sqrt[4]{x}"),
     ("superscript", r"x^{2n+1}"),
     ("subscript", r"x_{i+j}"),
     ("sub_sup", r"x_i^{2}"),
@@ -81,6 +82,16 @@ const FORMULAS: &[(&str, &str)] = &[
     ("gauss", r"\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}"),
     ("cross_product", r"\vec{a} \times \vec{b}"),
     ("dot_product", r"\vec{a} \cdot \vec{b}"),
+    ("boxed", r"\boxed{E = mc^2}"),
+    ("tag", r"E = mc^2\tag{1}"),
+    ("displaystyle", r"\displaystyle \sum_{i=1}^{n} x_i"),
+    ("textstyle", r"\textstyle \sum_{i=1}^{n} x_i"),
+    ("norm", r"\norm{x}"),
+    ("abs_val", r"\abs{x}"),
+    ("floor", r"\floor{x}"),
+    ("ceil", r"\ceil{x}"),
+    ("vphantom", r"\frac{a}{\vphantom{b}c}"),
+    ("hphantom", r"x + \hphantom{abc} + y"),
 ];
 
 fn convert_via(latex: &str, input_fmt: &str, output_fmt: OutputFormat) -> String {
