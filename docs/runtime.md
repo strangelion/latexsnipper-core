@@ -8,7 +8,8 @@
 [ExecuTorch Runtime](executorch-runtime.md)。ONNX 的 TensorRT 加速配置与 benchmark 见
 [ONNX Runtime TensorRT EP](onnx-tensorrt-ep.md)，直接 engine 构建/加载见
 [Native TensorRT Runtime](tensorrt-runtime.md)，RTX PC 的 AOT/JIT 部署见
-[TensorRT-RTX Runtime](tensorrt-rtx-runtime.md)。下文的
+[TensorRT-RTX Runtime](tensorrt-rtx-runtime.md)，Apple 原生模型见
+[Native Core ML Runtime](coreml-runtime.md)。下文的
 `RuntimeBackend` / `InferenceSession` 是保留的旧 ONNX 兼容 API。
 
 ## 核心原则

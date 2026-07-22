@@ -40,6 +40,16 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo test --locked --workspace --all-features
 
+  coreml-contract:
+    name: Core ML native contract
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p latexsnipper-runtime-coreml --all-targets
+
   focused-tests:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest

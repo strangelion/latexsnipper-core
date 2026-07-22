@@ -35,6 +35,12 @@ pub fn default_runtime_registry(models_dir: &Path) -> Result<RuntimeRegistry> {
         registry.register(latexsnipper_runtime_tensorrt::TensorRtRtxFactory::new())?;
         registry
     };
+    #[cfg(feature = "coreml")]
+    let registry = {
+        let mut registry = registry;
+        registry.register(latexsnipper_runtime_coreml::CoreMlFactory::new())?;
+        registry
+    };
     Ok(registry)
 }
 
@@ -76,5 +82,12 @@ mod tests {
     fn tensorrt_rtx_feature_registers_factory_even_when_sdk_is_absent() {
         let registry = default_runtime_registry(Path::new("models")).unwrap();
         assert!(registry.get(&RuntimeKind::TensorRtRtx).is_some());
+    }
+
+    #[cfg(feature = "coreml")]
+    #[test]
+    fn coreml_feature_registers_factory_on_every_platform() {
+        let registry = default_runtime_registry(Path::new("models")).unwrap();
+        assert!(registry.get(&RuntimeKind::CoreMl).is_some());
     }
 }
