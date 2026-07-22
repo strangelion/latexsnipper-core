@@ -268,7 +268,26 @@ impl RuntimeSessionCompatibility {
 
 impl InferenceSession for RuntimeSessionCompatibility {
     fn run(&self, inputs: &[Tensor]) -> Result<Vec<Tensor>> {
-        let response = self.inner.run(RunRequest::from_tensors(inputs))?;
+        if inputs.len() != self.input_names.len() {
+            return Err(SnipperError::Inference(format!(
+                "runtime expected {} positional inputs, got {}",
+                self.input_names.len(),
+                inputs.len(),
+            )));
+        }
+
+        // The legacy InferenceSession API is positional.
+        // Preserve that contract by binding each positional tensor
+        // to the canonical input name exposed by RuntimeSession,
+        // ignoring whatever name the legacy caller placed on the tensor.
+        let named_inputs: crate::TensorMap = self
+            .input_names
+            .iter()
+            .cloned()
+            .zip(inputs.iter().cloned())
+            .collect();
+
+        let response = self.inner.run(RunRequest::new(named_inputs))?;
         self.output_names
             .iter()
             .map(|name| {
@@ -391,5 +410,151 @@ mod tests {
         assert_eq!(handle.id(), "memory-model");
         assert_eq!(handle.model_bytes(), Some([7, 8, 9].as_slice()));
         assert!(handle.model_path().is_none());
+    }
+
+    /// Regression: legacy callers place arbitrary names on their tensors
+    /// (e.g. "x", "pixel_values"). The compatibility layer must bind by
+    /// position, not reject the request because the names differ from the
+    /// canonical RuntimeSession input names (e.g. "input_0").
+    #[test]
+    fn positional_compatibility_rebinds_runtime_input_names() {
+        use crate::session::{RunRequest, SessionMetadata, TensorSpec};
+        use crate::{RuntimeKind, RuntimeSession};
+        use std::sync::Arc;
+
+        let last_request: Arc<Mutex<Option<RunRequest>>> = Arc::new(Mutex::new(None));
+        let captured = last_request.clone();
+
+        struct NamedSession {
+            metadata: SessionMetadata,
+            on_run: Box<dyn Fn(RunRequest) -> Result<crate::RunResponse> + Send + Sync>,
+        }
+
+        impl RuntimeSession for NamedSession {
+            fn run(&self, request: RunRequest) -> Result<crate::RunResponse> {
+                (self.on_run)(request)
+            }
+
+            fn metadata(&self) -> &SessionMetadata {
+                &self.metadata
+            }
+        }
+
+        let session = NamedSession {
+            metadata: SessionMetadata {
+                runtime: RuntimeKind::OnnxRuntime,
+                model_id: None,
+                inputs: vec![
+                    TensorSpec {
+                        name: "input_0".to_owned(),
+                        shape: vec![Some(1), Some(3), Some(48), Some(320)],
+                        dtype: "float32".to_owned(),
+                    },
+                    TensorSpec {
+                        name: "input_1".to_owned(),
+                        shape: vec![Some(1), Some(128)],
+                        dtype: "int64".to_owned(),
+                    },
+                ],
+                outputs: vec![TensorSpec {
+                    name: "output".to_owned(),
+                    shape: vec![Some(1)],
+                    dtype: "float32".to_owned(),
+                }],
+                methods: Vec::new(),
+            },
+            on_run: Box::new(move |request: RunRequest| {
+                *captured.lock().unwrap() = Some(request);
+                Ok(crate::RunResponse {
+                    outputs: std::collections::BTreeMap::from([(
+                        "output".to_owned(),
+                        Tensor::float32("output", vec![1], vec![42.0]),
+                    )]),
+                })
+            }),
+        };
+
+        let compat = RuntimeSessionCompatibility {
+            inner: Box::new(session),
+            input_names: vec!["input_0".to_owned(), "input_1".to_owned()],
+            output_names: vec!["output".to_owned()],
+        };
+
+        // Legacy caller provides tensors with completely different names.
+        // The compatibility layer must map position 0 → "input_0",
+        // position 1 → "input_1", regardless of the tensor's own name.
+        let result = InferenceSession::run(
+            &compat,
+            &[
+                Tensor::float32("pixel_values", vec![1, 3, 48, 320], vec![0.5; 46080]),
+                Tensor::int64("input_ids", vec![1, 128], vec![0; 128]),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert!((result[0].as_f32_slice().unwrap()[0] - 42.0).abs() < 1e-6);
+
+        // Verify the inner session received the tensors under canonical names.
+        let last = last_request.lock().unwrap().clone().unwrap();
+        assert!(last.inputs.contains_key("input_0"));
+        assert!(last.inputs.contains_key("input_1"));
+        assert!(!last.inputs.contains_key("pixel_values"));
+        assert!(!last.inputs.contains_key("input_ids"));
+    }
+
+    #[test]
+    fn positional_compatibility_rejects_wrong_input_count() {
+        use crate::session::{SessionMetadata, TensorSpec};
+        use crate::{RuntimeKind, RuntimeSession};
+
+        struct SingleInputSession {
+            metadata: SessionMetadata,
+        }
+
+        impl RuntimeSession for SingleInputSession {
+            fn run(&self, _request: crate::session::RunRequest) -> Result<crate::RunResponse> {
+                Ok(crate::RunResponse {
+                    outputs: std::collections::BTreeMap::new(),
+                })
+            }
+
+            fn metadata(&self) -> &SessionMetadata {
+                &self.metadata
+            }
+        }
+
+        let session = SingleInputSession {
+            metadata: SessionMetadata {
+                runtime: RuntimeKind::OnnxRuntime,
+                model_id: None,
+                inputs: vec![TensorSpec {
+                    name: "input_0".to_owned(),
+                    shape: vec![Some(1), Some(3), Some(48), Some(320)],
+                    dtype: "float32".to_owned(),
+                }],
+                outputs: vec![],
+                methods: vec![],
+            },
+        };
+
+        let compat = RuntimeSessionCompatibility {
+            inner: Box::new(session),
+            input_names: vec!["input_0".to_owned()],
+            output_names: vec![],
+        };
+
+        let err = InferenceSession::run(
+            &compat,
+            &[
+                Tensor::float32("a", vec![1], vec![1.0]),
+                Tensor::float32("b", vec![1], vec![2.0]),
+            ],
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("expected 1 positional inputs, got 2"));
     }
 }
