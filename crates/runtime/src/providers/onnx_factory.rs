@@ -54,9 +54,11 @@ impl RuntimeFactory for OnnxRuntimeFactory {
                     })
                     .collect();
                 let mut capabilities = RuntimeCapabilities::default();
-                capabilities
-                    .tensor_dtypes
-                    .extend(["f32", "i64", "i32", "u8"].into_iter().map(str::to_owned));
+                capabilities.tensor_dtypes.extend(
+                    ["f32", "f16", "i64", "i32", "u8", "bool"]
+                        .into_iter()
+                        .map(str::to_owned),
+                );
                 capabilities.execution_providers.extend(
                     providers
                         .into_iter()
@@ -88,11 +90,7 @@ impl RuntimeFactory for OnnxRuntimeFactory {
         let model_path = select_model_path(artifacts, options)?;
         let backend = self.backend()?;
         let handle = crate::ModelHandle::with_path("onnx-model", model_path.clone());
-        let inner = backend.create_session_with_threads(
-            &handle,
-            options.legacy_acceleration(),
-            options.max_threads,
-        )?;
+        let inner = backend.create_session_with_options(&handle, options)?;
         let input_names = inner.input_names();
         let output_names = inner.output_names();
         Ok(Box::new(OnnxRegistrySession {

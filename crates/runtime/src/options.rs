@@ -141,6 +141,14 @@ impl From<AccelerationMode> for RuntimeOptions {
 /// should provide their desired provider order explicitly.
 fn legacy_gpu_provider_order() -> Vec<ExecutionProviderSpec> {
     vec![
+        #[cfg(any(
+            all(target_os = "windows", target_arch = "x86_64"),
+            all(
+                target_os = "linux",
+                any(target_arch = "x86_64", target_arch = "aarch64")
+            )
+        ))]
+        ExecutionProviderSpec::new("tensorrt"),
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         ExecutionProviderSpec::new("cuda"),
         #[cfg(target_os = "windows")]
@@ -165,5 +173,24 @@ mod tests {
             let options = RuntimeOptions::from(mode);
             assert_eq!(options.legacy_acceleration(), mode);
         }
+    }
+
+    #[cfg(any(
+        all(target_os = "windows", target_arch = "x86_64"),
+        all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        )
+    ))]
+    #[test]
+    fn legacy_gpu_prefers_tensorrt_before_cuda() {
+        let options = RuntimeOptions::from_acceleration(AccelerationMode::Gpu);
+        let names: Vec<_> = options
+            .providers
+            .iter()
+            .map(|provider| provider.name.as_str())
+            .collect();
+        assert_eq!(&names[..2], &["tensorrt", "cuda"]);
+        assert_eq!(names.last(), Some(&"cpu"));
     }
 }

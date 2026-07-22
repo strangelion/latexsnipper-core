@@ -6,11 +6,11 @@ use std::sync::Arc;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_model::{RuntimeVariant, VariantStatus};
 use latexsnipper_runtime::{
-    AccelerationMode, DeviceKind, ManifestTensorSpec, ModelFiles, ModelHandle, ModelManifest,
-    ModelTask, OnnxRuntimeBackend, RegistryRuntimeBackend, RunRequest, RunResponse,
-    RuntimeArtifacts, RuntimeBackend, RuntimeCapabilities, RuntimeDevice, RuntimeFactory,
-    RuntimeKind, RuntimeOptions, RuntimeProbe, RuntimeRegistry, RuntimeSession, SessionMetadata,
-    SessionTensorSpec, TensorMap,
+    AccelerationMode, DeviceKind, ExecutionProviderSpec, ManifestTensorSpec, ModelFiles,
+    ModelHandle, ModelManifest, ModelTask, OnnxRuntimeBackend, RegistryRuntimeBackend, RunRequest,
+    RunResponse, RuntimeArtifacts, RuntimeBackend, RuntimeCapabilities, RuntimeDevice,
+    RuntimeFactory, RuntimeKind, RuntimeOptions, RuntimeProbe, RuntimeRegistry, RuntimeSession,
+    SessionMetadata, SessionTensorSpec, TensorMap,
 };
 use latexsnipper_tensor::Tensor;
 
@@ -367,4 +367,49 @@ fn real_onnx_registry_inference_matches_legacy_execution() {
         assert_eq!(legacy.shape(), current.shape());
         assert_eq!(legacy.as_f32_slice(), current.as_f32_slice());
     }
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[test]
+fn onnx_provider_chain_runs_with_only_the_declared_cpu_fallback() {
+    use latexsnipper_runtime::providers::onnx_factory::OnnxRuntimeFactory;
+
+    let (model_dir, artifact) = existing_artifact();
+    let factory = OnnxRuntimeFactory::new(model_dir.to_path_buf());
+    let artifacts = RuntimeArtifacts::new(RuntimeKind::OnnxRuntime)
+        .with_file("model", model_dir.join(artifact));
+    let options = RuntimeOptions {
+        providers: vec![
+            ExecutionProviderSpec::new("tensorrt"),
+            ExecutionProviderSpec::new("cuda"),
+            ExecutionProviderSpec::cpu(),
+        ],
+        ..RuntimeOptions::default()
+    };
+    let session = factory.create_session(&artifacts, &options).unwrap();
+    let input = Tensor::float32("x", vec![1, 3, 48, 320], vec![0.25; 3 * 48 * 320]);
+    let response = session
+        .run(RunRequest::new(TensorMap::from([("x".to_owned(), input)])))
+        .unwrap();
+    assert!(!response.outputs.is_empty());
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+#[test]
+fn onnx_provider_chain_does_not_invent_cpu_fallback() {
+    use latexsnipper_runtime::providers::onnx_factory::OnnxRuntimeFactory;
+
+    let (model_dir, artifact) = existing_artifact();
+    let factory = OnnxRuntimeFactory::new(model_dir.to_path_buf());
+    let artifacts = RuntimeArtifacts::new(RuntimeKind::OnnxRuntime)
+        .with_file("model", model_dir.join(artifact));
+    let options = RuntimeOptions {
+        providers: vec![ExecutionProviderSpec::new("qnn")],
+        ..RuntimeOptions::default()
+    };
+    let error = match factory.create_session(&artifacts, &options) {
+        Ok(_) => panic!("QNN unexpectedly ran without a registered provider or CPU fallback"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("CPU fallback was not declared"));
 }

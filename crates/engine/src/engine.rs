@@ -200,7 +200,9 @@ impl SnipperEngine {
             let compatibility_options =
                 latexsnipper_runtime::RuntimeOptions::from(self.config.acceleration);
             resolved.options.device = compatibility_options.device;
-            resolved.options.providers = compatibility_options.providers;
+            if resolved.runtime == RuntimeKind::OnnxRuntime {
+                resolved.options.providers = compatibility_options.providers;
+            }
         }
         let session = self.runtime_registry.create_resolved_session(&resolved)?;
         Ok((resolved, session))

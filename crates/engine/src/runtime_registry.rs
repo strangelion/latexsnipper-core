@@ -23,6 +23,18 @@ pub fn default_runtime_registry(models_dir: &Path) -> Result<RuntimeRegistry> {
         registry.register(latexsnipper_runtime_executorch::ExecuTorchFactory::new())?;
         registry
     };
+    #[cfg(feature = "tensorrt")]
+    let registry = {
+        let mut registry = registry;
+        registry.register(latexsnipper_runtime_tensorrt::TensorRtFactory::new())?;
+        registry
+    };
+    #[cfg(feature = "tensorrt-rtx")]
+    let registry = {
+        let mut registry = registry;
+        registry.register(latexsnipper_runtime_tensorrt::TensorRtRtxFactory::new())?;
+        registry
+    };
     Ok(registry)
 }
 
@@ -50,5 +62,19 @@ mod tests {
     fn executorch_feature_registers_factory_even_when_sdk_is_absent() {
         let registry = default_runtime_registry(Path::new("models")).unwrap();
         assert!(registry.get(&RuntimeKind::ExecuTorch).is_some());
+    }
+
+    #[cfg(feature = "tensorrt")]
+    #[test]
+    fn tensorrt_feature_registers_factory_even_when_sdk_is_absent() {
+        let registry = default_runtime_registry(Path::new("models")).unwrap();
+        assert!(registry.get(&RuntimeKind::TensorRt).is_some());
+    }
+
+    #[cfg(feature = "tensorrt-rtx")]
+    #[test]
+    fn tensorrt_rtx_feature_registers_factory_even_when_sdk_is_absent() {
+        let registry = default_runtime_registry(Path::new("models")).unwrap();
+        assert!(registry.get(&RuntimeKind::TensorRtRtx).is_some());
     }
 }

@@ -5,7 +5,10 @@
 当前架构通过 `RuntimeRegistry → RuntimeResolver → RuntimeSession` 分离模型格式、Runtime
 和硬件加速。ONNX Runtime 是默认实现；Paddle Inference 与 ExecuTorch 是默认关闭的
 独立 Native Runtime，安装与打包见 [Paddle Inference Runtime](paddle-runtime.md) 和
-[ExecuTorch Runtime](executorch-runtime.md)。下文的
+[ExecuTorch Runtime](executorch-runtime.md)。ONNX 的 TensorRT 加速配置与 benchmark 见
+[ONNX Runtime TensorRT EP](onnx-tensorrt-ep.md)，直接 engine 构建/加载见
+[Native TensorRT Runtime](tensorrt-runtime.md)，RTX PC 的 AOT/JIT 部署见
+[TensorRT-RTX Runtime](tensorrt-rtx-runtime.md)。下文的
 `RuntimeBackend` / `InferenceSession` 是保留的旧 ONNX 兼容 API。
 
 ## 核心原则
@@ -190,11 +193,11 @@ pub struct OnnxRuntimeBackend {
 | `available_providers()` | 当前 ORT build 和系统可用的 provider |
 | `runtime_diagnostics()` | runtime/provider 的可序列化诊断快照 |
 
-Provider 选择顺序为：Windows `CUDA → DirectML → CPU`，Linux
-`CUDA → CPU`，macOS `CoreML → CPU`。注册失败会恢复 session builder、继续尝试下一项，
-最终 CPU fallback 会产生 `W_GPU_PROVIDER_FALLBACK`，不会伪装为 GPU 成功。
+显式 `RuntimeOptions.providers` 是真实的 provider 优先级和配置来源。Windows/Linux GPU
+兼容顺序为 `TensorRT → CUDA → 平台 GPU → CPU`，macOS 为 `CoreML → CPU`。只有列表
+明确包含 CPU 才允许 CPU fallback；未声明 CPU 时会关闭 ORT 的隐式 CPU fallback。
 
-`Auto` 只尝试硬件探测结果对应的 provider，不会因为某个 EP 动态库可加载就误选该
+`Auto` 只按硬件探测结果生成默认 provider 链，不会因为某个 EP 动态库可加载就误选该
 provider。显式 `Gpu` 模式才会依次尝试平台上的全部 GPU provider。GPU session 创建、
 推理及 cache 析构在进程内串行化，避免多个独立 backend 竞争原生 provider 生命周期。
 
