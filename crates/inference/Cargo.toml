@@ -25,12 +25,7 @@ regex = "1"
 # getrandom 0.3 is pulled transitively through tokenizers/ahash.
 # wasm32-unknown-unknown needs the explicit JS backend.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom_03 = {
-    package = "getrandom",
-    version = "0.3",
-    features = ["wasm_js"],
-    optional = true
-}
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"], optional = true }
 
 [features]
 default = []

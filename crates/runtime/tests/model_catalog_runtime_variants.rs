@@ -20,14 +20,20 @@ fn every_official_model_declares_runtime_variants() {
         .as_object()
         .expect("categories must be an object");
 
-    assert!(!categories.is_empty(), "manifest must declare at least one category");
+    assert!(
+        !categories.is_empty(),
+        "manifest must declare at least one category"
+    );
 
     for (category_name, category) in categories {
         let variants = category["variants"]
             .as_array()
             .unwrap_or_else(|| panic!("{category_name}: variants must be an array"));
 
-        assert!(!variants.is_empty(), "{category_name}: must have at least one variant");
+        assert!(
+            !variants.is_empty(),
+            "{category_name}: must have at least one variant"
+        );
 
         for variant in variants {
             let variant_id = variant["id"]
@@ -37,9 +43,9 @@ fn every_official_model_declares_runtime_variants() {
             let key = format!("{category_name}/{variant_id}");
 
             // 1. Must have explicit runtimeVariants
-            let runtime_variants = variant["runtimeVariants"].as_array().unwrap_or_else(|| {
-                panic!("{key}: has no explicit runtimeVariants array")
-            });
+            let runtime_variants = variant["runtimeVariants"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{key}: has no explicit runtimeVariants array"));
             assert!(
                 !runtime_variants.is_empty(),
                 "{key}: runtimeVariants must not be empty"
@@ -48,9 +54,9 @@ fn every_official_model_declares_runtime_variants() {
             // 2. No duplicate runtime variant ids
             let mut runtime_ids = HashSet::new();
             for rv in runtime_variants {
-                let rv_id = rv["id"].as_str().unwrap_or_else(|| {
-                    panic!("{key}: runtime variant missing id field")
-                });
+                let rv_id = rv["id"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{key}: runtime variant missing id field"));
                 assert!(
                     runtime_ids.insert(rv_id.to_string()),
                     "{key}: duplicate runtime variant id '{rv_id}'"
@@ -70,11 +76,9 @@ fn every_official_model_declares_runtime_variants() {
             // 4. Each variant must have artifacts
             for rv in runtime_variants {
                 let rv_id = rv["id"].as_str().unwrap_or("?");
-                let artifacts = rv["artifacts"].as_object().unwrap_or_else(|| {
-                    panic!(
-                        "{key}/{rv_id}: artifacts must be an object"
-                    )
-                });
+                let artifacts = rv["artifacts"]
+                    .as_object()
+                    .unwrap_or_else(|| panic!("{key}/{rv_id}: artifacts must be an object"));
                 assert!(
                     !artifacts.is_empty(),
                     "{key}/{rv_id}: artifacts must not be empty"
@@ -87,9 +91,7 @@ fn every_official_model_declares_runtime_variants() {
                 if let Some(fallbacks) = rv["fallbacks"].as_array() {
                     for fallback in fallbacks {
                         let fb = fallback.as_str().unwrap_or_else(|| {
-                            panic!(
-                                "{key}/{rv_id}: fallback entry is not a string"
-                            )
+                            panic!("{key}/{rv_id}: fallback entry is not a string")
                         });
                         assert!(
                             runtime_ids.contains(fb),
