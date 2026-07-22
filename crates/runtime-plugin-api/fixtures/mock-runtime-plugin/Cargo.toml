@@ -1,0 +1,19 @@
+[package]
+name = "latexsnipper-runtime-plugin-mock"
+description = "Test-only native runtime plugin implementing ABI v1"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+latexsnipper-runtime-plugin-api.workspace = true
+
+[dev-dependencies]
+latexsnipper-foundation.workspace = true
+latexsnipper-runtime.workspace = true
+latexsnipper-tensor.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

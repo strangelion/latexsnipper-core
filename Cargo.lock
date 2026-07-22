@@ -2326,6 +2326,7 @@ dependencies = [
  "latexsnipper-runtime-coreml",
  "latexsnipper-runtime-executorch",
  "latexsnipper-runtime-paddle",
+ "latexsnipper-runtime-plugin-api",
  "latexsnipper-runtime-tensorrt",
  "latexsnipper-syntax",
  "latexsnipper-tensor",
@@ -2630,6 +2631,33 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokenizers",
+]
+
+[[package]]
+name = "latexsnipper-runtime-plugin-api"
+version = "3.0.1"
+dependencies = [
+ "hex",
+ "latexsnipper-foundation",
+ "latexsnipper-runtime",
+ "latexsnipper-tensor",
+ "libloading",
+ "log",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "latexsnipper-runtime-plugin-mock"
+version = "3.0.1"
+dependencies = [
+ "latexsnipper-foundation",
+ "latexsnipper-runtime",
+ "latexsnipper-runtime-plugin-api",
+ "latexsnipper-tensor",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]

@@ -22,6 +22,8 @@ pub use job::{Job, JobQueue, JobStatus};
 pub use latexsnipper_pipeline::DocumentParseMode;
 pub use metrics::{MetricsBuilder, RecognitionMetrics, SerializableMetrics};
 pub use runtime_registry::default_runtime_registry;
+#[cfg(feature = "runtime-plugins")]
+pub use runtime_registry::runtime_registry_with_plugins;
 pub use service::{Service, ServiceStatus};
 
 /// Experimental source-aware incremental document sessions.

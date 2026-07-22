@@ -33,6 +33,8 @@ members = [
     "crates/runtime-executorch",
     "crates/runtime-tensorrt",
     "crates/runtime-coreml",
+    "crates/runtime-plugin-api",
+    "crates/runtime-plugin-api/fixtures/mock-runtime-plugin",
 ]
 
 [workspace.package]
@@ -83,6 +85,7 @@ latexsnipper-runtime-paddle = { path = "crates/runtime-paddle", version = "3.0.1
 latexsnipper-runtime-executorch = { path = "crates/runtime-executorch", version = "3.0.1" }
 latexsnipper-runtime-tensorrt = { path = "crates/runtime-tensorrt", version = "3.0.1" }
 latexsnipper-runtime-coreml = { path = "crates/runtime-coreml", version = "3.0.1" }
+latexsnipper-runtime-plugin-api = { path = "crates/runtime-plugin-api", version = "3.0.1" }
 sha2 = "0.10"
 cap-std = "=4.0.2"
 cap-fs-ext = "=4.0.2"

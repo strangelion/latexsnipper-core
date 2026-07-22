@@ -18,6 +18,7 @@ latexsnipper-runtime-paddle = { workspace = true, optional = true }
 latexsnipper-runtime-executorch = { workspace = true, optional = true }
 latexsnipper-runtime-tensorrt = { workspace = true, optional = true }
 latexsnipper-runtime-coreml = { workspace = true, optional = true }
+latexsnipper-runtime-plugin-api = { workspace = true, optional = true }
 latexsnipper-inference.workspace = true
 latexsnipper-pipeline = { workspace = true, default-features = false }
 latexsnipper-model.workspace = true
@@ -54,6 +55,7 @@ executorch = ["dep:latexsnipper-runtime-executorch"]
 tensorrt = ["dep:latexsnipper-runtime-tensorrt"]
 tensorrt-rtx = ["dep:latexsnipper-runtime-tensorrt"]
 coreml = ["dep:latexsnipper-runtime-coreml"]
+runtime-plugins = ["dep:latexsnipper-runtime-plugin-api"]
 experimental-incremental = ["dep:latexsnipper-incremental"]
 
 [dev-dependencies]

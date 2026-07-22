@@ -1,0 +1,24 @@
+[package]
+name = "latexsnipper-runtime-plugin-api"
+description = "Versioned C ABI and trusted loader for LaTeXSnipper runtime plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+latexsnipper-foundation.workspace = true
+latexsnipper-runtime.workspace = true
+latexsnipper-tensor.workspace = true
+libloading = "0.8"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex = "0.4"
+log.workspace = true
+
+[features]
+default = []

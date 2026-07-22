@@ -4,6 +4,10 @@ use std::path::Path;
 
 use latexsnipper_foundation::Result;
 use latexsnipper_runtime::{providers::onnx_factory::OnnxRuntimeFactory, RuntimeRegistry};
+#[cfg(feature = "runtime-plugins")]
+use latexsnipper_runtime_plugin_api::{
+    RuntimePluginDiscovery, RuntimePluginDiscoveryReport, RuntimePluginTrustStore,
+};
 
 /// Build the canonical runtime registry used by native Engine entry points.
 /// Optional native runtimes are registered but remain harmless when their
@@ -42,6 +46,22 @@ pub fn default_runtime_registry(models_dir: &Path) -> Result<RuntimeRegistry> {
         registry
     };
     Ok(registry)
+}
+
+/// Build the normal registry, then discover only explicitly trusted and
+/// enabled native runtime plugins from application-owned installation roots.
+/// Model directories are deliberately not accepted as discovery roots here.
+#[cfg(feature = "runtime-plugins")]
+pub fn runtime_registry_with_plugins(
+    models_dir: &Path,
+    plugin_install_roots: &[std::path::PathBuf],
+    trust: &RuntimePluginTrustStore,
+) -> Result<(RuntimeRegistry, RuntimePluginDiscoveryReport)> {
+    let mut registry = default_runtime_registry(models_dir)?;
+    let report =
+        RuntimePluginDiscovery::new(plugin_install_roots.iter().cloned(), trust).discover();
+    report.register_all(&mut registry)?;
+    Ok((registry, report))
 }
 
 #[cfg(test)]
@@ -89,5 +109,20 @@ mod tests {
     fn coreml_feature_registers_factory_on_every_platform() {
         let registry = default_runtime_registry(Path::new("models")).unwrap();
         assert!(registry.get(&RuntimeKind::CoreMl).is_some());
+    }
+
+    #[cfg(feature = "runtime-plugins")]
+    #[test]
+    fn runtime_plugin_discovery_does_not_scan_model_directories_implicitly() {
+        let trust = RuntimePluginTrustStore::new();
+        let (registry, report) = runtime_registry_with_plugins(
+            Path::new("models"),
+            &[std::env::temp_dir().join("latexsnipper-no-runtime-plugins")],
+            &trust,
+        )
+        .unwrap();
+        assert!(report.factories.is_empty());
+        assert!(report.issues.is_empty());
+        assert!(registry.get(&RuntimeKind::OnnxRuntime).is_some());
     }
 }
