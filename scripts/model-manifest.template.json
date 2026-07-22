@@ -1,12 +1,12 @@
 {
     "sourceId": "official",
     "sourceLabel": "LaTeXSnipper Official",
-    "version": "3.0.0",
-    "releaseTag": "models-v3.0.0",
-    "baseUrl": "https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.0.0",
+    "version": "3.1.0",
+    "releaseTag": "models-v3.1.0",
+    "baseUrl": "https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.1.0",
     "mirrors": [
-        "https://gh.zwy.one/https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.0.0",
-        "https://gh.xxooo.cf/https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.0.0"
+        "https://gh.zwy.one/https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.1.0",
+        "https://gh.xxooo.cf/https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.1.0"
     ],
     "checksums": {},
     "testAssets": {
