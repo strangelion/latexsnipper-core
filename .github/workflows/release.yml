@@ -295,10 +295,36 @@ jobs:
         env:
             CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
+          # Extract a "try again after" timestamp from a 429 error (supports
+          # both Retry-After header values and crates.io body messages like
+          # "Please try again after Wed, 22 Jul 2026 16:26:18 GMT").
+          extract_retry_deadline() {
+            local log="$1"
+            local ts
+            # Prefer Retry-After header if present (cargo may surface it)
+            ts=$(echo "$log" | grep -i 'retry-after:' | head -1 | sed 's/.*retry-after: *//i' | tr -d '\r')
+            if [ -n "$ts" ] && [ "$ts" -eq "$ts" ] 2>/dev/null; then
+              # Numeric: seconds from now
+              echo $(( $(date +%s) + ts ))
+              return
+            fi
+            if [ -n "$ts" ]; then
+              # HTTP-date
+              date -d "$ts" +%s 2>/dev/null && return
+            fi
+            # Fallback: parse body "Please try again after <date>"
+            ts=$(echo "$log" | grep -oP 'try again after \K[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} [A-Z]+' | head -1)
+            if [ -n "$ts" ]; then
+              date -d "$ts" +%s 2>/dev/null && return
+            fi
+            echo 0
+          }
+
           publish() {
               local crate="$1"
               local attempt=1
-              local max_attempts=4
+              local max_attempts=5
+              local success_sleep=120
               echo "=== Publishing $crate ==="
               while [ "$attempt" -le "$max_attempts" ]; do
                 set +e
@@ -307,7 +333,7 @@ jobs:
                 set -e
                 if [ "$exit_code" -eq 0 ]; then
                   echo "Published $crate"
-                  sleep 45
+                  sleep "$success_sleep"
                   return 0
                 fi
                 if grep -Ei "already uploaded|already exists|is already uploaded|crate version.*already" /tmp/pub.log; then
@@ -315,14 +341,33 @@ jobs:
                   sleep 5
                   return 0
                 fi
-                if [ "$attempt" -eq "$max_attempts" ]; then
-                  echo "ERROR: failed to publish $crate after $max_attempts attempts"
-                  return "$exit_code"
+                # Handle 429 rate limiting explicitly
+                if grep -qi "429\|Too Many Requests\|rate.limit\|rate limit\|too many" /tmp/pub.log; then
+                  local deadline
+                  deadline=$(extract_retry_deadline "$(cat /tmp/pub.log)")
+                  if [ "$deadline" -gt 0 ] 2>/dev/null; then
+                    local now
+                    now=$(date +%s)
+                    local wait_time=$(( deadline - now ))
+                    if [ "$wait_time" -gt 0 ]; then
+                      echo "Rate limited. Waiting until $(date -d @$deadline -u +'%Y-%m-%dT%H:%M:%SZ') (${wait_time}s)"
+                      sleep "$wait_time"
+                    fi
+                  else
+                    local fallback=$(( attempt * 120 ))
+                    echo "Rate limited (429). No Retry-After found; waiting ${fallback}s"
+                    sleep "$fallback"
+                  fi
+                else
+                  if [ "$attempt" -eq "$max_attempts" ]; then
+                    echo "ERROR: failed to publish $crate after $max_attempts attempts"
+                    return "$exit_code"
+                  fi
+                  local delay=$(( attempt * 30 ))
+                  echo "Publish attempt $attempt failed; retrying in ${delay}s"
+                  sleep "$delay"
                 fi
-                delay=$((attempt * 30))
-                echo "Publish attempt $attempt failed; retrying in ${delay}s"
-                sleep "$delay"
-                attempt=$((attempt + 1))
+                attempt=$(( attempt + 1 ))
               done
             }
             publish latexsnipper-foundation
