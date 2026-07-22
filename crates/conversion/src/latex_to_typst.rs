@@ -763,8 +763,8 @@ fn convert_symbol(s: &str) -> String {
         "quad" => "quad".to_string(),
         "qquad" => "qquad".to_string(),
         "," => "thin".to_string(),
-        ";" => "hair".to_string(),
         ":" => "med".to_string(),
+        ";" => "thick".to_string(),
         "!" => "negthin".to_string(),
 
         // Dots

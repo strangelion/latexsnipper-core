@@ -207,9 +207,15 @@ impl LatexParser {
             let ch = self.chars[self.pos];
             self.pos += 1;
             return match ch {
-                // \, \; \: are thin/medium spaces, not punctuation
-                ',' | ';' | ':' => Some(LatexNode::Text(" ".to_string())),
-                ' ' | '!' => Some(LatexNode::Text(ch.to_string())),
+                // \, \; \: are thin/medium/thick math spaces — NOT punctuation.
+                // Emit as Symbol so each output format (OMML spacing,
+                // MathML mspace, HTML &thinsp;, plain-text space) can
+                // choose the correct representation.
+                ',' => Some(LatexNode::Symbol(",".to_string())),
+                ';' => Some(LatexNode::Symbol(";".to_string())),
+                ':' => Some(LatexNode::Symbol(":".to_string())),
+                // \! is a negative thin space, not an exclamation mark
+                '!' => Some(LatexNode::Symbol("!".to_string())),
                 '(' | ')' | '[' | ']' => Some(LatexNode::Text(ch.to_string())),
                 _ => Some(LatexNode::Text(ch.to_string())),
             };

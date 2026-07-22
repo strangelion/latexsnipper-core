@@ -93,6 +93,10 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Symbol(name) => {
+            // Math spacing commands — output OMML <m:spacing> element
+            if let Some(spacing_val) = map_omml_spacing(name) {
+                return format!("<m:spacing m:val=\"{}\"/>", spacing_val);
+            }
             if let Some(sym) = map_symbol_unicode(&format!("\\{}", name)) {
                 wrap_mtext(sym)
             } else if let Some(sym) = map_omml_symbol(&format!("\\{}", name)) {
@@ -818,6 +822,21 @@ fn cases_to_omml(rows: &[Vec<LatexNode>]) -> String {
         "<m:d>\n  <m:dPr><m:begChr m:val=\"{{\"/><m:endChr m:val=\"\"/></m:dPr>\n  <m:e><m:m>\n{}\n  </m:m></m:e>\n</m:d>",
         rows_xml.join("\n")
     )
+}
+
+/// Map LaTeX spacing commands to OMML <m:spacing> values.
+/// OMML spacing values: 0=zero, 1=1em(quad), 2=2em(qquad),
+/// 3=3/18em(thin), 4=4/18em(medium), 5=5/18em(thick), 6=-3/18em(neg thin).
+fn map_omml_spacing(name: &str) -> Option<&str> {
+    match name {
+        "quad" => Some("1"),
+        "qquad" => Some("2"),
+        "," => Some("3"),
+        ":" => Some("4"),
+        ";" => Some("5"),
+        "!" => Some("6"),
+        _ => None,
+    }
 }
 
 fn map_omml_symbol(latex: &str) -> Option<&str> {

@@ -1068,6 +1068,13 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
         "\\perp" => Some("<mo>\u{22A5}</mo>"),
         "\\ldots" | "\\dots" => Some("<mo>\u{2026}</mo>"),
         "\\cdots" => Some("<mo>\u{22EF}</mo>"),
+        // Math spacing
+        "\\quad" | "quad" => Some("<mspace width=\"1em\"/>"),
+        "\\qquad" | "qquad" => Some("<mspace width=\"2em\"/>"),
+        "," => Some("<mspace width=\"thinmathspace\"/>"),
+        ":" => Some("<mspace width=\"mediummathspace\"/>"),
+        ";" => Some("<mspace width=\"thickmathspace\"/>"),
+        "!" => Some("<mspace width=\"negativethinmathspace\"/>"),
         _ => None,
     }
 }
