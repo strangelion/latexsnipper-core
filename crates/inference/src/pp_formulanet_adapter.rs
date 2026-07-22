@@ -1,9 +1,11 @@
-//! Runtime-neutral PP-FormulaNet-S model adapter.
+//! PP-FormulaNet-S model adapter — Paddle Inference native full graph.
 //!
-//! Paddle variants execute the exported full inference program once, so its
-//! official while loop, parallel generation, and KV cache remain inside the
-//! model. The explicitly declared ONNX fallback retains reconstructed
-//! encoder/decoder generation in this adapter.
+//! The Paddle variant executes the exported full inference program: official
+//! preprocessing, encoder, decoder parallel_step, while loop, KV cache, and
+//! token generation all remain inside the PIR program.
+//!
+//! PP-FormulaNet-S does not support ONNX. Use TrOCR (ONNX Runtime) as the
+//! formula recognition fallback when Paddle Inference is unavailable.
 
 use std::path::Path;
 
@@ -20,21 +22,11 @@ use crate::formula_backend::{BackendConfig, FormulaBackend};
 use crate::pp_formulanet::preprocess_image;
 use crate::types::RecognitionResult;
 
-enum ExecutionPlan {
-    PaddleFullGraph {
-        session: Box<dyn RuntimeSession>,
-        input_name: String,
-    },
-    OnnxReconstructed {
-        encoder: Box<dyn RuntimeSession>,
-        decoder: Box<dyn RuntimeSession>,
-    },
-}
-
 pub struct PPFormulaNetAdapter {
     name: String,
     variant_id: String,
-    execution: ExecutionPlan,
+    session: Box<dyn RuntimeSession>,
+    input_name: String,
     config: BackendConfig,
     tokenizer: tokenizers::Tokenizer,
 }
@@ -46,6 +38,13 @@ impl PPFormulaNetAdapter {
         model_dir: &Path,
         model_config: &ModelConfig,
     ) -> Result<Self> {
+        if resolved.runtime != RuntimeKind::PaddleInference {
+            return Err(SnipperError::Model(format!(
+                "PP-FormulaNet-S requires Paddle Inference, got '{}'",
+                resolved.runtime
+            )));
+        }
+
         let tokenizer_path = resolved
             .artifacts
             .files
@@ -59,39 +58,21 @@ impl PPFormulaNetAdapter {
             ))
         })?;
 
-        let execution = match resolved.runtime {
-            RuntimeKind::PaddleInference => {
-                let session = registry.create_resolved_session(resolved)?;
-                let input_name = session
-                    .metadata()
-                    .inputs
-                    .first()
-                    .map(|spec| spec.name.clone())
-                    .ok_or_else(|| {
-                        SnipperError::Model(
-                            "PP-FormulaNet Paddle program declares no input".to_owned(),
-                        )
-                    })?;
-                ExecutionPlan::PaddleFullGraph {
-                    session,
-                    input_name,
-                }
-            }
-            RuntimeKind::OnnxRuntime => ExecutionPlan::OnnxReconstructed {
-                encoder: create_onnx_role_session(registry, resolved, "encoder")?,
-                decoder: create_onnx_role_session(registry, resolved, "decoder")?,
-            },
-            ref runtime => {
-                return Err(SnipperError::Model(format!(
-                    "PP-FormulaNet adapter does not support runtime '{runtime}'"
-                )));
-            }
-        };
+        let session = registry.create_resolved_session(resolved)?;
+        let input_name = session
+            .metadata()
+            .inputs
+            .first()
+            .map(|spec| spec.name.clone())
+            .ok_or_else(|| {
+                SnipperError::Model("PP-FormulaNet Paddle program declares no input".to_owned())
+            })?;
 
         Ok(Self {
             name: "pp-formulanet-s".to_owned(),
             variant_id: resolved.variant_id.clone(),
-            execution,
+            session,
+            input_name,
             config: BackendConfig::from_config(model_config),
             tokenizer,
         })
@@ -99,101 +80,6 @@ impl PPFormulaNetAdapter {
 
     pub fn variant_id(&self) -> &str {
         &self.variant_id
-    }
-
-    pub fn uses_official_full_graph(&self) -> bool {
-        matches!(&self.execution, ExecutionPlan::PaddleFullGraph { .. })
-    }
-
-    fn recognize_paddle(
-        &self,
-        image: &SnipperImage,
-        session: &dyn RuntimeSession,
-        input_name: &str,
-    ) -> Result<RecognitionResult> {
-        let input = preprocessed_tensor(image, self.config.img_size, input_name)?;
-        let response = session.run(RunRequest::new(TensorMap::from([(
-            input_name.to_owned(),
-            input,
-        )])))?;
-        let output = response.first_output().ok_or_else(|| {
-            SnipperError::Inference("PP-FormulaNet Paddle program returned no output".to_owned())
-        })?;
-        let token_ids = integer_token_ids(output)?;
-        self.decode_tokens(&token_ids)
-    }
-
-    fn recognize_onnx(
-        &self,
-        image: &SnipperImage,
-        encoder: &dyn RuntimeSession,
-        decoder: &dyn RuntimeSession,
-    ) -> Result<RecognitionResult> {
-        let encoder_input = preprocessed_tensor(image, self.config.img_size, "pixel_values")?;
-        let encoder_response = encoder.run(RunRequest::new(TensorMap::from([(
-            "pixel_values".to_owned(),
-            encoder_input,
-        )])))?;
-        let hidden = encoder_response.first_output().ok_or_else(|| {
-            SnipperError::Inference("PP-FormulaNet ONNX encoder returned no output".to_owned())
-        })?;
-        let hidden_data = hidden.as_f32_slice().ok_or_else(|| {
-            SnipperError::Inference("PP-FormulaNet encoder output is not f32".to_owned())
-        })?;
-
-        let parallel_step = 3usize;
-        let max_blocks = self.config.max_tokens / parallel_step;
-        let mut token_ids = vec![0i64; parallel_step];
-        for _ in 0..max_blocks {
-            let request = RunRequest::new(TensorMap::from([
-                (
-                    "input_ids".to_owned(),
-                    Tensor::int64("input_ids", vec![1, token_ids.len()], token_ids.clone()),
-                ),
-                (
-                    "encoder_hidden_states".to_owned(),
-                    Tensor::float32(
-                        "encoder_hidden_states",
-                        hidden.shape().to_vec(),
-                        hidden_data.to_vec(),
-                    ),
-                ),
-            ]));
-            let response = decoder.run(request)?;
-            let logits = response.first_output().ok_or_else(|| {
-                SnipperError::Inference("PP-FormulaNet ONNX decoder returned no output".to_owned())
-            })?;
-            let values = logits.as_f32_slice().ok_or_else(|| {
-                SnipperError::Inference("PP-FormulaNet decoder output is not f32".to_owned())
-            })?;
-            let vocab_size = *logits.shape().last().ok_or_else(|| {
-                SnipperError::Inference("decoder logits have no vocabulary dimension".to_owned())
-            })?;
-            let sequence_length = logits.shape().get(1).copied().unwrap_or(token_ids.len());
-            let first_position = sequence_length.saturating_sub(parallel_step);
-            let mut next = Vec::with_capacity(parallel_step);
-            for position in first_position..sequence_length {
-                let start = position.checked_mul(vocab_size).ok_or_else(|| {
-                    SnipperError::Inference("decoder logits offset overflow".to_owned())
-                })?;
-                let end = start.checked_add(vocab_size).ok_or_else(|| {
-                    SnipperError::Inference("decoder logits offset overflow".to_owned())
-                })?;
-                let row = values.get(start..end).ok_or_else(|| {
-                    SnipperError::Inference("decoder logits shape/data mismatch".to_owned())
-                })?;
-                next.push(argmax(row) as i64);
-            }
-            if next.is_empty() {
-                break;
-            }
-            let reached_eos = next.contains(&self.config.eos_token_id);
-            token_ids.extend(next);
-            if reached_eos {
-                break;
-            }
-        }
-        self.decode_tokens(&token_ids[parallel_step..])
     }
 
     fn decode_tokens(&self, token_ids: &[i64]) -> Result<RecognitionResult> {
@@ -221,15 +107,16 @@ impl PPFormulaNetAdapter {
 
 impl FormulaBackend for PPFormulaNetAdapter {
     fn recognize(&self, image: &SnipperImage) -> Result<RecognitionResult> {
-        match &self.execution {
-            ExecutionPlan::PaddleFullGraph {
-                session,
-                input_name,
-            } => self.recognize_paddle(image, &**session, input_name),
-            ExecutionPlan::OnnxReconstructed { encoder, decoder } => {
-                self.recognize_onnx(image, &**encoder, &**decoder)
-            }
-        }
+        let input = preprocessed_tensor(image, self.config.img_size, &self.input_name)?;
+        let response = self.session.run(RunRequest::new(TensorMap::from([(
+            self.input_name.clone(),
+            input,
+        )])))?;
+        let output = response.first_output().ok_or_else(|| {
+            SnipperError::Inference("PP-FormulaNet Paddle program returned no output".to_owned())
+        })?;
+        let token_ids = integer_token_ids(output)?;
+        self.decode_tokens(&token_ids)
     }
 
     fn name(&self) -> &str {
@@ -239,22 +126,6 @@ impl FormulaBackend for PPFormulaNetAdapter {
     fn config(&self) -> &BackendConfig {
         &self.config
     }
-}
-
-fn create_onnx_role_session(
-    registry: &RuntimeRegistry,
-    resolved: &ResolvedRuntimeVariant,
-    role: &str,
-) -> Result<Box<dyn RuntimeSession>> {
-    if !resolved.artifacts.files.contains_key(role) {
-        return Err(SnipperError::Model(format!(
-            "PP-FormulaNet ONNX variant '{}' is missing '{role}'",
-            resolved.variant_id
-        )));
-    }
-    let mut options = resolved.options.clone();
-    options.extra.insert("artifact".to_owned(), role.into());
-    registry.create_session(&resolved.runtime, &resolved.artifacts, &options)
 }
 
 fn preprocessed_tensor(image: &SnipperImage, size: u32, name: &str) -> Result<Tensor> {
@@ -279,14 +150,6 @@ fn integer_token_ids(output: &Tensor) -> Result<Vec<i64>> {
             "PP-FormulaNet full graph output must contain integer token ids, got {other:?}"
         ))),
     }
-}
-
-fn argmax(values: &[f32]) -> usize {
-    values
-        .iter()
-        .enumerate()
-        .max_by(|(_, left), (_, right)| left.total_cmp(right))
-        .map_or(0, |(index, _)| index)
 }
 
 /// Rust port of the whitespace and Chinese-wrapper normalization used by
@@ -315,7 +178,10 @@ fn normalize_formula_whitespace(value: &str) -> String {
         }
         let next = characters.get(index).copied();
         let preserve = matches!((previous, next), (Some('\\'), _))
-            || matches!((previous, next), (Some(left), Some(right)) if left.is_alphabetic() && right.is_alphabetic());
+            || matches!(
+                (previous, next),
+                (Some(left), Some(right)) if left.is_alphabetic() && right.is_alphabetic()
+            );
         if preserve && !result.ends_with(' ') {
             result.push(' ');
         }
@@ -347,10 +213,5 @@ mod tests {
         );
         assert_eq!(postprocess_unimernet_infer(r#"\sin x"#), r#"\sin x"#);
         assert_eq!(postprocess_unimernet_infer(r#"\text{ 中文 }"#), "中文");
-    }
-
-    #[test]
-    fn argmax_uses_total_float_order() {
-        assert_eq!(argmax(&[-2.0, 3.0, 1.0]), 1);
     }
 }

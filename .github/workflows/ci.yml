@@ -282,7 +282,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}/latexsnipper-model-cache
-          key: real-models-${{ runner.os }}-${{ hashFiles('scripts/model-manifest.template.json', 'scripts/VerifiedDownload.psm1', 'scripts/setup-real-model-tests.ps1') }}
+          key: real-models-${{ runner.os }}-${{ hashFiles('scripts/real-model-test-assets.json', 'scripts/model-manifest.template.json', 'scripts/VerifiedDownload.psm1', 'scripts/setup-real-model-tests.ps1') }}
       - name: Download and verify model assets
         shell: pwsh
         run: ./scripts/setup-real-model-tests.ps1

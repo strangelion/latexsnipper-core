@@ -90,8 +90,12 @@ jobs:
           unzip -q ppfn.zip -d test-models/formula-rec
 
       - name: Install oracle Python dependencies
+        env:
+          PADDLE_PYTHON_VERSION: ${{ vars.PADDLE_PYTHON_VERSION }}
         run: |
+          python -m pip install --upgrade pip
           python -m pip install numpy pillow tokenizers
+          python -m pip install "paddlepaddle==$env:PADDLE_PYTHON_VERSION"
 
       - name: Run PP-FormulaNet Paddle parity
         run: >
@@ -153,7 +157,12 @@ jobs:
 
   tensorrt-hardware:
     name: TensorRT on GPU
-    if: ${{ vars.ENABLE_TENSORRT_SELF_HOSTED == 'true' }}
+    if: >-
+      ${{
+        vars.ENABLE_TENSORRT_SELF_HOSTED == 'true' &&
+        vars.TENSORRT_RUNTIME_PATH != '' &&
+        vars.TENSORRT_TEST_MODEL_PATH != ''
+      }}
     runs-on:
       - self-hosted
       - linux
@@ -180,7 +189,12 @@ jobs:
 
   tensorrt-rtx-hardware:
     name: TensorRT-RTX on GPU
-    if: ${{ vars.ENABLE_TENSORRT_SELF_HOSTED == 'true' }}
+    if: >-
+      ${{
+        vars.ENABLE_TENSORRT_SELF_HOSTED == 'true' &&
+        vars.TENSORRT_RTX_RUNTIME_PATH != '' &&
+        vars.TENSORRT_RTX_TEST_MODEL_PATH != ''
+      }}
     runs-on:
       - self-hosted
       - linux

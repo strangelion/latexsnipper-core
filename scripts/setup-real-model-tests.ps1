@@ -1,5 +1,4 @@
 param(
-    [string]$Tag = "models-v2.0.0",
     [string]$CacheDir = $(
         if ($env:LATEXSNIPPER_MODEL_CACHE) {
             $env:LATEXSNIPPER_MODEL_CACHE
@@ -33,7 +32,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $root = Split-Path -Parent $PSScriptRoot
-$manifestPath = Join-Path $PSScriptRoot "model-manifest.template.json"
+$manifestPath = Join-Path $PSScriptRoot "real-model-test-assets.json"
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $attempts = [System.Collections.ArrayList]::new()
 
@@ -57,7 +56,7 @@ function Write-SetupDiagnostics {
     param([Parameter(Mandatory = $true)][string]$Failure)
 
     New-Item -ItemType Directory -Path $DiagnosticDir -Force | Out-Null
-    Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $DiagnosticDir "model-manifest.json") -Force
+    Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $DiagnosticDir "real-model-test-assets.json") -Force
 
     $existingFiles = @()
     if (Test-Path -LiteralPath $CacheDir) {
@@ -80,7 +79,7 @@ function Write-SetupDiagnostics {
     $report = [ordered]@{
         TimestampUtc = (Get-Date).ToUniversalTime().ToString("o")
         Failure = $Failure
-        Tag = $Tag
+        ReleaseTag = $manifest.releaseTag
         CacheDir = $CacheDir
         RunnerOs = $env:RUNNER_OS
         OsDescription = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
@@ -91,29 +90,33 @@ function Write-SetupDiagnostics {
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $DiagnosticDir "setup-report.json") -Encoding utf8
 }
 
-$variants = @(
-    @{ Category = "formula-det"; Id = "yolov8-mfd" },
-    @{ Category = "formula-rec"; Id = "trocr-deit" },
-    @{ Category = "text-det"; Id = "v6-small" },
-    @{ Category = "text-rec"; Id = "v6-small" },
-    @{ Category = "table-det"; Id = "tatr-detection" },
-    @{ Category = "table-struct"; Id = "tatr-structure" }
-)
-
 try {
     New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
 
-    foreach ($item in $variants) {
-        $category = $manifest.categories.($item.Category)
-        $variant = $category.variants | Where-Object { $_.id -eq $item.Id } | Select-Object -First 1
-        if (-not $variant) {
-            throw "Model manifest entry missing: $($item.Category)/$($item.Id)"
+    foreach ($item in $manifest.variants) {
+        # Find the zipFile by reading the model catalog template.
+        # The test asset file carries the variant identity; the zipFile
+        # is looked up from the locally-shipped catalog template.
+        $catalogPath = Join-Path $PSScriptRoot "model-manifest.template.json"
+        $catalog = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json
+        $categoryEntry = $catalog.categories.($item.category)
+        if (-not $categoryEntry) {
+            throw "Category '$($item.category)' not found in model catalog"
         }
+        $variantEntry = $categoryEntry.variants | Where-Object { $_.id -eq $item.id } | Select-Object -First 1
+        if (-not $variantEntry) {
+            throw "Variant '$($item.category)/$($item.id)' not found in model catalog"
+        }
+        $assetName = $variantEntry.zipFile
 
-        $assetName = $variant.zipFile
-        $expected = $manifest.checksums.$assetName
-        if (-not $expected) {
+        # Safe checksum access (avoids StrictMode PropertyNotFoundException on empty objects)
+        $checksumProperty = $manifest.checksums.PSObject.Properties[$assetName]
+        if ($null -eq $checksumProperty) {
             throw "Checksum missing for required real-model asset: $assetName"
+        }
+        $expected = [string]$checksumProperty.Value
+        if ([string]::IsNullOrWhiteSpace($expected)) {
+            throw "Checksum is empty for required real-model asset: $assetName"
         }
 
         $archive = Join-Path $CacheDir $assetName
@@ -126,7 +129,7 @@ try {
             -TimeoutSeconds $TimeoutSeconds `
             -AttemptLog $attempts | Out-Null
 
-        $destination = Join-Path (Join-Path $root "models") $item.Category
+        $destination = Join-Path (Join-Path $root "models") $item.category
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
         Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force
     }
@@ -138,7 +141,7 @@ try {
         -not $orientation.sha256 -or
         -not $orientation.destination
     ) {
-        throw "Orientation test asset is missing from the model manifest"
+        throw "Orientation test asset is missing from the test assets manifest"
     }
 
     $orientationArchive = Join-Path $CacheDir $orientation.fileName

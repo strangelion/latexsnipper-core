@@ -224,7 +224,7 @@ foreach ($category in $categoryNames) {
 
     if (-not $defaultExists) {
         $newDefault = $kept[0].id
-        Write-Host "Changed default for $category: $($categoryInfo.default) -> $newDefault" -ForegroundColor Yellow
+        Write-Host "Changed default for ${category}: $($categoryInfo.default) -> $newDefault" -ForegroundColor Yellow
         $categoryInfo.default = $newDefault
     }
 }

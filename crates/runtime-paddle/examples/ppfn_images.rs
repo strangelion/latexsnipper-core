@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             decoded_latex: recognition.text,
             elapsed_ms: started.elapsed().as_secs_f64() * 1_000.0,
             variant_id: adapter.variant_id().to_owned(),
-            official_full_graph: adapter.uses_official_full_graph(),
+            official_full_graph: true,
         });
     }
 

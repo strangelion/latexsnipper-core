@@ -154,7 +154,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}/latexsnipper-model-cache
-          key: scheduled-models-${{ runner.os }}-${{ hashFiles('scripts/model-manifest.template.json', 'scripts/VerifiedDownload.psm1', 'scripts/setup-real-model-tests.ps1') }}
+          key: scheduled-models-${{ runner.os }}-${{ hashFiles('scripts/real-model-test-assets.json', 'scripts/model-manifest.template.json', 'scripts/VerifiedDownload.psm1', 'scripts/setup-real-model-tests.ps1') }}
       - name: Verify primary and mirror download paths
         shell: pwsh
         run: ./scripts/setup-real-model-tests.ps1
