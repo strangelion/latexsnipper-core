@@ -404,6 +404,7 @@ Model readiness is profile-driven. The manifest, checksum, configuration, tokeni
 |---|---|---|
 | YOLOv8-MFD | Formula detection | Default native profile |
 | TrOCR-DeiT | Formula recognition | Default native profile |
+| PP-FormulaNet-S | Formula recognition (Paddle Inference native) | Stable, Paddle-only |
 | PP-OCRv6 Det / Rec | Multilingual text detection and recognition | Default native profile |
 | OpenOCR Mobile Det / Rec | Alternative DBNet/CTC text pipeline | Experimental |
 | PP-DocLayout v3 | Document layout analysis | Experimental |
@@ -414,7 +415,7 @@ Model readiness is profile-driven. The manifest, checksum, configuration, tokeni
 ```text
 models/
 ├── formula-det/
-├── formula-rec/
+├── formula-rec/     (TrOCR-DeiT, PP-FormulaNet-S)
 ├── text-det/
 ├── text-rec/
 ├── layout/

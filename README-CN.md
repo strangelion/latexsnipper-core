@@ -400,6 +400,7 @@ JavaScript 包还提供：
 |---|---|---|
 | YOLOv8-MFD | 公式检测 | 默认原生 profile |
 | TrOCR-DeiT | 公式识别 | 默认原生 profile |
+| PP-FormulaNet-S | 公式识别（Paddle Inference 原生） | 稳定，仅 Paddle |
 | PP-OCRv6 Det / Rec | 多语言文本检测与识别 | 默认原生 profile |
 | OpenOCR Mobile Det / Rec | 替代 DBNet/CTC 文本流水线 | 实验性 |
 | PP-DocLayout v3 | 文档版式分析 | 实验性 |
@@ -410,7 +411,7 @@ JavaScript 包还提供：
 ```text
 models/
 ├── formula-det/
-├── formula-rec/
+├── formula-rec/     （TrOCR-DeiT、PP-FormulaNet-S）
 ├── text-det/
 ├── text-rec/
 ├── layout/
