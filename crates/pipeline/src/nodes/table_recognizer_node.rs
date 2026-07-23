@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use latexsnipper_ast::*;
 use latexsnipper_foundation::Result;
 use latexsnipper_image::operations;
-
 use latexsnipper_runtime::{InferenceContext, ModelInput, ModelOutput, ModelTask, TensorDtype};
 
 use crate::artifacts::RecognizedTable;
@@ -195,74 +194,91 @@ impl TableRecognizerNode {
                 dtype: TensorDtype::UInt8,
             };
             let mut inf_ctx = InferenceContext::new();
-            if let Ok(ModelOutput::Detections(raw)) = det.run(input, &mut inf_ctx) {
-                // Build DetectionBox list from runtime detections
-                let mut boxes: Vec<latexsnipper_inference::DetectionBox> = raw
-                    .into_iter()
-                    .map(|d| {
-                        let r = Rect::new(d.x, d.y, d.width, d.height);
-                        match d.quad {
-                            Some(q) => latexsnipper_inference::DetectionBox::quad(
-                                Quad::new(
-                                    Point::new(q.x1, q.y1),
-                                    Point::new(q.x2, q.y2),
-                                    Point::new(q.x3, q.y3),
-                                    Point::new(q.x4, q.y4),
+            match det.run(input, &mut inf_ctx) {
+                Ok(ModelOutput::Detections(raw)) => {
+                    let mut boxes: Vec<latexsnipper_inference::DetectionBox> = raw
+                        .into_iter()
+                        .map(|d| {
+                            let r = Rect::new(d.x, d.y, d.width, d.height);
+                            match d.quad {
+                                Some(q) => latexsnipper_inference::DetectionBox::quad(
+                                    Quad::new(
+                                        Point::new(q.x1, q.y1),
+                                        Point::new(q.x2, q.y2),
+                                        Point::new(q.x3, q.y3),
+                                        Point::new(q.x4, q.y4),
+                                    ),
+                                    d.confidence,
+                                    d.class_id,
+                                    d.class_name,
                                 ),
-                                d.confidence,
-                                d.class_id,
-                                d.class_name,
-                            ),
-                            None => latexsnipper_inference::DetectionBox::rect(
-                                r,
-                                d.confidence,
-                                d.class_id,
-                                d.class_name,
-                            ),
-                        }
-                    })
-                    .collect();
+                                None => latexsnipper_inference::DetectionBox::rect(
+                                    r,
+                                    d.confidence,
+                                    d.class_id,
+                                    d.class_name,
+                                ),
+                            }
+                        })
+                        .collect();
 
-                latexsnipper_inference::group_formula_detections(&mut boxes);
-                latexsnipper_inference::filter_formula_detections(&mut boxes, 20.0, 0.2);
+                    latexsnipper_inference::group_formula_detections(&mut boxes);
+                    latexsnipper_inference::filter_formula_detections(&mut boxes, 20.0, 0.2);
 
-                if !boxes.is_empty() {
-                    if let Some(ref mut rec) = formula_rec {
-                        let mut inlines = Vec::new();
-                        let mut has_formula = false;
-                        for det in &boxes {
-                            let dx = det.rect.x as u32;
-                            let dy = det.rect.y as u32;
-                            let dw = det.rect.width as u32;
-                            let dh = det.rect.height as u32;
-                            if dw >= 4 && dh >= 4 {
-                                let fc = operations::crop(
-                                    &cropped,
-                                    Rect::new(dx as f32, dy as f32, dw as f32, dh as f32),
-                                );
-                                let p = fc.pixels().to_vec();
-                                let s = vec![fc.height() as usize, fc.width() as usize, 3];
-                                let ri = ModelInput {
-                                    name: "image".to_string(),
-                                    data: p,
-                                    shape: s,
-                                    dtype: TensorDtype::UInt8,
-                                };
-                                let mut rc = InferenceContext::new();
-                                if let Ok(ModelOutput::Formula(results)) = rec.run(ri, &mut rc) {
-                                    for r in results {
-                                        let mut f = Formula::latex(r.latex);
-                                        f.confidence = r.confidence;
-                                        inlines.push(Inline::Formula(f));
-                                        has_formula = true;
+                    if !boxes.is_empty() {
+                        if let Some(ref mut rec) = formula_rec {
+                            let mut inlines = Vec::new();
+                            let mut has_formula = false;
+                            for det in &boxes {
+                                let dx = det.rect.x as u32;
+                                let dy = det.rect.y as u32;
+                                let dw = det.rect.width as u32;
+                                let dh = det.rect.height as u32;
+                                if dw >= 4 && dh >= 4 {
+                                    let fc = operations::crop(
+                                        &cropped,
+                                        Rect::new(dx as f32, dy as f32, dw as f32, dh as f32),
+                                    );
+                                    let p = fc.pixels().to_vec();
+                                    let s = vec![fc.height() as usize, fc.width() as usize, 3];
+                                    let ri = ModelInput {
+                                        name: "image".to_string(),
+                                        data: p,
+                                        shape: s,
+                                        dtype: TensorDtype::UInt8,
+                                    };
+                                    let mut rc = InferenceContext::new();
+                                    match rec.run(ri, &mut rc) {
+                                        Ok(ModelOutput::Formula(results)) => {
+                                            for r in results {
+                                                let mut f = Formula::latex(r.latex);
+                                                f.confidence = r.confidence;
+                                                inlines.push(Inline::Formula(f));
+                                                has_formula = true;
+                                            }
+                                        }
+                                        Ok(_other) => {
+                                            log::warn!(
+                                                "Table cell formula rec: unexpected output type"
+                                            );
+                                        }
+                                        Err(e) => {
+                                            log::warn!("Table cell formula rec failed: {}", e);
+                                        }
                                     }
                                 }
                             }
-                        }
-                        if has_formula {
-                            return inlines;
+                            if has_formula {
+                                return inlines;
+                            }
                         }
                     }
+                }
+                Ok(_other) => {
+                    log::warn!("Table cell formula detection: unexpected output type");
+                }
+                Err(e) => {
+                    log::warn!("Table cell formula detection failed: {}", e);
                 }
             }
         }

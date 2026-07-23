@@ -137,7 +137,14 @@ fn required_tasks(mode: RecognizeMode, parse_mode: DocumentParseMode) -> Vec<Mod
 
         RecognizeMode::Text => vec![ModelTask::TextDetection, ModelTask::TextRecognition],
 
-        RecognizeMode::Table => vec![ModelTask::TableDetection, ModelTask::TableStructure],
+        RecognizeMode::Table => vec![
+            ModelTask::TableDetection,
+            ModelTask::TableStructure,
+            // Cell content recognition
+            ModelTask::TextRecognition,
+            ModelTask::FormulaDetection,
+            ModelTask::FormulaRecognition,
+        ],
 
         RecognizeMode::Handwriting => vec![ModelTask::HandwritingRecognition],
 
