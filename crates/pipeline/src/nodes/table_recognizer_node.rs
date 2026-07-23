@@ -120,6 +120,7 @@ impl TableRecognizerNode {
         for table in &tables {
             if let Some(block) = self
                 .recognize_single_table(
+                    ctx,
                     &image,
                     table,
                     &mut formula_det,
@@ -142,6 +143,7 @@ impl TableRecognizerNode {
 
     async fn recognize_single_table(
         &self,
+        ctx: &mut PipelineContext,
         image: &latexsnipper_image::SnipperImage,
         table: &RecognizedTable,
         formula_det: &mut Option<Box<dyn latexsnipper_runtime::ModelExecutor>>,
@@ -156,6 +158,7 @@ impl TableRecognizerNode {
         for cell in cells {
             contents.push(
                 self.recognize_cell(
+                    ctx,
                     image,
                     &cell.rect,
                     formula_det,
@@ -170,6 +173,7 @@ impl TableRecognizerNode {
 
     async fn recognize_cell(
         &self,
+        ctx: &mut PipelineContext,
         image: &latexsnipper_image::SnipperImage,
         rect: &Rect,
         formula_det: &mut Option<Box<dyn latexsnipper_runtime::ModelExecutor>>,
@@ -263,7 +267,10 @@ impl TableRecognizerNode {
                                             );
                                         }
                                         Err(e) => {
-                                            log::warn!("Table cell formula rec failed: {}", e);
+                                            ctx.diagnostic_warn(
+                                                "recognize_table",
+                                                format!("Table cell formula rec failed: {e}"),
+                                            );
                                         }
                                     }
                                 }
@@ -275,10 +282,16 @@ impl TableRecognizerNode {
                     }
                 }
                 Ok(_other) => {
-                    log::warn!("Table cell formula detection: unexpected output type");
+                    ctx.diagnostic_warn(
+                        "recognize_table",
+                        "Table cell formula detection: unexpected output type",
+                    );
                 }
                 Err(e) => {
-                    log::warn!("Table cell formula detection failed: {}", e);
+                    ctx.diagnostic_warn(
+                        "recognize_table",
+                        format!("Table cell formula detection failed: {e}"),
+                    );
                 }
             }
         }
