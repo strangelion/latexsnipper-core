@@ -13,7 +13,8 @@ use latexsnipper_inference::{
 };
 use latexsnipper_model::ModelConfig;
 use latexsnipper_runtime::{
-    AccelerationMode, InferenceSession, ModelHandle, ModelId, RuntimeBackend, SharedModelResolver,
+    AccelerationMode, InferenceSession, ModelExecutionContext, ModelHandle, ModelId,
+    RuntimeBackend, SharedModelResolver,
 };
 use std::path::Path;
 use std::sync::Arc;
@@ -143,6 +144,50 @@ impl TextRecognitionService {
 
         Some(Self {
             session: Arc::new(session),
+            params,
+            keys,
+            first_char_id,
+        })
+    }
+
+    /// Create from a [`ModelExecutionContext`], using the resolved runtime
+    /// variant for session creation and artifact lookup.
+    ///
+    /// This is the preferred path for PreparedModel-based execution.
+    pub fn from_context(ctx: &ModelExecutionContext, model_dir: &std::path::Path) -> Option<Self> {
+        let session = ctx.create_session("model").ok()?;
+        let compat: Arc<Box<dyn InferenceSession>> = Arc::new(Box::new(
+            latexsnipper_runtime::RuntimeSessionCompatibility::new(session),
+        ));
+
+        let config: latexsnipper_model::ModelConfig =
+            if let Ok(json) = ctx.read_artifact("config", model_dir) {
+                latexsnipper_model::ModelConfig::from_json_str(&json).ok()?
+            } else {
+                latexsnipper_model::ModelConfig::minimal()
+            };
+
+        let params = TextRecParams::from_config(&config);
+
+        let (keys, first_char_id) = if let Ok(keys_str) = ctx.read_artifact("tokenizer", model_dir)
+        {
+            load_keys_from_str(&keys_str, "keys.txt").unwrap_or_else(|_| {
+                compat
+                    .get_character_list()
+                    .filter(|chars| !chars.is_empty())
+                    .map(|chars| (chars, 0))
+                    .unwrap_or((Vec::new(), 1))
+            })
+        } else {
+            compat
+                .get_character_list()
+                .filter(|chars| !chars.is_empty())
+                .map(|chars| (chars, 0))
+                .unwrap_or((Vec::new(), 1))
+        };
+
+        Some(Self {
+            session: compat,
             params,
             keys,
             first_char_id,
