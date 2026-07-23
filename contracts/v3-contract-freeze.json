@@ -24,7 +24,7 @@
     "crates/image/src": "09ee47ac30a77517c35f0e27bd647ccbc82f0e59f35644bbdf8d14512e7fc06f",
     "crates/inference/src": "4fad8e36596d12ab6c13036c413b8b4c458159e5b0f6d053079111ee79dbe855",
     "crates/model/src": "f0936a5bfd1f71c2e65d6c0dd8ea174d74a75479bcbcba4824e839fafd2678b5",
-    "crates/pipeline/src": "af8e9bdbb690f75c4075e4f2bc5685e6345ce196f60f6b0275e87112cd41efa3",
+    "crates/pipeline/src": "d6da9136be802dfacd4040a2a44f69464ff17dd35b2904202b267004644f54fd",
     "crates/plugin-wasi/src": "7c5bb16b853f03d4bb4bb5d14f0a21fff4cdd41cb9afdf34a59ae8c168f08061",
     "crates/plugin/src": "e7398dbf0021d54caf25f3bc93e4e1b6c14c9028145a29c03befef20707bab3c",
     "crates/runtime/src": "183a1649c3a3d67b4af3fe32969ea23cde67c45a2d6b311830c52f26d79d2905",

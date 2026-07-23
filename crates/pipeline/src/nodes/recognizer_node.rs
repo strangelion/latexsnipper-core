@@ -116,18 +116,17 @@ impl RecognizerNode {
             None => return Ok(()),
         };
 
-        // Prefer PreparedModel executor (resolved runtime) over bare package
-        let mut executor = if let Some(e) = ctx.create_model_executor(self.task)? {
-            e
-        } else {
-            let backend = get_backend(ctx)?;
-            package.create_executor(backend)?
-        };
-
         let mut blocks = Vec::new();
 
         match self.task {
             ModelTask::FormulaRecognition => {
+                let mut executor = if let Some(e) = ctx.create_model_executor(self.task)? {
+                    e
+                } else {
+                    let backend = get_backend(ctx)?;
+                    package.create_executor(backend)?
+                };
+
                 let detections = ctx.artifacts.formula_detections.clone();
                 for det in &detections {
                     let x = det.rect.x as u32;
