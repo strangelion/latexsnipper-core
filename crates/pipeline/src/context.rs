@@ -130,11 +130,42 @@ impl PipelineContext {
     }
 
     /// Get or initialize the shared text recognition service.
-    /// Uses the model resolver first and falls back to the native filesystem.
+    ///
+    /// Priority order:
+    /// 1. PreparedModel<TextRecognition> — resolved runtime variant
+    /// 2. MemoryModelResolver (WASM)
+    /// 3. Filesystem (native)
     pub fn get_or_init_text_rec_service(&mut self) -> Option<Arc<TextRecognitionService>> {
-        if self.text_rec_service.is_some() {
-            return self.text_rec_service.clone();
+        if let Some(svc) = &self.text_rec_service {
+            return Some(svc.clone());
         }
+
+        // 1. PreparedModel path (resolved runtime)
+        if let Some(prepared) = self.prepared_models.get(&ModelTask::TextRecognition) {
+            let exec_ctx = match self.execution_context(prepared) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    log::warn!("Prepared text rec execution context failed: {}", e);
+                    return self.try_legacy_text_rec_service();
+                }
+            };
+            match TextRecognitionService::from_context(&exec_ctx) {
+                Ok(service) => {
+                    let svc = Arc::new(service);
+                    self.text_rec_service = Some(svc.clone());
+                    return Some(svc);
+                }
+                Err(e) => {
+                    log::warn!("Prepared text rec service failed: {}", e);
+                }
+            }
+        }
+
+        // 2-3. Legacy paths
+        self.try_legacy_text_rec_service()
+    }
+
+    fn try_legacy_text_rec_service(&mut self) -> Option<Arc<TextRecognitionService>> {
         let variant = self.model_variants.get("text-rec").cloned()?;
         let backend = self.backend.clone()?;
         if let Some(resolver) = &self.model_resolver {
@@ -160,6 +191,22 @@ impl PipelineContext {
         let svc = Arc::new(service);
         self.text_rec_service = Some(svc.clone());
         Some(svc)
+    }
+
+    fn execution_context(
+        &self,
+        prepared: &PreparedModel,
+    ) -> latexsnipper_foundation::Result<ModelExecutionContext> {
+        let registry = self.runtime_registry.clone().ok_or_else(|| {
+            latexsnipper_foundation::SnipperError::Runtime(
+                "Runtime registry is not configured".into(),
+            )
+        })?;
+        Ok(ModelExecutionContext {
+            runtime_registry: registry,
+            resolved_runtime: prepared.runtime.clone(),
+            max_threads: self.max_threads,
+        })
     }
 
     pub fn with_image(image: SnipperImage) -> Self {

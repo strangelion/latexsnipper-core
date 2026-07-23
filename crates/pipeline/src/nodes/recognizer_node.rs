@@ -17,7 +17,6 @@ use crate::node::PipelineNode;
 use crate::nodes::utils::{
     get_backend, get_or_create_session, model_artifact_path, resolve_model_handle, resolve_variant,
 };
-use crate::text_recognition_service::TextRecognitionService;
 
 struct TextRecModel {
     config: latexsnipper_model::ModelConfig,
@@ -178,20 +177,29 @@ impl RecognizerNode {
                 ctx.artifacts.formula_blocks = blocks;
             }
             ModelTask::TextRecognition => {
-                // Try PreparedModel path first (resolved runtime)
-                if let Some(prepared) = ctx.get_prepared_model(&self.task) {
-                    let exec_ctx = Self::build_exec_ctx(ctx, prepared)?;
-                    if let Some(service) =
-                        TextRecognitionService::from_context(&exec_ctx, &std::path::PathBuf::new())
-                    {
-                        self.recognize_text_via_service(ctx, &image, &service);
+                // Shared TextRecognitionService (PreparedModel -> cache -> legacy)
+                if let Some(service) = ctx.get_or_init_text_rec_service() {
+                    let detections = ctx.artifacts.text_detections.clone();
+                    let mut blocks = Vec::new();
+                    for det in &detections {
+                        let text =
+                            match service.recognize_region(&image, &det.rect, det.quad.as_ref()) {
+                                Ok(t) => t,
+                                Err(e) => {
+                                    log::warn!("Text rec failed: {}", e);
+                                    continue;
+                                }
+                            };
+                        if !text.is_empty() {
+                            blocks.push(Block::Paragraph(ParagraphBlock {
+                                inlines: vec![Inline::Text(TextRun::new(text))],
+                                geometry: Some(det.rect),
+                                source: Some(SourceInfo::new().with_page(ctx.current_page)),
+                                style: None,
+                            }));
+                        }
                     }
-                } else {
-                    // Fall back to legacy service
-                    drop(executor);
-                    if let Some(service) = ctx.get_or_init_text_rec_service() {
-                        self.recognize_text_via_service(ctx, &image, &service);
-                    }
+                    ctx.artifacts.text_blocks = blocks;
                 }
             }
             _ => {
@@ -211,48 +219,6 @@ impl RecognizerNode {
             ctx.artifacts.formula_blocks.len() + ctx.artifacts.text_blocks.len()
         );
         Ok(())
-    }
-
-    fn build_exec_ctx(
-        ctx: &PipelineContext,
-        prepared: &latexsnipper_runtime::PreparedModel,
-    ) -> Result<latexsnipper_runtime::ModelExecutionContext> {
-        let registry = ctx
-            .runtime_registry
-            .clone()
-            .ok_or_else(|| SnipperError::Runtime("Runtime registry is not configured".into()))?;
-        Ok(latexsnipper_runtime::ModelExecutionContext {
-            runtime_registry: registry,
-            resolved_runtime: prepared.runtime.clone(),
-            max_threads: ctx.max_threads,
-        })
-    }
-
-    fn recognize_text_via_service(
-        &self,
-        ctx: &mut PipelineContext,
-        image: &latexsnipper_image::SnipperImage,
-        service: &TextRecognitionService,
-    ) {
-        let mut blocks = Vec::new();
-        for det in &ctx.artifacts.text_detections.clone() {
-            let text = match service.recognize_region(image, &det.rect, det.quad.as_ref()) {
-                Ok(t) => t,
-                Err(e) => {
-                    log::warn!("Text rec failed: {}", e);
-                    continue;
-                }
-            };
-            if !text.is_empty() {
-                blocks.push(Block::Paragraph(ParagraphBlock {
-                    inlines: vec![Inline::Text(TextRun::new(text))],
-                    geometry: Some(det.rect),
-                    source: Some(SourceInfo::new().with_page(ctx.current_page)),
-                    style: None,
-                }));
-            }
-        }
-        ctx.artifacts.text_blocks = blocks;
     }
 
     async fn recognize_formulas(

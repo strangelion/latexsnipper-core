@@ -5,7 +5,7 @@
 //! loading and parameter drift between the two paths.
 
 use latexsnipper_ast::{Quad, Rect};
-use latexsnipper_foundation::Result;
+use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_inference::{
@@ -20,9 +20,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// Shared text recognition service.
-///
-/// Holds the loaded ONNX session, compiled `TextRecParams`, and character
-/// keys so that all call sites share one model instance with identical config.
 pub struct TextRecognitionService {
     session: Arc<Box<dyn InferenceSession>>,
     params: TextRecParams,
@@ -31,56 +28,35 @@ pub struct TextRecognitionService {
 }
 
 impl TextRecognitionService {
-    /// Try to load a text recognition model from the given models directory.
-    ///
-    /// * `models_dir` — path to the models directory
-    /// * `variant` — optional variant name (e.g. "v6-small", "openocr-mobile").
-    ///   When None, auto-discovers the best available variant.
-    /// * `backend` — optional runtime backend from pipeline context.
-    ///   When None, creates a default CPU backend.
-    /// * `acceleration` — acceleration mode (only used when creating a new backend).
-    ///
-    /// Returns `None` when no suitable model is found (caller should skip
-    /// gracefully rather than fail).
+    /// Try to load from the filesystem (legacy path).
     pub fn try_load(
         models_dir: &Path,
         variant: Option<&str>,
         backend: Option<Arc<dyn RuntimeBackend>>,
         acceleration: AccelerationMode,
     ) -> Option<Self> {
-        // Resolve variant
         let (config, variant_dir) = match variant {
             Some(v) => {
                 let variant_dir = models_dir.join("text-rec").join(v);
                 if !variant_dir.is_dir() {
                     return None;
                 }
-                let config = latexsnipper_model::ModelConfig::load(&variant_dir)
+                let config = ModelConfig::load(&variant_dir)
                     .ok()
-                    .or_else(|| {
-                        latexsnipper_model::ModelConfig::from_paddle_inference_dir(&variant_dir)
-                            .ok()
-                    })?;
+                    .or_else(|| ModelConfig::from_paddle_inference_dir(&variant_dir).ok())?;
                 (config, variant_dir)
             }
             None => {
-                let (config, _, vd) =
-                    latexsnipper_model::ModelConfig::find_best(models_dir, "text-rec")?;
+                let (config, _, vd) = ModelConfig::find_best(models_dir, "text-rec")?;
                 (config, vd)
             }
         };
 
         let model_path = config.pipeline_model_path(&variant_dir)?;
-
-        // Backend is required — caller (PipelineContext) always provides one
-        // via the engine's configured RuntimeBackend.
         let b = backend?;
         let handle = ModelHandle::with_path("text-rec", model_path);
         let session: Box<dyn InferenceSession> = b.create_session(&handle, acceleration).ok()?;
-
         let params = TextRecParams::from_config(&config);
-
-        // Load character keys
         let keys_path = config.pipeline_tokenizer_path(&variant_dir)?;
         let (keys, first_char_id) = load_keys(&keys_path).unwrap_or_else(|_| {
             session
@@ -98,7 +74,7 @@ impl TextRecognitionService {
         })
     }
 
-    /// Load a text recognition model and its metadata from an in-memory resolver.
+    /// Load from an in-memory resolver (WASM path).
     pub fn try_load_from_resolver(
         resolver: &SharedModelResolver,
         variant: &str,
@@ -150,43 +126,28 @@ impl TextRecognitionService {
         })
     }
 
-    /// Create from a [`ModelExecutionContext`], using the resolved runtime
-    /// variant for session creation and artifact lookup.
+    /// Create from a [`ModelExecutionContext`] using the resolved runtime.
     ///
-    /// This is the preferred path for PreparedModel-based execution.
-    pub fn from_context(ctx: &ModelExecutionContext, model_dir: &std::path::Path) -> Option<Self> {
-        let session = ctx.create_session("model").ok()?;
+    /// Artifact lookup order:
+    /// 1. `tokenizer` or `keys` — explicit CTC charset file
+    /// 2. `inferenceConfig` — Paddle/OpenOCR inference.yml character dict
+    /// 3. Runtime-embedded character list (ORT session metadata)
+    pub fn from_context(ctx: &ModelExecutionContext) -> Result<Self> {
+        let session = ctx.create_session("model")?;
         let compat: Arc<Box<dyn InferenceSession>> = Arc::new(Box::new(
             latexsnipper_runtime::RuntimeSessionCompatibility::new(session),
         ));
 
-        let config: latexsnipper_model::ModelConfig =
-            if let Ok(json) = ctx.read_artifact("config", model_dir) {
-                latexsnipper_model::ModelConfig::from_json_str(&json).ok()?
-            } else {
-                latexsnipper_model::ModelConfig::minimal()
-            };
-
-        let params = TextRecParams::from_config(&config);
-
-        let (keys, first_char_id) = if let Ok(keys_str) = ctx.read_artifact("tokenizer", model_dir)
-        {
-            load_keys_from_str(&keys_str, "keys.txt").unwrap_or_else(|_| {
-                compat
-                    .get_character_list()
-                    .filter(|chars| !chars.is_empty())
-                    .map(|chars| (chars, 0))
-                    .unwrap_or((Vec::new(), 1))
-            })
+        let config = if let Ok(json) = ctx.read_artifact("config") {
+            ModelConfig::from_json_str(&json)?
         } else {
-            compat
-                .get_character_list()
-                .filter(|chars| !chars.is_empty())
-                .map(|chars| (chars, 0))
-                .unwrap_or((Vec::new(), 1))
+            ModelConfig::minimal()
         };
 
-        Some(Self {
+        let params = TextRecParams::from_config(&config);
+        let (keys, first_char_id) = load_text_keys(ctx, &compat)?;
+
+        Ok(Self {
             session: compat,
             params,
             keys,
@@ -195,9 +156,6 @@ impl TextRecognitionService {
     }
 
     /// Recognize text in a rectangular crop region.
-    ///
-    /// Uses quad-based perspective warp when `quad` is provided, otherwise
-    /// falls back to axis-aligned `Rect` crop.
     pub fn recognize_region(
         &self,
         image: &SnipperImage,
@@ -208,7 +166,7 @@ impl TextRecognitionService {
             .map(|result| result.text)
     }
 
-    /// Recognize a region while preserving OCR confidence for AST consumers.
+    /// Recognize a region while preserving OCR confidence.
     pub fn recognize_region_result(
         &self,
         image: &SnipperImage,
@@ -230,9 +188,7 @@ impl TextRecognitionService {
                 return Ok(result);
             }
         }
-
         let cropped = crop_rect_with_padding(image, rect);
-
         let result = recognize_text_with_keys(
             &cropped,
             self.session.as_ref().as_ref(),
@@ -240,9 +196,53 @@ impl TextRecognitionService {
             self.first_char_id,
             &self.params,
         )?;
-
         Ok(result)
     }
+}
+
+/// Load text recognition keys from resolved runtime artifacts.
+///
+/// Priority order:
+/// 1. `tokenizer` or `keys` artifact role
+/// 2. `inferenceConfig` artifact role (Paddle inference.yml with character dict)
+/// 3. Runtime-embedded character list
+fn load_text_keys(
+    ctx: &ModelExecutionContext,
+    session: &Arc<Box<dyn InferenceSession>>,
+) -> Result<(Vec<String>, usize)> {
+    // 1. Explicit tokenizer / keys artifact
+    for role in &["tokenizer", "keys"] {
+        if let Ok(text) = ctx.read_artifact(role) {
+            // Use the real artifact filename so inference.yml is parsed correctly
+            if let Some(path) = ctx.artifact_path(role) {
+                let filename = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("keys.txt");
+                if let Ok((keys, fid)) = load_keys_from_str(&text, filename) {
+                    return Ok((keys, fid));
+                }
+            }
+        }
+    }
+
+    // 2. inferenceConfig (Paddle/OpenOCR inference.yml)
+    if let Ok(text) = ctx.read_artifact("inferenceConfig") {
+        if let Ok((keys, fid)) = load_keys_from_str(&text, "inference.yml") {
+            return Ok((keys, fid));
+        }
+    }
+
+    // 3. Runtime-embedded character list
+    if let Some(chars) = session.get_character_list() {
+        if !chars.is_empty() {
+            return Ok((chars, 0));
+        }
+    }
+
+    Err(SnipperError::Model(
+        "No character table found in resolved runtime artifacts".into(),
+    ))
 }
 
 fn crop_rect_with_padding(image: &SnipperImage, rect: &Rect) -> SnipperImage {

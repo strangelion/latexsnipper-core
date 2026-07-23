@@ -302,32 +302,26 @@ impl ModelExecutionContext {
     /// Get the filesystem path of a named artifact from the resolved
     /// runtime variant (e.g. `"tokenizer"`, `"config"`, `"keys"`).
     ///
-    /// Returns `None` if the artifact is not declared in the variant
-    /// or the path does not exist on disk.
-    pub fn artifact_path(
-        &self,
-        name: &str,
-        model_dir: &std::path::Path,
-    ) -> Option<std::path::PathBuf> {
-        let relative = self.resolved_runtime.artifacts.files.get(name)?;
-        let path = model_dir.join(relative);
-        if path.exists() {
-            Some(path)
-        } else {
-            None
-        }
+    /// The paths in `ResolvedRuntimeVariant.artifacts.files` are already
+    /// resolved to absolute filesystem paths by `RuntimeResolver`.
+    pub fn artifact_path(&self, role: &str) -> Option<&std::path::Path> {
+        self.resolved_runtime
+            .artifacts
+            .files
+            .get(role)
+            .map(|p| p.as_path())
     }
 
     /// Read a text artifact (tokenizer, config, keys) from the resolved
     /// runtime variant's artifacts.
-    pub fn read_artifact(&self, name: &str, model_dir: &std::path::Path) -> Result<String> {
-        let path = self.artifact_path(name, model_dir).ok_or_else(|| {
+    pub fn read_artifact(&self, name: &str) -> Result<String> {
+        let path = self.artifact_path(name).ok_or_else(|| {
             latexsnipper_foundation::SnipperError::Model(format!(
                 "Artifact '{}' not found in resolved runtime variant '{}'",
                 name, self.resolved_runtime.variant_id
             ))
         })?;
-        std::fs::read_to_string(&path).map_err(|e| {
+        std::fs::read_to_string(path).map_err(|e| {
             latexsnipper_foundation::SnipperError::Model(format!(
                 "Failed to read artifact '{}' at '{}': {}",
                 name,
