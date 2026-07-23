@@ -67,7 +67,8 @@ fn engine_new_auto_registers_adapters() {
 
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());
@@ -95,7 +96,8 @@ fn engine_new_auto_scans_models_dir() {
 
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());
@@ -113,7 +115,8 @@ fn engine_new_handles_empty_models_dir_gracefully() {
 
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());
@@ -123,10 +126,7 @@ fn engine_new_handles_empty_models_dir_gracefully() {
     // Should not crash; just have no models
     assert!(engine.model_registry().is_empty());
     // Adapters should still be registered
-    assert!(!engine
-        .model_registry()
-        .registered_adapters()
-        .is_empty());
+    assert!(!engine.model_registry().registered_adapters().is_empty());
 }
 
 #[test]
@@ -140,7 +140,8 @@ fn try_new_scans_and_succeeds() {
 
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());
@@ -166,7 +167,8 @@ fn select_model_id_returns_explicit_override() {
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
         text_rec_model: Some("text-recognition/custom".to_string()),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());
@@ -194,7 +196,8 @@ fn select_model_id_errors_on_missing_override() {
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
         text_rec_model: Some("text-recognition/nonexistent".to_string()),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());
@@ -221,7 +224,8 @@ fn rescan_models_discovers_new_models() {
 
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());
@@ -229,15 +233,11 @@ fn rescan_models_discovers_new_models() {
     let mut engine = SnipperEngine::new(config, runtime);
 
     assert_eq!(engine.model_registry().len(), 1);
-    assert!(!engine
-        .model_registry()
-        .has("formula-detection/yolov8"));
+    assert!(!engine.model_registry().has("formula-detection/yolov8"));
 
     // Add a new model
     write_manifest(
-        &temp.path()
-            .join("formula-detection")
-            .join("yolov8"),
+        &temp.path().join("formula-detection").join("yolov8"),
         FORMULA_DET_MANIFEST,
     );
 
@@ -248,9 +248,7 @@ fn rescan_models_discovers_new_models() {
 
     // Both models should be present
     assert!(engine.model_registry().has("text-recognition/demo"));
-    assert!(engine
-        .model_registry()
-        .has("formula-detection/yolov8"));
+    assert!(engine.model_registry().has("formula-detection/yolov8"));
     assert_eq!(engine.model_registry().len(), 2);
 }
 
@@ -265,7 +263,8 @@ fn reload_all_models_clears_sessions_and_rescans() {
 
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());
@@ -276,15 +275,11 @@ fn reload_all_models_clears_sessions_and_rescans() {
 
     // Add another model
     write_manifest(
-        &temp.path()
-            .join("formula-detection")
-            .join("yolov8"),
+        &temp.path().join("formula-detection").join("yolov8"),
         FORMULA_DET_MANIFEST,
     );
 
-    let report = engine
-        .reload_all_models()
-        .expect("reload should succeed");
+    let report = engine.reload_all_models().expect("reload should succeed");
 
     assert_eq!(report.loaded_count(), 2);
     assert_eq!(engine.model_registry().len(), 2);
@@ -315,7 +310,8 @@ fn get_or_create_model_package_works() {
 
     let config = EngineConfig {
         models_dir: temp.path().to_path_buf(),
-        parse_mode: latexsnipper_engine::DocumentParseMode::default(), ..Default::default()
+        parse_mode: latexsnipper_engine::DocumentParseMode::default(),
+        ..Default::default()
     };
 
     let runtime = Box::new(StubRuntime::new());

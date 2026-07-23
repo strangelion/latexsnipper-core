@@ -63,9 +63,7 @@ fn legacy_runtime_registry(
 // ============================================================================
 
 /// Initialize a ModelRegistry with built-in adapters and scan the models directory.
-fn initialize_model_registry(
-    models_dir: &Path,
-) -> Result<(ModelRegistry, ModelScanReport)> {
+fn initialize_model_registry(models_dir: &Path) -> Result<(ModelRegistry, ModelScanReport)> {
     let mut registry = ModelRegistry::new();
 
     // Register built-in adapters from the inference crate.
@@ -84,27 +82,17 @@ fn initialize_model_registry(
 /// Return the list of ModelTask that a RecognizeMode requires.
 fn required_tasks(mode: RecognizeMode, parse_mode: DocumentParseMode) -> Vec<ModelTask> {
     match mode {
-        RecognizeMode::Formula => vec![
-            ModelTask::FormulaDetection,
-            ModelTask::FormulaRecognition,
-        ],
+        RecognizeMode::Formula => vec![ModelTask::FormulaDetection, ModelTask::FormulaRecognition],
 
-        RecognizeMode::Text => vec![
-            ModelTask::TextDetection,
-            ModelTask::TextRecognition,
-        ],
+        RecognizeMode::Text => vec![ModelTask::TextDetection, ModelTask::TextRecognition],
 
-        RecognizeMode::Table => vec![
-            ModelTask::TableDetection,
-            ModelTask::TableStructure,
-        ],
+        RecognizeMode::Table => vec![ModelTask::TableDetection, ModelTask::TableStructure],
 
         RecognizeMode::Handwriting => vec![ModelTask::HandwritingRecognition],
 
-        RecognizeMode::FormulaLayout => vec![
-            ModelTask::FormulaDetection,
-            ModelTask::FormulaRecognition,
-        ],
+        RecognizeMode::FormulaLayout => {
+            vec![ModelTask::FormulaDetection, ModelTask::FormulaRecognition]
+        }
 
         RecognizeMode::Mixed => {
             if parse_mode == DocumentParseMode::OpenDocHybrid {
@@ -204,10 +192,7 @@ impl SnipperEngine {
     ///
     /// This is the preferred constructor for new code. It automatically
     /// registers built-in adapters and scans the models directory.
-    pub fn with_runtime_registry(
-        config: EngineConfig,
-        registry: RuntimeRegistry,
-    ) -> Result<Self> {
+    pub fn with_runtime_registry(config: EngineConfig, registry: RuntimeRegistry) -> Result<Self> {
         let default_runtime = if registry.is_available(&RuntimeKind::OnnxRuntime) {
             RuntimeKind::OnnxRuntime
         } else {
@@ -232,8 +217,7 @@ impl SnipperEngine {
         let model_resolver = None;
 
         // Auto-scan models and register adapters
-        let (model_registry, scan_report) =
-            initialize_model_registry(&config.models_dir)?;
+        let (model_registry, scan_report) = initialize_model_registry(&config.models_dir)?;
 
         for issue in &scan_report.issues {
             warn!(
@@ -267,10 +251,7 @@ impl SnipperEngine {
     ///
     /// Unlike [`new`] which logs warnings and continues, this returns an
     /// error if the models directory cannot be scanned.
-    pub fn try_new(
-        config: EngineConfig,
-        runtime: Box<dyn RuntimeBackend>,
-    ) -> Result<Self> {
+    pub fn try_new(config: EngineConfig, runtime: Box<dyn RuntimeBackend>) -> Result<Self> {
         #[cfg(feature = "native")]
         let model_manager = ModelManager::new(config.models_dir.clone());
         #[cfg(feature = "native")]
@@ -281,8 +262,7 @@ impl SnipperEngine {
 
         let (runtime_registry, default_runtime) = legacy_runtime_registry(runtime);
 
-        let (model_registry, scan_report) =
-            initialize_model_registry(&config.models_dir)?;
+        let (model_registry, scan_report) = initialize_model_registry(&config.models_dir)?;
 
         for issue in &scan_report.issues {
             warn!(
@@ -409,15 +389,13 @@ impl SnipperEngine {
     /// This is the primary entry point for obtaining a `ModelPackage` for
     /// pipeline execution. It checks the cache first, then constructs the
     /// package via the registered adapter.
-    pub fn get_or_create_model_package(
-        &self,
-        model_id: &str,
-    ) -> Result<Arc<dyn ModelPackage>> {
+    pub fn get_or_create_model_package(&self, model_id: &str) -> Result<Arc<dyn ModelPackage>> {
         // Check cache first
         {
-            let cache = self.model_packages.read().map_err(|_| {
-                SnipperError::Model("Model package cache poisoned".into())
-            })?;
+            let cache = self
+                .model_packages
+                .read()
+                .map_err(|_| SnipperError::Model("Model package cache poisoned".into()))?;
 
             if let Some(package) = cache.get(model_id) {
                 return Ok(package.clone());
@@ -425,25 +403,13 @@ impl SnipperEngine {
         }
 
         // Look up manifest and directory from registry
-        let manifest = self
-            .model_registry
-            .get(model_id)
-            .ok_or_else(|| {
-                SnipperError::Model(format!(
-                    "Model '{}' is not registered",
-                    model_id
-                ))
-            })?;
+        let manifest = self.model_registry.get(model_id).ok_or_else(|| {
+            SnipperError::Model(format!("Model '{}' is not registered", model_id))
+        })?;
 
-        let model_dir = self
-            .model_registry
-            .get_dir(model_id)
-            .ok_or_else(|| {
-                SnipperError::Model(format!(
-                    "Model '{}' has no model directory",
-                    model_id
-                ))
-            })?;
+        let model_dir = self.model_registry.get_dir(model_id).ok_or_else(|| {
+            SnipperError::Model(format!("Model '{}' has no model directory", model_id))
+        })?;
 
         // Create package via adapter
         let package = self
@@ -459,9 +425,10 @@ impl SnipperEngine {
         let package: Arc<dyn ModelPackage> = Arc::from(package);
 
         // Cache it
-        let mut cache = self.model_packages.write().map_err(|_| {
-            SnipperError::Model("Model package cache poisoned".into())
-        })?;
+        let mut cache = self
+            .model_packages
+            .write()
+            .map_err(|_| SnipperError::Model("Model package cache poisoned".into()))?;
 
         cache.insert(model_id.to_string(), package.clone());
 
@@ -575,19 +542,13 @@ impl SnipperEngine {
         for task in required_tasks(mode, self.config.parse_mode) {
             match self.select_and_register_model(ctx, task) {
                 Ok(Some(ref model_id)) => {
-                    info!(
-                        "Selected model '{}' for {:?}",
-                        model_id, task
-                    );
+                    info!("Selected model '{}' for {:?}", model_id, task);
                 }
                 Ok(None) => {
                     warn!("No model selected for {:?}", task);
                 }
                 Err(error) => {
-                    warn!(
-                        "Failed to prepare model for {:?}: {}",
-                        task, error
-                    );
+                    warn!("Failed to prepare model for {:?}: {}", task, error);
                 }
             }
         }
@@ -1023,12 +984,10 @@ impl SnipperEngine {
 
         // Apply explicit model variant overrides from config
         if let Some(v) = &self.config.formula_det_model {
-            ctx.model_variants
-                .insert("formula-det".into(), v.clone());
+            ctx.model_variants.insert("formula-det".into(), v.clone());
         }
         if let Some(v) = &self.config.formula_rec_model {
-            ctx.model_variants
-                .insert("formula-rec".into(), v.clone());
+            ctx.model_variants.insert("formula-rec".into(), v.clone());
         }
         if let Some(v) = &self.config.text_det_model {
             ctx.model_variants.insert("text-det".into(), v.clone());
@@ -1040,8 +999,7 @@ impl SnipperEngine {
             ctx.model_variants.insert("table-det".into(), v.clone());
         }
         if let Some(v) = &self.config.table_struct_model {
-            ctx.model_variants
-                .insert("table-struct".into(), v.clone());
+            ctx.model_variants.insert("table-struct".into(), v.clone());
         }
         if let Some(v) = &self.config.handwriting_det_model {
             ctx.model_variants

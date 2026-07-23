@@ -195,10 +195,7 @@ impl ModelRegistry {
     pub fn register_adapter(
         &mut self,
         adapter_name: impl Into<String>,
-        factory: impl Fn(&ModelManifest, &Path) -> Result<Box<dyn ModelPackage>>
-            + Send
-            + Sync
-            + 'static,
+        factory: impl Fn(&ModelManifest, &Path) -> Result<Box<dyn ModelPackage>> + Send + Sync + 'static,
     ) {
         self.adapter_factories
             .insert(adapter_name.into(), Box::new(factory));
@@ -278,11 +275,11 @@ impl ModelRegistry {
         self.dirs.push(path.clone());
 
         // Scan for manifest files
-        for entry in std::fs::read_dir(&path).map_err(|e| {
-            SnipperError::Model(format!("Failed to read {}: {}", path.display(), e))
-        })? {
-            let entry = entry
-                .map_err(|e| SnipperError::Model(format!("Failed to read entry: {}", e)))?;
+        for entry in std::fs::read_dir(&path)
+            .map_err(|e| SnipperError::Model(format!("Failed to read {}: {}", path.display(), e)))?
+        {
+            let entry =
+                entry.map_err(|e| SnipperError::Model(format!("Failed to read entry: {}", e)))?;
 
             if !entry.path().is_dir() {
                 continue;
@@ -326,10 +323,7 @@ impl ModelRegistry {
     ///
     /// Returns a [`ModelScanReport`] with successfully loaded model IDs and any
     /// issues encountered.
-    pub fn register_models_root(
-        &mut self,
-        root: impl AsRef<Path>,
-    ) -> Result<ModelScanReport> {
+    pub fn register_models_root(&mut self, root: impl AsRef<Path>) -> Result<ModelScanReport> {
         let root = root.as_ref().to_path_buf();
 
         if !root.exists() {
@@ -354,13 +348,12 @@ impl ModelRegistry {
 
         let mut report = ModelScanReport::default();
 
-        let category_entries =
-            std::fs::read_dir(&root).map_err(|error| {
-                SnipperError::Model(format!(
-                    "Failed to read models root '{}': {error}",
-                    root.display()
-                ))
-            })?;
+        let category_entries = std::fs::read_dir(&root).map_err(|error| {
+            SnipperError::Model(format!(
+                "Failed to read models root '{}': {error}",
+                root.display()
+            ))
+        })?;
 
         for category_entry in category_entries {
             let category_entry = match category_entry {
@@ -520,10 +513,7 @@ fn should_ignore_model_dir(path: &Path) -> bool {
 
     name.starts_with('.')
         || name.starts_with('_')
-        || matches!(
-            name,
-            "cache" | "tmp" | "temp" | "runtimes" | "plugins"
-        )
+        || matches!(name, "cache" | "tmp" | "temp" | "runtimes" | "plugins")
 }
 
 // ─── Manifest validation and helpers ─────────────────────────────────
@@ -532,9 +522,7 @@ impl ModelManifest {
     /// Validate the manifest for required fields and semantic correctness.
     pub fn validate(&self) -> Result<()> {
         if self.id.trim().is_empty() {
-            return Err(SnipperError::Model(
-                "Model manifest has empty id".into(),
-            ));
+            return Err(SnipperError::Model("Model manifest has empty id".into()));
         }
 
         // Validate category/variant format: <category>/<variant>

@@ -333,9 +333,7 @@ fn reports_bad_manifest() {
     assert_eq!(report.loaded_count(), 0);
     assert!(!report.is_clean());
     assert_eq!(report.issues.len(), 1);
-    assert!(report.issues[0]
-        .message
-        .contains("missing field"));
+    assert!(report.issues[0].message.contains("missing field"));
 }
 
 #[test]
@@ -457,14 +455,9 @@ fn entries_iterates_all_models() {
     );
 
     let mut registry = ModelRegistry::new();
-    registry
-        .register_models_root(temp.path())
-        .unwrap();
+    registry.register_models_root(temp.path()).unwrap();
 
-    let mut ids: Vec<String> = registry
-        .entries()
-        .map(|(m, _)| m.id.clone())
-        .collect();
+    let mut ids: Vec<String> = registry.entries().map(|(m, _)| m.id.clone()).collect();
     ids.sort();
 
     assert_eq!(ids, vec!["text-recognition/a", "text-recognition/b"]);
@@ -488,15 +481,11 @@ fn clear_models_preserves_adapters() {
 
     // Register a dummy adapter
     registry.register_adapter("ctc-recognition-v1", |_, _| {
-        Err(latexsnipper_foundation::SnipperError::Model(
-            "dummy".into(),
-        ))
+        Err(latexsnipper_foundation::SnipperError::Model("dummy".into()))
     });
 
     // Scan models
-    registry
-        .register_models_root(temp.path())
-        .unwrap();
+    registry.register_models_root(temp.path()).unwrap();
 
     assert_eq!(registry.len(), 1);
 
@@ -524,7 +513,10 @@ fn model_task_id_is_stable() {
     assert_eq!(ModelTask::TableDetection.id(), "table-detection");
     assert_eq!(ModelTask::TableStructure.id(), "table-structure");
     assert_eq!(ModelTask::LayoutAnalysis.id(), "layout-analysis");
-    assert_eq!(ModelTask::HandwritingRecognition.id(), "handwriting-recognition");
+    assert_eq!(
+        ModelTask::HandwritingRecognition.id(),
+        "handwriting-recognition"
+    );
     assert_eq!(
         ModelTask::VisionLanguageRecognition.id(),
         "vision-language-recognition"
