@@ -1,5 +1,5 @@
 use latexsnipper_pipeline::DocumentParseMode;
-use latexsnipper_runtime::{AccelerationMode, SelectionPreference};
+use latexsnipper_runtime::{AccelerationMode, ModelTask, SelectionPreference};
 use std::path::PathBuf;
 
 /// Engine configuration.
@@ -97,6 +97,25 @@ impl EngineConfig {
     pub fn set_parse_mode(mut self, mode: DocumentParseMode) -> Self {
         self.parse_mode = mode;
         self
+    }
+
+    /// Resolve the explicit model override for a given task, if configured.
+    ///
+    /// Priority order:
+    /// 1. User explicit override (from config)
+    /// 2. ModelSelectionPolicy
+    /// 3. Default model per category
+    /// 4. Highest priority among available candidates
+    pub fn model_override(&self, task: ModelTask) -> Option<&str> {
+        match task {
+            ModelTask::FormulaDetection => self.formula_det_model.as_deref(),
+            ModelTask::FormulaRecognition => self.formula_rec_model.as_deref(),
+            ModelTask::TextDetection => self.text_det_model.as_deref(),
+            ModelTask::TextRecognition => self.text_rec_model.as_deref(),
+            ModelTask::TableDetection => self.table_det_model.as_deref(),
+            ModelTask::TableStructure => self.table_struct_model.as_deref(),
+            _ => None,
+        }
     }
 
     /// Get the model selection preference based on acceleration mode.

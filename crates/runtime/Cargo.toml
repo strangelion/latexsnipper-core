@@ -43,6 +43,7 @@ ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "
 
 [dev-dependencies]
 latexsnipper-image.workspace = true
+tempfile = "3"
 
 [[test]]
 name = "integration_test"

@@ -38,7 +38,7 @@ pub use model_package::{
 pub use model_plugin::{ManifestAdapter, ModelManifestView, ModelPlugin, ModelPluginRegistry};
 pub use model_registry::{
     ManifestDecoding, ManifestPreprocessing, ManifestResize, ManifestTensorSpec, ModelFiles,
-    ModelManifest, ModelRegistry,
+    ModelManifest, ModelRegistry, ModelScanIssue, ModelScanReport,
 };
 pub use model_resolver::{
     normalize_key, FsModelResolver, MemoryModelResolver, ModelId, ModelResolver,

@@ -67,3 +67,4 @@ latexsnipper-syntax.workspace = true
 latexsnipper-export.workspace = true
 latexsnipper-tensor.workspace = true
 tokio = { version = "1", features = ["full"] }
+tempfile = "3"
