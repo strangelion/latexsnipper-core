@@ -69,6 +69,15 @@ fn legacy_category(canonical: &str) -> &str {
     }
 }
 
+/// Check whether a model ID represents a built-in rule-based strategy
+/// (not a real model). These skip Runtime validation.
+fn is_builtin_model_strategy(model_id: &str) -> bool {
+    matches!(
+        model_id,
+        "table-structure/projection" | "table-struct/projection"
+    )
+}
+
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 /// Engine only assembles PipelineGraph and runs it — all logic lives in Nodes.
 pub struct SnipperEngine {
@@ -596,6 +605,12 @@ impl SnipperEngine {
     /// Falls back to `model_resolver` when the model is not in the registry
     /// (e.g. WASM builds that use `MemoryModelResolver`).
     fn validate_model_runnable(&self, model_id: &str) -> Result<()> {
+        // Built-in rule-based strategies (e.g. table projection) don't
+        // need a real model artifact or runtime.
+        if is_builtin_model_strategy(model_id) {
+            return Ok(());
+        }
+
         // If the model isn't in the registry, check via model_resolver
         // (WASM builds use MemoryModelResolver, not ModelRegistry).
         if !self.model_registry.has(model_id) {
@@ -722,10 +737,25 @@ impl SnipperEngine {
             return Ok(None);
         };
 
-        // Create and cache the package
+        // Built-in strategy (e.g. table projection): set variant hints,
+        // skip ModelRegistry/PreparedModel.
+        if is_builtin_model_strategy(&model_id) {
+            self.set_model_variant_hints(ctx, task, &model_id);
+            return Ok(Some(model_id));
+        }
+
+        // WASM / resolver-only model: set hints, don't attempt Package creation.
+        if !self.model_registry.has(&model_id) {
+            if self.model_resolver.is_some() {
+                self.set_model_variant_hints(ctx, task, &model_id);
+                return Ok(Some(model_id));
+            }
+            return Ok(None);
+        }
+
+        // Native registry-backed path: create PreparedModel.
         let package = self.get_or_create_model_package(&model_id)?;
 
-        // Resolve the runtime variant for this specific model
         let manifest = self.model_registry.get(&model_id).ok_or_else(|| {
             SnipperError::Model(format!("Model '{}' vanished during registration", model_id))
         })?;
@@ -737,21 +767,27 @@ impl SnipperEngine {
         })?;
         let resolved = self.prepare_model_runtime(manifest, model_dir, None)?;
 
-        // Register the prepared model: package + resolved runtime
         let prepared = PreparedModel::new(model_id.clone(), package, resolved);
         ctx.register_prepared_model(task, prepared);
 
-        // Also register for backward compat with nodes that use get_model_package
+        // Backward compat
         ctx.register_model_package(task, self.get_or_create_model_package(&model_id)?);
 
-        // Set model variant hints using canonical category keys
+        self.set_model_variant_hints(ctx, task, &model_id);
+
+        Ok(Some(model_id))
+    }
+
+    /// Set both canonical and legacy model variant hints in the context.
+    fn set_model_variant_hints(&self, ctx: &mut PipelineContext, task: ModelTask, model_id: &str) {
         if let Some((_category, variant)) = model_id.split_once('/') {
             let key = task_category_key(task);
             ctx.model_variants
                 .insert(key.to_string(), variant.to_string());
+            let legacy = legacy_category(key);
+            ctx.model_variants
+                .insert(legacy.to_string(), variant.to_string());
         }
-
-        Ok(Some(model_id))
     }
 
     /// Prepare models for all required tasks in a recognition mode.
