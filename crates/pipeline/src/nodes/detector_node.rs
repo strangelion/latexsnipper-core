@@ -111,8 +111,13 @@ impl DetectorNode {
         image: &latexsnipper_image::SnipperImage,
         package: &dyn latexsnipper_runtime::ModelPackage,
     ) -> Result<()> {
-        let backend = get_backend(ctx)?;
-        let mut executor = package.create_executor(backend)?;
+        // Prefer PreparedModel executor (resolved runtime) over bare package
+        let mut executor = if let Some(e) = ctx.create_model_executor(self.task)? {
+            e
+        } else {
+            let backend = get_backend(ctx)?;
+            package.create_executor(backend)?
+        };
 
         // Prepare input: RGB image bytes with shape [H, W, 3]
         let pixels = image.pixels().to_vec();

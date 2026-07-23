@@ -61,8 +61,13 @@ impl LayoutNode {
             None => return Ok(()),
         };
 
-        let backend = get_backend(ctx)?;
-        let mut executor = package.create_executor(backend)?;
+        // Prefer PreparedModel executor (resolved runtime) over bare package
+        let mut executor = if let Some(e) = ctx.create_model_executor(ModelTask::LayoutAnalysis)? {
+            e
+        } else {
+            let backend = get_backend(ctx)?;
+            package.create_executor(backend)?
+        };
 
         let pixels = image.pixels().to_vec();
         let shape = vec![image.height() as usize, image.width() as usize, 3];

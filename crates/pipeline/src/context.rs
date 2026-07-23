@@ -4,8 +4,8 @@ use crate::text_recognition_service::TextRecognitionService;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::{
-    InferenceSession, ModelPackage, ModelTask, PreparedModel, RuntimeBackend, RuntimeRegistry,
-    SharedModelResolver,
+    InferenceSession, ModelExecutionContext, ModelPackage, ModelTask, PreparedModel,
+    RuntimeBackend, RuntimeRegistry, SharedModelResolver,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -337,6 +337,50 @@ impl PipelineContext {
     /// Get a fully resolved model for a specific task.
     pub fn get_prepared_model(&self, task: &ModelTask) -> Option<&PreparedModel> {
         self.prepared_models.get(task)
+    }
+
+    /// Create a model executor for the given task, preferring PreparedModel.
+    ///
+    /// 1. If a [`PreparedModel`] is registered for this task, creates an
+    ///    executor via [`ModelPackage::create_executor_with_context`] using
+    ///    the resolved runtime variant (correct runtime guaranteed).
+    /// 2. Falls back to legacy [`ModelPackage::create_executor`] with
+    ///    `ctx.backend` if only a bare package is registered.
+    pub fn create_model_executor(
+        &self,
+        task: ModelTask,
+    ) -> latexsnipper_foundation::Result<Option<Box<dyn latexsnipper_runtime::ModelExecutor>>> {
+        // 1. PreparedModel path (preferred): uses resolved runtime variant
+        if let Some(prepared) = self.prepared_models.get(&task) {
+            let registry = self.runtime_registry.clone().ok_or_else(|| {
+                latexsnipper_foundation::SnipperError::Runtime(
+                    "Runtime registry is not configured".into(),
+                )
+            })?;
+
+            let exec_ctx = ModelExecutionContext {
+                runtime_registry: registry,
+                resolved_runtime: prepared.runtime.clone(),
+                max_threads: self.max_threads,
+            };
+
+            let executor = prepared.package.create_executor_with_context(&exec_ctx)?;
+            return Ok(Some(executor));
+        }
+
+        // 2. Legacy path: bare package + backend
+        if let Some(package) = self.model_packages.get(&task) {
+            let backend = self.backend.clone().ok_or_else(|| {
+                latexsnipper_foundation::SnipperError::Runtime(
+                    "Runtime backend is not configured".into(),
+                )
+            })?;
+
+            let executor = package.create_executor(backend)?;
+            return Ok(Some(executor));
+        }
+
+        Ok(None)
     }
 }
 

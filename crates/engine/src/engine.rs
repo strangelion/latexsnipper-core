@@ -362,6 +362,40 @@ impl SnipperEngine {
         manifest.resolve_runtime_variant(&self.runtime_registry, model_dir, preferred_variant)
     }
 
+    /// Resolve and fully prepare a runtime variant for execution.
+    ///
+    /// This is the single source of truth for runtime preparation.
+    /// It resolves the variant and fills in `max_threads`, acceleration
+    /// providers, and other engine-config-driven defaults so that every
+    /// code path (validation, registration, session creation) uses the
+    /// same options.
+    fn prepare_model_runtime(
+        &self,
+        manifest: &latexsnipper_runtime::ModelManifest,
+        model_dir: &Path,
+        preferred_variant: Option<&str>,
+    ) -> Result<ResolvedRuntimeVariant> {
+        let mut resolved = self.resolve_model_runtime(manifest, model_dir, preferred_variant)?;
+
+        // Apply engine-level defaults
+        if resolved.options.max_threads == 0 {
+            resolved.options.max_threads = self.config.max_threads;
+        }
+
+        if resolved.options.providers.is_empty()
+            && resolved.options.device == latexsnipper_runtime::DeviceKind::Auto
+        {
+            let compatibility_options =
+                latexsnipper_runtime::RuntimeOptions::from(self.config.acceleration);
+            resolved.options.device = compatibility_options.device;
+            if resolved.runtime == RuntimeKind::OnnxRuntime {
+                resolved.options.providers = compatibility_options.providers;
+            }
+        }
+
+        Ok(resolved)
+    }
+
     /// Resolve and create a canonical named-tensor session in one operation.
     pub fn create_model_runtime_session(
         &self,
@@ -630,9 +664,8 @@ impl SnipperEngine {
                 ))
             })?;
 
-        // Use the real RuntimeResolver: validates platform, artifacts,
-        // capabilities, variant status, and runtime availability.
-        self.resolve_model_runtime(manifest, model_dir, None)?;
+        // Use prepare_model_runtime: resolves + fills max_threads/acceleration
+        self.prepare_model_runtime(manifest, model_dir, None)?;
 
         Ok(())
     }
@@ -715,7 +748,7 @@ impl SnipperEngine {
                 model_id
             ))
         })?;
-        let resolved = self.resolve_model_runtime(manifest, model_dir, None)?;
+        let resolved = self.prepare_model_runtime(manifest, model_dir, None)?;
 
         // Register the prepared model: package + resolved runtime
         let prepared = PreparedModel::new(model_id.clone(), package, resolved);

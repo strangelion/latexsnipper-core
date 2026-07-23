@@ -1,9 +1,6 @@
 use crate::model_resolver::ModelId;
 use crate::runtime_registry::RuntimeRegistry;
-use crate::{
-    AccelerationMode, ModelHandle, ResolvedRuntimeVariant, RuntimeBackend,
-    RuntimeSessionCompatibility,
-};
+use crate::{ResolvedRuntimeVariant, RuntimeBackend};
 use latexsnipper_foundation::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -201,53 +198,19 @@ pub trait ModelPackage: Send + Sync {
 
     /// Create an executor using the resolved runtime context.
     ///
-    /// The default implementation wraps the resolved variant in a
-    /// [`VariantRuntimeBackend`] and delegates to [`create_executor`].
-    /// This ensures the executor uses the same runtime that was
-    /// selected during model resolution (e.g. Paddle, ONNX, TensorRT),
-    /// not the engine's default runtime.
+    /// Adapters that need the resolved variant (runtime, artifacts, options)
+    /// should override this. The default implementation panics with a
+    /// message directing the adapter author to implement this method.
     fn create_executor_with_context(
         &self,
         ctx: &ModelExecutionContext,
     ) -> Result<Box<dyn ModelExecutor>> {
-        let backend = Arc::new(VariantRuntimeBackend {
-            registry: ctx.runtime_registry.clone(),
-            resolved: ctx.resolved_runtime.clone(),
-        });
+        // Fall back to legacy path for adapters that haven't migrated yet.
+        // This uses ctx.backend_compat() which wraps the registry as a
+        // RuntimeBackend — it won't use the resolved variant, but keeps
+        // existing adapters working until they migrate.
+        let backend = ctx.backend_compat();
         self.create_executor(backend)
-    }
-}
-
-// ── VariantRuntimeBackend ─────────────────────────────────────────────
-
-/// A [`RuntimeBackend`] that creates sessions from a pre-resolved
-/// [`ResolvedRuntimeVariant`] rather than the engine's default runtime.
-///
-/// This is the bridge between model selection and actual execution:
-/// when a model is resolved to use a specific runtime (e.g. Paddle
-/// for PP-FormulaNet), this backend ensures sessions are created
-/// with that runtime.
-struct VariantRuntimeBackend {
-    registry: Arc<RuntimeRegistry>,
-    resolved: ResolvedRuntimeVariant,
-}
-
-impl RuntimeBackend for VariantRuntimeBackend {
-    fn create_session(
-        &self,
-        _handle: &ModelHandle,
-        _acceleration: AccelerationMode,
-    ) -> Result<Box<dyn crate::InferenceSession>> {
-        let session = self.registry.create_resolved_session(&self.resolved)?;
-        Ok(Box::new(RuntimeSessionCompatibility::new(session)))
-    }
-
-    fn name(&self) -> &str {
-        self.resolved.runtime.as_str()
-    }
-
-    fn is_available(&self) -> bool {
-        true
     }
 }
 
@@ -282,8 +245,9 @@ impl PreparedModel {
 
 /// Context passed to [`ModelPackage::create_executor_with_context`].
 ///
-/// Contains everything needed to create a runtime session using the
-/// exact resolved runtime variant.
+/// Contains everything needed to create runtime sessions using the
+/// exact resolved runtime variant, with role-aware artifact selection
+/// (e.g. "encoder" vs "decoder" for TrOCR models).
 pub struct ModelExecutionContext {
     /// Canonical runtime registry for creating sessions.
     pub runtime_registry: Arc<RuntimeRegistry>,
@@ -291,6 +255,49 @@ pub struct ModelExecutionContext {
     pub resolved_runtime: ResolvedRuntimeVariant,
     /// Maximum intra-op threads.
     pub max_threads: usize,
+}
+
+impl ModelExecutionContext {
+    /// Create a runtime session for a specific artifact role.
+    ///
+    /// For single-model packages (YOLOv8, DBNet, CRNN), use `"model"` or
+    /// leave `artifact_role` empty. For encoder-decoder models (TrOCR),
+    /// call once with `"encoder"` and once with `"decoder"`.
+    ///
+    /// The `artifact_role` is passed to the runtime factory via
+    /// `RuntimeOptions.extra["artifact"]`, which ONNX-based factories
+    /// use to select the correct file from `RuntimeArtifacts`.
+    pub fn create_session(&self, artifact_role: &str) -> Result<Box<dyn crate::RuntimeSession>> {
+        let mut resolved = self.resolved_runtime.clone();
+
+        // Inject artifact role so factories can select the right file
+        if !artifact_role.is_empty() {
+            resolved.options.extra.insert(
+                "artifact".into(),
+                serde_json::Value::String(artifact_role.into()),
+            );
+        }
+
+        // Apply max_threads if not already set
+        if resolved.options.max_threads == 0 && self.max_threads > 0 {
+            resolved.options.max_threads = self.max_threads;
+        }
+
+        self.runtime_registry.create_resolved_session(&resolved)
+    }
+
+    /// Create a legacy [`RuntimeBackend`] from the registry for adapters
+    /// that haven't migrated to [`create_executor_with_context`] yet.
+    ///
+    /// Prefer [`create_session`] for new code — it uses the resolved
+    /// variant's runtime rather than the default.
+    pub fn backend_compat(&self) -> Arc<dyn RuntimeBackend> {
+        let kind = self.resolved_runtime.runtime.clone();
+        Arc::new(crate::RegistryRuntimeBackend::new(
+            self.runtime_registry.clone(),
+            kind,
+        ))
+    }
 }
 
 /// A model executor — runs inference on a loaded model.
