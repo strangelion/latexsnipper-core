@@ -418,6 +418,29 @@ impl ModelRegistry {
 
                 match Self::load_manifest(&manifest_path) {
                     Ok(manifest) => {
+                        // Verify that the manifest id matches the directory structure.
+                        // Example: models/text-recognition/demo/manifest.toml
+                        //          must have id = "text-recognition/demo"
+                        let category_name = model_dir
+                            .parent()
+                            .and_then(|p| p.file_name())
+                            .and_then(|n| n.to_str());
+                        let variant_name = model_dir.file_name().and_then(|n| n.to_str());
+
+                        if let (Some(cat), Some(var)) = (category_name, variant_name) {
+                            let expected_id = format!("{}/{}", cat, var);
+                            if manifest.id != expected_id {
+                                report.issues.push(ModelScanIssue {
+                                    path: manifest_path,
+                                    message: format!(
+                                        "Manifest id '{}' does not match directory path '{}'",
+                                        manifest.id, expected_id
+                                    ),
+                                });
+                                continue;
+                            }
+                        }
+
                         let id = manifest.id.clone();
 
                         if let Some(previous) = self.models.get(&id) {

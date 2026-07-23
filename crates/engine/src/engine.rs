@@ -27,6 +27,28 @@ use crate::job::JobQueue;
 
 pub use latexsnipper_api_types::{RecognizeMode, RecognizeRequest, RecognizeResponse, StreamItem};
 
+// ============================================================================
+// Canonical category key constants
+// ============================================================================
+
+/// All `ctx.model_variants` keys should use these canonical category names.
+/// The old short keys (`formula-det`, `text-rec`, etc.) are deprecated.
+pub mod category {
+    pub const FORMULA_DETECTION: &str = "formula-detection";
+    pub const FORMULA_RECOGNITION: &str = "formula-recognition";
+    pub const TEXT_DETECTION: &str = "text-detection";
+    pub const TEXT_RECOGNITION: &str = "text-recognition";
+    pub const TABLE_DETECTION: &str = "table-detection";
+    pub const TABLE_STRUCTURE: &str = "table-structure";
+    pub const LAYOUT_ANALYSIS: &str = "layout-analysis";
+    pub const HANDWRITING_RECOGNITION: &str = "handwriting-recognition";
+}
+
+/// Map ModelTask to its canonical category key.
+fn task_category_key(task: ModelTask) -> &'static str {
+    task.id()
+}
+
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 /// Engine only assembles PipelineGraph and runs it — all logic lives in Nodes.
 pub struct SnipperEngine {
@@ -500,54 +522,186 @@ impl SnipperEngine {
             .select_registry(&self.model_registry, &request)
     }
 
-    /// Select and register the best model for a task into the pipeline context.
+    // ========================================================================
+    // Runnable model validation & selection
+    // ========================================================================
+
+    /// Validate that a model can actually run: manifest exists, adapter is
+    /// registered, package is constructable, and at least one runtime variant
+    /// is resolvable on the current system.
+    fn validate_model_runnable(&self, model_id: &str) -> Result<()> {
+        let manifest = self.model_registry.get(model_id).ok_or_else(|| {
+            SnipperError::Model(format!("Model '{}' is not registered", model_id))
+        })?;
+
+        // Check adapter is registered
+        let adapters = self.model_registry.registered_adapters();
+        if !adapters.iter().any(|a| *a == manifest.adapter) {
+            return Err(SnipperError::Model(format!(
+                "Model '{}' requires adapter '{}' which is not available. Registered: {:?}",
+                model_id, manifest.adapter, adapters
+            )));
+        }
+
+        // Check that package can be constructed (validates adapter compatibility)
+        let model_dir = self.model_registry.get_dir(model_id).ok_or_else(|| {
+            SnipperError::Model(format!("Model '{}' has no model directory", model_id))
+        })?;
+
+        // Try to construct the package (fails fast if adapter incompatible)
+        self.model_registry
+            .create_package(manifest, model_dir)?
+            .ok_or_else(|| {
+                SnipperError::Model(format!(
+                    "Unsupported model adapter '{}' for model '{}'",
+                    manifest.adapter, model_id
+                ))
+            })?;
+
+        // Check at least one runtime variant is resolvable
+        let variants = manifest.all_variants(model_dir);
+        if variants.is_empty() {
+            return Err(SnipperError::Model(format!(
+                "Model '{}' declares no runtime variants and no legacy files",
+                model_id
+            )));
+        }
+
+        // Verify at least one variant's runtime is available
+        let mut any_runtime_available = false;
+        let mut failures = Vec::new();
+        for variant in &variants {
+            let kind = RuntimeKind::from_id(&variant.runtime);
+            if self.runtime_registry.is_available(&kind) {
+                any_runtime_available = true;
+                break;
+            }
+            failures.push(format!(
+                "runtime '{}' not available (variant '{}')",
+                variant.runtime, variant.id
+            ));
+        }
+
+        if !any_runtime_available {
+            return Err(SnipperError::Model(format!(
+                "Model '{}' has no available runtime. Tried: {}",
+                model_id,
+                failures.join("; ")
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Select a model that is confirmed runnable on the current system.
     ///
-    /// Combines model selection with model package registration, so pipeline
-    /// nodes can immediately use the selected model via `ctx.get_model_package()`.
+    /// This extends [`select_model_id`] with runtime probing:
+    ///
+    /// 1. Explicit user override → validated, fails hard if not runnable
+    /// 2. Auto-selection → tries selected + fallbacks in order, picks the
+    ///    first one that is actually runnable
+    ///
+    /// Returns the selected model ID, or `None` if no runnable candidate exists.
+    pub fn select_runnable_model(&self, task: ModelTask) -> Result<Option<String>> {
+        // 1. Explicit user override
+        if let Some(explicit) = self.config.model_override(task) {
+            self.validate_model_runnable(explicit)?;
+            return Ok(Some(explicit.to_string()));
+        }
+
+        // 2. Auto-selection with fallback probing
+        let decision = self.select_model(task, None, Some(self.config.acceleration), None);
+
+        let candidates = decision.selected.into_iter().chain(decision.fallbacks);
+
+        let mut failures = Vec::new();
+
+        for model_id in candidates {
+            match self.validate_model_runnable(&model_id) {
+                Ok(()) => {
+                    info!("Selected runnable model '{}' for {:?}", model_id, task);
+                    return Ok(Some(model_id));
+                }
+                Err(error) => {
+                    warn!("Model '{}' not runnable: {}", model_id, error);
+                    failures.push(format!("{}: {}", model_id, error));
+                }
+            }
+        }
+
+        if failures.is_empty() {
+            info!("No model candidates for {:?}", task);
+            Ok(None)
+        } else {
+            warn!("No runnable model for {:?}: {}", task, failures.join("; "));
+            // Return None rather than Err to allow degraded operation
+            Ok(None)
+        }
+    }
+
+    /// Select and register the best *runnable* model for a task into the
+    /// pipeline context.
+    ///
+    /// This is the authoritative entry point for model assignment in
+    /// pipeline execution. It respects user overrides and validates
+    /// runtime availability before registering.
     pub fn select_and_register_model(
         &self,
         ctx: &mut PipelineContext,
         task: ModelTask,
     ) -> Result<Option<String>> {
-        let decision = self.select_model(task, None, Some(self.config.acceleration), None);
-
-        let Some(model_id) = &decision.selected else {
+        let Some(model_id) = self.select_runnable_model(task)? else {
             return Ok(None);
         };
 
         // Create and cache the package
-        let package = self.get_or_create_model_package(model_id)?;
+        let package = self.get_or_create_model_package(&model_id)?;
 
         // Register with the pipeline context so nodes can use it
         ctx.register_model_package(task, package);
 
-        // Set model variant hints for nodes that use model_variants
-        if let Some((category, variant)) = model_id.split_once('/') {
+        // Set model variant hints using canonical category keys
+        if let Some((_category, variant)) = model_id.split_once('/') {
+            let key = task_category_key(task);
             ctx.model_variants
-                .insert(category.to_string(), variant.to_string());
+                .insert(key.to_string(), variant.to_string());
         }
 
-        Ok(Some(model_id.clone()))
+        Ok(Some(model_id))
     }
 
     /// Prepare models for all required tasks in a recognition mode.
     ///
-    /// This selects and registers models for every task needed by the given
-    /// mode, populating the pipeline context appropriately.
+    /// For tasks with explicit user overrides, failures are propagated
+    /// immediately. For auto-selected tasks, failures are logged and the
+    /// pipeline continues in degraded mode.
     fn prepare_pipeline_models(
         &self,
         ctx: &mut PipelineContext,
         mode: RecognizeMode,
     ) -> Result<()> {
         for task in required_tasks(mode, self.config.parse_mode) {
+            let has_explicit_override = self.config.model_override(task).is_some();
+
             match self.select_and_register_model(ctx, task) {
                 Ok(Some(ref model_id)) => {
                     info!("Selected model '{}' for {:?}", model_id, task);
                 }
                 Ok(None) => {
+                    if has_explicit_override {
+                        // User explicitly configured a model but it couldn't be
+                        // selected or wasn't runnable → fail hard.
+                        return Err(SnipperError::Model(format!(
+                            "Explicitly configured model for {:?} could not be loaded",
+                            task
+                        )));
+                    }
                     warn!("No model selected for {:?}", task);
                 }
                 Err(error) => {
+                    if has_explicit_override {
+                        return Err(error);
+                    }
                     warn!("Failed to prepare model for {:?}: {}", task, error);
                 }
             }
@@ -973,6 +1127,11 @@ impl SnipperEngine {
     }
 
     /// Configure a pipeline context with engine config (shared by image and PDF paths).
+    ///
+    /// Note: model variant hints (ctx.model_variants) are now set exclusively
+    /// by `select_and_register_model`, which uses canonical category keys.
+    /// The old short-key overrides below are retained temporarily for backward
+    /// compatibility with pipeline nodes that still read the deprecated keys.
     fn configure_context(&self, mut ctx: PipelineContext) -> PipelineContext {
         ctx.models_dir = Some(self.config.models_dir.clone());
         ctx.runtime_registry = Some(self.runtime_registry.clone());
@@ -982,129 +1141,48 @@ impl SnipperEngine {
         ctx.max_threads = self.config.max_threads;
         ctx.parse_mode = self.config.parse_mode;
 
-        // Apply explicit model variant overrides from config
+        // Apply explicit model variant overrides from config, using both
+        // canonical and legacy keys for backward compatibility.
+        //
+        // TODO(p0): remove legacy short keys once all pipeline nodes read canonical keys.
         if let Some(v) = &self.config.formula_det_model {
+            ctx.model_variants
+                .insert(category::FORMULA_DETECTION.into(), v.clone());
             ctx.model_variants.insert("formula-det".into(), v.clone());
         }
         if let Some(v) = &self.config.formula_rec_model {
+            ctx.model_variants
+                .insert(category::FORMULA_RECOGNITION.into(), v.clone());
             ctx.model_variants.insert("formula-rec".into(), v.clone());
         }
         if let Some(v) = &self.config.text_det_model {
+            ctx.model_variants
+                .insert(category::TEXT_DETECTION.into(), v.clone());
             ctx.model_variants.insert("text-det".into(), v.clone());
         }
         if let Some(v) = &self.config.text_rec_model {
+            ctx.model_variants
+                .insert(category::TEXT_RECOGNITION.into(), v.clone());
             ctx.model_variants.insert("text-rec".into(), v.clone());
         }
         if let Some(v) = &self.config.table_det_model {
+            ctx.model_variants
+                .insert(category::TABLE_DETECTION.into(), v.clone());
             ctx.model_variants.insert("table-det".into(), v.clone());
         }
         if let Some(v) = &self.config.table_struct_model {
+            ctx.model_variants
+                .insert(category::TABLE_STRUCTURE.into(), v.clone());
             ctx.model_variants.insert("table-struct".into(), v.clone());
         }
         if let Some(v) = &self.config.handwriting_det_model {
             ctx.model_variants
+                .insert(category::HANDWRITING_RECOGNITION.into(), v.clone());
+            ctx.model_variants
                 .insert("handwriting-det".into(), v.clone());
         }
 
-        // Mode-specific defaults
-        match self.config.parse_mode {
-            DocumentParseMode::OpenOcrText => {
-                self.prefer_variant_if_installed(&mut ctx, "text-det", "openocr-mobile");
-                self.prefer_variant_if_installed(&mut ctx, "text-rec", "openocr-mobile");
-                self.prefer_variant_if_installed(&mut ctx, "table-struct", "slanet-plus");
-            }
-            DocumentParseMode::OpenDocHybrid => {
-                self.prefer_variant_if_installed(&mut ctx, "table-struct", "slanet-plus");
-                // Auto-register layout package from manifest if available
-                self.try_register_layout_package(&mut ctx);
-            }
-            DocumentParseMode::SpecializedStable => {}
-        }
-
         ctx
-    }
-
-    fn prefer_variant_if_installed(
-        &self,
-        ctx: &mut PipelineContext,
-        category: &str,
-        variant: &str,
-    ) {
-        if ctx.model_variants.contains_key(category) {
-            return;
-        }
-
-        let variant_dir = self.config.models_dir.join(category).join(variant);
-        if variant_dir.is_dir() {
-            ctx.model_variants
-                .insert(category.to_string(), variant.to_string());
-        }
-    }
-
-    /// Try to auto-register layout analysis package from the model manifest.
-    fn try_register_layout_package(&self, ctx: &mut PipelineContext) {
-        let manifest_path = self.config.models_dir.join("model-manifest.json");
-
-        let manifest = match std::fs::read_to_string(&manifest_path) {
-            Ok(content) => {
-                match serde_json::from_str::<latexsnipper_model::manifest::ModelManifest>(&content)
-                {
-                    Ok(m) => m,
-                    Err(e) => {
-                        warn!("Failed to parse manifest for layout registration: {}", e);
-                        return;
-                    }
-                }
-            }
-            Err(e) => {
-                warn!("Cannot read manifest: {}", e);
-                return;
-            }
-        };
-
-        // Look for a layout category
-        let layout_info = manifest.categories.iter().find(|(cat, _)| *cat == "layout");
-        let (_cat_name, layout_cat) = match layout_info {
-            Some(v) => v,
-            None => {
-                info!("No layout category in manifest, skipping layout registration");
-                return;
-            }
-        };
-
-        // Find the default variant
-        let default_id = layout_cat.default.as_deref().unwrap_or("pp-layout-cdla");
-
-        let variant = layout_cat.variants.iter().find(|v| v.id == default_id);
-
-        if let Some(variant) = variant {
-            let variant_dir = self.config.models_dir.join("layout").join(&variant.id);
-
-            if !variant_dir.is_dir() {
-                info!(
-                    "Layout model directory not found: {}, skipping layout registration",
-                    variant_dir.display()
-                );
-                return;
-            }
-
-            let model_path =
-                variant_dir.join(variant.files.first().unwrap_or(&"model.onnx".into()));
-            if !model_path.exists() {
-                info!(
-                    "Layout model file not found: {}, skipping",
-                    model_path.display()
-                );
-                return;
-            }
-
-            info!(
-                "Auto-registering layout package: {}/{}",
-                _cat_name, variant.id
-            );
-            ctx.model_variants
-                .insert("layout".into(), variant.id.clone());
-        }
     }
 }
 

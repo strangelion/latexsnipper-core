@@ -429,10 +429,57 @@ fn reports_duplicate_id() {
     assert_eq!(report.loaded_count(), 1);
     assert!(!report.is_clean());
     assert_eq!(report.issues.len(), 1);
-    assert!(report.issues[0].message.contains("Duplicate model id"));
+    // Second manifest had id "text-recognition/dupe" but was under
+    // directory "text-recognition-alt/dupe" — caught by directory-path check.
+    assert!(
+        report.issues[0].message.contains("directory path")
+            || report.issues[0].message.contains("Duplicate model id")
+    );
 
     // The second one was rejected; first one should still be registered
     assert!(registry.has("text-recognition/dupe"));
+}
+
+#[test]
+fn reports_directory_id_mismatch() {
+    let temp = create_temp_dir();
+
+    // Manifest claims "text-recognition/innocent" but sits in
+    // "formula-detection/innocent" — directory mismatch.
+    write_file(
+        &temp.path().join("formula-detection").join("innocent"),
+        "manifest.toml",
+        r#"
+id = "text-recognition/innocent"
+task = "TextRecognition"
+version = "1.0.0"
+adapter = "ctc-recognition-v1"
+
+[input]
+name = "x"
+shape = [-1, 3, 48, -1]
+dtype = "float32"
+
+[[output]]
+name = "softmax"
+shape = [-1, -1, -1]
+dtype = "float32"
+
+[files]
+primary = "model.onnx"
+"#,
+    );
+
+    let mut registry = ModelRegistry::new();
+    let report = registry
+        .register_models_root(temp.path())
+        .expect("Scan should succeed");
+
+    assert_eq!(report.loaded_count(), 0);
+    assert!(!report.is_clean());
+    assert!(report.issues[0]
+        .message
+        .contains("does not match directory path"));
 }
 
 // ────────────────────────────────────────────────────────────────────
