@@ -49,6 +49,26 @@ fn task_category_key(task: ModelTask) -> &'static str {
     task.id()
 }
 
+/// Map a canonical category name to its legacy short form.
+///
+/// WASM builds use short category names (`text-rec`, `formula-det`) while
+/// the canonical names use the full form (`text-recognition`, `formula-detection`).
+fn legacy_category(canonical: &str) -> &str {
+    match canonical {
+        "text-recognition" => "text-rec",
+        "text-detection" => "text-det",
+        "formula-recognition" => "formula-rec",
+        "formula-detection" => "formula-det",
+        "table-recognition" => "table-rec",
+        "table-detection" => "table-det",
+        "table-structure" => "table-struct",
+        "layout-analysis" => "layout",
+        "handwriting-recognition" => "handwriting-rec",
+        // If it doesn't match any canonical name, return as-is
+        other => other,
+    }
+}
+
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 /// Engine only assembles PipelineGraph and runs it — all logic lives in Nodes.
 pub struct SnipperEngine {
@@ -551,7 +571,47 @@ impl SnipperEngine {
     /// Checks: manifest exists, adapter is registered, package is constructable,
     /// and at least one runtime variant resolves successfully via the full
     /// RuntimeResolver (platform, artifacts, capabilities, runtime availability).
+    ///
+    /// Falls back to `model_resolver` when the model is not in the registry
+    /// (e.g. WASM builds that use `MemoryModelResolver`).
     fn validate_model_runnable(&self, model_id: &str) -> Result<()> {
+        // If the model isn't in the registry, check via model_resolver
+        // (WASM builds use MemoryModelResolver, not ModelRegistry).
+        if !self.model_registry.has(model_id) {
+            if let Some(ref resolver) = self.model_resolver {
+                if !resolver
+                    .is_available(&latexsnipper_runtime::ModelId::from_composite_key(model_id))
+                {
+                    // Also try the short variant name without category prefix
+                    // (legacy WASM models may use bare variant names)
+                    if let Some((cat, var)) = model_id.split_once('/') {
+                        let legacy_id = latexsnipper_runtime::ModelId::from_composite_key(
+                            &format!("{}/{}", legacy_category(cat), var),
+                        );
+                        if !resolver.is_available(&legacy_id) {
+                            return Err(SnipperError::Model(format!(
+                                "Model '{}' is not available in the resolver",
+                                model_id
+                            )));
+                        }
+                    } else {
+                        return Err(SnipperError::Model(format!(
+                            "Model '{}' is not available in the resolver",
+                            model_id
+                        )));
+                    }
+                }
+                // Model found in resolver; skip manifest/adapter/runtime checks
+                // since WASM doesn't have these on a per-model basis.
+                return Ok(());
+            }
+
+            return Err(SnipperError::Model(format!(
+                "Model '{}' is not registered and no resolver is configured",
+                model_id
+            )));
+        }
+
         let manifest = self.model_registry.get(model_id).ok_or_else(|| {
             SnipperError::Model(format!("Model '{}' is not registered", model_id))
         })?;

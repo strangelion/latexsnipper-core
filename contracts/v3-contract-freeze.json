@@ -17,7 +17,7 @@
     "crates/api-types/src": "e369249a891db190f7ca6d82086d2d0d93ac02c458f3c7461910ae2b4125f0e0",
     "crates/ast/src": "3bdada0312eec796d930c539246d0b39167aaa273c3997fcd8844007f29d407e",
     "crates/conversion/src": "60e60bdba764c4527466528dd8390840b41e82d936c9cfeec75d5230d811240a",
-    "crates/engine/src": "0134e9649cfee2544dcb44681e35e308609e16f2c9cb7cfb763bd57b2eda6e90",
+    "crates/engine/src": "da0b1a0621986947a53c2674758fd8bd5a79ecf75a45082cb79e21f0c143a247",
     "crates/export/src": "503ef470a53cef25d6f3739c83144af50ad7684c8eec6bfdcb698e6c75a370b0",
     "crates/ffi/src": "9096deeb3fe4bf673dbd323fd80e1ed6a7e9056fa7e7e76f27b874442021b5ed",
     "crates/foundation/src": "afbbf9d5e3e47b3e7080eb6d02a182c0063f92005acb22358a03974f4f382fbe",
