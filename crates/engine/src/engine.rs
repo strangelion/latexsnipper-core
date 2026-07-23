@@ -63,7 +63,7 @@ fn legacy_category(canonical: &str) -> &str {
         "table-detection" => "table-det",
         "table-structure" => "table-struct",
         "layout-analysis" => "layout",
-        "handwriting-recognition" => "handwriting-rec",
+        "handwriting-recognition" => "handwriting-det",
         // If it doesn't match any canonical name, return as-is
         other => other,
     }
@@ -613,33 +613,32 @@ impl SnipperEngine {
 
         // If the model isn't in the registry, check via model_resolver
         // (WASM builds use MemoryModelResolver, not ModelRegistry).
+        // Use list_artifacts() to detect both single-model and
+        // multi-artifact packages (encoder-decoder, Paddle, etc.).
         if !self.model_registry.has(model_id) {
             if let Some(ref resolver) = self.model_resolver {
-                if !resolver
-                    .is_available(&latexsnipper_runtime::ModelId::from_composite_key(model_id))
-                {
-                    // Also try the short variant name without category prefix
-                    // (legacy WASM models may use bare variant names)
-                    if let Some((cat, var)) = model_id.split_once('/') {
-                        let legacy_id = latexsnipper_runtime::ModelId::from_composite_key(
-                            &format!("{}/{}", legacy_category(cat), var),
-                        );
-                        if !resolver.is_available(&legacy_id) {
-                            return Err(SnipperError::Model(format!(
-                                "Model '{}' is not available in the resolver",
-                                model_id
-                            )));
-                        }
-                    } else {
-                        return Err(SnipperError::Model(format!(
-                            "Model '{}' is not available in the resolver",
-                            model_id
-                        )));
+                let available = |id: &latexsnipper_runtime::ModelId| {
+                    resolver.is_available(id) || !resolver.list_artifacts(id).is_empty()
+                };
+
+                let canonical_id = latexsnipper_runtime::ModelId::from_composite_key(model_id);
+
+                if available(&canonical_id) {
+                    return Ok(());
+                }
+
+                // Also try the legacy category name
+                if let Some((cat, var)) = model_id.split_once('/') {
+                    let legacy_id = latexsnipper_runtime::ModelId::new(legacy_category(cat), var);
+                    if available(&legacy_id) {
+                        return Ok(());
                     }
                 }
-                // Model found in resolver; skip manifest/adapter/runtime checks
-                // since WASM doesn't have these on a per-model basis.
-                return Ok(());
+
+                return Err(SnipperError::Model(format!(
+                    "Model '{}' is not available in the resolver",
+                    model_id
+                )));
             }
 
             return Err(SnipperError::Model(format!(

@@ -315,11 +315,7 @@ impl ModelResolver for MemoryModelResolver {
 
     fn is_available(&self, id: &ModelId) -> bool {
         let key = id.composite_key();
-        self.has(&key)
-            || self.has(&id.category)
-            || ["model.onnx", "model_int8.onnx", "inference.onnx"]
-                .iter()
-                .any(|suffix| self.has(&format!("{key}/{suffix}")))
+        self.has(&key) || self.has(&id.category) || !self.list_artifacts(id).is_empty()
     }
 
     fn resolve_artifact(&self, id: &ModelId, artifact: &str) -> Result<ModelHandle> {
