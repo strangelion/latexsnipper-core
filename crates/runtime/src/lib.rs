@@ -28,12 +28,15 @@ pub use artifacts::RuntimeArtifacts;
 pub use capabilities::{RuntimeCapabilities, RuntimeDevice, RuntimeProbe};
 pub use factory::RuntimeFactory;
 pub use kind::RuntimeKind;
-pub use legacy::{InferenceSession, RegistryRuntimeBackend, RuntimeBackend, RuntimeDiagnostics};
+pub use legacy::{
+    InferenceSession, RegistryRuntimeBackend, RuntimeBackend, RuntimeDiagnostics,
+    RuntimeSessionCompatibility,
+};
 pub use model_handle::ModelHandle;
 pub use model_package::{
     DetectionQuad, DetectionResult, FormulaResult, InferenceContext, LayoutResult, ModelDescriptor,
-    ModelExecutor, ModelInput, ModelOutput, ModelPackage, ModelTask, TableResult, TensorDtype,
-    TensorSpec, TextResult,
+    ModelExecutionContext, ModelExecutor, ModelInput, ModelOutput, ModelPackage, ModelTask,
+    PreparedModel, TableResult, TensorDtype, TensorSpec, TextResult,
 };
 pub use model_plugin::{ManifestAdapter, ModelManifestView, ModelPlugin, ModelPluginRegistry};
 pub use model_registry::{

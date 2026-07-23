@@ -4,7 +4,8 @@ use crate::text_recognition_service::TextRecognitionService;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::{
-    InferenceSession, ModelPackage, ModelTask, RuntimeBackend, RuntimeRegistry, SharedModelResolver,
+    InferenceSession, ModelPackage, ModelTask, PreparedModel, RuntimeBackend, RuntimeRegistry,
+    SharedModelResolver,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -78,6 +79,10 @@ pub struct PipelineContext {
     pub model_resolver: Option<SharedModelResolver>,
     /// Model packages for type-safe inference (indexed by ModelTask).
     pub model_packages: HashMap<ModelTask, Arc<dyn ModelPackage>>,
+    /// Fully resolved models with their selected runtime variants.
+    /// Indexed by ModelTask. Pipeline nodes should prefer this over
+    /// `model_packages` or `backend` to ensure the correct runtime is used.
+    pub prepared_models: HashMap<ModelTask, PreparedModel>,
     /// User-requested model variant per category (from EngineConfig).
     /// Category → variant name, e.g. "formula-det" → "custom-model".
     /// Nodes should prefer this over auto-discovery when set.
@@ -113,6 +118,7 @@ impl PipelineContext {
             runtime_registry: None,
             model_resolver: None,
             model_packages: HashMap::new(),
+            prepared_models: HashMap::new(),
             model_variants: HashMap::new(),
             acceleration: latexsnipper_runtime::AccelerationMode::Cpu,
             max_threads: 4,
@@ -317,6 +323,20 @@ impl PipelineContext {
     /// Get a model package for a specific task.
     pub fn get_model_package(&self, task: &ModelTask) -> Option<Arc<dyn ModelPackage>> {
         self.model_packages.get(task).cloned()
+    }
+
+    /// Register a fully resolved model for a specific task.
+    ///
+    /// Pipeline nodes should prefer this — the [`PreparedModel`] carries the
+    /// exact runtime variant that was selected, ensuring execution uses the
+    /// correct runtime (ONNX, Paddle, TensorRT, etc.).
+    pub fn register_prepared_model(&mut self, task: ModelTask, model: PreparedModel) {
+        self.prepared_models.insert(task, model);
+    }
+
+    /// Get a fully resolved model for a specific task.
+    pub fn get_prepared_model(&self, task: &ModelTask) -> Option<&PreparedModel> {
+        self.prepared_models.get(task)
     }
 }
 

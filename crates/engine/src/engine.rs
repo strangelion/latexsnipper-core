@@ -17,7 +17,7 @@ use latexsnipper_pipeline::{
 use latexsnipper_runtime::FsModelResolver;
 use latexsnipper_runtime::{
     AccelerationMode, ModelPackage, ModelRegistry, ModelScanReport, ModelSelectionDecision,
-    ModelSelectionPolicy, ModelSelectionRequest, ModelTask, RegistryRuntimeBackend,
+    ModelSelectionPolicy, ModelSelectionRequest, ModelTask, PreparedModel, RegistryRuntimeBackend,
     ResolvedRuntimeVariant, RuntimeBackend, RuntimeFactory, RuntimeKind, RuntimeRegistry,
     RuntimeSession, SharedModelResolver,
 };
@@ -526,29 +526,41 @@ impl SnipperEngine {
     // Runnable model validation & selection
     // ========================================================================
 
-    /// Validate that a model can actually run: manifest exists, adapter is
-    /// registered, package is constructable, and at least one runtime variant
-    /// is resolvable on the current system.
+    /// Normalize a user-supplied model override to a full "category/variant" ID.
+    ///
+    /// Accepts both short variant names ("ppocrv5-mobile") and full IDs
+    /// ("text-recognition/ppocrv5-mobile"). Short names are expanded using the
+    /// canonical task category.
+    fn normalize_model_override(&self, task: ModelTask, value: &str) -> String {
+        if value.contains('/') {
+            value.to_string()
+        } else {
+            format!("{}/{}", task.id(), value)
+        }
+    }
+
+    /// Extract the variant portion from a "category/variant" string.
+    ///
+    /// Returns the part after the `/`, or the whole string if no `/` is present.
+    fn variant_part(value: &str) -> &str {
+        value.split_once('/').map(|(_, v)| v).unwrap_or(value)
+    }
+
+    /// Validate that a model can actually run using the real RuntimeResolver.
+    ///
+    /// Checks: manifest exists, adapter is registered, package is constructable,
+    /// and at least one runtime variant resolves successfully via the full
+    /// RuntimeResolver (platform, artifacts, capabilities, runtime availability).
     fn validate_model_runnable(&self, model_id: &str) -> Result<()> {
         let manifest = self.model_registry.get(model_id).ok_or_else(|| {
             SnipperError::Model(format!("Model '{}' is not registered", model_id))
         })?;
 
-        // Check adapter is registered
-        let adapters = self.model_registry.registered_adapters();
-        if !adapters.iter().any(|a| *a == manifest.adapter) {
-            return Err(SnipperError::Model(format!(
-                "Model '{}' requires adapter '{}' which is not available. Registered: {:?}",
-                model_id, manifest.adapter, adapters
-            )));
-        }
-
-        // Check that package can be constructed (validates adapter compatibility)
         let model_dir = self.model_registry.get_dir(model_id).ok_or_else(|| {
             SnipperError::Model(format!("Model '{}' has no model directory", model_id))
         })?;
 
-        // Try to construct the package (fails fast if adapter incompatible)
+        // Check adapter is registered and package is constructable
         self.model_registry
             .create_package(manifest, model_dir)?
             .ok_or_else(|| {
@@ -558,37 +570,9 @@ impl SnipperEngine {
                 ))
             })?;
 
-        // Check at least one runtime variant is resolvable
-        let variants = manifest.all_variants(model_dir);
-        if variants.is_empty() {
-            return Err(SnipperError::Model(format!(
-                "Model '{}' declares no runtime variants and no legacy files",
-                model_id
-            )));
-        }
-
-        // Verify at least one variant's runtime is available
-        let mut any_runtime_available = false;
-        let mut failures = Vec::new();
-        for variant in &variants {
-            let kind = RuntimeKind::from_id(&variant.runtime);
-            if self.runtime_registry.is_available(&kind) {
-                any_runtime_available = true;
-                break;
-            }
-            failures.push(format!(
-                "runtime '{}' not available (variant '{}')",
-                variant.runtime, variant.id
-            ));
-        }
-
-        if !any_runtime_available {
-            return Err(SnipperError::Model(format!(
-                "Model '{}' has no available runtime. Tried: {}",
-                model_id,
-                failures.join("; ")
-            )));
-        }
+        // Use the real RuntimeResolver: validates platform, artifacts,
+        // capabilities, variant status, and runtime availability.
+        self.resolve_model_runtime(manifest, model_dir, None)?;
 
         Ok(())
     }
@@ -597,7 +581,8 @@ impl SnipperEngine {
     ///
     /// This extends [`select_model_id`] with runtime probing:
     ///
-    /// 1. Explicit user override → validated, fails hard if not runnable
+    /// 1. Explicit user override → normalized to full ID, validated, fails hard
+    ///    if not runnable
     /// 2. Auto-selection → tries selected + fallbacks in order, picks the
     ///    first one that is actually runnable
     ///
@@ -605,8 +590,9 @@ impl SnipperEngine {
     pub fn select_runnable_model(&self, task: ModelTask) -> Result<Option<String>> {
         // 1. Explicit user override
         if let Some(explicit) = self.config.model_override(task) {
-            self.validate_model_runnable(explicit)?;
-            return Ok(Some(explicit.to_string()));
+            let model_id = self.normalize_model_override(task, explicit);
+            self.validate_model_runnable(&model_id)?;
+            return Ok(Some(model_id));
         }
 
         // 2. Auto-selection with fallback probing
@@ -643,8 +629,10 @@ impl SnipperEngine {
     /// pipeline context.
     ///
     /// This is the authoritative entry point for model assignment in
-    /// pipeline execution. It respects user overrides and validates
-    /// runtime availability before registering.
+    /// pipeline execution. It respects user overrides, validates
+    /// runtime availability, resolves the runtime variant, and registers
+    /// a [`PreparedModel`] that binds the model package to its resolved
+    /// runtime — ensuring the executor uses the correct runtime.
     pub fn select_and_register_model(
         &self,
         ctx: &mut PipelineContext,
@@ -657,8 +645,24 @@ impl SnipperEngine {
         // Create and cache the package
         let package = self.get_or_create_model_package(&model_id)?;
 
-        // Register with the pipeline context so nodes can use it
-        ctx.register_model_package(task, package);
+        // Resolve the runtime variant for this specific model
+        let manifest = self.model_registry.get(&model_id).ok_or_else(|| {
+            SnipperError::Model(format!("Model '{}' vanished during registration", model_id))
+        })?;
+        let model_dir = self.model_registry.get_dir(&model_id).ok_or_else(|| {
+            SnipperError::Model(format!(
+                "Model '{}' has no directory during registration",
+                model_id
+            ))
+        })?;
+        let resolved = self.resolve_model_runtime(manifest, model_dir, None)?;
+
+        // Register the prepared model: package + resolved runtime
+        let prepared = PreparedModel::new(model_id.clone(), package, resolved);
+        ctx.register_prepared_model(task, prepared);
+
+        // Also register for backward compat with nodes that use get_model_package
+        ctx.register_model_package(task, self.get_or_create_model_package(&model_id)?);
 
         // Set model variant hints using canonical category keys
         if let Some((_category, variant)) = model_id.split_once('/') {
@@ -1143,43 +1147,51 @@ impl SnipperEngine {
 
         // Apply explicit model variant overrides from config, using both
         // canonical and legacy keys for backward compatibility.
+        // Legacy keys receive only the variant portion (e.g. "ppocrv5-mobile"),
+        // while canonical keys receive the full override value.
         //
         // TODO(p0): remove legacy short keys once all pipeline nodes read canonical keys.
         if let Some(v) = &self.config.formula_det_model {
             ctx.model_variants
                 .insert(category::FORMULA_DETECTION.into(), v.clone());
-            ctx.model_variants.insert("formula-det".into(), v.clone());
+            ctx.model_variants
+                .insert("formula-det".into(), Self::variant_part(v).to_string());
         }
         if let Some(v) = &self.config.formula_rec_model {
             ctx.model_variants
                 .insert(category::FORMULA_RECOGNITION.into(), v.clone());
-            ctx.model_variants.insert("formula-rec".into(), v.clone());
+            ctx.model_variants
+                .insert("formula-rec".into(), Self::variant_part(v).to_string());
         }
         if let Some(v) = &self.config.text_det_model {
             ctx.model_variants
                 .insert(category::TEXT_DETECTION.into(), v.clone());
-            ctx.model_variants.insert("text-det".into(), v.clone());
+            ctx.model_variants
+                .insert("text-det".into(), Self::variant_part(v).to_string());
         }
         if let Some(v) = &self.config.text_rec_model {
             ctx.model_variants
                 .insert(category::TEXT_RECOGNITION.into(), v.clone());
-            ctx.model_variants.insert("text-rec".into(), v.clone());
+            ctx.model_variants
+                .insert("text-rec".into(), Self::variant_part(v).to_string());
         }
         if let Some(v) = &self.config.table_det_model {
             ctx.model_variants
                 .insert(category::TABLE_DETECTION.into(), v.clone());
-            ctx.model_variants.insert("table-det".into(), v.clone());
+            ctx.model_variants
+                .insert("table-det".into(), Self::variant_part(v).to_string());
         }
         if let Some(v) = &self.config.table_struct_model {
             ctx.model_variants
                 .insert(category::TABLE_STRUCTURE.into(), v.clone());
-            ctx.model_variants.insert("table-struct".into(), v.clone());
+            ctx.model_variants
+                .insert("table-struct".into(), Self::variant_part(v).to_string());
         }
         if let Some(v) = &self.config.handwriting_det_model {
             ctx.model_variants
                 .insert(category::HANDWRITING_RECOGNITION.into(), v.clone());
             ctx.model_variants
-                .insert("handwriting-det".into(), v.clone());
+                .insert("handwriting-det".into(), Self::variant_part(v).to_string());
         }
 
         ctx

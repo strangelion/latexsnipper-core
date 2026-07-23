@@ -1,5 +1,9 @@
 use crate::model_resolver::ModelId;
-use crate::RuntimeBackend;
+use crate::runtime_registry::RuntimeRegistry;
+use crate::{
+    AccelerationMode, ModelHandle, ResolvedRuntimeVariant, RuntimeBackend,
+    RuntimeSessionCompatibility,
+};
 use latexsnipper_foundation::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -189,8 +193,104 @@ pub trait ModelPackage: Send + Sync {
     /// Get the model descriptor (task, version, specs).
     fn descriptor(&self) -> &ModelDescriptor;
 
-    /// Create an executor for this model.
+    /// Create an executor for this model using a legacy runtime backend.
+    ///
+    /// Prefer [`create_executor_with_context`] for new code — it ensures the
+    /// executor uses the same runtime that was resolved during model selection.
     fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>>;
+
+    /// Create an executor using the resolved runtime context.
+    ///
+    /// The default implementation wraps the resolved variant in a
+    /// [`VariantRuntimeBackend`] and delegates to [`create_executor`].
+    /// This ensures the executor uses the same runtime that was
+    /// selected during model resolution (e.g. Paddle, ONNX, TensorRT),
+    /// not the engine's default runtime.
+    fn create_executor_with_context(
+        &self,
+        ctx: &ModelExecutionContext,
+    ) -> Result<Box<dyn ModelExecutor>> {
+        let backend = Arc::new(VariantRuntimeBackend {
+            registry: ctx.runtime_registry.clone(),
+            resolved: ctx.resolved_runtime.clone(),
+        });
+        self.create_executor(backend)
+    }
+}
+
+// ── VariantRuntimeBackend ─────────────────────────────────────────────
+
+/// A [`RuntimeBackend`] that creates sessions from a pre-resolved
+/// [`ResolvedRuntimeVariant`] rather than the engine's default runtime.
+///
+/// This is the bridge between model selection and actual execution:
+/// when a model is resolved to use a specific runtime (e.g. Paddle
+/// for PP-FormulaNet), this backend ensures sessions are created
+/// with that runtime.
+struct VariantRuntimeBackend {
+    registry: Arc<RuntimeRegistry>,
+    resolved: ResolvedRuntimeVariant,
+}
+
+impl RuntimeBackend for VariantRuntimeBackend {
+    fn create_session(
+        &self,
+        _handle: &ModelHandle,
+        _acceleration: AccelerationMode,
+    ) -> Result<Box<dyn crate::InferenceSession>> {
+        let session = self.registry.create_resolved_session(&self.resolved)?;
+        Ok(Box::new(RuntimeSessionCompatibility::new(session)))
+    }
+
+    fn name(&self) -> &str {
+        self.resolved.runtime.as_str()
+    }
+
+    fn is_available(&self) -> bool {
+        true
+    }
+}
+
+/// A fully resolved model ready for execution.
+///
+/// Created by the engine after model selection and runtime resolution.
+/// Pipeline nodes use this to create executors with the exact runtime
+/// that was selected.
+#[derive(Clone)]
+pub struct PreparedModel {
+    /// Model identifier (category/variant).
+    pub id: String,
+    /// The model package (adapter-created).
+    pub package: Arc<dyn ModelPackage>,
+    /// The resolved runtime variant (specific runtime + options + artifacts).
+    pub runtime: ResolvedRuntimeVariant,
+}
+
+impl PreparedModel {
+    pub fn new(
+        id: String,
+        package: Arc<dyn ModelPackage>,
+        runtime: ResolvedRuntimeVariant,
+    ) -> Self {
+        Self {
+            id,
+            package,
+            runtime,
+        }
+    }
+}
+
+/// Context passed to [`ModelPackage::create_executor_with_context`].
+///
+/// Contains everything needed to create a runtime session using the
+/// exact resolved runtime variant.
+pub struct ModelExecutionContext {
+    /// Canonical runtime registry for creating sessions.
+    pub runtime_registry: Arc<RuntimeRegistry>,
+    /// The resolved runtime variant to use.
+    pub resolved_runtime: ResolvedRuntimeVariant,
+    /// Maximum intra-op threads.
+    pub max_threads: usize,
 }
 
 /// A model executor — runs inference on a loaded model.

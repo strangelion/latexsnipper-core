@@ -238,14 +238,14 @@ impl RuntimeBackend for RegistryRuntimeBackend {
     }
 }
 
-struct RuntimeSessionCompatibility {
+pub struct RuntimeSessionCompatibility {
     inner: Box<dyn crate::RuntimeSession>,
     input_names: Vec<String>,
     output_names: Vec<String>,
 }
 
 impl RuntimeSessionCompatibility {
-    fn new(inner: Box<dyn crate::RuntimeSession>) -> Self {
+    pub fn new(inner: Box<dyn crate::RuntimeSession>) -> Self {
         let input_names = inner
             .metadata()
             .inputs
