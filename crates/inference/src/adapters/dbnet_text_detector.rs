@@ -2,8 +2,8 @@ use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_model::ModelConfig;
 use latexsnipper_runtime::{
     AccelerationMode, DetectionQuad, InferenceContext, InferenceSession, ModelDescriptor,
-    ModelExecutor, ModelId, ModelInput, ModelOutput, ModelPackage, ModelTask, RuntimeBackend,
-    TensorDtype, TensorSpec,
+    ModelExecutionContext, ModelExecutor, ModelId, ModelInput, ModelOutput, ModelPackage,
+    ModelTask, RuntimeBackend, RuntimeSessionCompatibility, TensorDtype, TensorSpec,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,10 +11,6 @@ use std::sync::Arc;
 use crate::text_detector::{detect_text, TextDetParams};
 use crate::types::DetectionBox;
 
-/// DBNet text detection model package.
-///
-/// Config-driven: reads input/output names, preprocessing, and DBNet postprocessing
-/// parameters from config.json. Supports both PP-OCR and OpenOCR model variants.
 pub struct DbNetTextDetectorPackage {
     descriptor: ModelDescriptor,
     model_path: Option<PathBuf>,
@@ -22,16 +18,13 @@ pub struct DbNetTextDetectorPackage {
 }
 
 impl DbNetTextDetectorPackage {
-    /// Create from model config.
     pub fn from_config(config: &ModelConfig, model_id: ModelId) -> Self {
         let params = TextDetParams::from_config(config);
-
         let input_shape = config
             .input
             .as_ref()
             .map(|i| i.shape.iter().map(|s| *s as usize).collect())
             .unwrap_or_else(|| vec![1, 3, 960, 960]);
-
         let descriptor = ModelDescriptor {
             id: model_id,
             task: ModelTask::TextDetection,
@@ -51,7 +44,6 @@ impl DbNetTextDetectorPackage {
             }],
             artifact_paths: vec![],
         };
-
         Self {
             descriptor,
             model_path: None,
@@ -59,7 +51,6 @@ impl DbNetTextDetectorPackage {
         }
     }
 
-    /// Set the model file path.
     pub fn with_model_path(mut self, path: PathBuf) -> Self {
         self.model_path = Some(path);
         self
@@ -72,45 +63,55 @@ impl ModelPackage for DbNetTextDetectorPackage {
     }
 
     fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
-        let model_path = self.model_path.as_ref().ok_or_else(|| {
+        let model_path = self.model_path.clone().ok_or_else(|| {
             SnipperError::Inference("No model path configured for DbNetTextDetector".into())
         })?;
-
         Ok(Box::new(DbNetTextDetectorExecutor {
             descriptor: self.descriptor.clone(),
             params: self.params.clone(),
-            runtime,
-            model_path: model_path.clone(),
+            model_path,
             session: None,
+            _runtime: runtime,
+        }))
+    }
+
+    fn create_executor_with_context(
+        &self,
+        ctx: &ModelExecutionContext,
+    ) -> Result<Box<dyn ModelExecutor>> {
+        let session = ctx.create_session("model")?;
+        Ok(Box::new(DbNetTextDetectorExecutor {
+            descriptor: self.descriptor.clone(),
+            params: self.params.clone(),
+            model_path: self.model_path.clone().unwrap_or_default(),
+            session: Some(Arc::new(Box::new(RuntimeSessionCompatibility::new(
+                session,
+            )))),
+            _runtime: Arc::new(latexsnipper_runtime::StubRuntime::new()),
         }))
     }
 }
 
-/// Executor for DBNet text detection.
 struct DbNetTextDetectorExecutor {
     descriptor: ModelDescriptor,
     params: TextDetParams,
-    runtime: Arc<dyn RuntimeBackend>,
     model_path: PathBuf,
     session: Option<Arc<Box<dyn InferenceSession>>>,
+    _runtime: Arc<dyn RuntimeBackend>,
 }
 
 impl DbNetTextDetectorExecutor {
-    #[allow(clippy::unnecessary_unwrap)]
     fn ensure_loaded(&mut self) -> Result<&Arc<Box<dyn InferenceSession>>> {
-        if self.session.is_some() {
-            return Ok(self.session.as_ref().unwrap());
+        if let Some(ref session) = self.session {
+            return Ok(session);
         }
-
         let handle = latexsnipper_runtime::ModelHandle::with_path(
             self.descriptor.id.composite_key(),
             self.model_path.clone(),
         );
         let session = self
-            .runtime
+            ._runtime
             .create_session(&handle, AccelerationMode::Cpu)?;
-
-        // Fail-fast: validate input name against actual session
         let input_names = session.input_names();
         if !input_names.iter().any(|n| n == &self.params.input_name) {
             return Err(SnipperError::Inference(format!(
@@ -119,7 +120,6 @@ impl DbNetTextDetectorExecutor {
                 self.params.input_name, input_names
             )));
         }
-
         self.session = Some(Arc::new(session));
         Ok(self.session.as_ref().unwrap())
     }
@@ -129,8 +129,6 @@ impl ModelExecutor for DbNetTextDetectorExecutor {
     fn run(&mut self, input: ModelInput, _ctx: &mut InferenceContext) -> Result<ModelOutput> {
         let params = self.params.clone();
         let session = self.ensure_loaded()?.clone();
-
-        // Reconstruct SnipperImage from ModelInput
         let shape = &input.shape;
         if shape.len() != 3 {
             return Err(SnipperError::Inference(format!(
@@ -141,17 +139,14 @@ impl ModelExecutor for DbNetTextDetectorExecutor {
         let height = shape[0] as u32;
         let width = shape[1] as u32;
         let pixels: Vec<u8> = input.data.to_vec();
-
         let image = latexsnipper_image::SnipperImage::new(
             width,
             height,
             latexsnipper_image::color::PixelFormat::Rgb,
             pixels,
         );
-
         let detections: Vec<DetectionBox> =
             detect_text(&image, session.as_ref().as_ref(), &params)?;
-
         let results: Vec<latexsnipper_runtime::DetectionResult> = detections
             .into_iter()
             .map(|d| latexsnipper_runtime::DetectionResult {
@@ -174,7 +169,6 @@ impl ModelExecutor for DbNetTextDetectorExecutor {
                 class_name: d.class_name,
             })
             .collect();
-
         Ok(ModelOutput::Detections(results))
     }
 

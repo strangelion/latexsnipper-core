@@ -2,8 +2,9 @@ use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_model::ModelConfig;
 use latexsnipper_runtime::{
-    AccelerationMode, InferenceContext, InferenceSession, ModelDescriptor, ModelExecutor, ModelId,
-    ModelInput, ModelOutput, ModelPackage, ModelTask, RuntimeBackend, TensorDtype, TensorSpec,
+    AccelerationMode, InferenceContext, InferenceSession, ModelDescriptor, ModelExecutionContext,
+    ModelExecutor, ModelId, ModelInput, ModelOutput, ModelPackage, ModelTask, RuntimeBackend,
+    RuntimeSessionCompatibility, StubRuntime, TensorDtype, TensorSpec,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,7 +18,6 @@ pub struct TrOcrFormulaPackage {
 }
 
 impl TrOcrFormulaPackage {
-    /// Create from a model config.
     pub fn from_config(config: &ModelConfig, model_id: ModelId) -> Self {
         let input_size = config
             .encoder
@@ -25,7 +25,6 @@ impl TrOcrFormulaPackage {
             .and_then(|e| e.input.shape.get(2))
             .copied()
             .unwrap_or(384) as usize;
-
         let descriptor = ModelDescriptor {
             id: model_id,
             task: ModelTask::FormulaRecognition,
@@ -45,7 +44,6 @@ impl TrOcrFormulaPackage {
             }],
             artifact_paths: vec![],
         };
-
         Self {
             descriptor,
             encoder_path: None,
@@ -54,7 +52,6 @@ impl TrOcrFormulaPackage {
         }
     }
 
-    /// Set model paths for encoder, decoder, and tokenizer.
     pub fn with_paths(mut self, encoder: PathBuf, decoder: PathBuf, tokenizer: PathBuf) -> Self {
         self.encoder_path = Some(encoder);
         self.decoder_path = Some(decoder);
@@ -69,37 +66,75 @@ impl ModelPackage for TrOcrFormulaPackage {
     }
 
     fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
-        Ok(Box::new(TrOcrFormulaExecutor {
-            descriptor: self.descriptor.clone(),
+        Ok(Box::new(TrOcrFormulaExecutor::new(
+            self.descriptor.clone(),
+            self.encoder_path.clone(),
+            self.decoder_path.clone(),
+            self.tokenizer_path.clone(),
+            None,
+            None,
             runtime,
-            encoder_path: self.encoder_path.clone(),
-            decoder_path: self.decoder_path.clone(),
-            tokenizer_path: self.tokenizer_path.clone(),
-            encoder_session: None,
-            decoder_session: None,
-        }))
+        )))
+    }
+
+    /// Creates executor with encoder/decoder sessions from the resolved runtime.
+    /// Uses `ctx.create_session("encoder")` and `ctx.create_session("decoder")`
+    /// so the correct ONNX files are selected from the resolved variant's artifacts.
+    fn create_executor_with_context(
+        &self,
+        ctx: &ModelExecutionContext,
+    ) -> Result<Box<dyn ModelExecutor>> {
+        let enc_session = ctx.create_session("encoder")?;
+        let dec_session = ctx.create_session("decoder")?;
+        Ok(Box::new(TrOcrFormulaExecutor::new(
+            self.descriptor.clone(),
+            self.encoder_path.clone(),
+            self.decoder_path.clone(),
+            self.tokenizer_path.clone(),
+            Some(Arc::new(Box::new(RuntimeSessionCompatibility::new(
+                enc_session,
+            )))),
+            Some(Arc::new(Box::new(RuntimeSessionCompatibility::new(
+                dec_session,
+            )))),
+            Arc::new(StubRuntime::new()),
+        )))
     }
 }
 
-/// Executor for TrOCR formula recognition.
-///
-/// Input: `ModelInput` with RGB image bytes (name="image", shape=[H, W, 3])
-/// Output: `ModelOutput::Formula` with LaTeX strings
+type SessionRef<'a> = &'a Arc<Box<dyn InferenceSession>>;
+
 struct TrOcrFormulaExecutor {
     descriptor: ModelDescriptor,
-    runtime: Arc<dyn RuntimeBackend>,
     encoder_path: Option<PathBuf>,
     decoder_path: Option<PathBuf>,
     tokenizer_path: Option<PathBuf>,
     encoder_session: Option<Arc<Box<dyn InferenceSession>>>,
     decoder_session: Option<Arc<Box<dyn InferenceSession>>>,
+    _runtime: Arc<dyn RuntimeBackend>,
 }
 
-/// Type alias for session references.
-type SessionRef<'a> = &'a Arc<Box<dyn InferenceSession>>;
-
 impl TrOcrFormulaExecutor {
-    /// Ensure sessions are loaded, creating from paths if needed.
+    fn new(
+        descriptor: ModelDescriptor,
+        encoder_path: Option<PathBuf>,
+        decoder_path: Option<PathBuf>,
+        tokenizer_path: Option<PathBuf>,
+        encoder_session: Option<Arc<Box<dyn InferenceSession>>>,
+        decoder_session: Option<Arc<Box<dyn InferenceSession>>>,
+        runtime: Arc<dyn RuntimeBackend>,
+    ) -> Self {
+        Self {
+            descriptor,
+            encoder_path,
+            decoder_path,
+            tokenizer_path,
+            encoder_session,
+            decoder_session,
+            _runtime: runtime,
+        }
+    }
+
     #[allow(clippy::unnecessary_unwrap)]
     fn ensure_sessions(&mut self) -> Result<(SessionRef<'_>, SessionRef<'_>, &PathBuf)> {
         if self.encoder_session.is_some()
@@ -119,7 +154,6 @@ impl TrOcrFormulaExecutor {
         let decoder_path = self.decoder_path.as_ref().ok_or_else(|| {
             SnipperError::Inference("No decoder path configured for TrOcrFormula".into())
         })?;
-        // Validate tokenizer path exists
         if self.tokenizer_path.is_none() {
             return Err(SnipperError::Inference(
                 "No tokenizer path configured for TrOcrFormula".into(),
@@ -136,10 +170,10 @@ impl TrOcrFormulaExecutor {
         );
 
         let enc_session = self
-            .runtime
+            ._runtime
             .create_session(&enc_handle, AccelerationMode::Cpu)?;
         let dec_session = self
-            .runtime
+            ._runtime
             .create_session(&dec_handle, AccelerationMode::Cpu)?;
 
         self.encoder_session = Some(Arc::new(enc_session));
@@ -157,7 +191,6 @@ impl ModelExecutor for TrOcrFormulaExecutor {
     fn run(&mut self, input: ModelInput, _ctx: &mut InferenceContext) -> Result<ModelOutput> {
         let (encoder, decoder, tokenizer_path) = self.ensure_sessions()?;
 
-        // Reconstruct SnipperImage from ModelInput
         let shape = &input.shape;
         if shape.len() != 3 {
             return Err(SnipperError::Inference(format!(
@@ -167,16 +200,13 @@ impl ModelExecutor for TrOcrFormulaExecutor {
         }
         let height = shape[0] as u32;
         let width = shape[1] as u32;
-        let pixels: Vec<u8> = input.data.to_vec();
-
         let image = SnipperImage::new(
             width,
             height,
             latexsnipper_image::color::PixelFormat::Rgb,
-            pixels,
+            input.data.to_vec(),
         );
 
-        // Run recognition using the existing inference function
         let params = crate::formula_recognizer::RecognitionParams::default();
         let result = crate::formula_recognizer::recognize_formula(
             &image,
@@ -186,7 +216,6 @@ impl ModelExecutor for TrOcrFormulaExecutor {
             &params,
         )?;
 
-        // Convert to ModelOutput
         Ok(ModelOutput::Formula(vec![
             latexsnipper_runtime::FormulaResult {
                 latex: result.text,

@@ -2,8 +2,9 @@ use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_model::ModelConfig;
 use latexsnipper_runtime::{
-    InferenceContext, InferenceSession, ModelDescriptor, ModelExecutor, ModelId, ModelInput,
-    ModelOutput, ModelPackage, ModelTask, RuntimeBackend, TensorDtype, TensorSpec,
+    InferenceContext, InferenceSession, ModelDescriptor, ModelExecutionContext, ModelExecutor,
+    ModelId, ModelInput, ModelOutput, ModelPackage, ModelTask, RuntimeBackend,
+    RuntimeSessionCompatibility, TensorDtype, TensorSpec,
 };
 use std::sync::Arc;
 
@@ -17,10 +18,8 @@ pub struct YoloV8DetectorPackage {
 }
 
 impl YoloV8DetectorPackage {
-    /// Create from a model config.
     pub fn from_config(config: &ModelConfig, model_id: ModelId) -> Self {
         let params = DetectionParams::from_config(config);
-
         let descriptor = ModelDescriptor {
             id: model_id,
             task: ModelTask::FormulaDetection,
@@ -45,7 +44,6 @@ impl YoloV8DetectorPackage {
             }],
             artifact_paths: vec![],
         };
-
         Self {
             descriptor,
             params,
@@ -53,7 +51,6 @@ impl YoloV8DetectorPackage {
         }
     }
 
-    /// Create with explicit parameters.
     pub fn with_params(params: DetectionParams, model_id: ModelId) -> Self {
         let descriptor = ModelDescriptor {
             id: model_id,
@@ -76,7 +73,6 @@ impl YoloV8DetectorPackage {
             }],
             artifact_paths: vec![],
         };
-
         Self {
             descriptor,
             params,
@@ -84,7 +80,6 @@ impl YoloV8DetectorPackage {
         }
     }
 
-    /// Set the model file path.
     pub fn with_model_path(mut self, path: std::path::PathBuf) -> Self {
         self.model_path = Some(path);
         self
@@ -100,43 +95,51 @@ impl ModelPackage for YoloV8DetectorPackage {
         Ok(Box::new(YoloV8DetectorExecutor {
             descriptor: self.descriptor.clone(),
             params: self.params.clone(),
-            runtime,
             model_path: self.model_path.clone(),
             session: None,
+            _runtime: runtime,
+        }))
+    }
+
+    fn create_executor_with_context(
+        &self,
+        ctx: &ModelExecutionContext,
+    ) -> Result<Box<dyn ModelExecutor>> {
+        let session = ctx.create_session("model")?;
+        Ok(Box::new(YoloV8DetectorExecutor {
+            descriptor: self.descriptor.clone(),
+            params: self.params.clone(),
+            model_path: self.model_path.clone(),
+            session: Some(Arc::new(Box::new(RuntimeSessionCompatibility::new(
+                session,
+            )))),
+            _runtime: Arc::new(latexsnipper_runtime::StubRuntime::new()),
         }))
     }
 }
 
-/// Executor for YOLOv8 formula detection.
-///
-/// Input: `ModelInput` with RGB image bytes (name="image", shape=[H, W, 3])
-/// Output: `ModelOutput::Detections` with bounding boxes
 struct YoloV8DetectorExecutor {
     descriptor: ModelDescriptor,
     params: DetectionParams,
-    runtime: Arc<dyn RuntimeBackend>,
     model_path: Option<std::path::PathBuf>,
     session: Option<Arc<Box<dyn InferenceSession>>>,
+    _runtime: Arc<dyn RuntimeBackend>,
 }
 
 impl YoloV8DetectorExecutor {
-    /// Ensure session is loaded, creating from model_path if needed.
-    #[allow(clippy::unnecessary_unwrap)]
     fn ensure_session(&mut self) -> Result<&Arc<Box<dyn InferenceSession>>> {
-        if self.session.is_some() {
-            return Ok(self.session.as_ref().unwrap());
+        if let Some(ref session) = self.session {
+            return Ok(session);
         }
-
         let model_path = self.model_path.as_ref().ok_or_else(|| {
             SnipperError::Inference("No model path configured for YoloV8Detector".into())
         })?;
-
         let handle = latexsnipper_runtime::ModelHandle::with_path(
             self.descriptor.id.composite_key(),
             model_path.to_path_buf(),
         );
         let session = self
-            .runtime
+            ._runtime
             .create_session(&handle, latexsnipper_runtime::AccelerationMode::Cpu)?;
         self.session = Some(Arc::new(session));
         Ok(self.session.as_ref().unwrap())
@@ -145,12 +148,8 @@ impl YoloV8DetectorExecutor {
 
 impl ModelExecutor for YoloV8DetectorExecutor {
     fn run(&mut self, input: ModelInput, _ctx: &mut InferenceContext) -> Result<ModelOutput> {
-        // Clone params to avoid borrow conflict
         let params = self.params.clone();
         let session = self.ensure_session()?;
-
-        // Reconstruct SnipperImage from ModelInput
-        // Expected input: RGB pixels as bytes, shape = [H, W, 3]
         let shape = &input.shape;
         if shape.len() != 3 {
             return Err(SnipperError::Inference(format!(
@@ -161,18 +160,13 @@ impl ModelExecutor for YoloV8DetectorExecutor {
         let height = shape[0] as u32;
         let width = shape[1] as u32;
         let pixels: Vec<u8> = input.data.to_vec();
-
         let image = SnipperImage::new(
             width,
             height,
             latexsnipper_image::color::PixelFormat::Rgb,
             pixels,
         );
-
-        // Run detection using the existing inference function
         let detections = crate::formula_detector::detect_formulas(&image, &**session, &params)?;
-
-        // Convert to ModelOutput
         let results: Vec<latexsnipper_runtime::DetectionResult> = detections
             .into_iter()
             .map(|d| latexsnipper_runtime::DetectionResult {
@@ -195,7 +189,6 @@ impl ModelExecutor for YoloV8DetectorExecutor {
                 class_name: "formula".to_string(),
             })
             .collect();
-
         Ok(ModelOutput::Detections(results))
     }
 

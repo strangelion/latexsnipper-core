@@ -403,20 +403,7 @@ impl SnipperEngine {
         model_dir: &Path,
         preferred_variant: Option<&str>,
     ) -> Result<(ResolvedRuntimeVariant, Box<dyn RuntimeSession>)> {
-        let mut resolved = self.resolve_model_runtime(manifest, model_dir, preferred_variant)?;
-        if resolved.options.max_threads == 0 {
-            resolved.options.max_threads = self.config.max_threads;
-        }
-        if resolved.options.providers.is_empty()
-            && resolved.options.device == latexsnipper_runtime::DeviceKind::Auto
-        {
-            let compatibility_options =
-                latexsnipper_runtime::RuntimeOptions::from(self.config.acceleration);
-            resolved.options.device = compatibility_options.device;
-            if resolved.runtime == RuntimeKind::OnnxRuntime {
-                resolved.options.providers = compatibility_options.providers;
-            }
-        }
+        let resolved = self.prepare_model_runtime(manifest, model_dir, preferred_variant)?;
         let session = self.runtime_registry.create_resolved_session(&resolved)?;
         Ok((resolved, session))
     }

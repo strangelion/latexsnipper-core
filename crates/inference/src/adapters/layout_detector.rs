@@ -6,8 +6,9 @@
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_model::ModelConfig;
 use latexsnipper_runtime::{
-    AccelerationMode, InferenceContext, InferenceSession, ModelDescriptor, ModelExecutor, ModelId,
-    ModelInput, ModelOutput, ModelPackage, ModelTask, RuntimeBackend, TensorDtype, TensorSpec,
+    AccelerationMode, InferenceContext, InferenceSession, ModelDescriptor, ModelExecutionContext,
+    ModelExecutor, ModelId, ModelInput, ModelOutput, ModelPackage, ModelTask, RuntimeBackend,
+    RuntimeSessionCompatibility, StubRuntime, TensorDtype, TensorSpec,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -101,18 +102,33 @@ impl ModelPackage for LayoutDetectorPackage {
 
         Ok(Box::new(LayoutDetectorExecutor {
             descriptor: self.descriptor.clone(),
-            runtime,
             model_path: model_path.clone(),
             session: None,
+            _runtime: runtime,
+        }))
+    }
+
+    fn create_executor_with_context(
+        &self,
+        ctx: &ModelExecutionContext,
+    ) -> Result<Box<dyn ModelExecutor>> {
+        let session = ctx.create_session("model")?;
+        Ok(Box::new(LayoutDetectorExecutor {
+            descriptor: self.descriptor.clone(),
+            model_path: self.model_path.clone().unwrap_or_default(),
+            session: Some(Arc::new(Box::new(RuntimeSessionCompatibility::new(
+                session,
+            )))),
+            _runtime: Arc::new(StubRuntime::new()),
         }))
     }
 }
 
 struct LayoutDetectorExecutor {
     descriptor: ModelDescriptor,
-    runtime: Arc<dyn RuntimeBackend>,
     model_path: PathBuf,
     session: Option<Arc<Box<dyn InferenceSession>>>,
+    _runtime: Arc<dyn RuntimeBackend>,
 }
 
 impl LayoutDetectorExecutor {
@@ -127,7 +143,7 @@ impl LayoutDetectorExecutor {
             self.model_path.clone(),
         );
         let session = self
-            .runtime
+            ._runtime
             .create_session(&handle, AccelerationMode::Cpu)?;
         self.session = Some(Arc::new(session));
         Ok(self.session.as_ref().unwrap())
