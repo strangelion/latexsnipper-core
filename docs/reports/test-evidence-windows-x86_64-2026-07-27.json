@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-26T17:42:28Z",
+  "commit": "f6d8212fb45f0b358e9143020e62fec95dba2072",
+  "sourceCommit": "f6d8212fb45f0b358e9143020e62fec95dba2072",
+  "worktreeDirty": false,
+  "platform": {
+    "os": "Windows",
+    "release": "11",
+    "architecture": "AMD64",
+    "python": "3.12.12",
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "cargo": "cargo 1.96.0 (30a34c682 2026-05-25)"
+  },
+  "commands": [
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exitCode": 0,
+      "durationSeconds": 2.177,
+      "testSuites": 0,
+      "testsPassed": 0,
+      "testsFailed": 0,
+      "testsIgnored": 0,
+      "testsFiltered": 0,
+      "compilerWarnings": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "check",
+        "--locked",
+        "--workspace",
+        "--all-targets"
+      ],
+      "exitCode": 0,
+      "durationSeconds": 1.704,
+      "testSuites": 0,
+      "testsPassed": 0,
+      "testsFailed": 0,
+      "testsIgnored": 0,
+      "testsFiltered": 0,
+      "compilerWarnings": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "latexsnipper-ast",
+        "-p",
+        "latexsnipper-api-types",
+        "-p",
+        "latexsnipper-artifact",
+        "-p",
+        "latexsnipper-inference",
+        "-p",
+        "latexsnipper-pipeline",
+        "-p",
+        "latexsnipper-runtime",
+        "-p",
+        "latexsnipper-engine",
+        "-p",
+        "latexsnipper-benchmark"
+      ],
+      "exitCode": 0,
+      "durationSeconds": 9.748,
+      "testSuites": 28,
+      "testsPassed": 278,
+      "testsFailed": 0,
+      "testsIgnored": 0,
+      "testsFiltered": 0,
+      "compilerWarnings": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "check",
+        "--locked",
+        "-p",
+        "latexsnipper-runtime",
+        "--example",
+        "mmap_lifecycle",
+        "--features",
+        "runtime-mmap-experimental"
+      ],
+      "exitCode": 0,
+      "durationSeconds": 0.721,
+      "testSuites": 0,
+      "testsPassed": 0,
+      "testsFailed": 0,
+      "testsIgnored": 0,
+      "testsFiltered": 0,
+      "compilerWarnings": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "latexsnipper-ast",
+        "-p",
+        "latexsnipper-api-types",
+        "-p",
+        "latexsnipper-artifact",
+        "-p",
+        "latexsnipper-inference",
+        "-p",
+        "latexsnipper-pipeline",
+        "-p",
+        "latexsnipper-runtime",
+        "-p",
+        "latexsnipper-engine",
+        "-p",
+        "latexsnipper-benchmark",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "durationSeconds": 1.81,
+      "testSuites": 0,
+      "testsPassed": 0,
+      "testsFailed": 0,
+      "testsIgnored": 0,
+      "testsFiltered": 0,
+      "compilerWarnings": 0
+    }
+  ],
+  "tests": {
+    "passed": 278,
+    "failed": 0,
+    "ignored": 0,
+    "filtered": 0
+  },
+  "clippyWarnings": 0,
+  "summary": {
+    "passed": true,
+    "durationSeconds": 16.808,
+    "testsPassed": 278,
+    "testsFailed": 0,
+    "testsIgnored": 0,
+    "testsFiltered": 0,
+    "compilerWarnings": 0
+  },
+  "artifacts": [
+    {
+      "path": "benchmarks/formula-recognition/v1/predictions-trocr-deit-ort-cpu.json",
+      "sizeBytes": 32743,
+      "sha256": "7f8ace5ef91123b5f37b4891cf15f5e6a5b3e5c0d20976e66481b8cf3711c5d9"
+    },
+    {
+      "path": "benchmarks/formula-recognition/v1/report-trocr-deit-ort-cpu.json",
+      "sizeBytes": 104899,
+      "sha256": "689b2b4a27274339501cc2beaefe118522466240b1cc072586630b34bdd66497"
+    },
+    {
+      "path": "docs/reports/decoder-artifact-search-2026-07-27.json",
+      "sizeBytes": 67119,
+      "sha256": "a32dfe74bec9a711e0642426fa8816b6bdeb4898d7f4bf2b86e6e927e20ed8b1"
+    },
+    {
+      "path": "docs/reports/mmap-lifecycle-windows-x86_64-2026-07-27.json",
+      "sizeBytes": 1341,
+      "sha256": "c0432fd340d16a10d9578136480dbb9f08b262186872a57a0cb448edddf7b8fc"
+    },
+    {
+      "path": "docs/reports/paddle-while-state-inspection-2026-07-27.json",
+      "sizeBytes": 20834,
+      "sha256": "2c5725500738e139a1da721b00922101e9591205121b6b83876364cdf0ef6268"
+    },
+    {
+      "path": "docs/reports/provider-smoke-windows-x86_64-2026-07-27.json",
+      "sizeBytes": 3865,
+      "sha256": "f5d958acfc2f065740ab3ea681f3a75c86fe7dab5d154be6d05a5961b7e2cfff"
+    },
+    {
+      "path": "docs/reports/serialization-benchmark-windows-x86_64-2026-07-27.json",
+      "sizeBytes": 1437,
+      "sha256": "3c64380a41856631b6a9480278099a0dc1ce4fa28ddd7ffa6611277eb412d4c8"
+    },
+    {
+      "path": "docs/reports/type-sizes-current-windows-x86_64-2026-07-27.json",
+      "sizeBytes": 567,
+      "sha256": "4bce1e49ac21ace8859073bbffd52a3adbdb96dc79d6e41fb5afe29294732e3c"
+    }
+  ]
+}

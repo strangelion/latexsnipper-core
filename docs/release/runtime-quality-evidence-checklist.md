@@ -2,8 +2,8 @@
 
 Use this checklist before claiming the remaining runtime quality gaps closed.
 
-- [ ] Evidence JSON reports a clean source commit and all command exit codes 0.
-- [ ] Workspace format, check, test, documentation test, and clippy gates pass.
+- [x] Evidence JSON reports a clean source commit and all command exit codes 0.
+- [x] Workspace format, check, test, documentation test, and clippy gates pass.
 - [x] Fixed CPU model smoke creates a session and produces a hashed output.
 - [x] DirectML smoke matches CPU within the recorded tolerance on Windows.
 - [ ] CUDA, TensorRT, and CoreML smoke run on matching physical CI runners.
@@ -21,9 +21,8 @@ Use this checklist before claiming the remaining runtime quality gaps closed.
   default.
 - [x] Dependency duplication is classified; security-sensitive convergence is
   deferred to coordinated upgrades.
-- [ ] Privacy scan finds no username, home path, temporary path, secret, or
+- [x] Privacy scan finds no username, home path, temporary path, secret, or
   unrelated external filename in tracked evidence.
 
 Unchecked items are release blockers for the corresponding capability claim;
 they do not prevent shipping unrelated, already validated functionality.
-
