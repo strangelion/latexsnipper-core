@@ -4,6 +4,8 @@
 //! prediction quality, while benchmark cases measure execution behavior and
 //! incremental equivalence under a reproducible case contract.
 
+pub mod formula;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
