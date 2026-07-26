@@ -17,7 +17,9 @@ latexsnipper-runtime.workspace = true
 latexsnipper-tensor.workspace = true
 latexsnipper-model.workspace = true
 tokenizers.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 log.workspace = true
 ndarray = "0.16"
 regex = "1"
@@ -32,7 +34,6 @@ default = []
 wasm = ["dep:getrandom_03"]
 
 [dev-dependencies]
-serde.workspace = true
 serde_json.workspace = true
 
 [[test]]

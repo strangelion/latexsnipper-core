@@ -1,5 +1,6 @@
 pub mod adapter_registry;
 pub mod adapters;
+pub mod decoder_state;
 pub mod formula_backend;
 pub mod formula_detector;
 pub mod formula_lines;
@@ -24,6 +25,10 @@ pub mod yolo_utils;
 
 pub use adapter_registry::register_builtin_adapters;
 pub use adapters::formula_backend_adapter::FormulaBackendPackage;
+pub use decoder_state::{
+    AttentionKind, AxisSemantic, DecoderDType, DecoderStateEntry, DecoderStateError,
+    DecoderStateObservation, DecoderStateRole, DecoderStateSchema,
+};
 pub use formula_backend::{BackendConfig, FormulaBackend, OnnxFormulaBackend};
 pub use formula_detector::{
     detect_formulas, filter_formula_detections, group_formula_detections, DetectionParams,
