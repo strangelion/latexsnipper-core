@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "version": "formula-normalization-v1",
+  "trim": true,
+  "stripOuterMathDelimiters": true,
+  "collapseAsciiWhitespace": false,
+  "commandAliases": {}
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "baselineRequired": true,
+  "normalizedExactMatchMaximumDrop": 0.01,
+  "characterErrorRateMaximumRelativeIncrease": 0.05,
+  "repeatedTokenFailuresMaximumNewCount": 0,
+  "latexParseSuccessMaximumDrop": 0.0,
+  "latencyP95MaximumRelativeIncrease": 0.15,
+  "latencyRegressionRequiresApproval": true
+}

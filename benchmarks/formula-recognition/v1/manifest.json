@@ -1,0 +1,801 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "latexsnipper-formula-recognition",
+  "datasetVersion": "1.0.0",
+  "normalizationVersion": "formula-normalization-v1",
+  "seed": 42,
+  "samples": [
+    {
+      "id": "simple_000",
+      "image": "images/simple_000.png",
+      "imageSha256": "8dea3550cc7c975a66b60888b6c11f4d81c3825a470e849f195890823f273e54",
+      "groundTruthLatex": "E=mc^2",
+      "normalizedGroundTruth": "E=mc^2",
+      "category": [
+        "simple_inline"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "easy",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_001",
+      "image": "images/simple_001.png",
+      "imageSha256": "bc2ae65e9e7d7e68bc43d9748572be9e29cb4344aa80929291cded51840df99c",
+      "groundTruthLatex": "a^2+b^2=c^2",
+      "normalizedGroundTruth": "a^2+b^2=c^2",
+      "category": [
+        "simple_inline",
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "easy",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_002",
+      "image": "images/simple_002.png",
+      "imageSha256": "0cbbd5ed84ee24d9390ecd443b00d97494b2d64eefe93f23d647bfd5ec768cdb",
+      "groundTruthLatex": "x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}",
+      "normalizedGroundTruth": "x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}",
+      "category": [
+        "fractions_roots"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "easy",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_003",
+      "image": "images/simple_003.png",
+      "imageSha256": "e2987a0fb3c0d81b3b68698d51e3a65e2081224fd30524d301d91cd8ee81aeb7",
+      "groundTruthLatex": "f(x)=x^2+2x+1",
+      "normalizedGroundTruth": "f(x)=x^2+2x+1",
+      "category": [
+        "simple_inline",
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "easy",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_004",
+      "image": "images/simple_004.png",
+      "imageSha256": "30de1441f14b0987e6541b4c21d6d3930211c5b33efd47f75119e01a8c78c075",
+      "groundTruthLatex": "\\sin^2\\theta+\\cos^2\\theta=1",
+      "normalizedGroundTruth": "\\sin^2\\theta+\\cos^2\\theta=1",
+      "category": [
+        "simple_inline",
+        "greek_font_variant"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "easy",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_005",
+      "image": "images/simple_005.png",
+      "imageSha256": "f665ffe8bfaca33a436e1dc0910d284f3d7f27535de5e2da2e34c9d4c4ffb62b",
+      "groundTruthLatex": "e^{i\\pi}+1=0",
+      "normalizedGroundTruth": "e^{i\\pi}+1=0",
+      "category": [
+        "simple_inline",
+        "greek_font_variant"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "easy",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_006",
+      "image": "images/simple_006.png",
+      "imageSha256": "b5a3cbe3b613020534c59810f73a716a6aa873e07888dc514b047dc6cc90e36a",
+      "groundTruthLatex": "\\log_a(xy)=\\log_a x+\\log_a y",
+      "normalizedGroundTruth": "\\log_a(xy)=\\log_a x+\\log_a y",
+      "category": [
+        "simple_inline",
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "easy",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_007",
+      "image": "images/simple_007.png",
+      "imageSha256": "bc3d7857fd0248ce50cb93128edccdf3ae2554b5914de5d8af736aaeaf50c780",
+      "groundTruthLatex": "\\int_0^1 x^2\\,dx=\\frac{1}{3}",
+      "normalizedGroundTruth": "\\int_0^1 x^2\\,dx=\\frac{1}{3}",
+      "category": [
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "easy",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_008",
+      "image": "images/simple_008.png",
+      "imageSha256": "cae096de32722305c608dd070d3c0cea8306f841545bf8da5e9ce47a42685a80",
+      "groundTruthLatex": "\\sum_{n=1}^{\\infty}\\frac{1}{n^2}=\\frac{\\pi^2}{6}",
+      "normalizedGroundTruth": "\\sum_{n=1}^{\\infty}\\frac{1}{n^2}=\\frac{\\pi^2}{6}",
+      "category": [
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "simple_009",
+      "image": "images/simple_009.png",
+      "imageSha256": "6ba7d56d3cb49c5457acbdad1efd16376f840670e1ea8cc1e6ef751d2409edff",
+      "groundTruthLatex": "\\lim_{x\\to 0}\\frac{\\sin x}{x}=1",
+      "normalizedGroundTruth": "\\lim_{x\\to 0}\\frac{\\sin x}{x}=1",
+      "category": [
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_010",
+      "image": "images/fractions_roots_010.png",
+      "imageSha256": "1a123c7bad7df2bc5975c82c7046fa7ced52bd28b28eb1ffae02e906999bddf0",
+      "groundTruthLatex": "\\frac{a}{b}+\\frac{c}{d}=\\frac{ad+bc}{bd}",
+      "normalizedGroundTruth": "\\frac{a}{b}+\\frac{c}{d}=\\frac{ad+bc}{bd}",
+      "category": [
+        "fractions_roots"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_011",
+      "image": "images/fractions_roots_011.png",
+      "imageSha256": "2c17068af6e157a04efec078e97036e967f185058f764b47ce13fbabe372b295",
+      "groundTruthLatex": "\\sqrt{\\frac{x^2+y^2}{2}}\\geq\\frac{x+y}{2}",
+      "normalizedGroundTruth": "\\sqrt{\\frac{x^2+y^2}{2}}\\geq\\frac{x+y}{2}",
+      "category": [
+        "fractions_roots"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_012",
+      "image": "images/fractions_roots_012.png",
+      "imageSha256": "7163a2f5fbf12695497b1b9f17b9b10a6a4af34ff35d48f9803fa8436acd20c6",
+      "groundTruthLatex": "\\int_a^b f(x)\\,dx=F(b)-F(a)",
+      "normalizedGroundTruth": "\\int_a^b f(x)\\,dx=F(b)-F(a)",
+      "category": [
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_013",
+      "image": "images/fractions_roots_013.png",
+      "imageSha256": "64928db45105add68a40c16f4cb78f01e2df010cad59cffa2c050952ad0ddff6",
+      "groundTruthLatex": "\\iint_D f(x,y)\\,dx\\,dy",
+      "normalizedGroundTruth": "\\iint_D f(x,y)\\,dx\\,dy",
+      "category": [
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_014",
+      "image": "images/fractions_roots_014.png",
+      "imageSha256": "97b131ea4bfde17fb558f54abc7a0ddb9fd16556be9cab515199d895143f7ee4",
+      "groundTruthLatex": "\\oint_C \\mathbf{F}\\cdot d\\mathbf{r}",
+      "normalizedGroundTruth": "\\oint_C \\mathbf{F}\\cdot d\\mathbf{r}",
+      "category": [
+        "greek_font_variant"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_015",
+      "image": "images/fractions_roots_015.png",
+      "imageSha256": "e72f5d49b5d77b049db2da90c5f08cee7729a984925f79bf58a5213d8983a38a",
+      "groundTruthLatex": "\\sum_{k=0}^n \\binom{n}{k}=2^n",
+      "normalizedGroundTruth": "\\sum_{k=0}^n \\binom{n}{k}=2^n",
+      "category": [
+        "integral_sum_limit",
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_016",
+      "image": "images/fractions_roots_016.png",
+      "imageSha256": "40dc83ae15a7befcf348e870cd9394bba52ea59d1cd91278dbd03ad3b2429af6",
+      "groundTruthLatex": "\\prod_{i=1}^n i=n!",
+      "normalizedGroundTruth": "\\prod_{i=1}^n i=n!",
+      "category": [
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_017",
+      "image": "images/fractions_roots_017.png",
+      "imageSha256": "b5ea2a6f270a44d023b46c2eddc2bfc520676cc16c2fb36ddc7311d64bcb6b5a",
+      "groundTruthLatex": "\\sqrt[3]{x^3+y^3}\\neq x+y",
+      "normalizedGroundTruth": "\\sqrt[3]{x^3+y^3}\\neq x+y",
+      "category": [
+        "fractions_roots"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_018",
+      "image": "images/fractions_roots_018.png",
+      "imageSha256": "c50797e9627fabb0f5a29c200c174ada9c93215a9028dec8b2fefbed7b64d3a1",
+      "groundTruthLatex": "\\frac{\\partial^2 u}{\\partial x^2}+\\frac{\\partial^2 u}{\\partial y^2}=0",
+      "normalizedGroundTruth": "\\frac{\\partial^2 u}{\\partial x^2}+\\frac{\\partial^2 u}{\\partial y^2}=0",
+      "category": [
+        "fractions_roots",
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "fractions_roots_019",
+      "image": "images/fractions_roots_019.png",
+      "imageSha256": "05696fd91d4123213e4e94dbb601bf6fed6edacb3d0093eb950d5ea1ca84adc5",
+      "groundTruthLatex": "\\int_{-\\infty}^{\\infty}e^{-x^2}dx=\\sqrt{\\pi}",
+      "normalizedGroundTruth": "\\int_{-\\infty}^{\\infty}e^{-x^2}dx=\\sqrt{\\pi}",
+      "category": [
+        "fractions_roots",
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "matrices_cases_020",
+      "image": "images/matrices_cases_020.png",
+      "imageSha256": "434b00a72fad6aa71139c7ccc1faaafe48655db4a592f50eba52f912567b9f87",
+      "groundTruthLatex": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+      "normalizedGroundTruth": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+      "category": [
+        "matrix_piecewise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with typst; contains no user data."
+    },
+    {
+      "id": "matrices_cases_021",
+      "image": "images/matrices_cases_021.png",
+      "imageSha256": "076dccc5b18e8c8e37a59122c37cfc76faa3f48c169eb419e43d610b0e21e74f",
+      "groundTruthLatex": "\\begin{bmatrix}1&0\\\\0&1\\end{bmatrix}",
+      "normalizedGroundTruth": "\\begin{bmatrix}1&0\\\\0&1\\end{bmatrix}",
+      "category": [
+        "matrix_piecewise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with typst; contains no user data."
+    },
+    {
+      "id": "matrices_cases_022",
+      "image": "images/matrices_cases_022.png",
+      "imageSha256": "7b89aed2625d88621fd3999a6fa467af45350f7b9c22f81caedade3aae5ef8f1",
+      "groundTruthLatex": "A=\\begin{pmatrix}\\alpha&\\beta\\\\\\gamma&\\delta\\end{pmatrix}",
+      "normalizedGroundTruth": "A=\\begin{pmatrix}\\alpha&\\beta\\\\\\gamma&\\delta\\end{pmatrix}",
+      "category": [
+        "matrix_piecewise",
+        "greek_font_variant"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with typst; contains no user data."
+    },
+    {
+      "id": "matrices_cases_023",
+      "image": "images/matrices_cases_023.png",
+      "imageSha256": "a511e4eb5e1c2e8ff80d93bb247d2ff20733d242d2b0ac3ea553f6e68862f0c0",
+      "groundTruthLatex": "\\det\\begin{pmatrix}x&1\\\\1&x\\end{pmatrix}=x^2-1",
+      "normalizedGroundTruth": "\\det\\begin{pmatrix}x&1\\\\1&x\\end{pmatrix}=x^2-1",
+      "category": [
+        "matrix_piecewise",
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with typst; contains no user data."
+    },
+    {
+      "id": "matrices_cases_024",
+      "image": "images/matrices_cases_024.png",
+      "imageSha256": "d139410332a98021b7f7eed06e2a377706589162c0b30f7fc95d73f5d5b2a67e",
+      "groundTruthLatex": "\\begin{array}{cc}\\text{速度}&v\\\\\\text{时间}&t\\end{array}",
+      "normalizedGroundTruth": "\\begin{array}{cc}\\text{速度}&v\\\\\\text{时间}&t\\end{array}",
+      "category": [
+        "matrix_piecewise",
+        "mixed_chinese_english"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with typst; contains no user data."
+    },
+    {
+      "id": "matrices_cases_025",
+      "image": "images/matrices_cases_025.png",
+      "imageSha256": "d83bce9c1c7f99bcc7d19ce80c3f8d615cdb5fe8fea581e64fc3357def4384c4",
+      "groundTruthLatex": "f(x)=\\begin{cases}\\text{正数},&x>0\\\\\\text{非正数},&x\\leq0\\end{cases}",
+      "normalizedGroundTruth": "f(x)=\\begin{cases}\\text{正数},&x>0\\\\\\text{非正数},&x\\leq0\\end{cases}",
+      "category": [
+        "matrix_piecewise",
+        "mixed_chinese_english"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with typst; contains no user data."
+    },
+    {
+      "id": "matrices_cases_026",
+      "image": "images/matrices_cases_026.png",
+      "imageSha256": "f11e387abb4505418fad3309f1eff5de59846aaa5766117fa8a59565e54640e7",
+      "groundTruthLatex": "\\bigcap_{i=1}^{\\infty}A_i=\\emptyset",
+      "normalizedGroundTruth": "\\bigcap_{i=1}^{\\infty}A_i=\\emptyset",
+      "category": [
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "matrices_cases_027",
+      "image": "images/matrices_cases_027.png",
+      "imageSha256": "7d60d7b2b6495b62d02dfcb6322c71b46825c51f0bde2c237fd129088773fe3b",
+      "groundTruthLatex": "\\bigoplus_{k=0}^{n-1}\\mathbb{Z}_k",
+      "normalizedGroundTruth": "\\bigoplus_{k=0}^{n-1}\\mathbb{Z}_k",
+      "category": [
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "matrices_cases_028",
+      "image": "images/matrices_cases_028.png",
+      "imageSha256": "d02e5797f542d5315fee7792ee21b5df3e0aeb93d8e0aae33a964098538ba97b",
+      "groundTruthLatex": "\\left.\\frac{df}{dx}\\right|_{x=0}=0",
+      "normalizedGroundTruth": "\\left.\\frac{df}{dx}\\right|_{x=0}=0",
+      "category": [
+        "simple_inline"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "matrices_cases_029",
+      "image": "images/matrices_cases_029.png",
+      "imageSha256": "ec5cb02e50d1ec0cdab91bc797bf8ea5f8f173239ff2a6ba438fa7756e9ffa6c",
+      "groundTruthLatex": "\\sum_{i=1}^{26}a_i=a_1+a_2+\\cdots+a_{26}",
+      "normalizedGroundTruth": "\\sum_{i=1}^{26}a_i=a_1+a_2+\\cdots+a_{26}",
+      "category": [
+        "long_multi_relation"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_030",
+      "image": "images/long_complex_030.png",
+      "imageSha256": "9e21be614dd6994c806591c30f36728711002429c9bb45c8097e284dabb7eb33",
+      "groundTruthLatex": "\\frac{d}{dx}\\left(\\frac{f(x)}{g(x)}\\right)=\\frac{f'(x)g(x)-f(x)g'(x)}{[g(x)]^2}",
+      "normalizedGroundTruth": "\\frac{d}{dx}\\left(\\frac{f(x)}{g(x)}\\right)=\\frac{f'(x)g(x)-f(x)g'(x)}{[g(x)]^2}",
+      "category": [
+        "long_multi_relation",
+        "fractions_roots"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_031",
+      "image": "images/long_complex_031.png",
+      "imageSha256": "00a31b457baed2af6d846929edf18dda913144b7a8d307e5194d3032a2a8d4cf",
+      "groundTruthLatex": "\\iiint_V \\nabla\\cdot\\mathbf{F}\\,dV=\\oiint_S \\mathbf{F}\\cdot d\\mathbf{S}",
+      "normalizedGroundTruth": "\\iiint_V \\nabla\\cdot\\mathbf{F}\\,dV=\\oiint_S \\mathbf{F}\\cdot d\\mathbf{S}",
+      "category": [
+        "long_multi_relation",
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "medium",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_032",
+      "image": "images/long_complex_032.png",
+      "imageSha256": "6c0c2e6855c3af9fd33c0af196a9d3588ed946b3328e032bd6d29782ce40d62d",
+      "groundTruthLatex": "\\sum_{n=0}^{\\infty}\\frac{f^{(n)}(a)}{n!}(x-a)^n",
+      "normalizedGroundTruth": "\\sum_{n=0}^{\\infty}\\frac{f^{(n)}(a)}{n!}(x-a)^n",
+      "category": [
+        "long_multi_relation",
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_033",
+      "image": "images/long_complex_033.png",
+      "imageSha256": "40fa5398dc881922e7e13867d0a9657686f11bfcf86c8cf75f9341ee1c9ad792",
+      "groundTruthLatex": "\\det(A)=\\varepsilon_{ijk}a_{1i}a_{2j}a_{3k}",
+      "normalizedGroundTruth": "\\det(A)=\\varepsilon_{ijk}a_{1i}a_{2j}a_{3k}",
+      "category": [
+        "greek_font_variant",
+        "superscript_subscript"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_034",
+      "image": "images/long_complex_034.png",
+      "imageSha256": "6f9b21218f80a65219628be97f1bf80fd1b8218f5ab10f14e70a2f99e7e994de",
+      "groundTruthLatex": "\\frac{\\partial(f,g)}{\\partial(x,y)}=f_x g_y-f_y g_x",
+      "normalizedGroundTruth": "\\frac{\\partial(f,g)}{\\partial(x,y)}=f_x g_y-f_y g_x",
+      "category": [
+        "long_multi_relation",
+        "fractions_roots"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_035",
+      "image": "images/long_complex_035.png",
+      "imageSha256": "c9f0578d109fbbbe2eb168a6d67d14e0c7158f31249d0e6739cf039fa3cf1b46",
+      "groundTruthLatex": "\\int_0^{2\\pi}\\sqrt{\\left(\\frac{dx}{dt}\\right)^2+\\left(\\frac{dy}{dt}\\right)^2}\\,dt",
+      "normalizedGroundTruth": "\\int_0^{2\\pi}\\sqrt{\\left(\\frac{dx}{dt}\\right)^2+\\left(\\frac{dy}{dt}\\right)^2}\\,dt",
+      "category": [
+        "long_multi_relation",
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_036",
+      "image": "images/long_complex_036.png",
+      "imageSha256": "fdffc44729ccd997d15af38437f7df5a3828ca867b1f7b8fea86b5438cac4624",
+      "groundTruthLatex": "\\lim_{n\\to\\infty}\\left(1+\\frac{1}{n}\\right)^n=e",
+      "normalizedGroundTruth": "\\lim_{n\\to\\infty}\\left(1+\\frac{1}{n}\\right)^n=e",
+      "category": [
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_037",
+      "image": "images/long_complex_037.png",
+      "imageSha256": "ea2ee62cc84ecab434745ff788c925b870a7d76e502aa0a34949bbac2dd145fe",
+      "groundTruthLatex": "\\nabla\\times\\mathbf{E}=-\\frac{\\partial\\mathbf{B}}{\\partial t},\\ \\nabla\\times\\mathbf{B}=\\mu_0\\mathbf{J}+\\mu_0\\epsilon_0\\frac{\\partial\\mathbf{E}}{\\partial t}",
+      "normalizedGroundTruth": "\\nabla\\times\\mathbf{E}=-\\frac{\\partial\\mathbf{B}}{\\partial t},\\ \\nabla\\times\\mathbf{B}=\\mu_0\\mathbf{J}+\\mu_0\\epsilon_0\\frac{\\partial\\mathbf{E}}{\\partial t}",
+      "category": [
+        "long_multi_relation",
+        "greek_font_variant"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_038",
+      "image": "images/long_complex_038.png",
+      "imageSha256": "f65df2b45bb05b8583163406b83ce6b4a230f69ed2147813b5bd2ec50b625188",
+      "groundTruthLatex": "\\Phi(x)=\\frac{1}{\\sqrt{2\\pi}}\\int_{-\\infty}^x e^{-t^2/2}\\,dt",
+      "normalizedGroundTruth": "\\Phi(x)=\\frac{1}{\\sqrt{2\\pi}}\\int_{-\\infty}^x e^{-t^2/2}\\,dt",
+      "category": [
+        "long_multi_relation",
+        "greek_font_variant",
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "long_complex_039",
+      "image": "images/long_complex_039.png",
+      "imageSha256": "0be7816906b7aed7b27f51e42d7e930090a608a7f5b263345b2f90a5ca7728e9",
+      "groundTruthLatex": "\\Gamma(z)=\\int_0^{\\infty}t^{z-1}e^{-t}\\,dt\\quad(\\Re(z)>0)",
+      "normalizedGroundTruth": "\\Gamma(z)=\\int_0^{\\infty}t^{z-1}e^{-t}\\,dt\\quad(\\Re(z)>0)",
+      "category": [
+        "long_multi_relation",
+        "integral_sum_limit"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "clean",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "handwritten_040",
+      "image": "images/handwritten_040.png",
+      "imageSha256": "941607ef796269fbed994217edba818f3853537a6ced6ea83a52fbaba4295abc",
+      "groundTruthLatex": "y=mx+b",
+      "normalizedGroundTruth": "y=mx+b",
+      "category": [
+        "simple_inline",
+        "tilted_perspective_noise",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "noisy_tilted",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "handwritten_041",
+      "image": "images/handwritten_041.png",
+      "imageSha256": "3f787cbc75e0c00ffaad5ddc6989b42d6c2dae508dd0c2c2b39a48bcba7c929e",
+      "groundTruthLatex": "A=\\pi r^2",
+      "normalizedGroundTruth": "A=\\pi r^2",
+      "category": [
+        "simple_inline",
+        "blurred_low_resolution",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "low_resolution",
+      "notes": "Deterministic synthetic fixture rendered with typst-low-resolution; contains no user data."
+    },
+    {
+      "id": "handwritten_042",
+      "image": "images/handwritten_042.png",
+      "imageSha256": "1792d62c0cf08aaabe53deea901f9c78dfbdcc33408751df09f51114aa62af67",
+      "groundTruthLatex": "V=\\frac{4}{3}\\pi r^3",
+      "normalizedGroundTruth": "V=\\frac{4}{3}\\pi r^3",
+      "category": [
+        "fractions_roots",
+        "tilted_perspective_noise",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "noisy_tilted",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "handwritten_043",
+      "image": "images/handwritten_043.png",
+      "imageSha256": "a43a98630c81084fd36c646c4f5681fdee668a3f090596ab027ca59208757ad5",
+      "groundTruthLatex": "d=\\sqrt{(x_2-x_1)^2+(y_2-y_1)^2}",
+      "normalizedGroundTruth": "d=\\sqrt{(x_2-x_1)^2+(y_2-y_1)^2}",
+      "category": [
+        "superscript_subscript",
+        "tilted_perspective_noise",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "noisy_tilted",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "handwritten_044",
+      "image": "images/handwritten_044.png",
+      "imageSha256": "662488ef58c6bb664b81c3a79751850ea317bad9b680d2c5b92da25cb5d22d96",
+      "groundTruthLatex": "S=\\frac{n}{2}(a_1+a_n)",
+      "normalizedGroundTruth": "S=\\frac{n}{2}(a_1+a_n)",
+      "category": [
+        "fractions_roots",
+        "tilted_perspective_noise",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "noisy_tilted",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "handwritten_045",
+      "image": "images/handwritten_045.png",
+      "imageSha256": "d337acbbfce335ca65c641f566fa67ee76fbec1f3a1186a690df6d9369e0803c",
+      "groundTruthLatex": "P(A|B)=\\frac{P(B|A)P(A)}{P(B)}",
+      "normalizedGroundTruth": "P(A|B)=\\frac{P(B|A)P(A)}{P(B)}",
+      "category": [
+        "fractions_roots",
+        "tilted_perspective_noise",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "noisy_tilted",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "handwritten_046",
+      "image": "images/handwritten_046.png",
+      "imageSha256": "0c067ce3f60ae2069d3fc3a26cccc3d192e1faba2ef786e6f1dca9e3b53ebc31",
+      "groundTruthLatex": "\\bar{x}=\\frac{1}{n}\\sum_{i=1}^n x_i",
+      "normalizedGroundTruth": "\\bar{x}=\\frac{1}{n}\\sum_{i=1}^n x_i",
+      "category": [
+        "integral_sum_limit",
+        "tilted_perspective_noise",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "noisy_tilted",
+      "notes": "Deterministic synthetic fixture rendered with matplotlib_mathtext; contains no user data."
+    },
+    {
+      "id": "handwritten_047",
+      "image": "images/handwritten_047.png",
+      "imageSha256": "8079efcc42d8831b479b64d10b7120d3755014fd8c5e71d8a171cf1f98860af1",
+      "groundTruthLatex": "z=\\frac{x-\\mu}{\\sigma}",
+      "normalizedGroundTruth": "z=\\frac{x-\\mu}{\\sigma}",
+      "category": [
+        "greek_font_variant",
+        "blurred_low_resolution",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "low_resolution",
+      "notes": "Deterministic synthetic fixture rendered with typst-low-resolution; contains no user data."
+    },
+    {
+      "id": "handwritten_048",
+      "image": "images/handwritten_048.png",
+      "imageSha256": "483eb4be9656e463d9cd5ff9698eb7034830afb94faf3971b8ff297a5a970f6f",
+      "groundTruthLatex": "F=G\\frac{m_1m_2}{r^2}",
+      "normalizedGroundTruth": "F=G\\frac{m_1m_2}{r^2}",
+      "category": [
+        "superscript_subscript",
+        "blurred_low_resolution",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "low_resolution",
+      "notes": "Deterministic synthetic fixture rendered with typst-low-resolution; contains no user data."
+    },
+    {
+      "id": "handwritten_049",
+      "image": "images/handwritten_049.png",
+      "imageSha256": "133866e62a7b92c7689381f467de6609bcfee32fb98a8a7422ad02e4252d3b66",
+      "groundTruthLatex": "E=\\hbar\\omega",
+      "normalizedGroundTruth": "E=\\hbar\\omega",
+      "category": [
+        "greek_font_variant",
+        "blurred_low_resolution",
+        "synthetic_handwriting_noise"
+      ],
+      "source": "synthetic",
+      "license": "CC0-1.0",
+      "difficulty": "hard",
+      "imageQuality": "low_resolution",
+      "notes": "Deterministic synthetic fixture rendered with typst-low-resolution; contains no user data."
+    }
+  ]
+}
