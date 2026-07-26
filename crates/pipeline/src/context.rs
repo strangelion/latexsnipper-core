@@ -8,7 +8,37 @@ use latexsnipper_runtime::{
     RuntimeBackend, RuntimeRegistry, SharedModelResolver,
 };
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+
+/// Cloneable cancellation signal shared between an application and a running
+/// pipeline. Cancellation is observed at safe pipeline boundaries.
+#[derive(Debug, Clone, Default)]
+pub struct PipelineCancellationToken {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl PipelineCancellationToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
+}
+
+/// Framework-neutral observer for pipeline node progress.
+pub trait PipelineProgressObserver: Send + Sync {
+    fn node_started(&self, node: &str, current: usize, total: usize);
+    fn node_completed(&self, node: &str, current: usize, total: usize);
+}
 
 /// Diagnostic event level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,6 +97,14 @@ pub struct PipelineContext {
     pub metadata: HashMap<String, serde_json::Value>,
     /// Whether the pipeline was cancelled.
     pub cancelled: bool,
+    /// Shared external cancellation signal.
+    cancellation_token: Option<PipelineCancellationToken>,
+    /// Optional request deadline.
+    deadline: Option<std::time::Instant>,
+    /// Original timeout used for a stable timeout error.
+    timeout_ms: Option<u64>,
+    /// Optional node-boundary observer.
+    progress_observer: Option<Arc<dyn PipelineProgressObserver>>,
     /// Models directory path.
     pub models_dir: Option<std::path::PathBuf>,
     /// Runtime backend for inference sessions (injected by engine).
@@ -113,6 +151,10 @@ impl PipelineContext {
             artifacts: PipelineArtifacts::default(),
             metadata: HashMap::new(),
             cancelled: false,
+            cancellation_token: None,
+            deadline: None,
+            timeout_ms: None,
+            progress_observer: None,
             models_dir: None,
             backend: None,
             runtime_registry: None,
@@ -324,6 +366,49 @@ impl PipelineContext {
     /// Cancel the pipeline.
     pub fn cancel(&mut self) {
         self.cancelled = true;
+    }
+
+    /// Attach a cloneable external cancellation signal.
+    pub fn set_cancellation_token(&mut self, token: PipelineCancellationToken) {
+        self.cancellation_token = Some(token);
+    }
+
+    /// Set a request deadline relative to now.
+    pub fn set_timeout(&mut self, timeout: std::time::Duration) {
+        let timeout_ms = u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX);
+        self.deadline = std::time::Instant::now().checked_add(timeout);
+        self.timeout_ms = Some(timeout_ms);
+    }
+
+    /// Attach an observer that receives node-boundary progress.
+    pub fn set_progress_observer(&mut self, observer: Arc<dyn PipelineProgressObserver>) {
+        self.progress_observer = Some(observer);
+    }
+
+    /// Return the currently configured progress observer.
+    pub fn progress_observer(&self) -> Option<&Arc<dyn PipelineProgressObserver>> {
+        self.progress_observer.as_ref()
+    }
+
+    /// Check cancellation and timeout at a safe pipeline boundary.
+    pub fn check_control(&self) -> latexsnipper_foundation::Result<()> {
+        if self.cancelled
+            || self
+                .cancellation_token
+                .as_ref()
+                .is_some_and(PipelineCancellationToken::is_cancelled)
+        {
+            return Err(latexsnipper_foundation::SnipperError::Cancelled);
+        }
+        if self
+            .deadline
+            .is_some_and(|deadline| std::time::Instant::now() >= deadline)
+        {
+            return Err(latexsnipper_foundation::SnipperError::Timeout(
+                self.timeout_ms.unwrap_or(0),
+            ));
+        }
+        Ok(())
     }
 
     /// Record a diagnostic event.

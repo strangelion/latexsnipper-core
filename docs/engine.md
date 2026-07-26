@@ -16,10 +16,14 @@ Engine 是整个 Core 的入口点：
 | 模块 | 文件 | 说明 |
 |---|---|---|
 | `engine` | engine.rs | SnipperEngine（主编排器） |
+| `application` | application.rs | 长生命周期、传输无关的 RecognitionSession |
 | `config` | config.rs | EngineConfig |
 | `metrics` | metrics.rs | RecognitionMetrics + MetricsBuilder |
 | `job` | job.rs | JobQueue |
 | `service` | service.rs | Service trait |
+
+应用、CLI 和未来适配器的长期生命周期入口见
+[`application-integration.md`](application-integration.md)。
 
 ## SnipperEngine
 

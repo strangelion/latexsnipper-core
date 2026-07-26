@@ -50,10 +50,7 @@ impl PipelineNode for PageIteratorNode {
         log::info!("PageIterator: processing {} pages", page_count);
 
         for page_idx in 0..page_count {
-            if ctx.cancelled {
-                log::info!("PageIterator: cancelled at page {}", page_idx);
-                break;
-            }
+            ctx.check_control()?;
 
             log::info!(
                 "PageIterator: processing page {}/{}",

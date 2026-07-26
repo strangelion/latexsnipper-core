@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add the native, transport-neutral `RecognitionSession` application API with
+  long-lived Engine/Runtime ownership, stable profiles, bounded path/bytes/image
+  requests, Document-authoritative results, readiness and warmup reports,
+  progress, node-boundary cancellation, timeout, and structured application
+  errors. Raster CLI recognition now reuses this layer.
 - Add a versioned, fail-closed decoder-state schema for future incremental
   decoder exports. The public types are additive; no existing serialized or
   FFI contract changes. The v3 public source-tree freeze is intentionally

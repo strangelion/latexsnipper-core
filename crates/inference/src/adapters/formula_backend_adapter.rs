@@ -76,7 +76,7 @@ impl ModelPackage for FormulaBackendPackage {
 
     fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
         let diagnostics = runtime.runtime_diagnostics();
-        Ok(Box::new(FormulaBackendExecutor {
+        let mut executor = FormulaBackendExecutor {
             descriptor: self.descriptor.clone(),
             model_dir: self.model_dir.clone(),
             config: self.config.clone(),
@@ -84,7 +84,9 @@ impl ModelPackage for FormulaBackendPackage {
             backend: None,
             runtime_id: diagnostics.runtime,
             provider: diagnostics.selected_provider,
-        }))
+        };
+        executor.ensure_backend()?;
+        Ok(Box::new(executor))
     }
 
     fn create_executor_with_context(
@@ -98,7 +100,7 @@ impl ModelPackage for FormulaBackendPackage {
             .first()
             .map(|provider| provider.name.clone())
             .unwrap_or_else(|| "runtime-default".to_owned());
-        Ok(Box::new(FormulaBackendExecutor {
+        let mut executor = FormulaBackendExecutor {
             descriptor: self.descriptor.clone(),
             model_dir: self.model_dir.clone(),
             config: self.config.clone(),
@@ -106,7 +108,9 @@ impl ModelPackage for FormulaBackendPackage {
             backend: None,
             runtime_id: ctx.resolved_runtime.runtime.to_string(),
             provider,
-        }))
+        };
+        executor.ensure_backend()?;
+        Ok(Box::new(executor))
     }
 }
 

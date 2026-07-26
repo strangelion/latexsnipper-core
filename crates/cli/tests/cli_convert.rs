@@ -1,6 +1,10 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+use latexsnipper_image::color::PixelFormat;
+use latexsnipper_image::decode::encode_png;
+use latexsnipper_image::SnipperImage;
+
 fn workspace() -> std::path::PathBuf {
     let path = std::env::temp_dir().join(format!(
         "latexsnipper-cli-test-{}-{}",
@@ -16,6 +20,37 @@ fn workspace() -> std::path::PathBuf {
 
 fn snipper() -> Command {
     Command::new(env!("CARGO_BIN_EXE_snipper"))
+}
+
+#[test]
+fn raster_recognition_keeps_the_cli_output_contract() {
+    let directory = workspace();
+    let input = directory.join("公式.png");
+    let image = SnipperImage::new(4, 4, PixelFormat::Rgba, vec![255; 4 * 4 * 4]);
+    std::fs::write(&input, encode_png(&image).unwrap()).unwrap();
+
+    let output = snipper()
+        .current_dir(&directory)
+        .args([
+            "recognize",
+            "--input",
+            input.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Processing:"));
+    assert!(stderr.contains("Detected 0 blocks"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("\"schema_version\""));
+
+    std::fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

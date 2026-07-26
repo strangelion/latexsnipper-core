@@ -20,6 +20,7 @@ pub use v3::{
 
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
+use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // RecognizeMode
@@ -35,6 +36,72 @@ pub enum RecognizeMode {
     Handwriting,
     Table,
     FormulaLayout,
+}
+
+/// Stable, application-facing recognition profile.
+///
+/// Unlike the legacy [`RecognizeMode`], this type has an explicit wire
+/// representation that does not depend on Rust debug formatting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RecognitionProfile {
+    Formula,
+    Text,
+    Mixed,
+    Table,
+    Handwriting,
+    FormulaLayout,
+}
+
+impl RecognitionProfile {
+    pub const fn all() -> &'static [Self] {
+        &[
+            Self::Formula,
+            Self::Text,
+            Self::Mixed,
+            Self::Table,
+            Self::Handwriting,
+            Self::FormulaLayout,
+        ]
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Formula => "formula",
+            Self::Text => "text",
+            Self::Mixed => "mixed",
+            Self::Table => "table",
+            Self::Handwriting => "handwriting",
+            Self::FormulaLayout => "formula_layout",
+        }
+    }
+}
+
+impl From<RecognitionProfile> for RecognizeMode {
+    fn from(profile: RecognitionProfile) -> Self {
+        match profile {
+            RecognitionProfile::Formula => Self::Formula,
+            RecognitionProfile::Text => Self::Text,
+            RecognitionProfile::Mixed => Self::Mixed,
+            RecognitionProfile::Table => Self::Table,
+            RecognitionProfile::Handwriting => Self::Handwriting,
+            RecognitionProfile::FormulaLayout => Self::FormulaLayout,
+        }
+    }
+}
+
+impl From<RecognizeMode> for RecognitionProfile {
+    fn from(mode: RecognizeMode) -> Self {
+        match mode {
+            RecognizeMode::Formula => Self::Formula,
+            RecognizeMode::Text => Self::Text,
+            RecognizeMode::Mixed => Self::Mixed,
+            RecognizeMode::Table => Self::Table,
+            RecognizeMode::Handwriting => Self::Handwriting,
+            RecognizeMode::FormulaLayout => Self::FormulaLayout,
+        }
+    }
 }
 
 impl RecognizeMode {
@@ -188,4 +255,36 @@ pub enum StreamItem {
     },
     /// An error occurred during processing.
     Error { message: String },
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    #[test]
+    fn recognition_profile_has_stable_snake_case_values() {
+        let values = RecognitionProfile::all()
+            .iter()
+            .map(|profile| serde_json::to_string(profile).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec![
+                "\"formula\"",
+                "\"text\"",
+                "\"mixed\"",
+                "\"table\"",
+                "\"handwriting\"",
+                "\"formula_layout\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn recognition_profile_and_legacy_mode_are_lossless() {
+        for profile in RecognitionProfile::all() {
+            let mode = RecognizeMode::from(*profile);
+            assert_eq!(RecognitionProfile::from(mode), *profile);
+        }
+    }
 }

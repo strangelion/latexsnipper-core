@@ -24,7 +24,7 @@ pub mod text_recognition_service;
 pub use crate::opendoc_hybrid::DocumentParseMode;
 pub use artifacts::{CropRegion, PipelineArtifacts, RecognizedTable};
 pub use capability::PipelineCapability;
-pub use context::PipelineContext;
+pub use context::{PipelineCancellationToken, PipelineContext, PipelineProgressObserver};
 pub use graph::PipelineGraph;
 pub use latexsnipper_artifact::{
     ArtifactEdge, ArtifactEdgeKind, ArtifactGraph, ArtifactId, ArtifactKind, ArtifactRecord,

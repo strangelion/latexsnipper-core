@@ -1,5 +1,6 @@
 use latexsnipper_foundation::{Result, SnipperError};
 use log::info;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -68,10 +69,7 @@ impl PipelineGraph {
         );
 
         for (i, name) in order.iter().enumerate() {
-            if ctx.cancelled {
-                info!("Pipeline '{}' cancelled at node {}", self.name, name);
-                break;
-            }
+            ctx.check_control()?;
 
             let entry = self
                 .entries
@@ -80,7 +78,23 @@ impl PipelineGraph {
                 .ok_or_else(|| SnipperError::Pipeline(format!("Node '{}' not found", name)))?;
 
             info!("Pipeline '{}' executing node {}: {}", self.name, i, name);
+            if let Some(observer) = ctx.progress_observer() {
+                let observer = observer.clone();
+                let name = name.clone();
+                let _ = catch_unwind(AssertUnwindSafe(|| {
+                    observer.node_started(&name, i, order.len());
+                }));
+            }
+            ctx.check_control()?;
             entry.node.process(ctx).await?;
+            ctx.check_control()?;
+            if let Some(observer) = ctx.progress_observer() {
+                let observer = observer.clone();
+                let name = name.clone();
+                let _ = catch_unwind(AssertUnwindSafe(|| {
+                    observer.node_completed(&name, i + 1, order.len());
+                }));
+            }
             let stage_id = ArtifactId(format!("pipeline:{}:{}", self.name, name));
             ctx.artifacts.artifact_graph.insert(ArtifactRecord {
                 id: stage_id.clone(),
@@ -99,23 +113,21 @@ impl PipelineGraph {
             }
         }
 
-        if !ctx.cancelled {
-            let document_id = ArtifactId(format!("document:{}", self.name));
-            ctx.artifacts.artifact_graph.insert(ArtifactRecord {
-                id: document_id.clone(),
-                kind: ArtifactKind::DocumentAst,
-                stable_id: None,
-                content_ref: Some("Document".to_string()),
-                checksum: None,
-                provenance: Vec::new(),
-            });
-            for name in self.terminal_node_names() {
-                ctx.artifacts.artifact_graph.link(
-                    ArtifactId(format!("pipeline:{}:{}", self.name, name)),
-                    document_id.clone(),
-                    ArtifactEdgeKind::DerivedFrom,
-                );
-            }
+        let document_id = ArtifactId(format!("document:{}", self.name));
+        ctx.artifacts.artifact_graph.insert(ArtifactRecord {
+            id: document_id.clone(),
+            kind: ArtifactKind::DocumentAst,
+            stable_id: None,
+            content_ref: Some("Document".to_string()),
+            checksum: None,
+            provenance: Vec::new(),
+        });
+        for name in self.terminal_node_names() {
+            ctx.artifacts.artifact_graph.link(
+                ArtifactId(format!("pipeline:{}:{}", self.name, name)),
+                document_id.clone(),
+                ArtifactEdgeKind::DerivedFrom,
+            );
         }
 
         info!("Pipeline '{}' completed", self.name);
@@ -234,7 +246,7 @@ use std::collections::HashMap;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TransformNode;
+    use crate::{PipelineCancellationToken, TransformNode};
 
     #[tokio::test]
     async fn run_records_stage_and_document_lineage() {
@@ -259,5 +271,20 @@ mod tests {
             .get(&ArtifactId::from("document:lineage"))
             .is_some());
         assert_eq!(context.artifacts.artifact_graph.edges().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn cancellation_is_reported_at_a_node_boundary() {
+        let mut graph = PipelineGraph::new("cancelled");
+        graph.add_node(Box::new(TransformNode::new("never_runs", |_| {
+            panic!("cancelled pipeline executed a node")
+        })));
+        let token = PipelineCancellationToken::new();
+        token.cancel();
+        let mut context = PipelineContext::new();
+        context.set_cancellation_token(token);
+
+        let error = graph.run(&mut context).await.unwrap_err();
+        assert!(matches!(error, SnipperError::Cancelled));
     }
 }

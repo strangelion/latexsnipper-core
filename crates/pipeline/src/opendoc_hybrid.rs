@@ -8,6 +8,7 @@
 //!   OpenDocHybrid → layout + specialized regions → SpecializedStable → diagnostics
 
 use latexsnipper_foundation::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
@@ -25,7 +26,8 @@ use crate::nodes::{layout_node::LayoutNode, region_resolve_node::RegionResolveNo
 /// - `OpenDocHybrid`: runs layout analysis as a frontend (PP-DocLayout),
 ///   routes regions to specialized recognizers based on layout label.
 ///   Falls back to SpecializedStable if layout model is unavailable.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DocumentParseMode {
     #[default]
     SpecializedStable,

@@ -1,4 +1,6 @@
 pub mod api;
+#[cfg(feature = "native")]
+pub mod application;
 pub mod config;
 pub mod engine;
 pub mod job;
@@ -17,7 +19,10 @@ pub mod chart_understanding;
 pub mod diagram_understanding;
 
 pub use config::EngineConfig;
-pub use engine::{RecognizeMode, RecognizeRequest, RecognizeResponse, SnipperEngine, StreamItem};
+pub use engine::{
+    EngineWarmupEntry, RecognizeMode, RecognizeRequest, RecognizeResponse, SnipperEngine,
+    StreamItem,
+};
 pub use job::{Job, JobQueue, JobStatus};
 pub use latexsnipper_pipeline::DocumentParseMode;
 pub use metrics::{MetricsBuilder, RecognitionMetrics, SerializableMetrics};
@@ -41,7 +46,7 @@ pub use diagram_understanding::{
 
 // Re-export api-types for backward compatibility (wasm/ffi use these via engine)
 pub use latexsnipper_api_types::{
-    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness,
+    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness, RecognitionProfile,
     RecognizeMode as ApiRecognizeMode, RuntimeReadiness, StreamItem as ApiStreamItem,
     TaskReadiness, READINESS_SCHEMA_VERSION,
 };

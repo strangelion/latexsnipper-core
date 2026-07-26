@@ -7,6 +7,10 @@ use latexsnipper_ast::{
 use latexsnipper_conversion::{
     DocumentConverter, DocumentExportService, DocumentImporter, OutputFormat,
 };
+use latexsnipper_engine::application::{
+    RecognitionOptions as ApplicationRecognitionOptions, RecognitionProfile,
+    RecognitionRequest as ApplicationRecognitionRequest, RecognitionSession,
+};
 use latexsnipper_engine::{sdk::Snipper, DocumentParseMode, EngineConfig, RecognizeMode};
 use latexsnipper_export::VisualFormat;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -558,6 +562,61 @@ fn parse_recognize_mode(input: &str) -> Option<RecognizeMode> {
     RecognizeMode::from_label(input)
 }
 
+fn recognize_document(
+    input: &str,
+    parse_mode: DocumentParseMode,
+    recognize_mode: RecognizeMode,
+) -> Result<Document, String> {
+    // Preserve the existing PDF OCR path until Core has an in-process PDF
+    // renderer. The application API intentionally never spawns child processes.
+    if is_pdf_input(std::path::Path::new(input)) {
+        return Snipper::from_file_with_config(
+            input,
+            EngineConfig::default().set_parse_mode(parse_mode),
+            recognize_mode,
+        )
+        .map(|snipper| snipper.document().clone())
+        .map_err(|error| error.to_string());
+    }
+
+    let mut session = RecognitionSession::builder()
+        .parse_mode(parse_mode)
+        .build()
+        .map_err(format_application_error)?;
+    let request = ApplicationRecognitionRequest::from_path(input)
+        .with_profile(RecognitionProfile::from(recognize_mode))
+        .with_options(ApplicationRecognitionOptions {
+            parse_mode: Some(parse_mode),
+            ..ApplicationRecognitionOptions::default()
+        });
+    session
+        .recognize(request)
+        .map(|result| result.document)
+        .map_err(format_application_error)
+}
+
+fn format_application_error(error: latexsnipper_engine::application::ApplicationError) -> String {
+    match error.detail {
+        Some(detail) => format!("{} ({detail})", error.message),
+        None => error.message,
+    }
+}
+
+fn is_pdf_input(path: &std::path::Path) -> bool {
+    let extension_matches = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"));
+    if extension_matches {
+        return true;
+    }
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut signature = [0_u8; 5];
+    file.read_exact(&mut signature).is_ok() && &signature == b"%PDF-"
+}
+
 fn levenshtein_distance(a: &str, b: &str) -> usize {
     let a_len = a.len();
     let b_len = b.len();
@@ -766,23 +825,20 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let config = EngineConfig::default().set_parse_mode(parse_mode);
-
-            let snipper = match Snipper::from_file_with_config(&input, config, recognize_mode) {
-                Ok(s) => s,
+            let document = match recognize_document(&input, parse_mode, recognize_mode) {
+                Ok(document) => document,
                 Err(e) => {
                     eprintln!("Error: {}", e);
                     std::process::exit(1);
                 }
             };
 
-            eprintln!("Detected {} blocks", snipper.document().block_count());
+            eprintln!("Detected {} blocks", document.block_count());
 
             let resolved_format = resolve_format(&format);
 
             if let Some(CliTarget::Export(export_format)) = resolve_cli_target(&resolved_format) {
-                let artifact = snipper
-                    .export_format(export_format)
+                let artifact = DocumentExportService::export(&document, export_format)
                     .unwrap_or_else(|error| {
                         eprintln!("Export error: {}", error);
                         std::process::exit(1);
@@ -822,18 +878,26 @@ fn main() {
             }
 
             let output_result = match resolved_format.as_str() {
-                "latex" | "tex" => snipper.to_latex(),
-                "latex_display" | "display" => snipper.to_format(OutputFormat::LatexDisplay),
-                "latex_equation" | "equation" | "eqn" => {
-                    snipper.to_format(OutputFormat::LatexEquation)
+                "latex" | "tex" => DocumentConverter::new(OutputFormat::Latex).convert(&document),
+                "latex_display" | "display" => {
+                    DocumentConverter::new(OutputFormat::LatexDisplay).convert(&document)
                 }
-                "markdown" | "md" => snipper.to_markdown(),
-                "markdown_inline" | "md_inline" => snipper.to_format(OutputFormat::MarkdownInline),
-                "typst" => snipper.to_typst(),
-                "html" => snipper.to_html(),
-                "mathml" => snipper.to_mathml(),
-                "omml" => snipper.to_omml(),
-                "json" => snipper.to_json(),
+                "latex_equation" | "equation" | "eqn" => {
+                    DocumentConverter::new(OutputFormat::LatexEquation).convert(&document)
+                }
+                "markdown" | "md" => {
+                    DocumentConverter::new(OutputFormat::MarkdownBlock).convert(&document)
+                }
+                "markdown_inline" | "md_inline" => {
+                    DocumentConverter::new(OutputFormat::MarkdownInline).convert(&document)
+                }
+                "typst" => DocumentConverter::new(OutputFormat::Typst).convert(&document),
+                "html" => DocumentConverter::new(OutputFormat::Html).convert(&document),
+                "mathml" => DocumentConverter::new(OutputFormat::MathML).convert(&document),
+                "omml" => DocumentConverter::new(OutputFormat::OMML).convert(&document),
+                "json" => serde_json::to_string_pretty(&document).map_err(|error| {
+                    latexsnipper_foundation::SnipperError::Conversion(error.to_string())
+                }),
                 _ => {
                     eprintln!("Unknown format: '{}'", resolved_format);
                     if let Some(suggestion) = suggest_format(&resolved_format) {
@@ -2809,13 +2873,8 @@ fn handle_job_run(input: &str, format: &str, output: Option<&str>, mode: &str) {
     eprintln!("  Mode:   {}", mode);
 
     // Run the pipeline (reuse recognize logic)
-    let config = latexsnipper_engine::EngineConfig::default();
-    let snipper = match latexsnipper_engine::sdk::Snipper::from_file_with_config(
-        input,
-        config,
-        recognize_mode,
-    ) {
-        Ok(s) => s,
+    let document = match recognize_document(input, DocumentParseMode::default(), recognize_mode) {
+        Ok(document) => document,
         Err(e) => {
             job.status = latexsnipper_engine::JobStatus::Failed;
             eprintln!("Job failed: {}", e);
@@ -2824,18 +2883,19 @@ fn handle_job_run(input: &str, format: &str, output: Option<&str>, mode: &str) {
     };
 
     job.status = latexsnipper_engine::JobStatus::Completed;
-    eprintln!("  Blocks: {}", snipper.document().block_count());
+    eprintln!("  Blocks: {}", document.block_count());
 
     // Export
     let resolved = resolve_format(format);
     let result = match resolved.as_str() {
-        "latex" => snipper.to_latex(),
-        "markdown" => snipper.to_markdown(),
-        "typst" => snipper.to_typst(),
-        "html" => snipper.to_html(),
-        "mathml" => snipper.to_mathml(),
-        "omml" => snipper.to_omml(),
-        "json" => snipper.to_json(),
+        "latex" => DocumentConverter::new(OutputFormat::Latex).convert(&document),
+        "markdown" => DocumentConverter::new(OutputFormat::MarkdownBlock).convert(&document),
+        "typst" => DocumentConverter::new(OutputFormat::Typst).convert(&document),
+        "html" => DocumentConverter::new(OutputFormat::Html).convert(&document),
+        "mathml" => DocumentConverter::new(OutputFormat::MathML).convert(&document),
+        "omml" => DocumentConverter::new(OutputFormat::OMML).convert(&document),
+        "json" => serde_json::to_string_pretty(&document)
+            .map_err(|error| latexsnipper_foundation::SnipperError::Conversion(error.to_string())),
         other => {
             eprintln!("Unsupported format: {}", other);
             return;

@@ -15,7 +15,8 @@ use latexsnipper_image::SnipperImage;
 #[cfg(feature = "native")]
 use latexsnipper_model::ModelManager;
 use latexsnipper_pipeline::{
-    DocumentParseMode, PipelineContext, PipelineGraph, PipelinePlanner, PipelineProfile,
+    DocumentParseMode, PipelineCancellationToken, PipelineContext, PipelineGraph, PipelinePlanner,
+    PipelineProfile, PipelineProgressObserver,
 };
 #[cfg(feature = "native")]
 use latexsnipper_runtime::FsModelResolver;
@@ -30,6 +31,15 @@ use crate::config::EngineConfig;
 use crate::job::JobQueue;
 
 pub use latexsnipper_api_types::{RecognizeMode, RecognizeRequest, RecognizeResponse, StreamItem};
+
+/// Outcome of preparing one model task during application warmup.
+#[derive(Debug, Clone)]
+pub struct EngineWarmupEntry {
+    pub task: ModelTask,
+    pub model_id: Option<String>,
+    pub loaded: bool,
+    pub message: Option<String>,
+}
 
 // ============================================================================
 // Canonical category key constants
@@ -1003,8 +1013,9 @@ impl SnipperEngine {
         &self,
         ctx: &mut PipelineContext,
         mode: RecognizeMode,
+        parse_mode: DocumentParseMode,
     ) -> Result<()> {
-        for task in required_tasks(mode, self.config.parse_mode) {
+        for task in required_tasks(mode, parse_mode) {
             let has_explicit_override = self.config.model_override(task).is_some();
 
             match self.select_and_register_model(ctx, task) {
@@ -1111,6 +1122,15 @@ impl SnipperEngine {
 
     /// Build a PipelineGraph for the given recognition mode.
     pub fn build_pipeline(&self, mode: RecognizeMode) -> PipelineGraph {
+        self.build_pipeline_with_parse_mode(mode, self.config.parse_mode)
+    }
+
+    /// Build a pipeline using a request-scoped document parse mode.
+    pub fn build_pipeline_with_parse_mode(
+        &self,
+        mode: RecognizeMode,
+        parse_mode: DocumentParseMode,
+    ) -> PipelineGraph {
         let profile = match mode {
             RecognizeMode::Formula => PipelineProfile::Formula,
             RecognizeMode::Text => PipelineProfile::Text,
@@ -1120,9 +1140,7 @@ impl SnipperEngine {
             RecognizeMode::FormulaLayout => PipelineProfile::FormulaLayout,
             _ => return PipelineGraph::new(format!("{:?}_pipeline", mode)),
         };
-        PipelinePlanner
-            .plan(profile, self.config.parse_mode)
-            .build_graph()
+        PipelinePlanner.plan(profile, parse_mode).build_graph()
     }
 
     /// Legacy graph assembly retained temporarily as a behavior oracle while
@@ -1348,6 +1366,23 @@ impl SnipperEngine {
     /// Engine assembles the graph, auto-selects models, and runs the pipeline.
     /// All logic lives in Nodes.
     pub async fn recognize(&self, image: SnipperImage, mode: RecognizeMode) -> Result<Document> {
+        self.recognize_controlled(image, mode, self.config.parse_mode, None, None, None)
+            .await
+    }
+
+    /// Recognize an image with request-scoped control and parsing options.
+    ///
+    /// The engine and runtime registry remain owned by `self`; this method only
+    /// creates the per-request pipeline context.
+    pub async fn recognize_controlled(
+        &self,
+        image: SnipperImage,
+        mode: RecognizeMode,
+        parse_mode: DocumentParseMode,
+        cancellation: Option<PipelineCancellationToken>,
+        timeout: Option<std::time::Duration>,
+        progress: Option<Arc<dyn PipelineProgressObserver>>,
+    ) -> Result<Document> {
         info!(
             "Recognizing image ({}, {}) in {:?} mode",
             image.width(),
@@ -1355,11 +1390,23 @@ impl SnipperEngine {
             mode
         );
 
-        let graph = self.build_pipeline(mode);
-        let mut ctx = self.configure_context(PipelineContext::with_image(image));
+        let graph = self.build_pipeline_with_parse_mode(mode, parse_mode);
+        let mut ctx =
+            self.configure_context_with_parse_mode(PipelineContext::with_image(image), parse_mode);
+        if let Some(cancellation) = cancellation {
+            ctx.set_cancellation_token(cancellation);
+        }
+        if let Some(timeout) = timeout {
+            ctx.set_timeout(timeout);
+        }
+        if let Some(progress) = progress {
+            ctx.set_progress_observer(progress);
+        }
+        ctx.check_control()?;
 
         // Auto-select and register models for this mode
-        self.prepare_pipeline_models(&mut ctx, mode)?;
+        self.prepare_pipeline_models(&mut ctx, mode, parse_mode)?;
+        ctx.check_control()?;
 
         graph.run(&mut ctx).await?;
 
@@ -1383,6 +1430,71 @@ impl SnipperEngine {
             notes: Vec::new(),
             outline: None,
         })
+    }
+
+    /// Prepare model executors for a profile without running inference.
+    ///
+    /// Executor construction resolves artifacts and creates runtime sessions
+    /// for adapters that support eager loading. Runtime-owned caches keep those
+    /// sessions available to later recognition requests.
+    pub fn warmup_profile(
+        &self,
+        mode: RecognizeMode,
+        parse_mode: DocumentParseMode,
+    ) -> Vec<EngineWarmupEntry> {
+        let mut ctx = self.configure_context_with_parse_mode(PipelineContext::new(), parse_mode);
+        required_tasks(mode, parse_mode)
+            .into_iter()
+            .map(
+                |task| match self.select_and_register_model(&mut ctx, task) {
+                    Ok(Some(model_id)) if is_builtin_model_strategy(&model_id) => {
+                        EngineWarmupEntry {
+                            task,
+                            model_id: Some(model_id),
+                            loaded: true,
+                            message: Some(
+                                "built-in strategy requires no runtime session".to_string(),
+                            ),
+                        }
+                    }
+                    Ok(Some(model_id)) => match ctx.create_model_executor(task) {
+                        Ok(Some(_executor)) => EngineWarmupEntry {
+                            task,
+                            model_id: Some(model_id),
+                            loaded: true,
+                            message: None,
+                        },
+                        Ok(None) => EngineWarmupEntry {
+                            task,
+                            model_id: Some(model_id),
+                            loaded: false,
+                            message: Some(
+                                "model resolved but no executable adapter was available"
+                                    .to_string(),
+                            ),
+                        },
+                        Err(error) => EngineWarmupEntry {
+                            task,
+                            model_id: Some(model_id),
+                            loaded: false,
+                            message: Some(error.to_string()),
+                        },
+                    },
+                    Ok(None) => EngineWarmupEntry {
+                        task,
+                        model_id: None,
+                        loaded: false,
+                        message: Some("no runnable model found".to_string()),
+                    },
+                    Err(error) => EngineWarmupEntry {
+                        task,
+                        model_id: None,
+                        loaded: false,
+                        message: Some(error.to_string()),
+                    },
+                },
+            )
+            .collect()
     }
 
     /// Recognize content in a PDF file — Multi-page support.
@@ -1410,7 +1522,7 @@ impl SnipperEngine {
             let mut ctx = self.configure_context(PipelineContext::with_image(page_img.clone()));
 
             // Auto-select and register models for this mode
-            self.prepare_pipeline_models(&mut ctx, mode)?;
+            self.prepare_pipeline_models(&mut ctx, mode, self.config.parse_mode)?;
 
             graph.run(&mut ctx).await?;
 
@@ -1456,14 +1568,22 @@ impl SnipperEngine {
     /// by `select_and_register_model`, which uses canonical category keys.
     /// The old short-key overrides below are retained temporarily for backward
     /// compatibility with pipeline nodes that still read the deprecated keys.
-    fn configure_context(&self, mut ctx: PipelineContext) -> PipelineContext {
+    fn configure_context(&self, ctx: PipelineContext) -> PipelineContext {
+        self.configure_context_with_parse_mode(ctx, self.config.parse_mode)
+    }
+
+    fn configure_context_with_parse_mode(
+        &self,
+        mut ctx: PipelineContext,
+        parse_mode: DocumentParseMode,
+    ) -> PipelineContext {
         ctx.models_dir = Some(self.config.models_dir.clone());
         ctx.runtime_registry = Some(self.runtime_registry.clone());
         ctx.backend = Some(self.runtime());
         ctx.model_resolver = self.model_resolver.clone();
         ctx.acceleration = self.config.acceleration;
         ctx.max_threads = self.config.max_threads;
-        ctx.parse_mode = self.config.parse_mode;
+        ctx.parse_mode = parse_mode;
 
         // Apply explicit model variant overrides from config, using both
         // canonical and legacy keys for backward compatibility.
