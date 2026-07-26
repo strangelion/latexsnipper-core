@@ -20,6 +20,8 @@ pub struct FormulaBenchmarkManifest {
     pub dataset_version: String,
     pub normalization_version: String,
     pub seed: u64,
+    #[serde(default = "default_minimum_sample_count")]
+    pub minimum_sample_count: usize,
     pub samples: Vec<FormulaBenchmarkSample>,
 }
 
@@ -37,7 +39,25 @@ pub struct FormulaBenchmarkSample {
     pub difficulty: FormulaDifficulty,
     pub image_quality: String,
     #[serde(default)]
+    pub expected_kind: FormulaExpectedKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screenshot_scale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub degradation: Option<String>,
+    #[serde(default)]
     pub notes: String,
+}
+
+fn default_minimum_sample_count() -> usize {
+    50
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FormulaExpectedKind {
+    #[default]
+    Formula,
+    HardNegative,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,6 +127,18 @@ pub struct FormulaRunMetadata {
 pub struct FormulaPrediction {
     pub sample_id: String,
     pub raw_latex: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalized_latex: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corrected_latex: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    #[serde(default)]
+    pub diagnostics: Vec<String>,
+    #[serde(default)]
+    pub correction_triggered: bool,
+    #[serde(default)]
+    pub review_required: bool,
     #[serde(default)]
     pub top_k: Vec<String>,
     pub latency_ms: f64,
@@ -127,6 +159,8 @@ pub struct FormulaBenchmarkReport {
     pub metrics: FormulaMetrics,
     pub by_category: BTreeMap<String, FormulaMetrics>,
     pub by_image_quality: BTreeMap<String, FormulaMetrics>,
+    pub by_screenshot_scale: BTreeMap<String, FormulaMetrics>,
+    pub by_degradation: BTreeMap<String, FormulaMetrics>,
     pub by_sequence_length: BTreeMap<String, FormulaMetrics>,
     pub samples: Vec<FormulaSampleResult>,
 }
@@ -135,6 +169,8 @@ pub struct FormulaBenchmarkReport {
 #[serde(rename_all = "camelCase")]
 pub struct FormulaMetrics {
     pub sample_count: usize,
+    pub formula_sample_count: usize,
+    pub hard_negative_sample_count: usize,
     pub exact_match: f64,
     pub normalized_exact_match: f64,
     pub character_error_rate: f64,
@@ -147,6 +183,14 @@ pub struct FormulaMetrics {
     pub truncation_rate: f64,
     pub top_1_agreement: f64,
     pub top_5_agreement: f64,
+    pub false_positive_rate: f64,
+    pub false_negative_rate: f64,
+    pub correction_trigger_rate: f64,
+    pub correction_improvement_rate: f64,
+    pub correction_regression_rate: f64,
+    pub review_required_rate: f64,
+    pub confidence_sample_count: usize,
+    pub confidence_calibration_error: f64,
     pub cold_latency_ms: f64,
     pub warm_latency_ms: f64,
     pub latency_p50_ms: f64,
@@ -159,13 +203,27 @@ pub struct FormulaSampleResult {
     pub sample_id: String,
     pub categories: Vec<String>,
     pub image_quality: String,
+    pub expected_kind: FormulaExpectedKind,
+    pub screenshot_scale: Option<String>,
+    pub degradation: Option<String>,
     pub sequence_length: usize,
+    pub raw: String,
+    pub normalized_raw: String,
+    pub corrected: String,
     pub expected: String,
     pub actual: String,
     pub normalized_expected: String,
     pub normalized_actual: String,
     pub exact_match: bool,
     pub normalized_exact_match: bool,
+    pub raw_normalized_exact_match: bool,
+    pub correction_triggered: bool,
+    pub correction_improved: bool,
+    pub correction_regressed: bool,
+    pub review_required: bool,
+    pub confidence: Option<f64>,
+    pub false_positive: bool,
+    pub false_negative: bool,
     pub character_edits: usize,
     pub character_count: usize,
     pub token_edits: usize,
@@ -257,6 +315,10 @@ pub fn evaluate_formula_benchmark(
         sample.categories.iter().map(String::as_str).collect()
     });
     let by_image_quality = aggregate_groups(&samples, |sample| vec![sample.image_quality.as_str()]);
+    let by_screenshot_scale =
+        aggregate_optional_groups(&samples, |sample| sample.screenshot_scale.as_deref());
+    let by_degradation =
+        aggregate_optional_groups(&samples, |sample| sample.degradation.as_deref());
     let by_sequence_length = aggregate_groups(&samples, |sample| {
         vec![sequence_length_bucket(sample.sequence_length)]
     });
@@ -270,6 +332,8 @@ pub fn evaluate_formula_benchmark(
         metrics,
         by_category,
         by_image_quality,
+        by_screenshot_scale,
+        by_degradation,
         by_sequence_length,
         samples,
     })
@@ -340,19 +404,36 @@ pub fn write_formula_csv(
     report: &FormulaBenchmarkReport,
 ) -> Result<(), FormulaBenchmarkError> {
     let mut csv = String::from(
-        "sample_id,categories,image_quality,sequence_length,exact_match,normalized_exact_match,\
+        "sample_id,categories,image_quality,expected_kind,screenshot_scale,degradation,\
+sequence_length,exact_match,normalized_exact_match,raw_normalized_exact_match,\
+correction_triggered,correction_improved,correction_regressed,review_required,confidence,\
+false_positive,false_negative,\
 character_edits,character_count,token_edits,token_count,latex_parse_success,\
 ast_structure_valid,balanced_delimiters,repeated_token_failure,premature_eos,truncated,\
-top_1_agreement,top_5_agreement,latency_ms,expected,actual\n",
+top_1_agreement,top_5_agreement,latency_ms,expected,raw,normalized_raw,corrected,actual\n",
     );
     for sample in &report.samples {
         let fields = [
             csv_escape(&sample.sample_id),
             csv_escape(&sample.categories.join("|")),
             csv_escape(&sample.image_quality),
+            format!("{:?}", sample.expected_kind).to_ascii_lowercase(),
+            csv_escape(sample.screenshot_scale.as_deref().unwrap_or("")),
+            csv_escape(sample.degradation.as_deref().unwrap_or("")),
             sample.sequence_length.to_string(),
             sample.exact_match.to_string(),
             sample.normalized_exact_match.to_string(),
+            sample.raw_normalized_exact_match.to_string(),
+            sample.correction_triggered.to_string(),
+            sample.correction_improved.to_string(),
+            sample.correction_regressed.to_string(),
+            sample.review_required.to_string(),
+            sample
+                .confidence
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            sample.false_positive.to_string(),
+            sample.false_negative.to_string(),
             sample.character_edits.to_string(),
             sample.character_count.to_string(),
             sample.token_edits.to_string(),
@@ -367,6 +448,9 @@ top_1_agreement,top_5_agreement,latency_ms,expected,actual\n",
             sample.top_5_agreement.to_string(),
             sample.latency_ms.to_string(),
             csv_escape(&sample.expected),
+            csv_escape(&sample.raw),
+            csv_escape(&sample.normalized_raw),
+            csv_escape(&sample.corrected),
             csv_escape(&sample.actual),
         ];
         csv.push_str(&fields.join(","));
@@ -404,7 +488,7 @@ fn validate_contract(
             rules: rules.version.clone(),
         });
     }
-    if manifest.samples.len() < 50 {
+    if manifest.samples.len() < manifest.minimum_sample_count {
         return Err(FormulaBenchmarkError::TooFewSamples(manifest.samples.len()));
     }
     if manifest.dataset_id != bundle.dataset_id
@@ -465,12 +549,21 @@ fn evaluate_sample(
     prediction: &FormulaPrediction,
     rules: &NormalizationRules,
 ) -> FormulaSampleResult {
-    let normalized_actual = normalize_formula(&prediction.raw_latex, rules);
+    let normalized_raw = prediction
+        .normalized_latex
+        .clone()
+        .unwrap_or_else(|| normalize_formula(&prediction.raw_latex, rules));
+    let corrected = prediction
+        .corrected_latex
+        .as_deref()
+        .unwrap_or(&prediction.raw_latex)
+        .to_owned();
+    let normalized_actual = normalize_formula(&corrected, rules);
     let expected_chars: Vec<_> = sample.normalized_ground_truth.chars().collect();
     let actual_chars: Vec<_> = normalized_actual.chars().collect();
     let expected_tokens = formula_tokens(&sample.normalized_ground_truth);
     let actual_tokens = formula_tokens(&normalized_actual);
-    let balanced_delimiters = delimiters_balanced(&prediction.raw_latex);
+    let balanced_delimiters = delimiters_balanced(&corrected);
     let latex_parse_success =
         latexsnipper_inference::parse_formula_latex(&normalized_actual).is_ok();
     let top_k: Vec<_> = prediction
@@ -479,17 +572,44 @@ fn evaluate_sample(
         .map(|candidate| normalize_formula(candidate, rules))
         .collect();
 
+    let raw_normalized_exact_match = sample.expected_kind == FormulaExpectedKind::Formula
+        && sample.normalized_ground_truth == normalized_raw;
+    let normalized_exact_match = sample.expected_kind == FormulaExpectedKind::Formula
+        && sample.normalized_ground_truth == normalized_actual;
+    let correction_triggered = prediction.correction_triggered || prediction.raw_latex != corrected;
+    let non_empty_prediction = !normalized_actual.trim().is_empty();
     FormulaSampleResult {
         sample_id: sample.id.clone(),
         categories: sample.category.clone(),
         image_quality: sample.image_quality.clone(),
+        expected_kind: sample.expected_kind,
+        screenshot_scale: sample.screenshot_scale.clone(),
+        degradation: sample.degradation.clone(),
         sequence_length: expected_tokens.len(),
+        raw: prediction.raw_latex.clone(),
+        normalized_raw,
+        corrected: corrected.clone(),
         expected: sample.ground_truth_latex.clone(),
-        actual: prediction.raw_latex.clone(),
+        actual: corrected.clone(),
         normalized_expected: sample.normalized_ground_truth.clone(),
         normalized_actual: normalized_actual.clone(),
-        exact_match: sample.ground_truth_latex == prediction.raw_latex,
-        normalized_exact_match: sample.normalized_ground_truth == normalized_actual,
+        exact_match: sample.expected_kind == FormulaExpectedKind::Formula
+            && sample.ground_truth_latex == corrected,
+        normalized_exact_match,
+        raw_normalized_exact_match,
+        correction_triggered,
+        correction_improved: correction_triggered
+            && !raw_normalized_exact_match
+            && normalized_exact_match,
+        correction_regressed: correction_triggered
+            && raw_normalized_exact_match
+            && !normalized_exact_match,
+        review_required: prediction.review_required,
+        confidence: prediction.confidence,
+        false_positive: sample.expected_kind == FormulaExpectedKind::HardNegative
+            && non_empty_prediction,
+        false_negative: sample.expected_kind == FormulaExpectedKind::Formula
+            && !non_empty_prediction,
         character_edits: levenshtein(&expected_chars, &actual_chars),
         character_count: expected_chars.len(),
         token_edits: levenshtein(&expected_tokens, &actual_tokens),
@@ -520,6 +640,24 @@ fn aggregate<'a>(samples: impl Iterator<Item = &'a FormulaSampleResult>) -> Form
     let sum_bool = |predicate: fn(&FormulaSampleResult) -> bool| {
         samples.iter().filter(|sample| predicate(sample)).count() as f64 / count as f64
     };
+    let formulas: Vec<_> = samples
+        .iter()
+        .copied()
+        .filter(|sample| sample.expected_kind == FormulaExpectedKind::Formula)
+        .collect();
+    let negatives: Vec<_> = samples
+        .iter()
+        .copied()
+        .filter(|sample| sample.expected_kind == FormulaExpectedKind::HardNegative)
+        .collect();
+    let formula_rate = |predicate: fn(&FormulaSampleResult) -> bool| {
+        formulas.iter().filter(|sample| predicate(sample)).count() as f64
+            / formulas.len().max(1) as f64
+    };
+    let negative_rate = |predicate: fn(&FormulaSampleResult) -> bool| {
+        negatives.iter().filter(|sample| predicate(sample)).count() as f64
+            / negatives.len().max(1) as f64
+    };
     let character_edits: usize = samples.iter().map(|sample| sample.character_edits).sum();
     let character_count: usize = samples.iter().map(|sample| sample.character_count).sum();
     let token_edits: usize = samples.iter().map(|sample| sample.token_edits).sum();
@@ -538,8 +676,10 @@ fn aggregate<'a>(samples: impl Iterator<Item = &'a FormulaSampleResult>) -> Form
     latencies.sort_by(f64::total_cmp);
     FormulaMetrics {
         sample_count: count,
-        exact_match: sum_bool(|sample| sample.exact_match),
-        normalized_exact_match: sum_bool(|sample| sample.normalized_exact_match),
+        formula_sample_count: formulas.len(),
+        hard_negative_sample_count: negatives.len(),
+        exact_match: formula_rate(|sample| sample.exact_match),
+        normalized_exact_match: formula_rate(|sample| sample.normalized_exact_match),
         character_error_rate: character_edits as f64 / character_count.max(1) as f64,
         token_error_rate: token_edits as f64 / token_count.max(1) as f64,
         latex_parse_success: sum_bool(|sample| sample.latex_parse_success),
@@ -550,11 +690,67 @@ fn aggregate<'a>(samples: impl Iterator<Item = &'a FormulaSampleResult>) -> Form
         truncation_rate: sum_bool(|sample| sample.truncated),
         top_1_agreement: sum_bool(|sample| sample.top_1_agreement),
         top_5_agreement: sum_bool(|sample| sample.top_5_agreement),
+        false_positive_rate: negative_rate(|sample| sample.false_positive),
+        false_negative_rate: formula_rate(|sample| sample.false_negative),
+        correction_trigger_rate: formula_rate(|sample| sample.correction_triggered),
+        correction_improvement_rate: formula_rate(|sample| sample.correction_improved),
+        correction_regression_rate: formula_rate(|sample| sample.correction_regressed),
+        review_required_rate: sum_bool(|sample| sample.review_required),
+        confidence_sample_count: samples
+            .iter()
+            .filter(|sample| sample.confidence.is_some())
+            .count(),
+        confidence_calibration_error: calibration_error(&samples),
         cold_latency_ms,
         warm_latency_ms,
         latency_p50_ms: quantile(&latencies, 0.50),
         latency_p95_ms: quantile(&latencies, 0.95),
     }
+}
+
+fn calibration_error(samples: &[&FormulaSampleResult]) -> f64 {
+    let confident: Vec<_> = samples
+        .iter()
+        .copied()
+        .filter_map(|sample| {
+            sample
+                .confidence
+                .filter(|value| value.is_finite())
+                .map(|confidence| (sample, confidence.clamp(0.0, 1.0)))
+        })
+        .collect();
+    if confident.is_empty() {
+        return 0.0;
+    }
+    (0..10)
+        .map(|bin| {
+            let lower = bin as f64 / 10.0;
+            let upper = (bin + 1) as f64 / 10.0;
+            let bucket: Vec<_> = confident
+                .iter()
+                .copied()
+                .filter(|(_, confidence)| {
+                    *confidence >= lower
+                        && if bin == 9 {
+                            *confidence <= upper
+                        } else {
+                            *confidence < upper
+                        }
+                })
+                .collect();
+            if bucket.is_empty() {
+                return 0.0;
+            }
+            let accuracy = bucket
+                .iter()
+                .filter(|(sample, _)| sample.normalized_exact_match)
+                .count() as f64
+                / bucket.len() as f64;
+            let mean_confidence =
+                bucket.iter().map(|(_, confidence)| confidence).sum::<f64>() / bucket.len() as f64;
+            (bucket.len() as f64 / confident.len() as f64) * (accuracy - mean_confidence).abs()
+        })
+        .sum()
 }
 
 fn aggregate_groups(
@@ -564,6 +760,22 @@ fn aggregate_groups(
     let mut groups: BTreeMap<String, Vec<&FormulaSampleResult>> = BTreeMap::new();
     for sample in samples {
         for key in keys(sample) {
+            groups.entry(key.to_owned()).or_default().push(sample);
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(key, samples)| (key, aggregate(samples.into_iter())))
+        .collect()
+}
+
+fn aggregate_optional_groups(
+    samples: &[FormulaSampleResult],
+    key: impl Fn(&FormulaSampleResult) -> Option<&str>,
+) -> BTreeMap<String, FormulaMetrics> {
+    let mut groups: BTreeMap<String, Vec<&FormulaSampleResult>> = BTreeMap::new();
+    for sample in samples {
+        if let Some(key) = key(sample) {
             groups.entry(key.to_owned()).or_default().push(sample);
         }
     }
@@ -774,13 +986,27 @@ mod tests {
             sample_id: "one".to_owned(),
             categories: vec!["simple_inline".to_owned()],
             image_quality: "clean".to_owned(),
+            expected_kind: FormulaExpectedKind::Formula,
+            screenshot_scale: None,
+            degradation: None,
             sequence_length: 1,
+            raw: "b".to_owned(),
+            normalized_raw: "b".to_owned(),
+            corrected: "b".to_owned(),
             expected: "a".to_owned(),
             actual: "b".to_owned(),
             normalized_expected: "a".to_owned(),
             normalized_actual: "b".to_owned(),
             exact_match: false,
             normalized_exact_match: false,
+            raw_normalized_exact_match: false,
+            correction_triggered: false,
+            correction_improved: false,
+            correction_regressed: false,
+            review_required: false,
+            confidence: Some(0.2),
+            false_positive: false,
+            false_negative: false,
             character_edits: 1,
             character_count: 1,
             token_edits: 1,

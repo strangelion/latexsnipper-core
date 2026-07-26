@@ -695,7 +695,9 @@ impl RecognitionSession {
         let models = RecognitionProfile::all()
             .iter()
             .copied()
-            .map(|profile| model_status_from_readiness(profile, &readiness))
+            .map(|profile| {
+                model_status_from_readiness(profile, &readiness, self.warmups.get(&profile))
+            })
             .collect::<Vec<_>>();
         let ready = runtime.runtimes.iter().any(|item| item.available)
             && models.iter().any(|item| item.ready);
@@ -714,7 +716,11 @@ impl RecognitionSession {
                 .iter()
                 .copied()
                 .map(|profile| {
-                    let status = model_status_from_readiness(profile, &readiness);
+                    let status = model_status_from_readiness(
+                        profile,
+                        &readiness,
+                        self.warmups.get(&profile),
+                    );
                     ProfileCapability {
                         profile,
                         ready: status.ready,
@@ -725,7 +731,11 @@ impl RecognitionSession {
     }
 
     pub fn model_status(&self, profile: RecognitionProfile) -> ModelStatusReport {
-        model_status_from_readiness(profile, &self.engine.readiness())
+        model_status_from_readiness(
+            profile,
+            &self.engine.readiness(),
+            self.warmups.get(&profile),
+        )
     }
 
     pub fn runtime_status(&self) -> RuntimeStatusReport {
@@ -971,6 +981,7 @@ fn runtime_metadata(readiness: &EngineReadiness) -> RuntimeMetadata {
 fn model_status_from_readiness(
     profile: RecognitionProfile,
     readiness: &EngineReadiness,
+    warmup: Option<&WarmupReport>,
 ) -> ModelStatusReport {
     let mode: RecognizeMode = profile.into();
     let mode = readiness
@@ -983,10 +994,56 @@ fn model_status_from_readiness(
             ready: false,
             tasks: Vec::new(),
         });
+    let Some(warmup) = warmup else {
+        let tasks = mode
+            .tasks
+            .into_iter()
+            .map(|mut task| {
+                if task.ready {
+                    task.ready = false;
+                    task.code = Some(latexsnipper_api_types::CoreErrorCode::ProviderUnavailable);
+                    task.message = Some(
+                        "model artifacts resolve, but no application warmup has created a session"
+                            .to_string(),
+                    );
+                }
+                task
+            })
+            .collect();
+        return ModelStatusReport {
+            profile,
+            ready: false,
+            tasks,
+        };
+    };
+    let tasks = mode
+        .tasks
+        .into_iter()
+        .map(|mut task| {
+            if warmup
+                .loaded_models
+                .iter()
+                .any(|model| model.task == task.task)
+            {
+                task.ready = true;
+                task.code = None;
+                task.message = None;
+            } else if let Some(missing) = warmup
+                .missing_models
+                .iter()
+                .find(|model| model.task == task.task)
+            {
+                task.ready = false;
+                task.code = Some(latexsnipper_api_types::CoreErrorCode::ProviderUnavailable);
+                task.message = Some(missing.reason.clone());
+            }
+            task
+        })
+        .collect();
     ModelStatusReport {
         profile,
-        ready: mode.ready,
-        tasks: mode.tasks,
+        ready: warmup.ready,
+        tasks,
     }
 }
 

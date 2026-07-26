@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "model": "crates/wasm/tests/fixtures/tiny-text-rec.onnx",
+  "modelSha256": "ec6ecac6a32e663f67bd3967a6579171783c7185042cc61bb7ca84a92fdc5daa",
+  "inputSha256": "f4e0ec8e493d64ecab6aaa12e8407e758d871fb5f34cc372690f3a7bac3ac120",
+  "referenceProvider": "cpu",
+  "referenceOutputSha256": "1c14430eb3db02ad9f9bf1c3a8d8f9018c69a18623cbefc014e831472d54a193",
+  "tolerance": 0.000001,
+  "validations": [
+    {
+      "provider": "coreml",
+      "validationLevel": "declared",
+      "libraryDetected": false,
+      "probePassed": false,
+      "sessionCreated": false,
+      "smokeInferencePassed": false,
+      "benchmarkValidated": false,
+      "diagnostics": [
+        "provider is not supported on windows"
+      ],
+      "errorCode": "PROVIDER_LIBRARY_NOT_FOUND",
+      "outputSha256": null,
+      "maxAbsoluteError": null,
+      "sessionCreateMs": null,
+      "inferenceMs": null
+    },
+    {
+      "provider": "cpu",
+      "validationLevel": "benchmarkValidated",
+      "libraryDetected": true,
+      "probePassed": true,
+      "sessionCreated": true,
+      "smokeInferencePassed": true,
+      "benchmarkValidated": true,
+      "diagnostics": [],
+      "errorCode": null,
+      "outputSha256": "1c14430eb3db02ad9f9bf1c3a8d8f9018c69a18623cbefc014e831472d54a193",
+      "maxAbsoluteError": 0.0,
+      "sessionCreateMs": 14.484800000000002,
+      "inferenceMs": 1.0887
+    },
+    {
+      "provider": "cuda",
+      "validationLevel": "probePassed",
+      "libraryDetected": true,
+      "probePassed": true,
+      "sessionCreated": false,
+      "smokeInferencePassed": false,
+      "benchmarkValidated": false,
+      "diagnostics": [
+        "Runtime error: none of the requested ONNX Runtime providers [cuda] can run and CPU fallback was not declared: ONNX Runtime provider 'cuda' registration failed: D:\\a\\ort-artifacts\\ort-artifacts\\onnxruntime\\onnxruntime\\core\\session\\provider_bridge_ort.cc:1952 onnxruntime::ProviderLibrary::Get [ONNXRuntimeError] : 1 : FAIL : Error loading \"<repo>\\target\\debug\\examples\\onnxruntime_providers_shared.dll\" which is missing. (Error 126: \"找不到指定的模块。\")\n; continuing with the declared fallback chain"
+      ],
+      "errorCode": "PROVIDER_SESSION_CREATE_FAILED",
+      "outputSha256": null,
+      "maxAbsoluteError": null,
+      "sessionCreateMs": null,
+      "inferenceMs": null
+    },
+    {
+      "provider": "directml",
+      "validationLevel": "smokeInferencePassed",
+      "libraryDetected": true,
+      "probePassed": true,
+      "sessionCreated": true,
+      "smokeInferencePassed": true,
+      "benchmarkValidated": false,
+      "diagnostics": [],
+      "errorCode": null,
+      "outputSha256": "1c14430eb3db02ad9f9bf1c3a8d8f9018c69a18623cbefc014e831472d54a193",
+      "maxAbsoluteError": 0.0,
+      "sessionCreateMs": 193.0682,
+      "inferenceMs": 11.372399999999999
+    },
+    {
+      "provider": "tensorrt",
+      "validationLevel": "probePassed",
+      "libraryDetected": true,
+      "probePassed": true,
+      "sessionCreated": false,
+      "smokeInferencePassed": false,
+      "benchmarkValidated": false,
+      "diagnostics": [
+        "Runtime error: none of the requested ONNX Runtime providers [tensorrt] can run and CPU fallback was not declared: ONNX Runtime provider 'tensorrt' registration failed: D:\\a\\ort-artifacts\\ort-artifacts\\onnxruntime\\onnxruntime\\core\\session\\provider_bridge_ort.cc:1952 onnxruntime::ProviderLibrary::Get [ONNXRuntimeError] : 1 : FAIL : Error loading \"<repo>\\target\\debug\\examples\\onnxruntime_providers_shared.dll\" which is missing. (Error 126: \"找不到指定的模块。\")\n; continuing with the declared fallback chain"
+      ],
+      "errorCode": "PROVIDER_SESSION_CREATE_FAILED",
+      "outputSha256": null,
+      "maxAbsoluteError": null,
+      "sessionCreateMs": null,
+      "inferenceMs": null
+    }
+  ]
+}

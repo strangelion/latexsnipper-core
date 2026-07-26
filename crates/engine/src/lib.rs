@@ -46,7 +46,7 @@ pub use diagram_understanding::{
 
 // Re-export api-types for backward compatibility (wasm/ffi use these via engine)
 pub use latexsnipper_api_types::{
-    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness, RecognitionProfile,
-    RecognizeMode as ApiRecognizeMode, RuntimeReadiness, StreamItem as ApiStreamItem,
-    TaskReadiness, READINESS_SCHEMA_VERSION,
+    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness, ProviderValidationLevel,
+    ProviderValidationReport, RecognitionProfile, RecognizeMode as ApiRecognizeMode,
+    RuntimeReadiness, StreamItem as ApiStreamItem, TaskReadiness, READINESS_SCHEMA_VERSION,
 };

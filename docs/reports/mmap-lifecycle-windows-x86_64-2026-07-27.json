@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "feature": "runtime-mmap-experimental",
+  "productionDefaultChanged": false,
+  "modelV1Sha256": "ec6ecac6a32e663f67bd3967a6579171783c7185042cc61bb7ca84a92fdc5daa",
+  "modelV2Sha256": "807339e3f4816b481cffb9645ab068756466109289a995672941a56fde987e61",
+  "artifactReadMs": 0.8428,
+  "mmapCreateMs": 0.4935,
+  "pageTouchMs": 0.012799999999999999,
+  "sessionCreateAndOptimizeMs": 193.3975,
+  "firstInferenceMs": 2.2390000000000003,
+  "warmInferenceMs": 1.436,
+  "reloadSessionCreateMs": 3.444,
+  "reloadFirstInferenceMs": 2.5888999999999998,
+  "oldSessionSurvivedPointerUpdate": true,
+  "oldSessionSurvivedArtifactDelete": true,
+  "versionPointerUpdateAtomic": true,
+  "oldArtifactDeleteWhileMapped": {
+    "succeeded": true,
+    "errorKind": null
+  },
+  "oldArtifactReplaceWhileMapped": {
+    "succeeded": true,
+    "errorKind": null
+  },
+  "processMemory": {
+    "workingSetBytes": 34349056,
+    "peakWorkingSetBytes": 34349056,
+    "privateBytes": 19038208
+  },
+  "cleanupSucceeded": true,
+  "limitations": [
+    "This is an isolated CPU experiment, not the production loader.",
+    "ONNX graph optimization time is included in session creation.",
+    "Process memory includes the example process, ONNX Runtime, and both sessions.",
+    "File deletion and replacement semantics are operating-system dependent."
+  ]
+}

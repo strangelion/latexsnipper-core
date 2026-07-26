@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct RecognitionProvenance {
     pub model_id: String,
     pub model_version: String,
@@ -24,7 +24,7 @@ pub struct SourcePolygon {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct TransformationEvidence {
     pub rule_id: String,
     pub before_sha256: String,
@@ -179,5 +179,63 @@ mod tests {
         assert_eq!(value["source"]["content"], r"\frac{a}{b}");
         assert_eq!(value["recognition_evidence"]["raw"], r"\frac{a}{b");
         assert_eq!(value["recognition_evidence"]["corrected"], r"\frac{a}{b}");
+    }
+
+    #[test]
+    fn provenance_json_is_backward_and_forward_tolerant() {
+        let old_json = serde_json::json!({
+            "source": {"format": "Latex", "content": "x+y"},
+            "display_mode": true,
+            "confidence": 0.8,
+            "source_info": null,
+            "layout": null
+        });
+        let old_formula: crate::Formula = serde_json::from_value(old_json.clone()).unwrap();
+        let old_snapshot = serde_json::to_value(&old_formula).unwrap();
+        assert!(old_formula.recognition_provenance.is_none());
+        assert!(old_formula.recognition_evidence.is_none());
+
+        let new_without_evidence = serde_json::json!({
+            "source": {"format": "Latex", "content": "x+y"},
+            "display_mode": true,
+            "confidence": 0.8,
+            "recognition_provenance": {
+                "modelId": "trocr-deit",
+                "modelVersion": "models-v3.1.0",
+                "runtime": "onnxruntime",
+                "provider": "cpu",
+                "sourceRegion": null,
+                "rawConfidence": 0.8,
+                "normalizedConfidence": 0.8,
+                "transformations": [{
+                    "ruleId": "trim-v1",
+                    "beforeSha256": "0".repeat(64),
+                    "afterSha256": "1".repeat(64),
+                    "reason": "trim",
+                    "confidenceDelta": 0.0,
+                    "mode": "automatic",
+                    "version": "1",
+                    "futureEvidenceField": {"version": 2}
+                }],
+                "futureProviderField": true
+            }
+        });
+        let parsed: crate::Formula = serde_json::from_value(new_without_evidence.clone()).unwrap();
+        assert!(parsed.recognition_provenance.is_some());
+        assert!(parsed.recognition_evidence.is_none());
+
+        let mut null_evidence = new_without_evidence;
+        null_evidence["recognition_evidence"] = serde_json::Value::Null;
+        null_evidence["futureFormulaField"] = serde_json::json!("ignored");
+        assert!(serde_json::from_value::<crate::Formula>(null_evidence)
+            .unwrap()
+            .recognition_evidence
+            .is_none());
+
+        let mut legacy_snapshot = serde_json::to_value(parsed).unwrap();
+        let object = legacy_snapshot.as_object_mut().unwrap();
+        object.remove("recognition_provenance");
+        object.remove("recognition_evidence");
+        assert_eq!(legacy_snapshot, old_snapshot);
     }
 }

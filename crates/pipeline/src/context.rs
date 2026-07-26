@@ -105,6 +105,9 @@ pub struct PipelineContext {
     timeout_ms: Option<u64>,
     /// Optional node-boundary observer.
     progress_observer: Option<Arc<dyn PipelineProgressObserver>>,
+    /// Explicitly opt-in debug/benchmark crop store. Production defaults to
+    /// `None`, so source pixels are never persisted by ordinary recognition.
+    crop_artifact_store: Option<Arc<latexsnipper_artifact::DebugCropStore>>,
     /// Models directory path.
     pub models_dir: Option<std::path::PathBuf>,
     /// Runtime backend for inference sessions (injected by engine).
@@ -155,6 +158,7 @@ impl PipelineContext {
             deadline: None,
             timeout_ms: None,
             progress_observer: None,
+            crop_artifact_store: None,
             models_dir: None,
             backend: None,
             runtime_registry: None,
@@ -388,6 +392,14 @@ impl PipelineContext {
     /// Return the currently configured progress observer.
     pub fn progress_observer(&self) -> Option<&Arc<dyn PipelineProgressObserver>> {
         self.progress_observer.as_ref()
+    }
+
+    pub fn set_crop_artifact_store(&mut self, store: Arc<latexsnipper_artifact::DebugCropStore>) {
+        self.crop_artifact_store = Some(store);
+    }
+
+    pub fn crop_artifact_store(&self) -> Option<&Arc<latexsnipper_artifact::DebugCropStore>> {
+        self.crop_artifact_store.as_ref()
     }
 
     /// Check cancellation and timeout at a safe pipeline boundary.

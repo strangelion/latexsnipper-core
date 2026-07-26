@@ -10,8 +10,8 @@ pub mod readiness;
 pub mod v3;
 
 pub use readiness::{
-    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness, RuntimeReadiness, TaskReadiness,
-    READINESS_SCHEMA_VERSION,
+    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness, ProviderValidationLevel,
+    ProviderValidationReport, RuntimeReadiness, TaskReadiness, READINESS_SCHEMA_VERSION,
 };
 pub use v3::{
     ApiContractVersionsV3, ApiEnvelopeV3, ApiErrorV3, API_ENVELOPE_VERSION_V3,

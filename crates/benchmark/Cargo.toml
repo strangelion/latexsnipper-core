@@ -17,6 +17,9 @@ latexsnipper-ast.workspace = true
 latexsnipper-evaluation.workspace = true
 latexsnipper-inference.workspace = true
 latexsnipper-incremental.workspace = true
+latexsnipper-image.workspace = true
+latexsnipper-runtime.workspace = true
+latexsnipper-tensor.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -25,3 +28,11 @@ thiserror.workspace = true
 [[bin]]
 name = "latexsnipper-benchmark"
 path = "src/main.rs"
+
+[[bin]]
+name = "latexsnipper-formula-predict"
+path = "src/formula_predict.rs"
+
+[[bin]]
+name = "latexsnipper-table-benchmark"
+path = "src/table_main.rs"

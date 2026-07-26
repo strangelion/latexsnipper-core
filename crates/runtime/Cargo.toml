@@ -23,6 +23,7 @@ toml = "0.8"
 sha2 = "0.10"
 hex = "0.4"
 half.workspace = true
+memmap2 = { version = "0.9", optional = true }
 
 # Remote API provider (optional)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
@@ -31,6 +32,7 @@ base64 = { version = "0.22", optional = true }
 [features]
 default = []
 remote-api = ["reqwest", "base64"]
+runtime-mmap-experimental = ["dep:memmap2"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-20", "cuda", "directml", "tensorrt"] }
@@ -42,8 +44,18 @@ ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-20", "coreml"] }
 
 [dev-dependencies]
+latexsnipper-api-types.workspace = true
 latexsnipper-image.workspace = true
 tempfile = "3"
+
+[[example]]
+name = "provider_smoke"
+path = "examples/provider_smoke.rs"
+
+[[example]]
+name = "mmap_lifecycle"
+path = "examples/mmap_lifecycle.rs"
+required-features = ["runtime-mmap-experimental"]
 
 [[test]]
 name = "integration_test"

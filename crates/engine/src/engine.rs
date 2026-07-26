@@ -5,7 +5,8 @@ use std::sync::{Arc, RwLock};
 
 use latexsnipper_api_types::{
     CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness as ApiModelReadiness,
-    RuntimeReadiness, TaskReadiness, READINESS_SCHEMA_VERSION,
+    ProviderValidationLevel, ProviderValidationReport, RuntimeReadiness, TaskReadiness,
+    READINESS_SCHEMA_VERSION,
 };
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
@@ -540,11 +541,29 @@ impl SnipperEngine {
                         .with_recoverable(true),
                     );
                 }
+                let providers = probe.capabilities.execution_providers;
+                let provider_validations = providers
+                    .iter()
+                    .map(|provider| ProviderValidationReport {
+                        provider: provider.clone(),
+                        validation_level: ProviderValidationLevel::ProbePassed,
+                        library_detected: true,
+                        probe_passed: true,
+                        session_created: false,
+                        smoke_inference_passed: false,
+                        benchmark_validated: false,
+                        diagnostics: vec![
+                            "runtime probe passed; no model session or inference was run"
+                                .to_string(),
+                        ],
+                    })
+                    .collect();
                 RuntimeReadiness {
                     id: kind.to_string(),
                     available: probe.available,
                     version: probe.version,
-                    providers: probe.capabilities.execution_providers.into_iter().collect(),
+                    providers: providers.into_iter().collect(),
+                    provider_validations,
                     devices: probe
                         .devices
                         .into_iter()

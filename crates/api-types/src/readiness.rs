@@ -18,7 +18,12 @@ pub enum CoreErrorCode {
     RuntimeNotFound,
     ProviderUnavailable,
     ProviderLibraryMissing,
+    ProviderLibraryNotFound,
+    ProviderLoadFailed,
     SessionCreateFailed,
+    ProviderSessionCreateFailed,
+    ProviderSmokeInferenceFailed,
+    ProviderOutputMismatch,
     InputShapeMismatch,
     DecoderCacheSchemaMismatch,
     DecoderIncrementalDivergence,
@@ -36,7 +41,12 @@ impl CoreErrorCode {
             Self::RuntimeNotFound => "RUNTIME_NOT_FOUND",
             Self::ProviderUnavailable => "PROVIDER_UNAVAILABLE",
             Self::ProviderLibraryMissing => "PROVIDER_LIBRARY_MISSING",
+            Self::ProviderLibraryNotFound => "PROVIDER_LIBRARY_NOT_FOUND",
+            Self::ProviderLoadFailed => "PROVIDER_LOAD_FAILED",
             Self::SessionCreateFailed => "SESSION_CREATE_FAILED",
+            Self::ProviderSessionCreateFailed => "PROVIDER_SESSION_CREATE_FAILED",
+            Self::ProviderSmokeInferenceFailed => "PROVIDER_SMOKE_INFERENCE_FAILED",
+            Self::ProviderOutputMismatch => "PROVIDER_OUTPUT_MISMATCH",
             Self::InputShapeMismatch => "INPUT_SHAPE_MISMATCH",
             Self::DecoderCacheSchemaMismatch => "DECODER_CACHE_SCHEMA_MISMATCH",
             Self::DecoderIncrementalDivergence => "DECODER_INCREMENTAL_DIVERGENCE",
@@ -90,9 +100,36 @@ pub struct RuntimeReadiness {
     #[serde(default)]
     pub providers: Vec<String>,
     #[serde(default)]
+    pub provider_validations: Vec<ProviderValidationReport>,
+    #[serde(default)]
     pub devices: Vec<String>,
     pub code: Option<CoreErrorCode>,
     pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProviderValidationLevel {
+    Declared,
+    LibraryDetected,
+    ProbePassed,
+    SessionCreated,
+    SmokeInferencePassed,
+    BenchmarkValidated,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderValidationReport {
+    pub provider: String,
+    pub validation_level: ProviderValidationLevel,
+    pub library_detected: bool,
+    pub probe_passed: bool,
+    pub session_created: bool,
+    pub smoke_inference_passed: bool,
+    pub benchmark_validated: bool,
+    #[serde(default)]
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,7 +192,12 @@ mod tests {
             CoreErrorCode::RuntimeNotFound,
             CoreErrorCode::ProviderUnavailable,
             CoreErrorCode::ProviderLibraryMissing,
+            CoreErrorCode::ProviderLibraryNotFound,
+            CoreErrorCode::ProviderLoadFailed,
             CoreErrorCode::SessionCreateFailed,
+            CoreErrorCode::ProviderSessionCreateFailed,
+            CoreErrorCode::ProviderSmokeInferenceFailed,
+            CoreErrorCode::ProviderOutputMismatch,
             CoreErrorCode::InputShapeMismatch,
             CoreErrorCode::DecoderCacheSchemaMismatch,
             CoreErrorCode::DecoderIncrementalDivergence,

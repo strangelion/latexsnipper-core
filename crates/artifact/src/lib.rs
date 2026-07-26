@@ -3,10 +3,16 @@
 //! The graph complements `Document.assets`, `SourceInfo`, and `Provenance`
 //! without changing the Document 1.0.0 wire schema.
 
+mod crop_store;
+
 use std::collections::{HashMap, HashSet};
 
 use latexsnipper_ast::Provenance;
 use serde::{Deserialize, Serialize};
+
+pub use crop_store::{
+    CropArtifactPolicy, CropPrivacyConsent, DebugCropStore, DurableCropReference,
+};
 
 pub const ARTIFACT_TRACE_SCHEMA_VERSION: u32 = 1;
 

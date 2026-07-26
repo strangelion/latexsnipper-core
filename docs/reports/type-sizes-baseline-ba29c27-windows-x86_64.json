@@ -1,0 +1,25 @@
+{
+  "commit": "ba29c27f800ba5dbd53954923be236b3cedb24c2",
+  "notPresentAtBaseline": [
+    "RecognitionProvenance",
+    "TransformationEvidence"
+  ],
+  "schemaVersion": 1,
+  "target": {
+    "arch": "x86_64",
+    "os": "windows",
+    "pointerWidthBits": 64
+  },
+  "types": [
+    {
+      "alignmentBytes": 8,
+      "name": "Inline",
+      "sizeBytes": 712
+    },
+    {
+      "alignmentBytes": 8,
+      "name": "Formula",
+      "sizeBytes": 672
+    }
+  ]
+}

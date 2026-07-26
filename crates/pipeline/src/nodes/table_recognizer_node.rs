@@ -186,6 +186,43 @@ impl TableRecognizerNode {
             return vec![];
         }
         let cropped = operations::crop(image, *rect);
+        if let Some(store) = ctx.crop_artifact_store().cloned() {
+            match latexsnipper_image::decode::encode_png(&cropped)
+                .map_err(|error| error.to_string())
+                .and_then(|png| {
+                    store
+                        .save_png(&png, *rect, image.pixels())
+                        .map_err(|error| error.to_string())
+                }) {
+                Ok(reference) => {
+                    ctx.artifacts
+                        .artifact_graph
+                        .insert(latexsnipper_artifact::ArtifactRecord {
+                            id: latexsnipper_artifact::ArtifactId::from(
+                                reference.artifact_ref.clone(),
+                            ),
+                            kind: latexsnipper_artifact::ArtifactKind::CroppedRegion,
+                            stable_id: None,
+                            content_ref: Some(reference.content_ref.clone()),
+                            checksum: Some(reference.crop_hash.clone()),
+                            provenance: Vec::new(),
+                        });
+                    if let Ok(evidence) = serde_json::to_string(&reference) {
+                        ctx.diagnostic_info(
+                            "recognize_table",
+                            format!("TABLE_CELL_CROP_REFERENCE {evidence}"),
+                        );
+                    }
+                }
+                Err(error) => ctx.diagnostic_warn(
+                    "recognize_table",
+                    format!("debug crop artifact was not saved: {error}"),
+                ),
+            }
+        }
+        let mut route = latexsnipper_inference::CellRecognitionRoute::TextOnly;
+        let mut detector_overlap = 0.0f32;
+        let mut formula_candidate: Option<(Vec<Inline>, String, f32)> = None;
 
         // Try formula detection via ModelExecutor
         if let Some(ref mut det) = formula_det {
@@ -230,56 +267,75 @@ impl TableRecognizerNode {
                     latexsnipper_inference::filter_formula_detections(&mut boxes, 20.0, 0.2);
 
                     if !boxes.is_empty() {
-                        if let Some(ref mut rec) = formula_rec {
-                            let mut inlines = Vec::new();
-                            let mut has_formula = false;
-                            for det in &boxes {
-                                let dx = det.rect.x as u32;
-                                let dy = det.rect.y as u32;
-                                let dw = det.rect.width as u32;
-                                let dh = det.rect.height as u32;
-                                if dw >= 4 && dh >= 4 {
-                                    let fc = operations::crop(
-                                        &cropped,
-                                        Rect::new(dx as f32, dy as f32, dw as f32, dh as f32),
-                                    );
-                                    let p = fc.pixels().to_vec();
-                                    let s = vec![fc.height() as usize, fc.width() as usize, 3];
-                                    let ri = ModelInput {
-                                        name: "image".to_string(),
-                                        data: p,
-                                        shape: s,
-                                        dtype: TensorDtype::UInt8,
-                                    };
-                                    let mut rc = InferenceContext::new();
-                                    match rec.run(ri, &mut rc) {
-                                        Ok(ModelOutput::Formula(results)) => {
-                                            for r in results {
-                                                let mut f = Formula::latex(r.latex);
-                                                f.confidence = r.confidence;
-                                                f.recognition_provenance =
-                                                    r.provenance.map(Box::new);
-                                                f.recognition_evidence = r.evidence.map(Box::new);
-                                                inlines.push(Inline::Formula(f));
-                                                has_formula = true;
+                        let detector_confidence = boxes
+                            .iter()
+                            .map(|item| item.confidence)
+                            .fold(0.0f32, f32::max);
+                        detector_overlap = (boxes
+                            .iter()
+                            .map(|item| item.rect.width * item.rect.height)
+                            .sum::<f32>()
+                            / (rect.width * rect.height).max(1.0))
+                        .clamp(0.0, 1.0);
+                        route = latexsnipper_inference::cell_recognition_route(detector_confidence);
+                        if route != latexsnipper_inference::CellRecognitionRoute::TextOnly {
+                            if let Some(ref mut rec) = formula_rec {
+                                let mut inlines = Vec::new();
+                                let mut latex = Vec::new();
+                                let mut confidences = Vec::new();
+                                for det in &boxes {
+                                    let dx = det.rect.x as u32;
+                                    let dy = det.rect.y as u32;
+                                    let dw = det.rect.width as u32;
+                                    let dh = det.rect.height as u32;
+                                    if dw >= 4 && dh >= 4 {
+                                        let fc = operations::crop(
+                                            &cropped,
+                                            Rect::new(dx as f32, dy as f32, dw as f32, dh as f32),
+                                        );
+                                        let p = fc.pixels().to_vec();
+                                        let s = vec![fc.height() as usize, fc.width() as usize, 3];
+                                        let ri = ModelInput {
+                                            name: "image".to_string(),
+                                            data: p,
+                                            shape: s,
+                                            dtype: TensorDtype::UInt8,
+                                        };
+                                        let mut rc = InferenceContext::new();
+                                        match rec.run(ri, &mut rc) {
+                                            Ok(ModelOutput::Formula(results)) => {
+                                                for r in results {
+                                                    latex.push(r.latex.clone());
+                                                    confidences.push(r.confidence);
+                                                    let mut f = Formula::latex(r.latex);
+                                                    f.confidence = r.confidence;
+                                                    f.recognition_provenance =
+                                                        r.provenance.map(Box::new);
+                                                    f.recognition_evidence =
+                                                        r.evidence.map(Box::new);
+                                                    inlines.push(Inline::Formula(f));
+                                                }
                                             }
-                                        }
-                                        Ok(_other) => {
-                                            log::warn!(
+                                            Ok(_other) => {
+                                                log::warn!(
                                                 "Table cell formula rec: unexpected output type"
                                             );
-                                        }
-                                        Err(e) => {
-                                            ctx.diagnostic_warn(
-                                                "recognize_table",
-                                                format!("Table cell formula rec failed: {e}"),
-                                            );
+                                            }
+                                            Err(e) => {
+                                                ctx.diagnostic_warn(
+                                                    "recognize_table",
+                                                    format!("Table cell formula rec failed: {e}"),
+                                                );
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            if has_formula {
-                                return inlines;
+                                if !inlines.is_empty() {
+                                    let confidence = confidences.iter().sum::<f32>()
+                                        / confidences.len().max(1) as f32;
+                                    formula_candidate =
+                                        Some((inlines, latex.join(" "), confidence));
+                                }
                             }
                         }
                     }
@@ -299,22 +355,62 @@ impl TableRecognizerNode {
             }
         }
 
-        // Fall back to text recognition
-        if let Some(service) = text_rec_service {
-            if let Ok(result) = service.recognize_region_result(
-                &cropped,
-                &Rect::new(0.0, 0.0, w as f32, h as f32),
-                None,
-            ) {
-                if !result.text.is_empty() {
-                    return vec![Inline::Text(recognized_text(
-                        result.text,
-                        result.confidence,
-                    ))];
+        if route == latexsnipper_inference::CellRecognitionRoute::FormulaOnly {
+            return formula_candidate
+                .map(|candidate| candidate.0)
+                .unwrap_or_default();
+        }
+
+        let text_candidate = text_rec_service.and_then(|service| {
+            service
+                .recognize_region_result(&cropped, &Rect::new(0.0, 0.0, w as f32, h as f32), None)
+                .ok()
+                .filter(|result| !result.text.is_empty())
+                .map(|result| {
+                    let inline =
+                        Inline::Text(recognized_text(result.text.clone(), result.confidence));
+                    (vec![inline], result.text, result.confidence)
+                })
+        });
+
+        if route == latexsnipper_inference::CellRecognitionRoute::DualCandidate {
+            match (formula_candidate, text_candidate) {
+                (Some(formula), Some(text)) => {
+                    let decision = latexsnipper_inference::select_ambiguous_cell_candidate(
+                        latexsnipper_inference::CellCandidate {
+                            kind: latexsnipper_inference::CellCandidateKind::Formula,
+                            content: &formula.1,
+                            confidence: formula.2,
+                        },
+                        latexsnipper_inference::CellCandidate {
+                            kind: latexsnipper_inference::CellCandidateKind::Text,
+                            content: &text.1,
+                            confidence: text.2,
+                        },
+                        latexsnipper_inference::CellGeometryEvidence {
+                            aspect_ratio: rect.width / rect.height.max(1.0),
+                            detector_overlap,
+                        },
+                    );
+                    if let Ok(evidence) = serde_json::to_string(&decision) {
+                        ctx.diagnostic_info(
+                            "recognize_table",
+                            format!("TABLE_CELL_CANDIDATE_DECISION {evidence}"),
+                        );
+                    }
+                    return match decision.selected_candidate {
+                        latexsnipper_inference::CellCandidateKind::Formula => formula.0,
+                        latexsnipper_inference::CellCandidateKind::Text => text.0,
+                    };
                 }
+                (Some(formula), None) => return formula.0,
+                (None, Some(text)) => return text.0,
+                (None, None) => return Vec::new(),
             }
         }
 
-        vec![]
+        text_candidate
+            .map(|candidate| candidate.0)
+            .unwrap_or_default()
     }
 }

@@ -1,0 +1,51 @@
+{
+  "cases": [
+    {
+      "deserializeMeanMs": 5.863,
+      "itemCount": 100,
+      "jsonBytes": 138061,
+      "name": "formulas-100-inline-provenance",
+      "serializeMeanMs": 8.427575000000001
+    },
+    {
+      "deserializeMeanMs": 3.97789,
+      "itemCount": 100,
+      "jsonBytes": 86716,
+      "name": "formulas-100-registry-prototype",
+      "serializeMeanMs": 4.6739250000000006
+    },
+    {
+      "deserializeMeanMs": 66.10260500000001,
+      "itemCount": 1000,
+      "jsonBytes": 1384561,
+      "name": "formulas-1000-inline-provenance",
+      "serializeMeanMs": 66.38005000000001
+    },
+    {
+      "deserializeMeanMs": 44.164165,
+      "itemCount": 1000,
+      "jsonBytes": 866116,
+      "name": "formulas-1000-registry-prototype",
+      "serializeMeanMs": 40.118235000000006
+    },
+    {
+      "deserializeMeanMs": 57.416880000000006,
+      "itemCount": 10000,
+      "jsonBytes": 838895,
+      "name": "table-cells-10000",
+      "serializeMeanMs": 52.42666499999999
+    }
+  ],
+  "iterations": 20,
+  "registryDesign": {
+    "migration": [
+      "Readers continue accepting inline recognitionProvenance.",
+      "Writers opt in only after a document schema version bump.",
+      "A compatibility writer expands provenanceId for legacy clients."
+    ],
+    "notImplementedInAst": true,
+    "shape": "Document.provenanceRegistry + formula.provenanceId"
+  },
+  "registryDesignStatus": "evaluation-only",
+  "schemaVersion": 1
+}

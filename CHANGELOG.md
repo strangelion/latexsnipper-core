@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add real-model formula prediction/evaluation, provider smoke levels,
+  confidence/correction diagnostics, ordered-tree table scoring, ambiguity
+  routing, explicit-consent crop artifacts, AST size/serialization evidence,
+  dependency auditing, and an opt-in ORT mmap lifecycle experiment. Real
+  distribution, accelerator, and incremental-decoder claims remain fail-closed
+  until their required artifacts or runners exist.
 - Add the native, transport-neutral `RecognitionSession` application API with
   long-lived Engine/Runtime ownership, stable profiles, bounded path/bytes/image
   requests, Document-authoritative results, readiness and warmup reports,

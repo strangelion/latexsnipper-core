@@ -27,7 +27,12 @@ timestamp, model load time, and peak RSS when available. Missing samples,
 unknown samples, stale normalized ground truth, duplicate IDs, and invalid
 latencies fail closed.
 
-`thresholds.json` defines comparison policy. It deliberately requires a real
-baseline rather than allowing a synthetic or oracle run to establish quality.
-No accuracy claim is made until a checked-in result was produced by the real
-model/runtime path.
+`predictions-trocr-deit-ort-cpu.json` and its JSON/CSV reports were produced by
+the real TrOCR encoder/decoder through ONNX Runtime CPU; predictions are not
+copied from ground truth. This establishes an honest model/runtime baseline on
+the synthetic v1 distribution. Its normalized exact match is 0 and its CER is
+about 1.302, so it is evidence of the current quality gap, not a quality claim.
+
+`thresholds.json` defines comparison policy. Real screenshot, scan, mobile, and
+hard-negative claims remain blocked until licensed inputs pass the intake
+contract in `docs/quality/real-dataset-intake-status.md`.

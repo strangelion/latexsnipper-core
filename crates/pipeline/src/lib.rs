@@ -28,6 +28,7 @@ pub use context::{PipelineCancellationToken, PipelineContext, PipelineProgressOb
 pub use graph::PipelineGraph;
 pub use latexsnipper_artifact::{
     ArtifactEdge, ArtifactEdgeKind, ArtifactGraph, ArtifactId, ArtifactKind, ArtifactRecord,
+    CropArtifactPolicy, CropPrivacyConsent, DebugCropStore, DurableCropReference,
 };
 pub use manifest::PipelineManifest;
 pub use node::{PipelineNode, TransformNode};

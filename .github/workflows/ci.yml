@@ -203,6 +203,55 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
+  runtime-quality-evidence:
+    name: Runtime quality evidence
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Collect machine-readable gates
+        run: >-
+          python tools/quality/collect_test_evidence.py
+          --output target/runtime-quality/test-evidence.json
+      - name: Upload runtime quality evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-quality-evidence-${{ github.run_id }}
+          path: target/runtime-quality/test-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+  provider-cpu-smoke:
+    name: Provider CPU smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run fixed-model CPU session and inference
+        run: >-
+          cargo run --locked -p latexsnipper-runtime --example provider_smoke --
+          crates/wasm/tests/fixtures/tiny-text-rec.onnx
+          target/provider-smoke.json cpu cpu
+      - name: Upload provider smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: provider-cpu-smoke-${{ matrix.os }}-${{ github.run_id }}
+          path: target/provider-smoke.json
+          if-no-files-found: error
+          retention-days: 30
+
   fuzz-build:
     name: Compile all fuzz targets
     runs-on: ubuntu-latest

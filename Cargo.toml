@@ -151,6 +151,14 @@ path = "examples/ctc_ocr_model/main.rs"
 name = "generate_fixtures"
 path = "tools/generate_fixtures.rs"
 
+[[example]]
+name = "report_type_sizes"
+path = "tools/quality/report_type_sizes.rs"
+
+[[example]]
+name = "serialization_benchmark"
+path = "tools/quality/serialization_benchmark.rs"
+
 [[test]]
 name = "integration"
 path = "tests/integration.rs"

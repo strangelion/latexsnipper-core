@@ -1,5 +1,6 @@
 pub mod adapter_registry;
 pub mod adapters;
+pub mod cell_candidate;
 pub mod decoder_state;
 pub mod formula_backend;
 pub mod formula_detector;
@@ -26,6 +27,11 @@ pub mod yolo_utils;
 
 pub use adapter_registry::register_builtin_adapters;
 pub use adapters::formula_backend_adapter::FormulaBackendPackage;
+pub use cell_candidate::{
+    cell_recognition_route, looks_like_hard_negative, select_ambiguous_cell_candidate,
+    CellCandidate, CellCandidateDecision, CellCandidateKind, CellCandidateScore,
+    CellGeometryEvidence, CellRecognitionRoute,
+};
 pub use decoder_state::{
     AttentionKind, AxisSemantic, DecoderDType, DecoderStateEntry, DecoderStateError,
     DecoderStateObservation, DecoderStateRole, DecoderStateSchema,

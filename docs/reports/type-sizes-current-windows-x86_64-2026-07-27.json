@@ -1,0 +1,31 @@
+{
+  "commit": "52ce8dcd6e574a5a085888bb0bc33d3430f57a49",
+  "schemaVersion": 1,
+  "target": {
+    "arch": "x86_64",
+    "os": "windows",
+    "pointerWidthBits": 64
+  },
+  "types": [
+    {
+      "alignmentBytes": 8,
+      "name": "Inline",
+      "sizeBytes": 712
+    },
+    {
+      "alignmentBytes": 8,
+      "name": "Formula",
+      "sizeBytes": 688
+    },
+    {
+      "alignmentBytes": 8,
+      "name": "RecognitionProvenance",
+      "sizeBytes": 160
+    },
+    {
+      "alignmentBytes": 8,
+      "name": "TransformationEvidence",
+      "sizeBytes": 128
+    }
+  ]
+}

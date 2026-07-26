@@ -1,0 +1,1720 @@
+{
+  "schemaVersion": 1,
+  "repository": "strangelion/latexsnipper-core",
+  "searchRoots": [
+    "<repo>",
+    "<search-root-1>",
+    "<search-root-2>"
+  ],
+  "candidateCount": 170,
+  "decoderStepCandidateCount": 0,
+  "decoderStepStatus": "blocked",
+  "limitations": [
+    "GitHub metadata is inspected without downloading large archives.",
+    "containsWhile/containsAdd34 are byte observations, not graph validation.",
+    "A full decoder model is not treated as an incremental decoder_step model."
+  ],
+  "candidates": [
+    {
+      "location": "git-object",
+      "path": "crates/tests/fixtures/pp_formulanet_tokenizer.json",
+      "gitObject": "4d663e2f5ef8ea1aaf54daae0ef09c44de645055",
+      "sizeBytes": 1539581,
+      "sha256": "352f9ea33f61cca2cc5d44bfa11ead41f243c4be96255f39bae9c0246787dc9d",
+      "format": "json",
+      "containsWhile": true,
+      "containsAdd34": false
+    },
+    {
+      "location": "git-object",
+      "path": "crates/wasm/tests/fixtures/tiny-formula-decoder.onnx",
+      "gitObject": "1d6cb8a5155f1c70278aa7656c0356221459cae2",
+      "sizeBytes": 534,
+      "sha256": "60f0a3a326f28af63e1f13365edf018c4b9e4c4e8a64d6971b34b32516a1ee93",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false
+    },
+    {
+      "location": "git-object",
+      "path": "models/formula-rec/trocr-deit/decoder_model.onnx",
+      "gitObject": "8a98dbf24cdf03aa1b0afa9a91af40260aca7280",
+      "sizeBytes": 30114937,
+      "sha256": "fd0f92d7a012f3dae41e1ac79421aea0ea888b5a66cb3f9a004e424f82f3daed",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false
+    },
+    {
+      "location": "github-release",
+      "path": "models-v3.1.0/latexsnipper-pp-formulanet-s.zip",
+      "url": "https://github.com/strangelion/latexsnipper-core/releases/download/models-v3.1.0/latexsnipper-pp-formulanet-s.zip",
+      "sizeBytes": 163089009,
+      "sha256": null,
+      "format": "archive",
+      "containsWhile": null,
+      "containsAdd34": null,
+      "notDownloaded": true
+    },
+    {
+      "location": "local",
+      "path": "<repo>/.mypy_cache/3.14/json/decoder.data.json",
+      "sizeBytes": 16329,
+      "sha256": "3f946f36f789e4ef77504b615b333ffdc62c44c85334b18cbeac65f4ac351bad",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/.mypy_cache/3.14/json/decoder.meta.json",
+      "sizeBytes": 1692,
+      "sha256": "6442100ab9fc514f8fbba2d08608f69ebe390d49b29785aecf6687c888aecc02",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/crates/tests/fixtures/pp_formulanet_tokenizer.json",
+      "sizeBytes": 1539581,
+      "sha256": "352f9ea33f61cca2cc5d44bfa11ead41f243c4be96255f39bae9c0246787dc9d",
+      "format": "json",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/crates/wasm/tests/fixtures/tiny-formula-decoder.onnx",
+      "sizeBytes": 534,
+      "sha256": "60f0a3a326f28af63e1f13365edf018c4b9e4c4e8a64d6971b34b32516a1ee93",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/docs/reports/decoder-artifact-search-2026-07-27.json",
+      "sizeBytes": 61700,
+      "sha256": "31d5bf51afad9489b4ffcc1d2cfb2a43f78d1891eabd49af2b0c774c429ac85c",
+      "format": "json",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/models/doc_ori/inference.json",
+      "sizeBytes": 104441,
+      "sha256": "3580978602f309c3554508dd85d4fe09b73a7e0d80d7f9e63258f5b72c390c69",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/models/doc_ori/inference.pdiparams",
+      "sizeBytes": 6754166,
+      "sha256": "e8d6e7c5d264507e40e58a655779059d616b20d7441ea22047d829eb3931989c",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/models/formula-rec/pp-formulanet-s/inference.json",
+      "sizeBytes": 504505,
+      "sha256": "2c8fc31a94d461a7325fe06e8cbaa5db6c5658c490f74d3d6116defe8c859d6f",
+      "format": "paddle-pir-json",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/models/formula-rec/pp-formulanet-s/inference.pdiparams",
+      "sizeBytes": 231675001,
+      "sha256": "b6392296d16e2a9f414c0a751d7ccbd1bd9d8272b68aab72df1d3875f35a7489",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/models/formula-rec/trocr-deit/decoder_model.onnx",
+      "sizeBytes": 30114937,
+      "sha256": "fd0f92d7a012f3dae41e1ac79421aea0ea888b5a66cb3f9a004e424f82f3daed",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/models/text-det/openocr-mobile/inference.json",
+      "sizeBytes": 229307,
+      "sha256": "89240f689a4a77aad75ef55a8df0a15c8e1d4980a327d17e58f24bbadde5aeab",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/models/text-rec/openocr-mobile/inference.json",
+      "sizeBytes": 208004,
+      "sha256": "f0bf53c853937a917affdd74467472167727f8ab0f0f7bded01c4a16c27e46e6",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/release_models/latexsnipper-pp-formulanet-s.zip",
+      "sizeBytes": 163089009,
+      "sha256": "826dc63ee8f7cda311e4ba4d1752b4a51855c1c6d7ff9ee2a2034c3aa57b0d4f",
+      "format": "archive",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-01e9d7df2308cdb3/lib-latexsnipper_inference.json",
+      "sizeBytes": 1130,
+      "sha256": "5a1896798c0e9b0db6697c26759936296691e476bd821fcea89b298cce211722",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-0801707d275956cd/lib-latexsnipper_inference.json",
+      "sizeBytes": 1127,
+      "sha256": "aa1470f72f136ddad654270c7b4eb227a36923a3ab58f04bc63ac2dfafa4c284",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-16d0f4002e905593/lib-latexsnipper_inference.json",
+      "sizeBytes": 1304,
+      "sha256": "c84df21cc1ebd1861f4c8a09667701d499ccaec36d6c4549e5a5bec2f216bb02",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-16db5305331202be/lib-latexsnipper_inference.json",
+      "sizeBytes": 1303,
+      "sha256": "b52016ddef730972589f56b795038db528c726256ccb0b3f92a9fb668da77421",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-28b3d7d50c934f76/test-lib-latexsnipper_inference.json",
+      "sizeBytes": 1312,
+      "sha256": "5c9bf069131f64b299c2b532dc9797d4665ae1581a71c4286b7584bbdec26ed8",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-2a3a76c6e8ac828c/test-lib-latexsnipper_inference.json",
+      "sizeBytes": 1306,
+      "sha256": "1204ee4d5951628be0de73e1ef36c4770487e753d90831ed9199b09bdcc7abf1",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-2d57eedff6f9d977/lib-latexsnipper_inference.json",
+      "sizeBytes": 1315,
+      "sha256": "4eacffc793b0708c25bc4e7853f1cfa824f941f84ae11f5416941f9a93a5924a",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-31205886afbe7046/lib-latexsnipper_inference.json",
+      "sizeBytes": 1302,
+      "sha256": "f9e5f5546b0dadde07eb6aeb891d1604c64940865adbade9b3cc474e1ea9eefa",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-4b4c41aa33a90a48/lib-latexsnipper_inference.json",
+      "sizeBytes": 1319,
+      "sha256": "02a85e7a92c61f11cee716067e934bd235a9599665443ce1f4d3994bc063fdbd",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-4caaabfff8b8cba9/lib-latexsnipper_inference.json",
+      "sizeBytes": 1305,
+      "sha256": "c2919941b136f9deb6e552787a69c3dd1320502b5948489f8616d31cc6ba1550",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-55e5b377b2011e67/lib-latexsnipper_inference.json",
+      "sizeBytes": 1315,
+      "sha256": "ac3c2c251cfe6dd691ddf4ec96007df278f4d56fa62cad5f2572983db15c12e8",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-5c3246cd07deb9bf/lib-latexsnipper_inference.json",
+      "sizeBytes": 1130,
+      "sha256": "f336e74f7b4c0f8ddc0a2753c7233f8bac04b3023b42b94fc6bb3ed298115496",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-60e8420a88f20fe0/lib-latexsnipper_inference.json",
+      "sizeBytes": 1246,
+      "sha256": "39166c964ae44ec04e8ea7e7e7584287d5089724755fd80cdd23ebdb7fea53f7",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-65603e8346660008/lib-latexsnipper_inference.json",
+      "sizeBytes": 1305,
+      "sha256": "95db48b20cde4d83d866f9367383259c80b6cf0319996542b39d28bdd2a6f67e",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-6f843a571126644b/test-lib-latexsnipper_inference.json",
+      "sizeBytes": 1190,
+      "sha256": "2c710fc70ca0b786f58a3f66102a819d7bbccac386020e52697280da492782f1",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-8506d2674e1251da/lib-latexsnipper_inference.json",
+      "sizeBytes": 1129,
+      "sha256": "c3f5f98db34cfb42979a6574a24cae23edb8ced14edac1602667e1ef67864c8c",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-9382d2c5ab6534af/lib-latexsnipper_inference.json",
+      "sizeBytes": 1130,
+      "sha256": "43fa5afd6aeae44bdb33fdb0e399774d17ccdd9a39a9c601f6a241025541395c",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-979bd7e9d98b59d3/test-lib-latexsnipper_inference.json",
+      "sizeBytes": 1306,
+      "sha256": "4136066ae4196b11c5ee1d31d24aab79b0962b704208bc32883ee01f38237f73",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-a3f0c91bfe575288/lib-latexsnipper_inference.json",
+      "sizeBytes": 1128,
+      "sha256": "26d0f1096c979a9913293e7161f51dbcd1d238f01d1fe6d10d98e0de0d552e92",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-a8a2163120ff8207/lib-latexsnipper_inference.json",
+      "sizeBytes": 1316,
+      "sha256": "cce9859d84a4ce4c8911547f1dfb94b3f0878ac96d0b48874464186881d60374",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-aa5b3656a8082b7b/test-lib-latexsnipper_inference.json",
+      "sizeBytes": 1190,
+      "sha256": "23fd47d8324ad894d2fefef9a06540bfcd5de1b405ccb3e3c747c86cde885e51",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-ac6e8af1d1b7ba6d/test-lib-latexsnipper_inference.json",
+      "sizeBytes": 1319,
+      "sha256": "8778fd2f914b405678c0c6af54d13324f7bc5ff416b210f8fb3f5de712660fae",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-b2ab6eca4100389b/lib-latexsnipper_inference.json",
+      "sizeBytes": 1302,
+      "sha256": "03e2d4b29a477e5cef30d4d0542b9e9f5f9b9cd8f1bb1ebcc7f78a6c79b8aeb6",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-b456719d80455b77/lib-latexsnipper_inference.json",
+      "sizeBytes": 1301,
+      "sha256": "6a77e8eb1f142b5ea242463c0a8fe9ac1860bf7aefada1f344f4d6abefcc4bef",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-c2a5aeb400e515db/lib-latexsnipper_inference.json",
+      "sizeBytes": 1144,
+      "sha256": "93c7f85cb8d474d6dfd4b13cef9586bda27746dd807ce1102581551342970b98",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-c9db7441b436e9fc/test-lib-latexsnipper_inference.json",
+      "sizeBytes": 1251,
+      "sha256": "5ed289bc82cfe579e472be11103d33dfaf2cbce896ce4b207c190cd13640f1f5",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-cc61dec66c865698/lib-latexsnipper_inference.json",
+      "sizeBytes": 1127,
+      "sha256": "12a442f0c1d2eb429fe05daa74e1555a626731bad1e40df81a08e1d25881f956",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-d72b5bb259138b6d/test-lib-latexsnipper_inference.json",
+      "sizeBytes": 1323,
+      "sha256": "7bc59321272c6706723c1cd4b079455afdf559add6c4a2284ee838c258f78cad",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-e35bcad3fefac0fb/lib-latexsnipper_inference.json",
+      "sizeBytes": 1307,
+      "sha256": "4f14781e2078ec8c625787ff641b78731f144e994a280d871fbd345198487aad",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-e5dc84f82b7cae9a/lib-latexsnipper_inference.json",
+      "sizeBytes": 1301,
+      "sha256": "45817849645a39025aca17281c6edbd1010f333fbc12793bcfb4b661563dd3ed",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-eb273b6a2c357c80/lib-latexsnipper_inference.json",
+      "sizeBytes": 1132,
+      "sha256": "b46a9a17e6aa1e28f1884ccf66bbce25a3077aa351232837fa38c2b3049c6385",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-ef9509512e9935e2/lib-latexsnipper_inference.json",
+      "sizeBytes": 1301,
+      "sha256": "947753ac84f53a84c8c2cfa5c4099637e6614c1a2279ff0d70cf8a8b942d4901",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-f4c3f25a2713032b/lib-latexsnipper_inference.json",
+      "sizeBytes": 1301,
+      "sha256": "82ed9def248cdeb01b5167c5d382087a9a62f3572fe49fcc6234aec1fcf3007a",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-f681c2799e7a29ef/lib-latexsnipper_inference.json",
+      "sizeBytes": 1303,
+      "sha256": "7e2eee24ab6368e1f3eb1df8cb34931a2d951d26ebffe3aea13aa4faa09f729e",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/target/debug/.fingerprint/latexsnipper-inference-fbf63c0003b25c45/lib-latexsnipper_inference.json",
+      "sizeBytes": 1133,
+      "sha256": "46ca1174e253ad693d7a8dbfabb542c28805e19686820694e314e4b642dd4112",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/ch_ppstructure_mobile_v2.0_SLANet_infer/inference.pdiparams",
+      "sizeBytes": 7666515,
+      "sha256": "9d33d47b174bcb9fb63f94dac54a4d01a974da6d0c56ddb51cf0e38ed43f7a60",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/ch_ppstructure_mobile_v2.0_SLANet_infer/inference.pdmodel",
+      "sizeBytes": 353490,
+      "sha256": "5ed9d29433666828d2a3d6a6bc55ef2a55734091955c53eb20a098a19da6d9fd",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-LCNet_x1_0_doc_ori_infer/inference.json",
+      "sizeBytes": 104441,
+      "sha256": "3580978602f309c3554508dd85d4fe09b73a7e0d80d7f9e63258f5b72c390c69",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-LCNet_x1_0_doc_ori_infer/inference.pdiparams",
+      "sizeBytes": 6754166,
+      "sha256": "e8d6e7c5d264507e40e58a655779059d616b20d7441ea22047d829eb3931989c",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-LCNet_x1_0_textline_ori_infer/inference.json",
+      "sizeBytes": 104399,
+      "sha256": "b81929eeaff8e52db0fafb49c9fbfc5bc0572f81641fe0179cc52096323fb4d4",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-LCNet_x1_0_textline_ori_infer/inference.pdiparams",
+      "sizeBytes": 6743918,
+      "sha256": "0de2bcf996cf553e2b848dd7b1769dafffc6917b1ccdf55c1d8efe7909fbf743",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-OCRv6_medium_det_infer/inference.json",
+      "sizeBytes": 312150,
+      "sha256": "0f1a7ec35da36173529c7a60238b7f7919e3831929c3f700ad90ad4896adecd5",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-OCRv6_medium_det_infer/inference.pdiparams",
+      "sizeBytes": 61960476,
+      "sha256": "85218d2e3d98f5a21c58b4220627be923a97aee5db3cc71f39536ab31ac53960",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-OCRv6_medium_rec_infer/inference.json",
+      "sizeBytes": 221814,
+      "sha256": "0b2e25e990bd072f1bf77d59d67d508bce6c4bd44af6624e0fb27d6da2cd00e8",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-OCRv6_medium_rec_infer/inference.pdiparams",
+      "sizeBytes": 76465087,
+      "sha256": "1b01c79a914587933f615569e75de54f2e638ebb5d3f3b3c1b38c24ede8c7319",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-OCRv6_small_det_infer/inference.json",
+      "sizeBytes": 229307,
+      "sha256": "89240f689a4a77aad75ef55a8df0a15c8e1d4980a327d17e58f24bbadde5aeab",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/PP-OCRv6_small_det_infer/inference.pdiparams",
+      "sizeBytes": 9817888,
+      "sha256": "5043d4ccc8d63402ccea8feefcee4db57077431a873e78d2191836a178a492da",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/cls/ch_ppocr_mobile_v2_0_cls_mobile/inference.pdiparams",
+      "sizeBytes": 539978,
+      "sha256": "d1efda1b80e174b4fcb168a035ac96c1af4938892bd86a55f300a6027105d08c",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/cls/ch_ppocr_mobile_v2_0_cls_mobile/inference.pdmodel",
+      "sizeBytes": 1624487,
+      "sha256": "3c4337ec61722a20b1dca2e5bfaffc313c0592bc89ad6e0d45168224186f6683",
+      "format": "paddle-program",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/det/ch_PP-OCRv4_det_mobile/inference.pdiparams",
+      "sizeBytes": 4692937,
+      "sha256": "49ee815e30cff43cb1057d33bf0d94193e4d4f1ae28451cad15b40be830df915",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/det/ch_PP-OCRv4_det_mobile/inference.pdmodel",
+      "sizeBytes": 166367,
+      "sha256": "2ad68ed2768fe6c41166a5bc64680cc9f445390acb6528da449a4db2f7b90e14",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/det/ch_PP-OCRv4_det_server/inference.pdiparams",
+      "sizeBytes": 113295054,
+      "sha256": "48cecf9e30e9261a634126bc5211a2736508ae89d2d6199ef2ede06cdebe678f",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/det/ch_PP-OCRv4_det_server/inference.pdmodel",
+      "sizeBytes": 148803,
+      "sha256": "fec18291e9994c66a8c6877c7194c094071f115f7fd9f48b4da40e966749b03a",
+      "format": "paddle-program",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/det/en_PP-OCRv3_det_mobile/inference.pdiparams",
+      "sizeBytes": 2377917,
+      "sha256": "83676ec730627ab4502f401410a4b6a3ce1c0bb98fa249b71db055b6bddae051",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/det/en_PP-OCRv3_det_mobile/inference.pdmodel",
+      "sizeBytes": 1590133,
+      "sha256": "c4bfb1b05d9d1d5a760801eaf6d20180ef7e47bcc675fb17d1f3a89da5fef427",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/det/multi_PP-OCRv3_det_mobile/inference.pdiparams",
+      "sizeBytes": 2377917,
+      "sha256": "a6119e639cade15873ac32eb4bee121b63c811c4d007d9f618baf680aef8b857",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/det/multi_PP-OCRv3_det_mobile/inference.pdmodel",
+      "sizeBytes": 1441206,
+      "sha256": "c49f664c75549678deedcaff8d11f8f2b9f1303ef6c72deccdb98a5ea2104381",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/arabic_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7639215,
+      "sha256": "b388bf744151963a21b9ee9c60b4624ba90976ae5f1f1b023e594032b16ce40f",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/arabic_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 169634,
+      "sha256": "c9a2f2e222937a934c5c23fd95dbba5b62a3f6d822a14f86cf8b3e9b93632c64",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/ch_doc_PP-OCRv4_rec_server/inference.json",
+      "sizeBytes": 227033,
+      "sha256": "ad20b17e9306f1f6ca00a875dfd5206837513b53d5052fe4b56050468f4751b8",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/ch_doc_PP-OCRv4_rec_server/inference.pdiparams",
+      "sizeBytes": 94812503,
+      "sha256": "4ad3cf3f353ae3353515266c5e96ef49e9de27dd6cbe413b0234192384203bab",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 10766823,
+      "sha256": "a6dbfa63e7ee161688523c954e9e293f77dc24044db81e836ff9c7f103fd191a",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 169485,
+      "sha256": "bf78f3898a004615e69c676259d8171bd7ae99000653b41fd72aaa36ae8bd304",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/ch_PP-OCRv4_rec_server/inference.pdiparams",
+      "sizeBytes": 90453599,
+      "sha256": "0319d16cb29b01788757164083da6512a5defb9bccdff5148a929bd43b2cd58f",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/ch_PP-OCRv4_rec_server/inference.pdmodel",
+      "sizeBytes": 1887621,
+      "sha256": "d3cbe31c26670a275c74bba052a49925e24452243f6f646a9ef92c4f5acffd37",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/chinese_cht_PP-OCRv3_rec_mobile/inference.pdiparams",
+      "sizeBytes": 11081578,
+      "sha256": "53cdd14ef365d43a3de5357dea00935c56ae6d8f0f7d464b8aee187df8bdea47",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/chinese_cht_PP-OCRv3_rec_mobile/inference.pdmodel",
+      "sizeBytes": 1222540,
+      "sha256": "343da1722eae396309e365f9a98bca53f55ca71cf757743abaf83dce9d805bc0",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/cyrillic_PP-OCRv3_rec_mobile/inference.pdiparams",
+      "sizeBytes": 8934498,
+      "sha256": "2ef815afbb8970610618561946ce86faf60745ada64cd316ed34bfe34bdbf46f",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/cyrillic_PP-OCRv3_rec_mobile/inference.pdmodel",
+      "sizeBytes": 1020920,
+      "sha256": "377bee205d0ba2d401cb463c300366ab87b2373b45dd9c8e3b560166b064beee",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/devanagari_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7642119,
+      "sha256": "3effa6613d040b79aac36699a3c97fe835fc91791db2010d614cc9ffb08ee415",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/devanagari_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 169634,
+      "sha256": "854c6d41d186be07588f3cd4ced044270ad96afd7f31ee4f63a70e1d3714a9d1",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7607269,
+      "sha256": "75f64a1ffb70c56b7a25655963ca16f5bf3286202e3f52ac972bee05cdee2f56",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 2517366,
+      "sha256": "85b952f05f709af259cfe4254012aa7208bef0998f71f57a15495446f25ccd43",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/japan_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 9690407,
+      "sha256": "e6e9b7395bb8476e85a15776aa09445c483778c06a512921cbc9ba81c6a2719a",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/japan_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 169634,
+      "sha256": "d3339a79fa88863f639a00cd57e973cc278fa46c3eb369b88cb24bb06c96b89d",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/kannada_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7635343,
+      "sha256": "580fe5bc0a45956569bc63bda99b27f33505f20e519fa43517d1d5b9bcbb029b",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/kannada_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 169634,
+      "sha256": "bb23a7045f9f03c414f727c75752660d51760f02da2023e258bcc014f585f8e8",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/korean_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 23920621,
+      "sha256": "ea4f4762582336e9b85653b016c5b1091223c947fafd282161fa3145ecb72d1d",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/korean_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 353760,
+      "sha256": "992eed58af98ed6125065027e52fbc69b570e6c2e74610ec240e8a2436151ada",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/latin_PP-OCRv3_rec_mobile/inference.pdiparams",
+      "sizeBytes": 8940218,
+      "sha256": "fa6f22a8b2a669c7d5b4dfd2607491abd4cd2467adf7077c9cc70ce8c47b61d9",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/latin_PP-OCRv3_rec_mobile/inference.pdmodel",
+      "sizeBytes": 1201877,
+      "sha256": "23e11a537d8cd7ebab669a9e48fb12f49c295ca9ecde398c6b5460830bd174b8",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/ta_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 22197581,
+      "sha256": "b0ae170098a2f706de3c60496f5730b5ea4afe1d6e679a67ab6f89aa1018ffde",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/ta_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 353760,
+      "sha256": "42ddd121b43ab9ef399e59705bcde6c56891a531c6df87a467aa99c5db54926f",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/te_PP-OCRv4_rec_mobile/inference.pdiparams",
+      "sizeBytes": 22208713,
+      "sha256": "6efc7c74d4ff86b4187ece2f3b4f6ecd775c3a780b82d27d39a9c506d6e9eb42",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv4/rec/te_PP-OCRv4_rec_mobile/inference.pdmodel",
+      "sizeBytes": 353760,
+      "sha256": "f07501e6a3e96aa065ed5a656c8aee5bff9694ac8cb51826178dd4f34e884333",
+      "format": "paddle-program",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/cls/ch_PP-LCNet_x0_25_textline_ori_cls_mobile/inference.json",
+      "sizeBytes": 104123,
+      "sha256": "8b3f80ca25f4765594640ddb3cb26f507f00e7e5d11bfef4c2915a6b9dff5d3c",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/cls/ch_PP-LCNet_x0_25_textline_ori_cls_mobile/inference.pdiparams",
+      "sizeBytes": 985712,
+      "sha256": "08ee1ce4bcdb30dd4e784862334d1df49d80a600294d75daae4ca4c70bc860e9",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/cls/ch_PP-LCNet_x1_0_textline_ori_cls_server/inference.json",
+      "sizeBytes": 104399,
+      "sha256": "b81929eeaff8e52db0fafb49c9fbfc5bc0572f81641fe0179cc52096323fb4d4",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/cls/ch_PP-LCNet_x1_0_textline_ori_cls_server/inference.pdiparams",
+      "sizeBytes": 6743918,
+      "sha256": "0de2bcf996cf553e2b848dd7b1769dafffc6917b1ccdf55c1d8efe7909fbf743",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/det/ch_PP-OCRv5_det_mobile/inference.json",
+      "sizeBytes": 229777,
+      "sha256": "05feef1acb00aa4cd7362b15f7f501fc4f99d7b1fa73c1c871e0c7b1504b0f5c",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/det/ch_PP-OCRv5_det_mobile/inference.pdiparams",
+      "sizeBytes": 4692937,
+      "sha256": "afa1820cb16c1fd0dad589d0f8b389139061c1ef6d68019685fd07be997dda5b",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/det/ch_PP-OCRv5_det_server/inference.json",
+      "sizeBytes": 402480,
+      "sha256": "af5876933d8806a1b50d895867e0781e135cd92ff37381992828fc8d1b842d28",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/det/ch_PP-OCRv5_det_server/inference.pdiparams",
+      "sizeBytes": 87932887,
+      "sha256": "183146fe9d9910352f68482f623bcbbb9fa7b9e8fa1463b9ad288cef00524d2d",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/arabic_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "d43832804d89c0e18d59f8446a3babd0ef60c44bc335efddac3176caf71d50af",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/arabic_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7922839,
+      "sha256": "4b4271fd1dd89a40b2056e1a42e58de7c0df2fdcf1a97ca9a8916d7ec45f9143",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217724,
+      "sha256": "24587345250c7332d0fc6f9a44e794d078cdaeb64c302fef906f325619de2569",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 16458665,
+      "sha256": "2460da90875937c94db97eba74ae3d9e5d4c4c57c42f1f41531c09a26bcc771a",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/ch_PP-OCRv5_rec_server/inference.json",
+      "sizeBytes": 325204,
+      "sha256": "8e6e12e5d42531840310977fffb58165bf889fc5061408c5a8afdb6985f47fcb",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/ch_PP-OCRv5_rec_server/inference.pdiparams",
+      "sizeBytes": 84390117,
+      "sha256": "63853f062a5f4089befc16f565a68277618e0da5cb45468b49d11079de0ada77",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/cyrillic_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "5d90f1bfca52d80c01de176c5238fae2459995a99ff1dbfe5319ab4ed1735df2",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/cyrillic_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7972691,
+      "sha256": "434dc9fa2a99fa3653e08f8cf793ae56be7dd41c35c4980e6255147cc02bbc80",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/devanagari_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "20d3b121184ec6b7de1705015022f4b22117990f6e5728a5d21c314bac9c1444",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/devanagari_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7836203,
+      "sha256": "719be7d20bfe9530e2deae324c999e9911087496bce5e70846767c448d023a01",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/el_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "7fb97d32c52562deb0a0654e0839acbb54cacc0441a857cc1d66e12892337e41",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/el_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7732627,
+      "sha256": "4d69bbb8ed9f84373631d121ab459f8583cd978df813b5fb9b139b7783b05fbd",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/en_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "fd1b6ec722ea841a72d3ba43e527df1d1066d5d7808e0503ee3eec7265188753",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/en_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7772315,
+      "sha256": "3ec8a97ed6cefe8568d3e2ee90bb193299b566a7661aa4fd52d224b96b59f66b",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/eslav_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "3fb6e2e658f5139ff16e35260de8f0577f106a9505c902e1dfc1f4f1d03cc9cb",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/eslav_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7811519,
+      "sha256": "f11057b05d8517868bca505271278973d706600d9dcc184cbcf5c4512091c32b",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217724,
+      "sha256": "562404e3c590c50c93778d5f0a94df21b47b5ab8f3ea6d47c7f8a7930c3bc844",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 13342671,
+      "sha256": "cac3e5f12cf04aaa77f6a5bc704e4e736ef2908476551891d84b41b4e9090462",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/latin_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "ea8f315e69b96e33a1339dde868651eadb4aaa62ce92e70c546f4b25e43134e7",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/latin_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7804259,
+      "sha256": "ecebeaac46267ecaa9f21025ac3ba8972a93c4a906c505ceb8a525299e466e0a",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/ta_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "9f845b15eef3272a47201fa0e411f8e466392b7dcfd705ade2890bf434b70370",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/ta_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7809583,
+      "sha256": "7e7bb6c9cbcc401aeaceb0cdace485dbfcc15a410f299294e7c3123bbcbc68f0",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/te_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "ad866e22872fbc0ee498b2c47d9537bd8f49f125353e43d82a4d173b595e6bfb",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/te_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7822651,
+      "sha256": "45967d00d6b4af590221733bf0d93791babc1feb17b98da401dba53d3cf110c9",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/th_PP-OCRv5_rec_mobile/inference.json",
+      "sizeBytes": 217712,
+      "sha256": "b92a9442af5ac6da3c6ba30ce1672d00a2d7a0fbd8068ed543ac6dcb9d5c7764",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv5/rec/th_PP-OCRv5_rec_mobile/inference.pdiparams",
+      "sizeBytes": 7814907,
+      "sha256": "45ec91f2322b58b8d30ba27d18fcfdbb8bf388b918dd978162d2af91e0c66d4b",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/det/PP-OCRv6_det_medium/inference.json",
+      "sizeBytes": 312150,
+      "sha256": "0f1a7ec35da36173529c7a60238b7f7919e3831929c3f700ad90ad4896adecd5",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/det/PP-OCRv6_det_medium/inference.pdiparams",
+      "sizeBytes": 61960476,
+      "sha256": "85218d2e3d98f5a21c58b4220627be923a97aee5db3cc71f39536ab31ac53960",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/det/PP-OCRv6_det_small/inference.json",
+      "sizeBytes": 229307,
+      "sha256": "89240f689a4a77aad75ef55a8df0a15c8e1d4980a327d17e58f24bbadde5aeab",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/det/PP-OCRv6_det_small/inference.pdiparams",
+      "sizeBytes": 9817888,
+      "sha256": "5043d4ccc8d63402ccea8feefcee4db57077431a873e78d2191836a178a492da",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/det/PP-OCRv6_det_tiny/inference.json",
+      "sizeBytes": 229184,
+      "sha256": "935c18972799dd8f2a2ff424b9f8b2c6adee4b89f3a76f0746210ec33ba9b3d8",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/det/PP-OCRv6_det_tiny/inference.pdiparams",
+      "sizeBytes": 1718055,
+      "sha256": "853f7ed317d4f2f80de646842e5bbc32f9d39c601562cbe466cda42e4bafb1b1",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/rec/PP-OCRv6_rec_medium/inference.json",
+      "sizeBytes": 221814,
+      "sha256": "0b2e25e990bd072f1bf77d59d67d508bce6c4bd44af6624e0fb27d6da2cd00e8",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/rec/PP-OCRv6_rec_medium/inference.pdiparams",
+      "sizeBytes": 76465087,
+      "sha256": "1b01c79a914587933f615569e75de54f2e638ebb5d3f3b3c1b38c24ede8c7319",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/rec/PP-OCRv6_rec_small/inference.json",
+      "sizeBytes": 208004,
+      "sha256": "f0bf53c853937a917affdd74467472167727f8ab0f0f7bded01c4a16c27e46e6",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/rec/PP-OCRv6_rec_small/inference.pdiparams",
+      "sizeBytes": 21074618,
+      "sha256": "406e1e689c9a7fbb04178007a3fe10cf852afe7bf8bb3bc6dbb9d532b13bd907",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/rec/PP-OCRv6_rec_tiny/inference.json",
+      "sizeBytes": 108959,
+      "sha256": "b5b14770c7dcf092781e92f4278a2ae5f95048f08b4b8a04140e88cb2745f147",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/rapidocr-models/paddle/PP-OCRv6/rec/PP-OCRv6_rec_tiny/inference.pdiparams",
+      "sizeBytes": 4420410,
+      "sha256": "bb2f8f54d1e25f28c71b6fa4fe23f5940e159cae27fbee96155c99f822156e57",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/UVDoc_infer/inference.json",
+      "sizeBytes": 190986,
+      "sha256": "2c2bc3e0f15e782cf8f2ad411b5033d99ca504fe88648f8054a5e925ba2336e0",
+      "format": "paddle-pir-json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<repo>/test-models/UVDoc_infer/inference.pdiparams",
+      "sizeBytes": 32054311,
+      "sha256": "810488899520e0da843b9bd9769ba4949f1c81e357f0eceb12d4a7da459c3eca",
+      "format": "paddle-parameters",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-21524c2e9c5c",
+      "sizeBytes": 1749,
+      "sha256": "21524c2e9c5c2c855c286a68fd496858af85d6f4a0a78716ce98895b14f5d29d",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-352f9ea33f61",
+      "sizeBytes": 1539581,
+      "sha256": "352f9ea33f61cca2cc5d44bfa11ead41f243c4be96255f39bae9c0246787dc9d",
+      "format": "json",
+      "containsWhile": true,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-3f946f36f789",
+      "sizeBytes": 16329,
+      "sha256": "3f946f36f789e4ef77504b615b333ffdc62c44c85334b18cbeac65f4ac351bad",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-5abfcd573c23",
+      "sizeBytes": 1692,
+      "sha256": "5abfcd573c23b19e4d55420f2826ccba9462d1710c555931fc8214e133c024c3",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-60f0a3a326f2",
+      "sizeBytes": 534,
+      "sha256": "60f0a3a326f28af63e1f13365edf018c4b9e4c4e8a64d6971b34b32516a1ee93",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-60f0a3a326f2",
+      "sizeBytes": 534,
+      "sha256": "60f0a3a326f28af63e1f13365edf018c4b9e4c4e8a64d6971b34b32516a1ee93",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-62822edb29da",
+      "sizeBytes": 1692,
+      "sha256": "62822edb29da8f3b0c39fdf80d57dc8363839ceba0a2baec82ee504ec54e0b1e",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-7b589b444492",
+      "sizeBytes": 1692,
+      "sha256": "7b589b444492e2faf840dc129af00df13cd669d64a8bac89dd1b0517bd6c44dd",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-89843b741650",
+      "sizeBytes": 16495,
+      "sha256": "89843b741650af89a294dd711da6669d07fdb175ad0e490e9ad016822d73a72f",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-956aa8b264ef",
+      "sizeBytes": 1692,
+      "sha256": "956aa8b264ef096ddba5c6970e5251eaa407fb1a881450cdbc80fd387cba50eb",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-b6c81ed53d39",
+      "sizeBytes": 16329,
+      "sha256": "b6c81ed53d396b9430d94c2ad7c1ed557fbab004a7919b0cc4683e9261851236",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-b6c81ed53d39",
+      "sizeBytes": 16329,
+      "sha256": "b6c81ed53d396b9430d94c2ad7c1ed557fbab004a7919b0cc4683e9261851236",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-b6c81ed53d39",
+      "sizeBytes": 16329,
+      "sha256": "b6c81ed53d396b9430d94c2ad7c1ed557fbab004a7919b0cc4683e9261851236",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-b6c81ed53d39",
+      "sizeBytes": 16329,
+      "sha256": "b6c81ed53d396b9430d94c2ad7c1ed557fbab004a7919b0cc4683e9261851236",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-b6c81ed53d39",
+      "sizeBytes": 16329,
+      "sha256": "b6c81ed53d396b9430d94c2ad7c1ed557fbab004a7919b0cc4683e9261851236",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-c399ac5a22bd",
+      "sizeBytes": 1692,
+      "sha256": "c399ac5a22bd32bb2530629e4d7e1fd4844aec7c2bc3d35a6780ac86f08c79a5",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-f1a14a1847c9",
+      "sizeBytes": 1692,
+      "sha256": "f1a14a1847c91cff2e3ef3d0ee8c602970955c281e05fd9837c00cbeedd83d96",
+      "format": "json",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-fd0f92d7a012",
+      "sizeBytes": 30114937,
+      "sha256": "fd0f92d7a012f3dae41e1ac79421aea0ea888b5a66cb3f9a004e424f82f3daed",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-fd0f92d7a012",
+      "sizeBytes": 30114937,
+      "sha256": "fd0f92d7a012f3dae41e1ac79421aea0ea888b5a66cb3f9a004e424f82f3daed",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    },
+    {
+      "location": "local",
+      "path": "<search-root-1>/candidate-fd0f92d7a012",
+      "sizeBytes": 30114937,
+      "sha256": "fd0f92d7a012f3dae41e1ac79421aea0ea888b5a66cb3f9a004e424f82f3daed",
+      "format": "onnx",
+      "containsWhile": false,
+      "containsAdd34": false,
+      "decoderStepNameMatch": false
+    }
+  ]
+}
