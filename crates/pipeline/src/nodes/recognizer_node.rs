@@ -156,8 +156,8 @@ impl RecognizerNode {
                             for result in results {
                                 let mut f = Formula::latex(result.latex);
                                 f.confidence = result.confidence;
-                                f.recognition_provenance = result.provenance;
-                                f.recognition_evidence = result.evidence;
+                                f.recognition_provenance = result.provenance.map(Box::new);
+                                f.recognition_evidence = result.evidence.map(Box::new);
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
                                     label: None,
@@ -362,8 +362,8 @@ impl RecognizerNode {
                                 let evidence = result.postprocess.clone();
                                 let mut f = Formula::latex(result.text);
                                 f.confidence = result.confidence;
-                                f.recognition_provenance = provenance;
-                                f.recognition_evidence = evidence;
+                                f.recognition_provenance = provenance.map(Box::new);
+                                f.recognition_evidence = evidence.map(Box::new);
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
                                     label: None,

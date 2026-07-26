@@ -578,9 +578,10 @@ fn strip_outer_math_delimiters(value: &str) -> &str {
         value[2..value.len() - 2].trim()
     } else if value.len() >= 2 && value.starts_with('$') && value.ends_with('$') {
         value[1..value.len() - 1].trim()
-    } else if value.len() >= 4 && value.starts_with(r"\(") && value.ends_with(r"\)") {
-        value[2..value.len() - 2].trim()
-    } else if value.len() >= 4 && value.starts_with(r"\[") && value.ends_with(r"\]") {
+    } else if value.len() >= 4
+        && ((value.starts_with(r"\(") && value.ends_with(r"\)"))
+            || (value.starts_with(r"\[") && value.ends_with(r"\]")))
+    {
         value[2..value.len() - 2].trim()
     } else {
         value

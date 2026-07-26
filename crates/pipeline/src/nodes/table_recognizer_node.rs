@@ -257,8 +257,9 @@ impl TableRecognizerNode {
                                             for r in results {
                                                 let mut f = Formula::latex(r.latex);
                                                 f.confidence = r.confidence;
-                                                f.recognition_provenance = r.provenance;
-                                                f.recognition_evidence = r.evidence;
+                                                f.recognition_provenance =
+                                                    r.provenance.map(Box::new);
+                                                f.recognition_evidence = r.evidence.map(Box::new);
                                                 inlines.push(Inline::Formula(f));
                                                 has_formula = true;
                                             }

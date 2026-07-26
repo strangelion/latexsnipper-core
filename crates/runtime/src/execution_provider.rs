@@ -106,7 +106,7 @@ pub enum ProviderPluginError {
     #[error("no execution provider is available for model '{model}'")]
     NoProviderAvailable {
         model: String,
-        trace: ProviderResolutionTrace,
+        trace: Box<ProviderResolutionTrace>,
     },
 }
 
@@ -255,7 +255,7 @@ impl ExecutionProviderRegistry {
         };
         Err(ProviderPluginError::NoProviderAvailable {
             model: model.to_owned(),
-            trace,
+            trace: Box::new(trace),
         })
     }
 }

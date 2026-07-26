@@ -69,14 +69,17 @@ impl ModelPackage for TrOcrFormulaPackage {
         let diagnostics = runtime.runtime_diagnostics();
         Ok(Box::new(TrOcrFormulaExecutor::new(
             self.descriptor.clone(),
-            self.encoder_path.clone(),
-            self.decoder_path.clone(),
-            self.tokenizer_path.clone(),
-            None,
+            (
+                self.encoder_path.clone(),
+                self.decoder_path.clone(),
+                self.tokenizer_path.clone(),
+            ),
             None,
             runtime,
-            diagnostics.runtime,
-            diagnostics.selected_provider,
+            ExecutionIdentity {
+                runtime: diagnostics.runtime,
+                provider: diagnostics.selected_provider,
+            },
         )))
     }
 
@@ -98,23 +101,34 @@ impl ModelPackage for TrOcrFormulaPackage {
             .unwrap_or_else(|| "runtime-default".to_owned());
         Ok(Box::new(TrOcrFormulaExecutor::new(
             self.descriptor.clone(),
-            self.encoder_path.clone(),
-            self.decoder_path.clone(),
-            self.tokenizer_path.clone(),
-            Some(Arc::new(Box::new(RuntimeSessionCompatibility::new(
-                enc_session,
-            )))),
-            Some(Arc::new(Box::new(RuntimeSessionCompatibility::new(
-                dec_session,
-            )))),
+            (
+                self.encoder_path.clone(),
+                self.decoder_path.clone(),
+                self.tokenizer_path.clone(),
+            ),
+            Some((
+                Arc::new(Box::new(RuntimeSessionCompatibility::new(enc_session))),
+                Arc::new(Box::new(RuntimeSessionCompatibility::new(dec_session))),
+            )),
             Arc::new(StubRuntime::new()),
-            ctx.resolved_runtime.runtime.to_string(),
-            provider,
+            ExecutionIdentity {
+                runtime: ctx.resolved_runtime.runtime.to_string(),
+                provider,
+            },
         )))
     }
 }
 
 type SessionRef<'a> = &'a Arc<Box<dyn InferenceSession>>;
+type SessionPair = (
+    Arc<Box<dyn InferenceSession>>,
+    Arc<Box<dyn InferenceSession>>,
+);
+
+struct ExecutionIdentity {
+    runtime: String,
+    provider: String,
+}
 
 struct TrOcrFormulaExecutor {
     descriptor: ModelDescriptor,
@@ -131,15 +145,15 @@ struct TrOcrFormulaExecutor {
 impl TrOcrFormulaExecutor {
     fn new(
         descriptor: ModelDescriptor,
-        encoder_path: Option<PathBuf>,
-        decoder_path: Option<PathBuf>,
-        tokenizer_path: Option<PathBuf>,
-        encoder_session: Option<Arc<Box<dyn InferenceSession>>>,
-        decoder_session: Option<Arc<Box<dyn InferenceSession>>>,
+        paths: (Option<PathBuf>, Option<PathBuf>, Option<PathBuf>),
+        sessions: Option<SessionPair>,
         runtime: Arc<dyn RuntimeBackend>,
-        runtime_id: String,
-        provider: String,
+        identity: ExecutionIdentity,
     ) -> Self {
+        let (encoder_path, decoder_path, tokenizer_path) = paths;
+        let (encoder_session, decoder_session) = sessions
+            .map(|(encoder, decoder)| (Some(encoder), Some(decoder)))
+            .unwrap_or((None, None));
         Self {
             descriptor,
             encoder_path,
@@ -148,8 +162,8 @@ impl TrOcrFormulaExecutor {
             encoder_session,
             decoder_session,
             _runtime: runtime,
-            runtime_id,
-            provider,
+            runtime_id: identity.runtime,
+            provider: identity.provider,
         }
     }
 

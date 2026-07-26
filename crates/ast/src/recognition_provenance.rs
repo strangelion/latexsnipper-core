@@ -152,7 +152,7 @@ mod tests {
             matrix_shape_valid: true,
         };
         let mut formula = crate::Formula::latex(r"\frac{a}{b}");
-        formula.recognition_evidence = Some(PostProcessResult {
+        formula.recognition_evidence = Some(Box::new(PostProcessResult {
             raw: r"\frac{a}{b".to_owned(),
             normalized: r"\frac{a}{b".to_owned(),
             corrected: r"\frac{a}{b}".to_owned(),
@@ -174,7 +174,7 @@ mod tests {
             transformations: Vec::new(),
             review_required: false,
             status_code: None,
-        });
+        }));
         let value = serde_json::to_value(formula).unwrap();
         assert_eq!(value["source"]["content"], r"\frac{a}{b}");
         assert_eq!(value["recognition_evidence"]["raw"], r"\frac{a}{b");

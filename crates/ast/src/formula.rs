@@ -16,11 +16,11 @@ pub struct Formula {
     pub layout: Option<FormulaLayout>,
     /// Model/runtime identity and evidence for automatic transformations.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recognition_provenance: Option<RecognitionProvenance>,
+    pub recognition_provenance: Option<Box<RecognitionProvenance>>,
     /// Raw/normalized/corrected text and validation evidence, kept separate
     /// from the formula source used for rendering.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recognition_evidence: Option<PostProcessResult>,
+    pub recognition_evidence: Option<Box<PostProcessResult>>,
 }
 
 /// The source format of a formula.
