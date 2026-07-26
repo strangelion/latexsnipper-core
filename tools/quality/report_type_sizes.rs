@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "target": {
                 "os": std::env::consts::OS,
                 "arch": std::env::consts::ARCH,
-                "pointerWidthBits": size_of::<usize>() * 8,
+                "pointerWidthBits": usize::BITS,
             },
             "types": [
                 type_entry("Inline", size_of::<Inline>(), align_of::<Inline>()),
