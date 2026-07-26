@@ -2,6 +2,7 @@ pub mod acceleration;
 pub mod api_provider;
 pub mod artifacts;
 pub mod capabilities;
+pub mod execution_provider;
 pub mod factory;
 pub mod kind;
 pub mod legacy;
@@ -26,6 +27,11 @@ pub use api_provider::{
 };
 pub use artifacts::RuntimeArtifacts;
 pub use capabilities::{RuntimeCapabilities, RuntimeDevice, RuntimeProbe};
+pub use execution_provider::{
+    builtin_onnx_provider_plugins, ExecutionProviderPlugin, ExecutionProviderRegistry,
+    ProviderDescriptor, ProviderOptions, ProviderPluginError, ProviderResolutionCode,
+    ProviderResolutionReason, ProviderResolutionTrace, ResolvedProvider, RuntimeEnvironment,
+};
 pub use factory::RuntimeFactory;
 pub use kind::RuntimeKind;
 pub use legacy::{

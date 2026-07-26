@@ -27,7 +27,7 @@
     "crates/pipeline/src": "44fb8c5cd7ed22ba62fc4730fa058c2edda1ac0a29f817848c282b89dbddf002",
     "crates/plugin-wasi/src": "7c5bb16b853f03d4bb4bb5d14f0a21fff4cdd41cb9afdf34a59ae8c168f08061",
     "crates/plugin/src": "e7398dbf0021d54caf25f3bc93e4e1b6c14c9028145a29c03befef20707bab3c",
-    "crates/runtime/src": "183a1649c3a3d67b4af3fe32969ea23cde67c45a2d6b311830c52f26d79d2905",
+    "crates/runtime/src": "146587ea79a7db32d18922008829c2afd3c74bf3bc489dc7161315d17540bbdb",
     "crates/syntax/src": "62622e92171f80e26730e90e8e0ba6846577200513c1db65f073fa777635167b",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
     "crates/wasm/src": "ede5ad3b157cffec104e4e545acc3f5fa860bb00a2351ccdef4164f1ce48affd"

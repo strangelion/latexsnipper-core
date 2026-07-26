@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoder exports. The public types are additive; no existing serialized or
   FFI contract changes. The v3 public source-tree freeze is intentionally
   refreshed to cover these new exports.
+- Add ABI-neutral execution-provider descriptors, probes, configuration, and
+  machine-readable fallback traces for CPU, DirectML, CUDA, TensorRT, and
+  CoreML. Model runtime variants now reject native libraries and scripts as
+  artifacts; provider libraries remain runtime-owned.
 
 ## [3.0.1] - 2026-07-19
 

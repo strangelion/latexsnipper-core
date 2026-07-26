@@ -229,6 +229,11 @@ impl<'registry> RuntimeResolver<'registry> {
                     "artifact '{role}' must be a package-relative path: {declared}"
                 ));
             }
+            if forbidden_executable_artifact(relative) {
+                return Err(format!(
+                    "artifact '{role}' is executable content and cannot be loaded from a model package: {declared}"
+                ));
+            }
             let resolved = model_dir.join(relative);
             if self.artifact_validation == ArtifactValidation::RequireExisting && !resolved.exists()
             {
@@ -261,6 +266,30 @@ impl<'registry> RuntimeResolver<'registry> {
         status == VariantStatus::Stable
             || (self.allow_experimental && status == VariantStatus::Experimental)
     }
+}
+
+fn forbidden_executable_artifact(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "dll"
+                    | "so"
+                    | "dylib"
+                    | "exe"
+                    | "com"
+                    | "bat"
+                    | "cmd"
+                    | "ps1"
+                    | "sh"
+                    | "py"
+                    | "pyc"
+                    | "js"
+                    | "mjs"
+                    | "cjs"
+            )
+        })
 }
 
 fn unique_variants<'a>(
@@ -403,4 +432,38 @@ fn current_platform_tags() -> BTreeSet<String> {
         tags.insert("apple".to_owned());
     }
     tags
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn model_artifacts_cannot_be_native_libraries_or_scripts() {
+        for artifact in [
+            "provider.dll",
+            "libprovider.so",
+            "provider.dylib",
+            "install.ps1",
+            "install.sh",
+            "setup.py",
+            "bootstrap.js",
+        ] {
+            assert!(
+                forbidden_executable_artifact(Path::new(artifact)),
+                "{artifact} must be rejected"
+            );
+        }
+        for artifact in [
+            "model.onnx",
+            "model.ort",
+            "tokenizer.json",
+            "program.pdmodel",
+        ] {
+            assert!(
+                !forbidden_executable_artifact(Path::new(artifact)),
+                "{artifact} must remain a data artifact"
+            );
+        }
+    }
 }
