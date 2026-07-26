@@ -66,6 +66,7 @@ impl ModelPackage for TrOcrFormulaPackage {
     }
 
     fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
+        let diagnostics = runtime.runtime_diagnostics();
         Ok(Box::new(TrOcrFormulaExecutor::new(
             self.descriptor.clone(),
             self.encoder_path.clone(),
@@ -74,6 +75,8 @@ impl ModelPackage for TrOcrFormulaPackage {
             None,
             None,
             runtime,
+            diagnostics.runtime,
+            diagnostics.selected_provider,
         )))
     }
 
@@ -86,6 +89,13 @@ impl ModelPackage for TrOcrFormulaPackage {
     ) -> Result<Box<dyn ModelExecutor>> {
         let enc_session = ctx.create_session("encoder")?;
         let dec_session = ctx.create_session("decoder")?;
+        let provider = ctx
+            .resolved_runtime
+            .options
+            .providers
+            .first()
+            .map(|provider| provider.name.clone())
+            .unwrap_or_else(|| "runtime-default".to_owned());
         Ok(Box::new(TrOcrFormulaExecutor::new(
             self.descriptor.clone(),
             self.encoder_path.clone(),
@@ -98,6 +108,8 @@ impl ModelPackage for TrOcrFormulaPackage {
                 dec_session,
             )))),
             Arc::new(StubRuntime::new()),
+            ctx.resolved_runtime.runtime.to_string(),
+            provider,
         )))
     }
 }
@@ -112,6 +124,8 @@ struct TrOcrFormulaExecutor {
     encoder_session: Option<Arc<Box<dyn InferenceSession>>>,
     decoder_session: Option<Arc<Box<dyn InferenceSession>>>,
     _runtime: Arc<dyn RuntimeBackend>,
+    runtime_id: String,
+    provider: String,
 }
 
 impl TrOcrFormulaExecutor {
@@ -123,6 +137,8 @@ impl TrOcrFormulaExecutor {
         encoder_session: Option<Arc<Box<dyn InferenceSession>>>,
         decoder_session: Option<Arc<Box<dyn InferenceSession>>>,
         runtime: Arc<dyn RuntimeBackend>,
+        runtime_id: String,
+        provider: String,
     ) -> Self {
         Self {
             descriptor,
@@ -132,6 +148,8 @@ impl TrOcrFormulaExecutor {
             encoder_session,
             decoder_session,
             _runtime: runtime,
+            runtime_id,
+            provider,
         }
     }
 
@@ -214,12 +232,20 @@ impl ModelExecutor for TrOcrFormulaExecutor {
             &**decoder,
             tokenizer_path,
             &params,
-        )?;
+        )?
+        .ensure_runtime_provenance(
+            self.descriptor.id.composite_key(),
+            self.descriptor.version.clone(),
+            self.runtime_id.clone(),
+            self.provider.clone(),
+        );
 
         Ok(ModelOutput::Formula(vec![
             latexsnipper_runtime::FormulaResult {
                 latex: result.text,
                 confidence: result.confidence,
+                provenance: result.provenance,
+                evidence: result.postprocess,
             },
         ]))
     }

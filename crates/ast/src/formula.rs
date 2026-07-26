@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::formula_layout::FormulaLayout;
-use crate::SourceInfo;
+use crate::{PostProcessResult, RecognitionProvenance, SourceInfo};
 
 /// A mathematical formula.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,6 +14,13 @@ pub struct Formula {
     /// Structured layout tree (if parsed).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layout: Option<FormulaLayout>,
+    /// Model/runtime identity and evidence for automatic transformations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recognition_provenance: Option<RecognitionProvenance>,
+    /// Raw/normalized/corrected text and validation evidence, kept separate
+    /// from the formula source used for rendering.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recognition_evidence: Option<PostProcessResult>,
 }
 
 /// The source format of a formula.
@@ -34,6 +41,8 @@ impl Formula {
             confidence: 1.0,
             source_info: None,
             layout: None,
+            recognition_provenance: None,
+            recognition_evidence: None,
         }
     }
 

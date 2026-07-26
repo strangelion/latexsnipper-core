@@ -8,7 +8,7 @@
 //!   → DecoderSession.run(input_ids, hidden_states) → logits
 //!   → greedy/beam decode → token_ids
 //!   → vocab lookup → LaTeX string
-//!   → postprocess (latex_repair)
+//!   → evidence-preserving rule postprocessing
 //! ```
 //!
 //! Any encoder-decoder ONNX pair (TrOCR, PP-FormulaNet, UniMERNet, etc.)
@@ -21,6 +21,7 @@ use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::InferenceSession;
 
 use crate::types::RecognitionResult;
+use crate::RecognitionPostProcessor;
 
 /// Backend configuration loaded from config.json.
 #[derive(Debug, Clone)]
@@ -280,9 +281,10 @@ impl FormulaBackend for OnnxFormulaBackend {
             .filter_map(|&id| self.vocab.get(id as usize).cloned())
             .collect();
 
-        let text = crate::latex_repair::repair_latex(&text);
-
-        Ok(RecognitionResult { text, confidence })
+        let postprocess = crate::RuleBasedRecognitionPostProcessor::default()
+            .process(&crate::Candidate::new(text, confidence))
+            .map_err(|error| SnipperError::Inference(error.to_string()))?;
+        Ok(RecognitionResult::from_postprocess(postprocess))
     }
 
     fn name(&self) -> &str {

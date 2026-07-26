@@ -21,9 +21,14 @@ use regex::Regex;
 use crate::formula_backend::{BackendConfig, FormulaBackend};
 use crate::pp_formulanet::preprocess_image;
 use crate::types::RecognitionResult;
+use crate::{
+    Candidate, RecognitionPostProcessor, RecognitionProvenance, RuleBasedRecognitionPostProcessor,
+    TransformationEvidence,
+};
 
 pub struct PPFormulaNetAdapter {
     name: String,
+    model_id: String,
     variant_id: String,
     session: Box<dyn RuntimeSession>,
     input_name: String,
@@ -70,6 +75,7 @@ impl PPFormulaNetAdapter {
 
         Ok(Self {
             name: "pp-formulanet-s".to_owned(),
+            model_id: resolved.model_id.clone(),
             variant_id: resolved.variant_id.clone(),
             session,
             input_name,
@@ -98,10 +104,37 @@ impl PPFormulaNetAdapter {
         let decoded = self.tokenizer.decode(&ids, true).map_err(|error| {
             SnipperError::Model(format!("PP-FormulaNet tokenizer decode failed: {error}"))
         })?;
-        Ok(RecognitionResult {
-            text: postprocess_unimernet_infer(&decoded),
-            confidence: 0.0,
-        })
+        let normalized = postprocess_unimernet_infer(&decoded);
+        let official_transformation = (decoded != normalized).then(|| {
+            TransformationEvidence::automatic(
+                "paddle-unimernet-normalization",
+                &decoded,
+                &normalized,
+                "apply the versioned official UniMERNet inference whitespace and Chinese wrapper normalization",
+                "unimernet-infer-v1",
+            )
+        });
+        let postprocess = RuleBasedRecognitionPostProcessor::default()
+            .process(&Candidate::new(&normalized, 0.0))
+            .map_err(|error| SnipperError::Inference(error.to_string()))?;
+        let mut transformations = Vec::new();
+        transformations.extend(official_transformation);
+        transformations.extend(postprocess.transformations.clone());
+        let mut result = RecognitionResult::from_postprocess(postprocess);
+        result.raw_text = Some(decoded);
+        result.normalized_text = Some(normalized);
+        let normalized_confidence = result.confidence;
+        result = result.with_provenance(RecognitionProvenance {
+            model_id: self.model_id.clone(),
+            model_version: self.variant_id.clone(),
+            runtime: RuntimeKind::PaddleInference.to_string(),
+            provider: "paddle-native".to_owned(),
+            source_region: None,
+            raw_confidence: Some(0.0),
+            normalized_confidence: Some(normalized_confidence),
+            transformations,
+        });
+        Ok(result)
     }
 }
 

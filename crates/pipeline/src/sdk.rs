@@ -147,8 +147,12 @@ impl Snipper {
                         &tok_path,
                         &rec_params,
                     ) {
+                        let provenance = result.provenance.clone();
+                        let evidence = result.postprocess.clone();
                         let mut f = Formula::latex(result.text);
                         f.confidence = result.confidence;
+                        f.recognition_provenance = provenance;
+                        f.recognition_evidence = evidence;
                         blocks.push(Block::Formula(FormulaBlock {
                             formula: f,
                             label: None,

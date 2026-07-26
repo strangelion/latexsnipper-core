@@ -6,8 +6,8 @@ use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::InferenceSession;
 use latexsnipper_tensor::Tensor;
 
-use crate::latex_repair;
 use crate::types::RecognitionResult;
+use crate::RecognitionPostProcessor;
 
 /// Recognition parameters loaded from config.json.
 #[derive(Debug, Clone)]
@@ -135,9 +135,10 @@ pub fn recognize_formula_with_tokenizer(
         beam_search(decoder, &hidden_states, &hidden_shape, tokenizer, params)?
     };
 
-    let text = latex_repair::repair_latex(&decoded_text);
-
-    Ok(RecognitionResult { text, confidence })
+    let postprocess = crate::RuleBasedRecognitionPostProcessor::default()
+        .process(&crate::Candidate::new(decoded_text, confidence))
+        .map_err(|error| SnipperError::Inference(error.to_string()))?;
+    Ok(RecognitionResult::from_postprocess(postprocess))
 }
 
 /// Greedy decoding: at each step, pick the token with highest probability.
@@ -373,7 +374,7 @@ fn beam_search(
     Ok((text, confidence))
 }
 
-// Old repair_latex removed — now using latex_repair::repair_latex
+// Legacy repair is intentionally not used here; postprocessing retains evidence.
 
 #[cfg(test)]
 mod tests {

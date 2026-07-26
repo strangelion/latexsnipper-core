@@ -171,6 +171,8 @@ impl HandwritingRecognizerNode {
                                 if looks_like_formula(&processed_text) {
                                     let mut f = Formula::latex(&processed_text);
                                     f.confidence = result.confidence;
+                                    f.recognition_provenance = result.provenance.clone();
+                                    f.recognition_evidence = result.postprocess.clone();
                                     blocks.push(Block::Formula(FormulaBlock {
                                         formula: f,
                                         label: None,

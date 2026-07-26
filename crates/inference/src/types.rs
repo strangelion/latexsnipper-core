@@ -1,5 +1,7 @@
 use latexsnipper_ast::{Quad, Rect};
 
+use crate::{PostProcessResult, RecognitionProvenance};
+
 /// A detected region with bounding box and class.
 #[derive(Debug, Clone)]
 pub struct DetectionBox {
@@ -41,6 +43,67 @@ impl DetectionBox {
 pub struct RecognitionResult {
     pub text: String,
     pub confidence: f32,
+    pub raw_text: Option<String>,
+    pub normalized_text: Option<String>,
+    pub provenance: Option<RecognitionProvenance>,
+    pub postprocess: Option<PostProcessResult>,
+}
+
+impl RecognitionResult {
+    pub fn new(text: impl Into<String>, confidence: f32) -> Self {
+        Self {
+            text: text.into(),
+            confidence,
+            raw_text: None,
+            normalized_text: None,
+            provenance: None,
+            postprocess: None,
+        }
+    }
+
+    pub fn from_postprocess(result: PostProcessResult) -> Self {
+        Self {
+            text: result.corrected.clone(),
+            confidence: result.normalized_confidence,
+            raw_text: Some(result.raw.clone()),
+            normalized_text: Some(result.normalized.clone()),
+            provenance: None,
+            postprocess: Some(result),
+        }
+    }
+
+    pub fn with_provenance(mut self, provenance: RecognitionProvenance) -> Self {
+        self.provenance = Some(provenance);
+        self
+    }
+
+    /// Attach the execution identity when a backend did not already provide
+    /// more specific provenance (for example PP-FormulaNet's native adapter).
+    pub fn ensure_runtime_provenance(
+        mut self,
+        model_id: impl Into<String>,
+        model_version: impl Into<String>,
+        runtime: impl Into<String>,
+        provider: impl Into<String>,
+    ) -> Self {
+        if self.provenance.is_none() {
+            self.provenance = Some(RecognitionProvenance {
+                model_id: model_id.into(),
+                model_version: model_version.into(),
+                runtime: runtime.into(),
+                provider: provider.into(),
+                source_region: None,
+                raw_confidence: Some(self.confidence),
+                normalized_confidence: Some(self.confidence),
+                transformations: self
+                    .postprocess
+                    .as_ref()
+                    .map(|evidence| evidence.transformations.clone())
+                    .unwrap_or_default(),
+            });
+        }
+        self
+    }
 }
 
 /// A cell in a recognized table grid.

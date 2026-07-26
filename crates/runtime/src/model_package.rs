@@ -115,6 +115,8 @@ pub struct TextResult {
 pub struct FormulaResult {
     pub latex: String,
     pub confidence: f32,
+    pub provenance: Option<latexsnipper_ast::RecognitionProvenance>,
+    pub evidence: Option<latexsnipper_ast::PostProcessResult>,
 }
 
 /// Table structure result.

@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   machine-readable fallback traces for CPU, DirectML, CUDA, TensorRT, and
   CoreML. Model runtime variants now reject native libraries and scripts as
   artifacts; provider libraries remain runtime-owned.
+- Formula results now preserve model/runtime/provider provenance and separate
+  raw, normalized, corrected, diff, trigger, confidence, validation, and
+  transformation evidence. Rule correction is low-confidence/invalid-output
+  gated and returns `POSTPROCESS_REVIEW_REQUIRED` when safe rules cannot
+  establish validity.
+- Stop the legacy LaTeX repair path from corrupting valid `\frac` expressions
+  or replacing matrix/alignment column separators.
 
 ## [3.0.1] - 2026-07-19
 

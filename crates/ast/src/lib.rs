@@ -10,6 +10,7 @@ pub mod input;
 pub mod media;
 pub mod metadata;
 pub mod operation;
+pub mod recognition_provenance;
 pub mod report;
 pub mod span;
 pub mod style;
@@ -65,6 +66,10 @@ pub use media::{
 };
 pub use metadata::{Metadata, OcrMetadata};
 pub use operation::Operation;
+pub use recognition_provenance::{
+    PostProcessResult, RecognitionProvenance, SourcePolygon, TextDiff, TransformationEvidence,
+    TransformationMode, TriggerDecision, ValidationEvidence,
+};
 pub use report::{
     ArtifactEntry, ArtifactKind, ArtifactManifest, BlockSummary, ConfidenceSummary,
     ConversionOutput, CredentialRef, CredentialSource, DocumentReport, EventRecord, InputSummary,

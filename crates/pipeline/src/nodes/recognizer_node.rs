@@ -156,6 +156,8 @@ impl RecognizerNode {
                             for result in results {
                                 let mut f = Formula::latex(result.latex);
                                 f.confidence = result.confidence;
+                                f.recognition_provenance = result.provenance;
+                                f.recognition_evidence = result.evidence;
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
                                     label: None,
@@ -356,8 +358,12 @@ impl RecognizerNode {
                     if line_groups.is_empty() {
                         match recognize_crop(&cropped) {
                             Ok(result) => {
+                                let provenance = result.provenance.clone();
+                                let evidence = result.postprocess.clone();
                                 let mut f = Formula::latex(result.text);
                                 f.confidence = result.confidence;
+                                f.recognition_provenance = provenance;
+                                f.recognition_evidence = evidence;
                                 blocks.push(Block::Formula(FormulaBlock {
                                     formula: f,
                                     label: None,

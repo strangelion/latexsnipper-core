@@ -10,6 +10,7 @@ pub mod handwriting_detector;
 pub mod handwriting_postprocess;
 pub mod language;
 pub mod latex_repair;
+pub mod postprocess;
 pub mod pp_formulanet;
 pub mod pp_formulanet_adapter;
 pub mod symbol_detector;
@@ -43,6 +44,13 @@ pub use handwriting_detector::{
 pub use handwriting_postprocess::postprocess_handwriting;
 pub use language::{Language, LanguageDetector};
 pub use latex_repair::{has_severe_latex_issue, latex_quality_flags, repair_latex};
+pub use latexsnipper_ast::{
+    PostProcessResult, RecognitionProvenance, SourcePolygon, TextDiff, TransformationEvidence,
+    TransformationMode, TriggerDecision, ValidationEvidence,
+};
+pub use postprocess::{
+    Candidate, PostProcessError, RecognitionPostProcessor, RuleBasedRecognitionPostProcessor,
+};
 #[allow(deprecated)]
 pub use pp_formulanet::PPFormulaNetBackend;
 pub use pp_formulanet_adapter::PPFormulaNetAdapter;

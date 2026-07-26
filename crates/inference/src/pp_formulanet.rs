@@ -279,10 +279,9 @@ impl FormulaBackend for PPFormulaNetBackend {
             .decode(&ids_u32, true)
             .map_err(|e| SnipperError::Model(format!("Tokenizer decode failed: {}", e)))?;
 
-        Ok(RecognitionResult {
-            text,
-            confidence: 0.0, // not meaningful during parity testing
-        })
+        Ok(RecognitionResult::new(
+            text, 0.0, // not meaningful during parity testing
+        ))
     }
 
     fn name(&self) -> &str {

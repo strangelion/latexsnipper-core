@@ -82,10 +82,10 @@ impl FakePipeline {
 
         let mut blocks = Vec::new();
         for (i, detection) in detections.iter().enumerate() {
-            let result = results.get(i).cloned().unwrap_or(RecognitionResult {
-                text: String::new(),
-                confidence: 0.0,
-            });
+            let result = results
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| RecognitionResult::new(String::new(), 0.0));
 
             if detection.class_name == "isolated" || detection.class_name == "embedding" {
                 let mut f = Formula::latex(result.text);

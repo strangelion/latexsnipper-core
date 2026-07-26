@@ -242,6 +242,8 @@ impl DocumentConverter {
                         confidence: 1.0,
                         source_info: None,
                         layout: None,
+                        recognition_provenance: None,
+                        recognition_evidence: None,
                     },
                     label: None,
                     number: None,
@@ -336,6 +338,8 @@ mod tests {
                 confidence: 1.0,
                 source_info: None,
                 layout: None,
+                recognition_provenance: None,
+                recognition_evidence: None,
             };
             let layout = DocumentConverter::formula_layout(&formula).unwrap();
             assert_eq!(layout.canonical_latex(), "\\frac{a}{b}");

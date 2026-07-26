@@ -17,11 +17,6 @@ pub fn repair_latex(text: &str) -> String {
     // Fix double scripts (x^2^3 → {x^2}^3)
     result = make_double_scripts_render_safe(&result);
 
-    // Fix empty numerator in \frac
-    if result.contains("\\frac{") && !result.contains("\\frac{}{") {
-        result = result.replace("\\frac{", "\\frac{}{");
-    }
-
     // Wrap in $$ delimiters if needed
     result = wrap_latex_delimiters(&result);
 
@@ -302,7 +297,7 @@ fn make_left_right_render_safe(text: &str) -> String {
 }
 
 fn make_alignment_tabs_render_safe(text: &str) -> String {
-    if !text.contains('&') {
+    if !text.contains('&') || text.contains("\\begin{") {
         return text.to_string();
     }
 
@@ -427,6 +422,7 @@ mod tests {
     fn test_repair_latex_with_frac() {
         let result = repair_latex("\\frac{a}{b}");
         assert!(result.contains("\\frac"));
+        assert!(!result.contains("\\frac{}{a}"));
     }
 
     #[test]
@@ -554,6 +550,7 @@ mod tests {
         let result = repair_latex("\\begin{matrix} a & b \\\\ c & d \\end{matrix}");
         assert!(result.contains("\\begin{matrix}"));
         assert!(result.contains("\\end{matrix}"));
+        assert!(result.contains('&'));
     }
 
     #[test]

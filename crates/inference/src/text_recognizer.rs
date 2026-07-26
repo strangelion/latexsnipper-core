@@ -171,7 +171,7 @@ pub fn recognize_text_with_keys(
 
     let (text, confidence) = ctc_decode(logits, &shape, keys, first_char_id, params);
 
-    Ok(RecognitionResult { text, confidence })
+    Ok(RecognitionResult::new(text, confidence))
 }
 
 fn preprocess(image: &SnipperImage, params: &TextRecParams) -> (SnipperImage, u32) {

@@ -6,8 +6,8 @@
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_model::ModelConfig;
 use latexsnipper_runtime::{
-    InferenceContext, ModelDescriptor, ModelExecutor, ModelId, ModelInput, ModelOutput,
-    ModelPackage, ModelTask, RuntimeBackend, TensorDtype, TensorSpec,
+    InferenceContext, ModelDescriptor, ModelExecutionContext, ModelExecutor, ModelId, ModelInput,
+    ModelOutput, ModelPackage, ModelTask, RuntimeBackend, TensorDtype, TensorSpec,
 };
 
 use crate::formula_backend::{BackendConfig, FormulaBackend, OnnxFormulaBackend};
@@ -75,12 +75,37 @@ impl ModelPackage for FormulaBackendPackage {
     }
 
     fn create_executor(&self, runtime: Arc<dyn RuntimeBackend>) -> Result<Box<dyn ModelExecutor>> {
+        let diagnostics = runtime.runtime_diagnostics();
         Ok(Box::new(FormulaBackendExecutor {
             descriptor: self.descriptor.clone(),
             model_dir: self.model_dir.clone(),
             config: self.config.clone(),
             runtime,
             backend: None,
+            runtime_id: diagnostics.runtime,
+            provider: diagnostics.selected_provider,
+        }))
+    }
+
+    fn create_executor_with_context(
+        &self,
+        ctx: &ModelExecutionContext,
+    ) -> Result<Box<dyn ModelExecutor>> {
+        let provider = ctx
+            .resolved_runtime
+            .options
+            .providers
+            .first()
+            .map(|provider| provider.name.clone())
+            .unwrap_or_else(|| "runtime-default".to_owned());
+        Ok(Box::new(FormulaBackendExecutor {
+            descriptor: self.descriptor.clone(),
+            model_dir: self.model_dir.clone(),
+            config: self.config.clone(),
+            runtime: ctx.backend_compat(),
+            backend: None,
+            runtime_id: ctx.resolved_runtime.runtime.to_string(),
+            provider,
         }))
     }
 }
@@ -93,6 +118,8 @@ struct FormulaBackendExecutor {
     config: BackendConfig,
     runtime: Arc<dyn RuntimeBackend>,
     backend: Option<OnnxFormulaBackend>,
+    runtime_id: String,
+    provider: String,
 }
 
 impl FormulaBackendExecutor {
@@ -128,12 +155,19 @@ impl ModelExecutor for FormulaBackendExecutor {
             pixels,
         );
 
-        let result = backend.recognize(&image)?;
+        let result = backend.recognize(&image)?.ensure_runtime_provenance(
+            self.descriptor.id.composite_key(),
+            self.descriptor.version.clone(),
+            self.runtime_id.clone(),
+            self.provider.clone(),
+        );
 
         Ok(ModelOutput::Formula(vec![
             latexsnipper_runtime::FormulaResult {
                 latex: result.text,
                 confidence: result.confidence,
+                provenance: result.provenance,
+                evidence: result.postprocess,
             },
         ]))
     }

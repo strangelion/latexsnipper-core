@@ -15,20 +15,14 @@ impl FakeRecognizer {
     /// Create a recognizer that returns a single formula.
     pub fn formula(latex: &str, confidence: f32) -> Self {
         Self {
-            results: vec![RecognitionResult {
-                text: latex.to_string(),
-                confidence,
-            }],
+            results: vec![RecognitionResult::new(latex, confidence)],
         }
     }
 
     /// Create a recognizer that returns a single text line.
     pub fn text(text: &str, confidence: f32) -> Self {
         Self {
-            results: vec![RecognitionResult {
-                text: text.to_string(),
-                confidence,
-            }],
+            results: vec![RecognitionResult::new(text, confidence)],
         }
     }
 
@@ -37,19 +31,16 @@ impl FakeRecognizer {
         let results = detections
             .iter()
             .zip(texts.iter())
-            .map(|(d, t)| RecognitionResult {
-                text: t.to_string(),
-                confidence: d.confidence,
-            })
+            .map(|(d, t)| RecognitionResult::new(*t, d.confidence))
             .collect();
         Self { results }
     }
 
     pub fn recognize(&self, _image: &SnipperImage, _rect: &Rect) -> RecognitionResult {
-        self.results.first().cloned().unwrap_or(RecognitionResult {
-            text: String::new(),
-            confidence: 0.0,
-        })
+        self.results
+            .first()
+            .cloned()
+            .unwrap_or_else(|| RecognitionResult::new(String::new(), 0.0))
     }
 
     pub fn recognize_all(&self) -> Vec<RecognitionResult> {
