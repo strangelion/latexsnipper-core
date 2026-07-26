@@ -19,7 +19,8 @@ from typing import Any
 TEST_RESULT = re.compile(
     r"test result: (?P<status>ok|FAILED)\. "
     r"(?P<passed>\d+) passed; (?P<failed>\d+) failed; "
-    r"(?P<ignored>\d+) ignored"
+    r"(?P<ignored>\d+) ignored; (?P<measured>\d+) measured; "
+    r"(?P<filtered>\d+) filtered out"
 )
 PRIVATE_PATH = re.compile(
     r"(?i)(?:[a-z]:[\\/])?users[\\/][^\\/\s:]+[\\/]"
@@ -50,6 +51,7 @@ def run(repo: pathlib.Path, command: list[str]) -> dict[str, Any]:
         "testsPassed": sum(int(match["passed"]) for match in matches),
         "testsFailed": sum(int(match["failed"]) for match in matches),
         "testsIgnored": sum(int(match["ignored"]) for match in matches),
+        "testsFiltered": sum(int(match["filtered"]) for match in matches),
         "compilerWarnings": warnings,
     }
     if process.returncode:
@@ -157,13 +159,22 @@ def main() -> int:
         ],
         key=lambda path: path.as_posix(),
     )
+    source_commit = command_output(repo, ["git", "rev-parse", "HEAD"])
+    tests = {
+        "passed": sum(command["testsPassed"] for command in commands),
+        "failed": sum(command["testsFailed"] for command in commands),
+        "ignored": sum(command["testsIgnored"] for command in commands),
+        "filtered": sum(command["testsFiltered"] for command in commands),
+    }
+    clippy_warnings = sum(command["compilerWarnings"] for command in commands)
     evidence = {
         "schemaVersion": 1,
         "generatedAtUtc": dt.datetime.now(dt.timezone.utc)
         .replace(microsecond=0)
         .isoformat()
         .replace("+00:00", "Z"),
-        "sourceCommit": command_output(repo, ["git", "rev-parse", "HEAD"]),
+        "commit": source_commit,
+        "sourceCommit": source_commit,
         "worktreeDirty": bool(command_output(repo, ["git", "status", "--porcelain"])),
         "platform": {
             "os": platform.system(),
@@ -174,15 +185,16 @@ def main() -> int:
             "cargo": command_output(repo, ["cargo", "--version"]),
         },
         "commands": commands,
+        "tests": tests,
+        "clippyWarnings": clippy_warnings,
         "summary": {
             "passed": all(command["exitCode"] == 0 for command in commands),
             "durationSeconds": round(time.perf_counter() - started, 3),
-            "testsPassed": sum(command["testsPassed"] for command in commands),
-            "testsFailed": sum(command["testsFailed"] for command in commands),
-            "testsIgnored": sum(command["testsIgnored"] for command in commands),
-            "compilerWarnings": sum(
-                command["compilerWarnings"] for command in commands
-            ),
+            "testsPassed": tests["passed"],
+            "testsFailed": tests["failed"],
+            "testsIgnored": tests["ignored"],
+            "testsFiltered": tests["filtered"],
+            "compilerWarnings": clippy_warnings,
         },
         "artifacts": [
             {
