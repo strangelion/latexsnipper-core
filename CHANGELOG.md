@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   establish validity.
 - Stop the legacy LaTeX repair path from corrupting valid `\frac` expressions
   or replacing matrix/alignment column separators.
+- Add the versioned `EngineReadiness` public DTO and `SnipperEngine::readiness()`
+  for mode/task/model/runtime availability, stable error codes, and retained
+  model-scan diagnostics without exposing internal sessions or shared handles.
 
 ## [3.0.1] - 2026-07-19
 

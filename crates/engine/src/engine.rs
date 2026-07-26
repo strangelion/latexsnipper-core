@@ -3,6 +3,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
+use latexsnipper_api_types::{
+    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness as ApiModelReadiness,
+    RuntimeReadiness, TaskReadiness, READINESS_SCHEMA_VERSION,
+};
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 #[cfg(feature = "native")]
@@ -16,10 +20,10 @@ use latexsnipper_pipeline::{
 #[cfg(feature = "native")]
 use latexsnipper_runtime::FsModelResolver;
 use latexsnipper_runtime::{
-    AccelerationMode, ModelPackage, ModelRegistry, ModelScanReport, ModelSelectionDecision,
-    ModelSelectionPolicy, ModelSelectionRequest, ModelTask, PreparedModel, RegistryRuntimeBackend,
-    ResolvedRuntimeVariant, RuntimeBackend, RuntimeFactory, RuntimeKind, RuntimeRegistry,
-    RuntimeSession, SharedModelResolver,
+    AccelerationMode, ModelPackage, ModelRegistry, ModelScanIssue, ModelScanReport,
+    ModelSelectionDecision, ModelSelectionPolicy, ModelSelectionRequest, ModelTask, PreparedModel,
+    RegistryRuntimeBackend, ResolvedRuntimeVariant, RuntimeBackend, RuntimeFactory, RuntimeKind,
+    RuntimeRegistry, RuntimeSession, SharedModelResolver,
 };
 
 use crate::config::EngineConfig;
@@ -78,6 +82,37 @@ fn is_builtin_model_strategy(model_id: &str) -> bool {
     )
 }
 
+fn unavailable_provider_code(reason: &str) -> CoreErrorCode {
+    let reason = reason.to_ascii_lowercase();
+    if reason.contains("library")
+        || reason.contains(".dll")
+        || reason.contains(".so")
+        || reason.contains(".dylib")
+    {
+        CoreErrorCode::ProviderLibraryMissing
+    } else {
+        CoreErrorCode::ProviderUnavailable
+    }
+}
+
+fn readiness_error_code(error: &SnipperError) -> CoreErrorCode {
+    let message = error.to_string().to_ascii_lowercase();
+    if message.contains("checksum") || message.contains("hash") {
+        CoreErrorCode::ModelArtifactHashMismatch
+    } else if message.contains("artifact") && message.contains("does not exist") {
+        CoreErrorCode::ModelArtifactMissing
+    } else if message.contains("manifest") || message.contains("runtime variant") {
+        CoreErrorCode::ModelManifestInvalid
+    } else {
+        match error {
+            SnipperError::Model(_) => CoreErrorCode::ModelNotFound,
+            SnipperError::Runtime(_) => unavailable_provider_code(&message),
+            SnipperError::Inference(_) => CoreErrorCode::SessionCreateFailed,
+            _ => CoreErrorCode::OutputValidationFailed,
+        }
+    }
+}
+
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 /// Engine only assembles PipelineGraph and runs it — all logic lives in Nodes.
 pub struct SnipperEngine {
@@ -96,6 +131,8 @@ pub struct SnipperEngine {
     model_selection: ModelSelectionPolicy,
     /// Model registry for discovering available models.
     model_registry: ModelRegistry,
+    /// Scan issues retained for the public readiness/diagnostics snapshot.
+    model_scan_issues: Vec<ModelScanIssue>,
 }
 
 fn legacy_runtime_registry(
@@ -196,9 +233,16 @@ impl SnipperEngine {
         // Auto-scan models directory
         let mut model_registry = ModelRegistry::new();
         latexsnipper_inference::register_builtin_adapters(&mut model_registry);
-        if let Err(error) = model_registry.register_models_root(&config.models_dir) {
-            warn!("Failed to initialize model registry: {}", error);
-        }
+        let model_scan_issues = match model_registry.register_models_root(&config.models_dir) {
+            Ok(report) => report.issues,
+            Err(error) => {
+                warn!("Failed to initialize model registry: {}", error);
+                vec![ModelScanIssue {
+                    path: config.models_dir.clone(),
+                    message: error.to_string(),
+                }]
+            }
+        };
 
         Self {
             config,
@@ -211,6 +255,7 @@ impl SnipperEngine {
             model_packages: RwLock::new(HashMap::new()),
             model_selection: ModelSelectionPolicy::default(),
             model_registry,
+            model_scan_issues,
         }
     }
 
@@ -228,9 +273,16 @@ impl SnipperEngine {
         // Auto-scan models directory
         let mut model_registry = ModelRegistry::new();
         latexsnipper_inference::register_builtin_adapters(&mut model_registry);
-        if let Err(error) = model_registry.register_models_root(&config.models_dir) {
-            warn!("Failed to initialize model registry: {}", error);
-        }
+        let model_scan_issues = match model_registry.register_models_root(&config.models_dir) {
+            Ok(report) => report.issues,
+            Err(error) => {
+                warn!("Failed to initialize model registry: {}", error);
+                vec![ModelScanIssue {
+                    path: config.models_dir.clone(),
+                    message: error.to_string(),
+                }]
+            }
+        };
 
         Self {
             config,
@@ -243,6 +295,7 @@ impl SnipperEngine {
             model_packages: RwLock::new(HashMap::new()),
             model_selection: ModelSelectionPolicy::default(),
             model_registry,
+            model_scan_issues,
         }
     }
 
@@ -302,6 +355,7 @@ impl SnipperEngine {
             model_packages: RwLock::new(HashMap::new()),
             model_selection: ModelSelectionPolicy::default(),
             model_registry,
+            model_scan_issues: scan_report.issues,
         })
     }
 
@@ -341,6 +395,7 @@ impl SnipperEngine {
             model_packages: RwLock::new(HashMap::new()),
             model_selection: ModelSelectionPolicy::default(),
             model_registry,
+            model_scan_issues: scan_report.issues,
         })
     }
 
@@ -431,6 +486,149 @@ impl SnipperEngine {
 
     pub fn config(&self) -> &EngineConfig {
         &self.config
+    }
+
+    /// Return a stable, serializable snapshot for desktop, Office, SDK, and
+    /// FFI callers. This probes and resolves capabilities but never creates a
+    /// session or exposes internal runtime/model objects.
+    pub fn readiness(&self) -> EngineReadiness {
+        let mut diagnostics = self
+            .model_scan_issues
+            .iter()
+            .map(|issue| {
+                Diagnostic::new(
+                    DiagnosticLevel::Error,
+                    CoreErrorCode::ModelManifestInvalid.as_str(),
+                    format!("{}: {}", issue.path.display(), issue.message),
+                )
+                .with_recoverable(true)
+            })
+            .collect::<Vec<_>>();
+
+        let runtimes = self
+            .runtime_registry
+            .probe_all()
+            .into_iter()
+            .map(|(kind, probe)| {
+                let code = (!probe.available).then(|| {
+                    unavailable_provider_code(probe.reason_unavailable.as_deref().unwrap_or(""))
+                });
+                if let Some(code) = code {
+                    diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticLevel::Warning,
+                            code.as_str(),
+                            format!(
+                                "runtime '{}' is unavailable: {}",
+                                kind,
+                                probe
+                                    .reason_unavailable
+                                    .as_deref()
+                                    .unwrap_or("no reason reported")
+                            ),
+                        )
+                        .with_recoverable(true),
+                    );
+                }
+                RuntimeReadiness {
+                    id: kind.to_string(),
+                    available: probe.available,
+                    version: probe.version,
+                    providers: probe.capabilities.execution_providers.into_iter().collect(),
+                    devices: probe
+                        .devices
+                        .into_iter()
+                        .map(|device| device.name)
+                        .collect(),
+                    code,
+                    message: probe.reason_unavailable,
+                }
+            })
+            .collect();
+
+        let mut model_entries: Vec<_> = self.model_registry.entries().collect();
+        model_entries.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
+        let models = model_entries
+            .into_iter()
+            .map(|(manifest, model_dir)| {
+                match self.prepare_model_runtime(manifest, model_dir, None) {
+                    Ok(resolved) => ApiModelReadiness {
+                        id: manifest.id.clone(),
+                        task: manifest.task.id().to_owned(),
+                        version: manifest.version.clone(),
+                        ready: true,
+                        runtime: Some(resolved.runtime.to_string()),
+                        provider: resolved
+                            .options
+                            .providers
+                            .first()
+                            .map(|provider| provider.name.clone()),
+                        code: None,
+                        message: None,
+                    },
+                    Err(error) => {
+                        let code = readiness_error_code(&error);
+                        ApiModelReadiness {
+                            id: manifest.id.clone(),
+                            task: manifest.task.id().to_owned(),
+                            version: manifest.version.clone(),
+                            ready: false,
+                            runtime: None,
+                            provider: None,
+                            code: Some(code),
+                            message: Some(error.to_string()),
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        let modes = RecognizeMode::all()
+            .iter()
+            .copied()
+            .map(|mode| {
+                let tasks = required_tasks(mode, self.config.parse_mode)
+                    .into_iter()
+                    .map(|task| match self.select_runnable_model(task) {
+                        Ok(Some(model)) => TaskReadiness {
+                            task: task.id().to_owned(),
+                            ready: true,
+                            selected_model: Some(model),
+                            code: None,
+                            message: None,
+                        },
+                        Ok(None) => TaskReadiness {
+                            task: task.id().to_owned(),
+                            ready: false,
+                            selected_model: None,
+                            code: Some(CoreErrorCode::ModelNotFound),
+                            message: Some("no runnable model is installed".to_owned()),
+                        },
+                        Err(error) => TaskReadiness {
+                            task: task.id().to_owned(),
+                            ready: false,
+                            selected_model: None,
+                            code: Some(readiness_error_code(&error)),
+                            message: Some(error.to_string()),
+                        },
+                    })
+                    .collect::<Vec<_>>();
+                ModeReadiness {
+                    mode: mode.label().to_owned(),
+                    ready: tasks.iter().all(|task| task.ready),
+                    tasks,
+                }
+            })
+            .collect();
+
+        EngineReadiness {
+            schema_version: READINESS_SCHEMA_VERSION,
+            core_version: env!("CARGO_PKG_VERSION").to_owned(),
+            modes,
+            runtimes,
+            models,
+            diagnostics,
+        }
     }
 
     pub fn job_queue(&self) -> &JobQueue {
@@ -1527,5 +1725,30 @@ fn extract_block_text(block: &Block) -> String {
         | Block::ChemicalFormula(_)
         | Block::QrCode(_)
         | Block::Graph(_) => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use super::*;
+
+    #[test]
+    fn readiness_json_reports_modes_without_exposing_runtime_objects() {
+        let models = tempfile::tempdir().unwrap();
+        let engine = SnipperEngine::new(
+            EngineConfig::with_models_dir(models.path().to_owned()),
+            Box::new(latexsnipper_runtime::StubRuntime::new()),
+        );
+
+        let readiness = engine.readiness();
+        assert_eq!(readiness.schema_version, READINESS_SCHEMA_VERSION);
+        assert_eq!(readiness.runtimes.len(), 1);
+        assert!(readiness.runtimes[0].available);
+        assert!(readiness.modes.iter().all(|mode| !mode.ready));
+
+        let json = serde_json::to_value(readiness).unwrap();
+        assert!(json.get("runtime_registry").is_none());
+        assert!(json.get("sessions").is_none());
+        assert_eq!(json["schemaVersion"], READINESS_SCHEMA_VERSION);
     }
 }

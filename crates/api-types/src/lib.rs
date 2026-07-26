@@ -6,8 +6,13 @@
 //! - [`RecognizeResponse`] — recognition result wrapper
 //! - [`StreamItem`] — streaming recognition events
 
+pub mod readiness;
 pub mod v3;
 
+pub use readiness::{
+    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness, RuntimeReadiness, TaskReadiness,
+    READINESS_SCHEMA_VERSION,
+};
 pub use v3::{
     ApiContractVersionsV3, ApiEnvelopeV3, ApiErrorV3, API_ENVELOPE_VERSION_V3,
     CAPABILITY_SCHEMA_VERSION_V3, DIAGNOSTIC_SCHEMA_VERSION_V3,
