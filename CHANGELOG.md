@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the versioned `EngineReadiness` public DTO and `SnipperEngine::readiness()`
   for mode/task/model/runtime availability, stable error codes, and retained
   model-scan diagnostics without exposing internal sessions or shared handles.
+- ONNX Runtime variants can opt into `.ort` role alternatives through the
+  advertised `artifact-format:ort` capability. ONNX remains the default, and
+  unsupported mmap requests now fail closed instead of being silently ignored.
 
 ## [3.0.1] - 2026-07-19
 

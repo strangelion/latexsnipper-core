@@ -23,11 +23,11 @@
     "crates/foundation/src": "afbbf9d5e3e47b3e7080eb6d02a182c0063f92005acb22358a03974f4f382fbe",
     "crates/image/src": "09ee47ac30a77517c35f0e27bd647ccbc82f0e59f35644bbdf8d14512e7fc06f",
     "crates/inference/src": "f07e3a07508ff5a7c5822bdd51ba131256c08aef48667c4a224218b5c00410f9",
-    "crates/model/src": "f0936a5bfd1f71c2e65d6c0dd8ea174d74a75479bcbcba4824e839fafd2678b5",
+    "crates/model/src": "cd75404fedfef2b22a81c4bc8d2d0582086b34703ab73b96654e160fb121d719",
     "crates/pipeline/src": "6a81c8fe17a90b43ae09ef9f2a9d6edf5d680307205b81caf32b2d3c36aea7d0",
     "crates/plugin-wasi/src": "7c5bb16b853f03d4bb4bb5d14f0a21fff4cdd41cb9afdf34a59ae8c168f08061",
     "crates/plugin/src": "e7398dbf0021d54caf25f3bc93e4e1b6c14c9028145a29c03befef20707bab3c",
-    "crates/runtime/src": "f876d3dff14a39d72bd3fc30e9d43d7710121b4b5eba10ab34d91e2042e72cdf",
+    "crates/runtime/src": "59b726b4cddcb3cf36ebe1e3cbfa92d23d800397738caa0df6ec7c5c37f8b5bd",
     "crates/syntax/src": "62622e92171f80e26730e90e8e0ba6846577200513c1db65f073fa777635167b",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
     "crates/wasm/src": "ede5ad3b157cffec104e4e545acc3f5fa860bb00a2351ccdef4164f1ce48affd"

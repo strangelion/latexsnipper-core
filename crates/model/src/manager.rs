@@ -499,6 +499,7 @@ impl ModelManager {
                     let name = name.to_string_lossy();
                     [
                         ".onnx",
+                        ".ort",
                         ".pdmodel",
                         ".pdiparams",
                         ".pte",
@@ -664,5 +665,16 @@ mod tests {
             )
             .unwrap_err();
         assert!(error.to_string().contains("checksum"));
+    }
+
+    #[test]
+    fn ort_format_counts_as_a_model_artifact() {
+        let root = workspace();
+        let variant = root.join("models").join("formula").join("ort");
+        std::fs::create_dir_all(&variant).unwrap();
+        std::fs::write(variant.join("model.ort"), b"ORTM").unwrap();
+        let manager = ModelManager::new(root.join("models"));
+        assert!(manager.dir_contains_model_files(&variant));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

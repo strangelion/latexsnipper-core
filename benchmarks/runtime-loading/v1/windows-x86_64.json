@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "scope": "io_only_not_ort_session",
+  "timestampUtc": "2026-07-26T14:04:39.332843+00:00",
+  "coreCommit": "d1b8b28fdf18567fd4e5883c90536184989b7f6b",
+  "model": {
+    "path": "models/formula-rec/trocr-deit/encoder_model.onnx",
+    "sizeBytes": 87496990,
+    "sha256": "bd8d5c322792e9ec45793af5569e9748f82a3d728a9e00213dbfc56c1486f37d"
+  },
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.12",
+    "pageSizeBytes": 4096
+  },
+  "iterations": 5,
+  "bufferedReadMs": {
+    "min": 22.1185,
+    "median": 22.322,
+    "p95": 23.0452,
+    "max": 23.0452
+  },
+  "mmapOpenMs": {
+    "min": 0.029,
+    "median": 0.0319,
+    "p95": 0.0545,
+    "max": 0.0545
+  },
+  "mmapPageTouchMs": {
+    "min": 19.4054,
+    "median": 19.7864,
+    "p95": 24.405,
+    "max": 24.405
+  },
+  "memory": {
+    "before": {
+      "workingSetBytes": 24174592,
+      "peakWorkingSetBytes": 24174592
+    },
+    "after": {
+      "workingSetBytes": 24207360,
+      "peakWorkingSetBytes": 111685632
+    }
+  },
+  "fileReplacementProbe": {
+    "replaceWhileMapped": "failed:5",
+    "replaceAfterClose": "succeeded"
+  },
+  "limitations": [
+    "Measures OS file I/O mechanics only.",
+    "Does not create an ONNX Runtime session.",
+    "Warm filesystem cache can affect every timing."
+  ]
+}
