@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: '23 3 * * 1'
   workflow_dispatch:
+    inputs:
+      formula_predictions_url:
+        description: HTTPS URL of a real-runtime formula prediction bundle
+        required: false
+        type: string
+      formula_predictions_sha256:
+        description: SHA-256 for the prediction bundle
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -16,6 +25,54 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  formula-benchmark-contract:
+    name: Formula benchmark contract (50 images)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate dataset hashes, schema, categories, and metrics runner
+        run: cargo test --locked -p latexsnipper-benchmark
+
+  formula-benchmark-evaluation:
+    name: Evaluate verified formula predictions
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.formula_predictions_url != '' &&
+      inputs.formula_predictions_sha256 != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Download explicitly supplied prediction evidence
+        env:
+          PREDICTIONS_URL: ${{ inputs.formula_predictions_url }}
+          PREDICTIONS_SHA256: ${{ inputs.formula_predictions_sha256 }}
+        run: |
+          mkdir -p target/formula-benchmark
+          curl --fail --location --retry 3 --max-redirs 5 \
+            --output target/formula-benchmark/predictions.json "$PREDICTIONS_URL"
+          echo "$PREDICTIONS_SHA256  target/formula-benchmark/predictions.json" \
+            | sha256sum --check --strict
+      - name: Calculate the complete 50-image report
+        run: >-
+          cargo run --locked -p latexsnipper-benchmark --
+          --formula-manifest benchmarks/formula-recognition/v1/manifest.json
+          --normalization benchmarks/formula-recognition/v1/normalization.json
+          --predictions target/formula-benchmark/predictions.json
+          --output target/formula-benchmark/report.json
+          --csv-output target/formula-benchmark/report.csv
+      - uses: actions/upload-artifact@v7
+        with:
+          name: formula-benchmark-${{ github.run_id }}
+          path: target/formula-benchmark/report.*
+          if-no-files-found: error
+          retention-days: 90
+
   dependency-audit:
     name: Dependency audit
     runs-on: ubuntu-latest
