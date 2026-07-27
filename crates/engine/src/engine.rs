@@ -1587,6 +1587,7 @@ impl SnipperEngine {
     /// by `select_and_register_model`, which uses canonical category keys.
     /// The old short-key overrides below are retained temporarily for backward
     /// compatibility with pipeline nodes that still read the deprecated keys.
+    #[cfg(feature = "native")]
     fn configure_context(&self, ctx: PipelineContext) -> PipelineContext {
         self.configure_context_with_parse_mode(ctx, self.config.parse_mode)
     }

@@ -1,6 +1,7 @@
 [package]
 name = "latexsnipper-benchmark"
 description = "Executable OCR and document benchmark contracts"
+default-run = "latexsnipper-benchmark"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
