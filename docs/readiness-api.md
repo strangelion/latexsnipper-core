@@ -1,39 +1,55 @@
-# Engine readiness API
+# Engine readiness API v2
 
 `SnipperEngine::readiness()` is the public capability boundary for desktop,
-Office, SDK, and FFI adapters. Callers must not scan the Core model directory or
-infer capability from private Rust types.
+Office, SDK, FFI, and WASM adapters. Hosts must not scan model manifests,
+search for provider DLLs, parse `RuntimeRegistry`, or access factories and
+sessions.
 
-The returned `EngineReadiness` JSON uses `schemaVersion: 1` and contains:
+The returned `EngineReadiness` uses `schemaVersion: 2`. It deliberately splits:
 
-- every public recognition mode and the model task selected for each;
-- every registered runtime and its probe result;
-- every parsed model manifest and its resolved runtime/provider preference;
-- scan and runtime diagnostics using stable error codes.
+- `technicalReady`: executor, session, and successful inference have actually
+  been observed for the selected model;
+- `qualityReady`: trusted release evidence passes at least an experimental
+  baseline;
+- `productionRecommended`: every required model has both technical readiness
+  and a `validated` real+hard-negative quality baseline.
 
-The method is read-only. It probes and resolves configuration but does not
-create inference sessions. A `ready: true` task means a package and runtime
-variant are resolvable with the current installation; session creation can
-still fail later and must report `SESSION_CREATE_FAILED`.
+Resolving a manifest or artifact alone never sets `technicalReady`. Readiness
+does not perform expensive work: it probes runtimes and returns cached provider
+validation, but never creates a session, runs smoke inference, or benchmarks.
+Call warmup or explicit provider validation separately.
 
-Consumers should branch on `code`, never on `message`. `message` is diagnostic
-text and may change. The stable codes are represented by `CoreErrorCode`:
+Each model exposes the individual facts `manifestValid`, `artifactsValid`,
+`runtimeResolved`, `executorCreated`, `sessionCreated`, and
+`smokeInferencePassed`. Its quality status is one of `unknown`,
+`baselineMissing`, `baselineFailed`, `experimental`, or `validated`.
+
+## Compatibility
+
+Consumer DTOs ignore unknown fields. Missing v2 fields use safe defaults, and
+v1 `ready` is accepted as an input alias for `technicalReady`; v2 never emits
+the ambiguous field. Producers and strict same-version validators remain
+covered by contract snapshots and schema checks. Explicit `null` for newly added readiness
+collections and booleans is treated as the same fail-closed default as omission;
+non-null values with the wrong type remain errors.
+
+## Stable error codes
+
+Consumers branch on `code`, never `message`. v2 adds:
 
 ```text
-MODEL_NOT_FOUND
-MODEL_MANIFEST_INVALID
-MODEL_ARTIFACT_MISSING
-MODEL_ARTIFACT_HASH_MISMATCH
-RUNTIME_NOT_FOUND
-PROVIDER_UNAVAILABLE
-PROVIDER_LIBRARY_MISSING
-SESSION_CREATE_FAILED
-INPUT_SHAPE_MISMATCH
-DECODER_CACHE_SCHEMA_MISMATCH
-DECODER_INCREMENTAL_DIVERGENCE
-OUTPUT_VALIDATION_FAILED
-POSTPROCESS_REVIEW_REQUIRED
+MODEL_BASELINE_MISSING
+MODEL_BASELINE_FAILED
+MODEL_QUALITY_NOT_VALIDATED
+AUTO_ACCEPT_NOT_RECOMMENDED
+CROPPED_FORMULA_MODEL_MISSING
+PROVIDER_VALIDATION_STALE
+PROVIDER_VALIDATION_REQUIRED
+REAL_DATASET_MISSING
+TABLE_QUALITY_BASELINE_MISSING
+DECODER_ARTIFACT_MISSING
+DECODER_STATE_CAPTURE_UNAVAILABLE
 ```
 
-Unknown fields are rejected when deserializing this schema. Consumers must
-negotiate `schemaVersion` before decoding a newer contract.
+Existing model, runtime, provider, decoder, input, output, and postprocess
+codes retain their exact wire spelling.

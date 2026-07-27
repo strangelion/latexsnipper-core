@@ -21,6 +21,9 @@ pub fn validate_profile(
         "formula" | "formula_layout" => {
             validate_components(resolver, profile, &["formula-det", "formula-rec"])
         }
+        "croppedFormula" | "cropped_formula" | "cropped-formula" => {
+            validate_components(resolver, "croppedFormula", &["formula-rec"])
+        }
         "text" => validate_components(resolver, profile, &["text-det", "text-rec"]),
         "mixed" => validate_components(
             resolver,

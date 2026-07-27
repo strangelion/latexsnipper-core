@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Upgrade Engine readiness to schema v2 with separate technical, quality, and
+  production-recommendation states; tolerant consumer DTOs; trusted model
+  quality baselines; Core-owned acceptance decisions; environment-bound
+  provider validation caching; and the stable `RecognitionIntegrationApi`
+  Office facade.
+- Add `croppedFormula` / `cropped-formula` across Core, application, CLI, WASM,
+  iOS C, and Android JNI entry points. Its two-stage plan performs formula
+  recognition and postprocess without formula detection or a crop node.
+- Add the opt-in `memory-map-model-experimental` session/mapping owner contract
+  and Paddle while-state capture wrappers. Production mmap and decoder-state
+  claims remain fail-closed until the runtime bindings and real artifacts are
+  available.
 - Add real-model formula prediction/evaluation, provider smoke levels,
   confidence/correction diagnostics, ordered-tree table scoring, ambiguity
   routing, explicit-consent crop artifacts, AST size/serialization evidence,

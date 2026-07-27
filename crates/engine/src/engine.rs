@@ -4,9 +4,10 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use latexsnipper_api_types::{
-    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness as ApiModelReadiness,
-    ProviderValidationLevel, ProviderValidationReport, RuntimeReadiness, TaskReadiness,
-    READINESS_SCHEMA_VERSION,
+    CoreErrorCode, EngineReadiness, ModeReadiness, ModelQualityReadiness, ModelQualityStatus,
+    ModelReadiness as ApiModelReadiness, ProviderValidationKey, ProviderValidationLevel,
+    ProviderValidationPolicy, ProviderValidationReport, ProviderValidationRequest,
+    RuntimeReadiness, TaskReadiness, READINESS_SCHEMA_VERSION,
 };
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
@@ -22,14 +23,16 @@ use latexsnipper_pipeline::{
 #[cfg(feature = "native")]
 use latexsnipper_runtime::FsModelResolver;
 use latexsnipper_runtime::{
-    AccelerationMode, ModelPackage, ModelRegistry, ModelScanIssue, ModelScanReport,
-    ModelSelectionDecision, ModelSelectionPolicy, ModelSelectionRequest, ModelTask, PreparedModel,
-    RegistryRuntimeBackend, ResolvedRuntimeVariant, RuntimeBackend, RuntimeFactory, RuntimeKind,
-    RuntimeRegistry, RuntimeSession, SharedModelResolver,
+    AccelerationMode, ExecutionProviderSpec, ModelPackage, ModelRegistry, ModelScanIssue,
+    ModelScanReport, ModelSelectionDecision, ModelSelectionPolicy, ModelSelectionRequest,
+    ModelTask, PreparedModel, RegistryRuntimeBackend, ResolvedRuntimeVariant, RuntimeBackend,
+    RuntimeFactory, RuntimeKind, RuntimeRegistry, RuntimeSession, SharedModelResolver,
 };
 
 use crate::config::EngineConfig;
 use crate::job::JobQueue;
+use crate::provider_validation::ProviderValidationStore;
+use crate::quality::{ModelQualityRegistry, ModelQualityValidation};
 
 pub use latexsnipper_api_types::{RecognizeMode, RecognizeRequest, RecognizeResponse, StreamItem};
 
@@ -40,6 +43,13 @@ pub struct EngineWarmupEntry {
     pub model_id: Option<String>,
     pub loaded: bool,
     pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ModelTechnicalState {
+    executor_created: bool,
+    session_created: bool,
+    smoke_inference_passed: bool,
 }
 
 // ============================================================================
@@ -124,6 +134,44 @@ fn readiness_error_code(error: &SnipperError) -> CoreErrorCode {
     }
 }
 
+fn current_provider_key(provider: &str, runtime_version: &str) -> ProviderValidationKey {
+    ProviderValidationKey {
+        core_version: env!("CARGO_PKG_VERSION").to_owned(),
+        runtime_version: runtime_version.to_owned(),
+        provider: provider.to_ascii_lowercase(),
+        provider_library_fingerprint: "unverified".to_owned(),
+        os: std::env::consts::OS.to_owned(),
+        architecture: std::env::consts::ARCH.to_owned(),
+        device_driver_fingerprint: "unverified".to_owned(),
+        smoke_model_sha256: "not-run".to_owned(),
+    }
+}
+
+fn declared_model_sha256(manifest: &latexsnipper_runtime::ModelManifest) -> String {
+    if manifest.checksums.len() == 1 {
+        return manifest
+            .checksums
+            .values()
+            .next()
+            .cloned()
+            .unwrap_or_else(|| "0".repeat(64));
+    }
+    if manifest.checksums.is_empty() {
+        return "0".repeat(64);
+    }
+    let mut checksums = manifest.checksums.iter().collect::<Vec<_>>();
+    checksums.sort_by_key(|(name, _)| *name);
+    let mut hasher = sha2::Sha256::new();
+    use sha2::Digest;
+    for (name, checksum) in checksums {
+        hasher.update(name.as_bytes());
+        hasher.update([0]);
+        hasher.update(checksum.as_bytes());
+        hasher.update([0]);
+    }
+    format!("{:x}", hasher.finalize())
+}
+
 /// The main engine that orchestrates all LaTeXSnipper capabilities.
 /// Engine only assembles PipelineGraph and runs it — all logic lives in Nodes.
 pub struct SnipperEngine {
@@ -144,6 +192,12 @@ pub struct SnipperEngine {
     model_registry: ModelRegistry,
     /// Scan issues retained for the public readiness/diagnostics snapshot.
     model_scan_issues: Vec<ModelScanIssue>,
+    /// Runtime facts observed by explicit warmup and real recognition calls.
+    model_technical_state: RwLock<HashMap<String, ModelTechnicalState>>,
+    /// Release-owned quality evidence. Model packages cannot mutate it.
+    model_quality_registry: ModelQualityRegistry,
+    /// Environment-bound provider validation results.
+    provider_validation_store: ProviderValidationStore,
 }
 
 fn legacy_runtime_registry(
@@ -174,6 +228,27 @@ fn initialize_model_registry(models_dir: &Path) -> Result<(ModelRegistry, ModelS
     Ok((registry, report))
 }
 
+fn load_model_quality_registry(models_dir: &Path) -> ModelQualityRegistry {
+    let root = models_dir
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map_or_else(
+            || std::path::PathBuf::from("quality").join("baselines"),
+            |parent| parent.join("quality").join("baselines"),
+        );
+    match ModelQualityRegistry::load(&root) {
+        Ok(registry) => registry,
+        Err(error) => {
+            warn!(
+                "Failed to load trusted model quality baselines from '{}': {}",
+                root.display(),
+                error
+            );
+            ModelQualityRegistry::default()
+        }
+    }
+}
+
 // ============================================================================
 // Pipeline task resolution
 // ============================================================================
@@ -182,6 +257,7 @@ fn initialize_model_registry(models_dir: &Path) -> Result<(ModelRegistry, ModelS
 fn required_tasks(mode: RecognizeMode, parse_mode: DocumentParseMode) -> Vec<ModelTask> {
     match mode {
         RecognizeMode::Formula => vec![ModelTask::FormulaDetection, ModelTask::FormulaRecognition],
+        RecognizeMode::CroppedFormula => vec![ModelTask::FormulaRecognition],
 
         RecognizeMode::Text => vec![ModelTask::TextDetection, ModelTask::TextRecognition],
 
@@ -255,6 +331,7 @@ impl SnipperEngine {
             }
         };
 
+        let model_quality_registry = load_model_quality_registry(&config.models_dir);
         Self {
             config,
             runtime_registry,
@@ -267,6 +344,9 @@ impl SnipperEngine {
             model_selection: ModelSelectionPolicy::default(),
             model_registry,
             model_scan_issues,
+            model_technical_state: RwLock::new(HashMap::new()),
+            model_quality_registry,
+            provider_validation_store: ProviderValidationStore::default(),
         }
     }
 
@@ -295,6 +375,7 @@ impl SnipperEngine {
             }
         };
 
+        let model_quality_registry = load_model_quality_registry(&config.models_dir);
         Self {
             config,
             runtime_registry,
@@ -307,6 +388,9 @@ impl SnipperEngine {
             model_selection: ModelSelectionPolicy::default(),
             model_registry,
             model_scan_issues,
+            model_technical_state: RwLock::new(HashMap::new()),
+            model_quality_registry,
+            provider_validation_store: ProviderValidationStore::default(),
         }
     }
 
@@ -355,6 +439,7 @@ impl SnipperEngine {
             scan_report.issues.len()
         );
 
+        let model_quality_registry = load_model_quality_registry(&config.models_dir);
         Ok(Self {
             config,
             runtime_registry: Arc::new(registry),
@@ -367,6 +452,9 @@ impl SnipperEngine {
             model_selection: ModelSelectionPolicy::default(),
             model_registry,
             model_scan_issues: scan_report.issues,
+            model_technical_state: RwLock::new(HashMap::new()),
+            model_quality_registry,
+            provider_validation_store: ProviderValidationStore::default(),
         })
     }
 
@@ -395,6 +483,7 @@ impl SnipperEngine {
             );
         }
 
+        let model_quality_registry = load_model_quality_registry(&config.models_dir);
         Ok(Self {
             config,
             runtime_registry,
@@ -407,6 +496,9 @@ impl SnipperEngine {
             model_selection: ModelSelectionPolicy::default(),
             model_registry,
             model_scan_issues: scan_report.issues,
+            model_technical_state: RwLock::new(HashMap::new()),
+            model_quality_registry,
+            provider_validation_store: ProviderValidationStore::default(),
         })
     }
 
@@ -542,20 +634,33 @@ impl SnipperEngine {
                     );
                 }
                 let providers = probe.capabilities.execution_providers;
+                let runtime_version = probe
+                    .version
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_owned());
                 let provider_validations = providers
                     .iter()
-                    .map(|provider| ProviderValidationReport {
-                        provider: provider.clone(),
-                        validation_level: ProviderValidationLevel::ProbePassed,
-                        library_detected: true,
-                        probe_passed: true,
-                        session_created: false,
-                        smoke_inference_passed: false,
-                        benchmark_validated: false,
-                        diagnostics: vec![
-                            "runtime probe passed; no model session or inference was run"
-                                .to_string(),
-                        ],
+                    .map(|provider| {
+                        let key = current_provider_key(provider, &runtime_version);
+                        self.provider_validation_store
+                            .lookup(&key)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| ProviderValidationReport {
+                                provider: provider.clone(),
+                                validation_level: ProviderValidationLevel::ProbePassed,
+                                library_detected: true,
+                                probe_passed: true,
+                                session_created: false,
+                                smoke_inference_passed: false,
+                                benchmark_validated: false,
+                                key: Some(key),
+                                stale: false,
+                                diagnostics: vec![
+                                    "runtime probe passed; no model session or inference was run"
+                                        .to_string(),
+                                ],
+                            })
                     })
                     .collect();
                 RuntimeReadiness {
@@ -575,42 +680,122 @@ impl SnipperEngine {
             })
             .collect();
 
+        let technical_states = self
+            .model_technical_state
+            .read()
+            .map(|states| states.clone())
+            .unwrap_or_default();
         let mut model_entries: Vec<_> = self.model_registry.entries().collect();
         model_entries.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
-        let models = model_entries
+        let model_and_quality = model_entries
             .into_iter()
             .map(|(manifest, model_dir)| {
                 match self.prepare_model_runtime(manifest, model_dir, None) {
-                    Ok(resolved) => ApiModelReadiness {
-                        id: manifest.id.clone(),
-                        task: manifest.task.id().to_owned(),
-                        version: manifest.version.clone(),
-                        ready: true,
-                        runtime: Some(resolved.runtime.to_string()),
-                        provider: resolved
+                    Ok(resolved) => {
+                        let runtime = resolved.runtime.to_string();
+                        let provider = resolved
                             .options
                             .providers
                             .first()
-                            .map(|provider| provider.name.clone()),
-                        code: None,
-                        message: None,
-                    },
+                            .map(|provider| provider.name.clone());
+                        let quality =
+                            self.model_quality_registry.validate(ModelQualityValidation {
+                                model_id: &manifest.id,
+                                model_version: &manifest.version,
+                                model_sha256: &declared_model_sha256(manifest),
+                                dataset_version: None,
+                                runtime: Some(&runtime),
+                                provider: provider.as_deref(),
+                            });
+                        let state = technical_states
+                            .get(&manifest.id)
+                            .copied()
+                            .unwrap_or_default();
+                        let technical_ready = state.executor_created
+                            && state.session_created
+                            && state.smoke_inference_passed;
+                        let code = if technical_ready {
+                            quality.code
+                        } else {
+                            Some(CoreErrorCode::ProviderValidationRequired)
+                        };
+                        let message = if technical_ready {
+                            quality.message.clone()
+                        } else {
+                            Some(
+                                "model artifacts resolve, but executor/session/smoke readiness has not been observed"
+                                    .to_owned(),
+                            )
+                        };
+                        (
+                            ApiModelReadiness {
+                                id: manifest.id.clone(),
+                                task: manifest.task.id().to_owned(),
+                                version: manifest.version.clone(),
+                                manifest_valid: true,
+                                artifacts_valid: true,
+                                runtime_resolved: true,
+                                executor_created: state.executor_created,
+                                session_created: state.session_created,
+                                smoke_inference_passed: state.smoke_inference_passed,
+                                technical_ready,
+                                quality_status: quality.status,
+                                runtime: Some(runtime),
+                                provider,
+                                code,
+                                message,
+                            },
+                            quality,
+                        )
+                    }
                     Err(error) => {
                         let code = readiness_error_code(&error);
-                        ApiModelReadiness {
-                            id: manifest.id.clone(),
-                            task: manifest.task.id().to_owned(),
-                            version: manifest.version.clone(),
-                            ready: false,
-                            runtime: None,
-                            provider: None,
-                            code: Some(code),
-                            message: Some(error.to_string()),
-                        }
+                        (
+                            ApiModelReadiness {
+                                id: manifest.id.clone(),
+                                task: manifest.task.id().to_owned(),
+                                version: manifest.version.clone(),
+                                manifest_valid: true,
+                                artifacts_valid: false,
+                                runtime_resolved: false,
+                                executor_created: false,
+                                session_created: false,
+                                smoke_inference_passed: false,
+                                technical_ready: false,
+                                quality_status: ModelQualityStatus::Unknown,
+                                runtime: None,
+                                provider: None,
+                                code: Some(code),
+                                message: Some(error.to_string()),
+                            },
+                            ModelQualityReadiness {
+                                model_id: manifest.id.clone(),
+                                model_version: manifest.version.clone(),
+                                task: manifest.task.id().to_owned(),
+                                status: ModelQualityStatus::Unknown,
+                                dataset_version: None,
+                                runtime: None,
+                                provider: None,
+                                baseline_sha256: None,
+                                code: Some(CoreErrorCode::ModelQualityNotValidated),
+                                message: Some(
+                                    "technical model resolution failed before quality evidence could be matched"
+                                        .to_owned(),
+                                ),
+                            },
+                        )
                     }
                 }
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let models = model_and_quality
+            .iter()
+            .map(|(model, _)| model.clone())
+            .collect::<Vec<_>>();
+        let quality = model_and_quality
+            .into_iter()
+            .map(|(_, quality)| quality)
+            .collect::<Vec<_>>();
 
         let modes = RecognizeMode::all()
             .iter()
@@ -619,32 +804,58 @@ impl SnipperEngine {
                 let tasks = required_tasks(mode, self.config.parse_mode)
                     .into_iter()
                     .map(|task| match self.select_runnable_model(task) {
-                        Ok(Some(model)) => TaskReadiness {
-                            task: task.id().to_owned(),
-                            ready: true,
-                            selected_model: Some(model),
-                            code: None,
-                            message: None,
-                        },
+                        Ok(Some(model_id)) => {
+                            let model = models.iter().find(|model| model.id == model_id);
+                            let technical_ready = model.is_some_and(|model| model.technical_ready);
+                            let quality_status = model
+                                .map_or(ModelQualityStatus::Unknown, |model| model.quality_status);
+                            TaskReadiness {
+                                task: task.id().to_owned(),
+                                technical_ready,
+                                quality_ready: quality_status.is_quality_ready(),
+                                selected_model: Some(model_id),
+                                code: model.and_then(|model| model.code),
+                                message: model.and_then(|model| model.message.clone()),
+                            }
+                        }
                         Ok(None) => TaskReadiness {
                             task: task.id().to_owned(),
-                            ready: false,
+                            technical_ready: false,
+                            quality_ready: false,
                             selected_model: None,
-                            code: Some(CoreErrorCode::ModelNotFound),
+                            code: Some(if mode == RecognizeMode::CroppedFormula {
+                                CoreErrorCode::CroppedFormulaModelMissing
+                            } else {
+                                CoreErrorCode::ModelNotFound
+                            }),
                             message: Some("no runnable model is installed".to_owned()),
                         },
                         Err(error) => TaskReadiness {
                             task: task.id().to_owned(),
-                            ready: false,
+                            technical_ready: false,
+                            quality_ready: false,
                             selected_model: None,
                             code: Some(readiness_error_code(&error)),
                             message: Some(error.to_string()),
                         },
                     })
                     .collect::<Vec<_>>();
+                let technical_ready = tasks.iter().all(|task| task.technical_ready);
+                let quality_ready = tasks.iter().all(|task| task.quality_ready);
+                let production_recommended = technical_ready
+                    && tasks.iter().all(|task| {
+                        task.selected_model.as_ref().is_some_and(|selected| {
+                            models.iter().any(|model| {
+                                model.id == *selected
+                                    && model.quality_status == ModelQualityStatus::Validated
+                            })
+                        })
+                    });
                 ModeReadiness {
                     mode: mode.label().to_owned(),
-                    ready: tasks.iter().all(|task| task.ready),
+                    technical_ready,
+                    quality_ready,
+                    production_recommended,
                     tasks,
                 }
             })
@@ -656,8 +867,122 @@ impl SnipperEngine {
             modes,
             runtimes,
             models,
+            quality,
             diagnostics,
         }
+    }
+
+    /// Record externally produced validation only after the caller has
+    /// authenticated the report and supplied its full environment key.
+    pub fn record_provider_validation(&self, report: ProviderValidationReport) -> Result<()> {
+        self.provider_validation_store.record(report)
+    }
+
+    /// Validate a provider according to an explicit policy. Readiness itself
+    /// never starts a session, smoke inference, or benchmark.
+    pub fn validate_provider(
+        &self,
+        request: ProviderValidationRequest,
+    ) -> Result<ProviderValidationReport> {
+        let provider = request.provider.to_ascii_lowercase();
+        let probe = self
+            .runtime_registry
+            .probe_all()
+            .into_iter()
+            .find_map(|(_kind, probe)| {
+                probe
+                    .capabilities
+                    .execution_providers
+                    .iter()
+                    .any(|candidate| candidate.eq_ignore_ascii_case(&provider))
+                    .then_some(probe)
+            });
+        let Some(probe) = probe else {
+            return Ok(ProviderValidationReport {
+                provider,
+                validation_level: ProviderValidationLevel::Declared,
+                library_detected: false,
+                probe_passed: false,
+                session_created: false,
+                smoke_inference_passed: false,
+                benchmark_validated: false,
+                key: request.key,
+                stale: false,
+                diagnostics: vec![format!(
+                    "{}: provider is not available in any registered runtime",
+                    CoreErrorCode::ProviderUnavailable.as_str()
+                )],
+            });
+        };
+        let key = request.key.unwrap_or_else(|| {
+            current_provider_key(&provider, probe.version.as_deref().unwrap_or("unknown"))
+        });
+        if let Some(cached) = self.provider_validation_store.lookup(&key)? {
+            let sufficient = match request.policy {
+                ProviderValidationPolicy::ProbeOnly => cached.probe_passed,
+                ProviderValidationPolicy::CreateSession => cached.session_created,
+                ProviderValidationPolicy::SmokeInference => cached.smoke_inference_passed,
+                ProviderValidationPolicy::Benchmark => cached.benchmark_validated,
+            };
+            if sufficient && !cached.stale {
+                return Ok(cached);
+            }
+        }
+
+        let mut report = ProviderValidationReport {
+            provider,
+            validation_level: ProviderValidationLevel::ProbePassed,
+            library_detected: true,
+            probe_passed: true,
+            session_created: false,
+            smoke_inference_passed: false,
+            benchmark_validated: false,
+            key: Some(key),
+            stale: false,
+            diagnostics: Vec::new(),
+        };
+        if request.policy != ProviderValidationPolicy::ProbeOnly {
+            let mut failures = Vec::new();
+            for (manifest, model_dir) in self.model_registry.entries() {
+                let mut resolved = match self.prepare_model_runtime(manifest, model_dir, None) {
+                    Ok(resolved) => resolved,
+                    Err(error) => {
+                        failures.push(error.to_string());
+                        continue;
+                    }
+                };
+                resolved.options.providers =
+                    vec![ExecutionProviderSpec::new(report.provider.clone())];
+                match self.runtime_registry.create_resolved_session(&resolved) {
+                    Ok(_session) => {
+                        report.session_created = true;
+                        report.validation_level = ProviderValidationLevel::SessionCreated;
+                        break;
+                    }
+                    Err(error) => failures.push(error.to_string()),
+                }
+            }
+            if !report.session_created {
+                report.diagnostics.push(format!(
+                    "{}: no installed smoke-capable model session could be created ({})",
+                    CoreErrorCode::ProviderSessionCreateFailed.as_str(),
+                    failures
+                        .first()
+                        .map_or("no installed model was eligible", String::as_str)
+                ));
+            }
+        }
+        if matches!(
+            request.policy,
+            ProviderValidationPolicy::SmokeInference | ProviderValidationPolicy::Benchmark
+        ) {
+            report.diagnostics.push(format!(
+                "{}: smoke/benchmark validation requires a versioned tensor fixture for the keyed smoke model or a hash-verified release report",
+                CoreErrorCode::ProviderValidationRequired.as_str()
+            ));
+        }
+        self.provider_validation_store.record(report.clone())?;
+        Ok(report)
     }
 
     pub fn job_queue(&self) -> &JobQueue {
@@ -1073,6 +1398,9 @@ impl SnipperEngine {
     /// Next inference call will create fresh sessions.
     pub fn clear_runtime_sessions(&self) {
         self.runtime_registry.clear_sessions();
+        if let Ok(mut states) = self.model_technical_state.write() {
+            states.clear();
+        }
     }
 
     /// Rescan the models directory for new or removed models.
@@ -1087,12 +1415,17 @@ impl SnipperEngine {
         let report = self
             .model_registry
             .register_models_root(&self.config.models_dir)?;
+        self.model_scan_issues = report.issues.clone();
+        self.model_quality_registry = load_model_quality_registry(&self.config.models_dir);
 
         // Clear the package cache so stale packages are not reused
         self.model_packages
             .write()
             .map_err(|_| SnipperError::Model("Model package cache poisoned".into()))?
             .clear();
+        if let Ok(mut states) = self.model_technical_state.write() {
+            states.clear();
+        }
 
         Ok(report)
     }
@@ -1152,6 +1485,7 @@ impl SnipperEngine {
     ) -> PipelineGraph {
         let profile = match mode {
             RecognizeMode::Formula => PipelineProfile::Formula,
+            RecognizeMode::CroppedFormula => PipelineProfile::CroppedFormula,
             RecognizeMode::Text => PipelineProfile::Text,
             RecognizeMode::Mixed => PipelineProfile::Mixed,
             RecognizeMode::Handwriting => PipelineProfile::Handwriting,
@@ -1412,6 +1746,10 @@ impl SnipperEngine {
         let graph = self.build_pipeline_with_parse_mode(mode, parse_mode);
         let mut ctx =
             self.configure_context_with_parse_mode(PipelineContext::with_image(image), parse_mode);
+        if mode == RecognizeMode::CroppedFormula {
+            ctx.metadata
+                .insert("croppedFormula".to_owned(), serde_json::Value::Bool(true));
+        }
         if let Some(cancellation) = cancellation {
             ctx.set_cancellation_token(cancellation);
         }
@@ -1428,6 +1766,21 @@ impl SnipperEngine {
         ctx.check_control()?;
 
         graph.run(&mut ctx).await?;
+
+        if let Ok(mut states) = self.model_technical_state.write() {
+            for task in required_tasks(mode, parse_mode) {
+                if let Ok(Some(model_id)) = self.select_runnable_model(task) {
+                    states.insert(
+                        model_id,
+                        ModelTechnicalState {
+                            executor_created: true,
+                            session_created: true,
+                            smoke_inference_passed: true,
+                        },
+                    );
+                }
+            }
+        }
 
         let blocks = Self::collect_blocks_from_context(&ctx);
         let diagnostics = ctx.diagnostics.into_iter().map(Into::into).collect();
@@ -1462,7 +1815,7 @@ impl SnipperEngine {
         parse_mode: DocumentParseMode,
     ) -> Vec<EngineWarmupEntry> {
         let mut ctx = self.configure_context_with_parse_mode(PipelineContext::new(), parse_mode);
-        required_tasks(mode, parse_mode)
+        let entries = required_tasks(mode, parse_mode)
             .into_iter()
             .map(
                 |task| match self.select_and_register_model(&mut ctx, task) {
@@ -1513,7 +1866,24 @@ impl SnipperEngine {
                     },
                 },
             )
-            .collect()
+            .collect::<Vec<_>>();
+        if let Ok(mut states) = self.model_technical_state.write() {
+            for entry in &entries {
+                if entry.loaded {
+                    if let Some(model_id) = &entry.model_id {
+                        states.insert(
+                            model_id.clone(),
+                            ModelTechnicalState {
+                                executor_created: true,
+                                session_created: false,
+                                smoke_inference_passed: false,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+        entries
     }
 
     /// Recognize content in a PDF file — Multi-page support.
@@ -1884,7 +2254,7 @@ mod readiness_tests {
         assert_eq!(readiness.schema_version, READINESS_SCHEMA_VERSION);
         assert_eq!(readiness.runtimes.len(), 1);
         assert!(readiness.runtimes[0].available);
-        assert!(readiness.modes.iter().all(|mode| !mode.ready));
+        assert!(readiness.modes.iter().all(|mode| !mode.technical_ready));
 
         let json = serde_json::to_value(readiness).unwrap();
         assert!(json.get("runtime_registry").is_none());

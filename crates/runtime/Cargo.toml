@@ -32,7 +32,8 @@ base64 = { version = "0.22", optional = true }
 [features]
 default = []
 remote-api = ["reqwest", "base64"]
-runtime-mmap-experimental = ["dep:memmap2"]
+memory-map-model-experimental = ["dep:memmap2"]
+runtime-mmap-experimental = ["memory-map-model-experimental"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-20", "cuda", "directml", "tensorrt"] }

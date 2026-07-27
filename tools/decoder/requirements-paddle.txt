@@ -1,0 +1,4 @@
+# CPU capture environment. GPU wheels must be selected explicitly for the
+# target CUDA/driver pair; do not silently substitute them here.
+paddlepaddle>=3.0,<4
+numpy>=1.26,<3

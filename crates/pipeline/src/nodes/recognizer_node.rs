@@ -5,7 +5,7 @@ use latexsnipper_image::operations;
 use latexsnipper_inference::formula_lines::split_formula_line_groups;
 use latexsnipper_inference::{
     load_keys, load_tokenizer_from_str, recognize_formula, recognize_formula_with_tokenizer,
-    recognize_text_with_keys, FormulaBackend, PPFormulaNetAdapter, RecognitionParams,
+    recognize_text_with_keys, DetectionBox, FormulaBackend, PPFormulaNetAdapter, RecognitionParams,
     RecognitionResult, TextRecParams,
 };
 use latexsnipper_runtime::{
@@ -68,6 +68,23 @@ impl PipelineNode for RecognizerNode {
     }
 
     async fn process(&self, ctx: &mut PipelineContext) -> Result<()> {
+        if self.task == ModelTask::FormulaRecognition
+            && ctx.artifacts.formula_detections.is_empty()
+            && ctx
+                .metadata
+                .get("croppedFormula")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+        {
+            if let Some(image) = &ctx.image {
+                ctx.artifacts.formula_detections.push(DetectionBox::rect(
+                    Rect::new(0.0, 0.0, image.width() as f32, image.height() as f32),
+                    1.0,
+                    0,
+                    "cropped_formula".to_owned(),
+                ));
+            }
+        }
         // Try using ModelPackage if available (FormulaBackend path)
         if let Some(package) = ctx.get_model_package(&self.task) {
             match self.recognize_via_package(ctx, &*package).await {

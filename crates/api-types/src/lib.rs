@@ -10,8 +10,10 @@ pub mod readiness;
 pub mod v3;
 
 pub use readiness::{
-    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness, ProviderValidationLevel,
-    ProviderValidationReport, RuntimeReadiness, TaskReadiness, READINESS_SCHEMA_VERSION,
+    CoreErrorCode, EngineReadiness, ModeReadiness, ModelQualityReadiness, ModelQualityStatus,
+    ModelReadiness, ProviderValidationKey, ProviderValidationLevel, ProviderValidationPolicy,
+    ProviderValidationReport, ProviderValidationRequest, RecognitionAcceptance, RecognitionAction,
+    RuntimeReadiness, TaskReadiness, READINESS_SCHEMA_VERSION,
 };
 pub use v3::{
     ApiContractVersionsV3, ApiEnvelopeV3, ApiErrorV3, API_ENVELOPE_VERSION_V3,
@@ -31,6 +33,7 @@ use serde::{Deserialize, Serialize};
 #[non_exhaustive]
 pub enum RecognizeMode {
     Formula,
+    CroppedFormula,
     Text,
     Mixed,
     Handwriting,
@@ -47,6 +50,12 @@ pub enum RecognizeMode {
 #[non_exhaustive]
 pub enum RecognitionProfile {
     Formula,
+    #[serde(
+        rename = "croppedFormula",
+        alias = "cropped_formula",
+        alias = "cropped-formula"
+    )]
+    CroppedFormula,
     Text,
     Mixed,
     Table,
@@ -58,6 +67,7 @@ impl RecognitionProfile {
     pub const fn all() -> &'static [Self] {
         &[
             Self::Formula,
+            Self::CroppedFormula,
             Self::Text,
             Self::Mixed,
             Self::Table,
@@ -69,6 +79,7 @@ impl RecognitionProfile {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Formula => "formula",
+            Self::CroppedFormula => "croppedFormula",
             Self::Text => "text",
             Self::Mixed => "mixed",
             Self::Table => "table",
@@ -82,6 +93,7 @@ impl From<RecognitionProfile> for RecognizeMode {
     fn from(profile: RecognitionProfile) -> Self {
         match profile {
             RecognitionProfile::Formula => Self::Formula,
+            RecognitionProfile::CroppedFormula => Self::CroppedFormula,
             RecognitionProfile::Text => Self::Text,
             RecognitionProfile::Mixed => Self::Mixed,
             RecognitionProfile::Table => Self::Table,
@@ -95,6 +107,7 @@ impl From<RecognizeMode> for RecognitionProfile {
     fn from(mode: RecognizeMode) -> Self {
         match mode {
             RecognizeMode::Formula => Self::Formula,
+            RecognizeMode::CroppedFormula => Self::CroppedFormula,
             RecognizeMode::Text => Self::Text,
             RecognizeMode::Mixed => Self::Mixed,
             RecognizeMode::Table => Self::Table,
@@ -108,6 +121,7 @@ impl RecognizeMode {
     pub const fn all() -> &'static [Self] {
         &[
             Self::Formula,
+            Self::CroppedFormula,
             Self::Text,
             Self::Mixed,
             Self::Handwriting,
@@ -119,6 +133,7 @@ impl RecognizeMode {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Formula => "formula",
+            Self::CroppedFormula => "cropped-formula",
             Self::Text => "text",
             Self::Mixed => "mixed",
             Self::Handwriting => "handwriting",
@@ -130,6 +145,7 @@ impl RecognizeMode {
     pub const fn aliases(self) -> &'static [&'static str] {
         match self {
             Self::Formula => &["math"],
+            Self::CroppedFormula => &["cropped_formula", "croppedFormula"],
             Self::Text => &["ocr"],
             Self::Mixed => &["document"],
             Self::Handwriting => &["handwrite"],
@@ -271,6 +287,7 @@ mod profile_tests {
             values,
             vec![
                 "\"formula\"",
+                "\"croppedFormula\"",
                 "\"text\"",
                 "\"mixed\"",
                 "\"table\"",

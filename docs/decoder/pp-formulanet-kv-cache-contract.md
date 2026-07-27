@@ -55,3 +55,26 @@ The graph tracer follows the shape-sensitive
 Reshape/Transpose/Slice/Concat/Expand/Gather/Unsqueeze ancestry and emits JSON.
 The comparator emits max/mean absolute error, cosine similarity, and top-1/
 top-5 agreement. No repeated-token penalty participates in this workflow.
+
+The reproducible CPU capture environment is:
+
+```powershell
+tools/decoder/run_capture.ps1 `
+  -ModelDir models/formula-rec/pp-formulanet-s `
+  -FeedNpz <licensed-feed.npz> `
+  -Output <capture.json>
+```
+
+or:
+
+```sh
+tools/decoder/run_capture.sh \
+  models/formula-rec/pp-formulanet-s \
+  <licensed-feed.npz> \
+  <capture.json>
+```
+
+The current supported Paddle inference API cannot hook PIR while block
+arguments. The script therefore exits with status 2 and
+`DECODER_STATE_CAPTURE_UNAVAILABLE` rather than writing inferred state names,
+shapes, LoD, growth axes, or token prefixes.

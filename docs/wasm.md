@@ -19,7 +19,9 @@
 
 ## 能力边界
 
-Formula、text、mixed 和 formula-layout 只有在所需 config、model、tokenizer/keys artifact 完整时才会报告 ready。
+Formula、croppedFormula、text、mixed 和 formula-layout 只有在所需
+config、model、tokenizer/keys artifact 完整时才会报告 ready。
+croppedFormula 只要求 formula-rec artifact，不要求 formula-det。
 
 Table 流水线要求 text-rec profile：
 

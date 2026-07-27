@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "coreVersion": "3.1.0",
+  "modes": [
+    {
+      "mode": "cropped-formula",
+      "technicalReady": true,
+      "qualityReady": false,
+      "productionRecommended": false,
+      "tasks": [
+        {
+          "task": "formula-recognition",
+          "technicalReady": true,
+          "qualityReady": false,
+          "selectedModel": "formula-recognition/trocr-deit",
+          "code": "MODEL_BASELINE_FAILED",
+          "message": null
+        }
+      ]
+    }
+  ],
+  "runtimes": [],
+  "models": [
+    {
+      "id": "formula-recognition/trocr-deit",
+      "task": "formula-recognition",
+      "version": "models-v3.1.0",
+      "manifestValid": true,
+      "artifactsValid": true,
+      "runtimeResolved": true,
+      "executorCreated": true,
+      "sessionCreated": true,
+      "smokeInferencePassed": true,
+      "technicalReady": true,
+      "qualityStatus": "baselineFailed",
+      "runtime": "onnx-runtime",
+      "provider": "cpu",
+      "code": "MODEL_BASELINE_FAILED",
+      "message": null
+    }
+  ],
+  "quality": [
+    {
+      "modelId": "formula-recognition/trocr-deit",
+      "modelVersion": "models-v3.1.0",
+      "task": "formula-recognition",
+      "status": "baselineFailed",
+      "datasetVersion": "latexsnipper-formula-recognition/1.0.0",
+      "runtime": "onnxruntime",
+      "provider": "cpu",
+      "baselineSha256": null,
+      "code": "MODEL_BASELINE_FAILED",
+      "message": null
+    }
+  ],
+  "diagnostics": [],
+  "futureOfficeField": {
+    "ignored": true
+  }
+}

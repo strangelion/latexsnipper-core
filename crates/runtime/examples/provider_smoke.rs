@@ -143,6 +143,8 @@ fn run_provider(
         session_created: false,
         smoke_inference_passed: false,
         benchmark_validated: false,
+        key: None,
+        stale: false,
         diagnostics: Vec::new(),
     };
     let mut result = ProviderSmokeResult {

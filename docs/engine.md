@@ -57,7 +57,15 @@ impl SnipperEngine {
 ## RecognizeMode
 
 ```rust
-pub enum RecognizeMode { Formula, Text, Mixed, Handwriting, Table, FormulaLayout }
+pub enum RecognizeMode {
+    Formula,
+    CroppedFormula,
+    Text,
+    Mixed,
+    Handwriting,
+    Table,
+    FormulaLayout,
+}
 ```
 
 ## DocumentParseMode

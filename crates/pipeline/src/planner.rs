@@ -35,6 +35,19 @@ impl PipelinePlanner {
                     PipelineCapability::FormulaRecognition,
                 ],
             ),
+            PipelineProfile::CroppedFormula => simple_plan(
+                profile,
+                parse_mode,
+                vec![
+                    PipelineNodeSpec::RecognizeFormula,
+                    PipelineNodeSpec::Postprocess,
+                ],
+                vec![dependency(
+                    PipelineNodeSpec::Postprocess,
+                    &[PipelineNodeSpec::RecognizeFormula],
+                )],
+                vec![PipelineCapability::FormulaRecognition],
+            ),
             PipelineProfile::Text => simple_plan(
                 profile,
                 parse_mode,
@@ -309,5 +322,36 @@ mod tests {
         assert!(plan
             .required_capabilities
             .contains(&PipelineCapability::FormulaLayout));
+    }
+
+    #[test]
+    fn cropped_formula_skips_detection_and_crop() {
+        let plan = PipelinePlanner.plan(
+            PipelineProfile::CroppedFormula,
+            DocumentParseMode::SpecializedStable,
+        );
+        assert_eq!(
+            plan.nodes,
+            vec![
+                PipelineNodeSpec::RecognizeFormula,
+                PipelineNodeSpec::Postprocess
+            ]
+        );
+        assert!(!plan.nodes.contains(&PipelineNodeSpec::DetectFormula));
+        assert!(!plan.nodes.contains(&PipelineNodeSpec::Crop));
+        assert_eq!(
+            plan.required_capabilities,
+            vec![PipelineCapability::FormulaRecognition]
+        );
+        assert!(
+            plan.nodes.len()
+                < PipelinePlanner
+                    .plan(
+                        PipelineProfile::Formula,
+                        DocumentParseMode::SpecializedStable
+                    )
+                    .nodes
+                    .len()
+        );
     }
 }

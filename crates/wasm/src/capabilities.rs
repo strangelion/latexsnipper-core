@@ -69,6 +69,7 @@ pub fn collect(
 ) -> CapabilityDocument {
     let recognition = [
         "formula",
+        "croppedFormula",
         "text",
         "mixed",
         "formula_layout",

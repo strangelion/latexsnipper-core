@@ -32,10 +32,16 @@ selection. Only `.onnx` and `.ort` are accepted by this factory.
 
 ## mmap status
 
-Model mmap is not enabled in production. An isolated
-`runtime-mmap-experimental` example now maps a versioned model and uses ORT's
-borrowed `commit_from_memory_directly` API, which makes the map outlive the
-session at the Rust type level. It runs first/warm inference, atomically
+Model mmap is not enabled by default. The
+`memory-map-model-experimental` feature now provides `ModelMemoryOwner`,
+`RuntimeSessionEntry`, and `RuntimeSessionOwnerCache`. The cache entry declares
+the session before its optional mapping owner, clears both together, and lets
+active callers retain an old version while a new version is atomically
+published. Lifecycle tests cover clear and old/new coexistence.
+
+An isolated `runtime-mmap-experimental` compatibility feature (an alias for the
+new feature) maps a versioned model and uses ORT's borrowed
+`commit_from_memory_directly` API. It runs first/warm inference, atomically
 switches a version pointer, proves the old session remains usable, loads the new
 version, records process memory and Windows delete/replace behavior, and checks
 temporary-directory cleanup. Accordingly:
@@ -44,10 +50,11 @@ temporary-directory cleanup. Accordingly:
 - `memoryMapModel: true` fails with `ONNX_MODEL_MMAP_UNSUPPORTED`;
 - no RSS or cold-start improvement is attributed to mmap.
 
-The experiment is positive lifecycle evidence, but not proof of a production
-RSS or cold-start improvement. Keeping the advertised capability disabled
-prevents an option from being silently accepted before the cache/session owner
-implements the same lifetime contract.
+The owner abstraction and experiment are positive lifecycle evidence, but not
+proof of an RSS or cold-start improvement. The ONNX factory continues to reject
+`memoryMapModel: true`: rc.12 exposes a borrowed in-memory session, and wiring
+that self-reference into the production factory without a sound owner is not
+accepted. Keeping the advertised capability disabled prevents silent opt-in.
 
 ## Update and locking design
 
@@ -85,7 +92,7 @@ Run the session experiment with:
 
 ```powershell
 cargo run -p latexsnipper-runtime --example mmap_lifecycle `
-  --features runtime-mmap-experimental -- `
+  --features memory-map-model-experimental -- `
   crates/wasm/tests/fixtures/tiny-text-rec.onnx `
   target/runtime-quality/mmap-lifecycle.json
 ```

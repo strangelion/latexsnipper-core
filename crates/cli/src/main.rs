@@ -3750,5 +3750,9 @@ mod tests {
             parse_recognize_mode("mixed"),
             Some(RecognizeMode::Mixed)
         ));
+        assert!(matches!(
+            parse_recognize_mode("cropped-formula"),
+            Some(RecognizeMode::CroppedFormula)
+        ));
     }
 }

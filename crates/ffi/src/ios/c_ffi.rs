@@ -60,6 +60,21 @@ pub extern "C" fn latexsnipper_recognize_formula(
     }
 }
 
+/// Recognize an already-cropped single formula without running detection.
+#[no_mangle]
+pub extern "C" fn latexsnipper_recognize_cropped_formula(
+    data: *const u8,
+    len: usize,
+    width: u32,
+    height: u32,
+) -> *mut c_char {
+    let response = recognize_sync(data, len, width, height, RecognizeMode::CroppedFormula);
+    match CString::new(response.to_json()) {
+        Ok(cs) => cs.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 /// Recognize text.
 #[no_mangle]
 pub extern "C" fn latexsnipper_recognize_text(

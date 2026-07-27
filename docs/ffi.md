@@ -17,6 +17,7 @@
 | `nativeInit` | models_dir: String | i32 | 初始化引擎 |
 | `nativeResponseVersion` | — | u32 | 返回 FFI JSON contract version（当前为 3） |
 | `nativeRecognizeFormula` | data: byte[], len: int | String (JSON) | 公式识别 |
+| `nativeRecognizeCroppedFormula` | data: byte[], len: int | String (JSON) | 已裁剪单公式识别（跳过检测） |
 | `nativeRecognizeText` | data: byte[], len: int | String (JSON) | 文字识别 |
 | `nativeRecognizeMixed` | data: byte[], len: int | String (JSON) | 混合识别 |
 | `nativeRelease` | — | void | 释放资源 |
@@ -29,6 +30,7 @@
 | `latexsnipper_init` | models_dir: *const c_char | i32 | 初始化 |
 | `latexsnipper_ffi_response_version` | — | u32 | 返回 FFI JSON contract version（当前为 3） |
 | `latexsnipper_recognize_formula` | data, len | *mut c_char | 公式识别 |
+| `latexsnipper_recognize_cropped_formula` | data, len | *mut c_char | 已裁剪单公式识别（跳过检测） |
 | `latexsnipper_recognize_text` | data, len | *mut c_char | 文字识别 |
 | `latexsnipper_recognize_mixed` | data, len | *mut c_char | 混合识别 |
 | `latexsnipper_release` | — | void | 释放 |

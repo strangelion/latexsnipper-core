@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "blocked",
+  "code": "REAL_DATASET_MISSING",
+  "formula": {
+    "required": {
+      "screenshots": 30,
+      "scans": 20,
+      "mobilePhotos": 20,
+      "hardNegatives": 20
+    },
+    "admitted": {
+      "screenshots": 0,
+      "scans": 0,
+      "mobilePhotos": 0,
+      "hardNegatives": 0
+    },
+    "metricsAvailable": false
+  },
+  "table": {
+    "requiredRealImages": 30,
+    "admittedRealImages": 0,
+    "status": "blocked",
+    "code": "TABLE_QUALITY_BASELINE_MISSING",
+    "metricsAvailable": false
+  },
+  "admissionRequires": [
+    "redistributable license",
+    "redaction review",
+    "source SHA-256",
+    "annotation reviewer",
+    "ground truth independent from predictions"
+  ],
+  "syntheticDataPromotedToReal": false
+}

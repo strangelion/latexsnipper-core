@@ -59,6 +59,27 @@ pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRecognizeFormula
     }
 }
 
+/// Recognize an already-cropped single formula without running detection.
+#[no_mangle]
+pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRecognizeCroppedFormula(
+    image_data: *const u8,
+    image_len: usize,
+    width: u32,
+    height: u32,
+) -> *mut std::os::raw::c_char {
+    let response = recognize_sync(
+        image_data,
+        image_len,
+        width,
+        height,
+        RecognizeMode::CroppedFormula,
+    );
+    match std::ffi::CString::new(response.to_json()) {
+        Ok(cs) => cs.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 /// Recognize text in an image.
 #[no_mangle]
 pub extern "C" fn Java_com_latexsnipper_core_NativeBridge_nativeRecognizeText(

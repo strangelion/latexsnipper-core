@@ -5,6 +5,8 @@ pub mod config;
 pub mod engine;
 pub mod job;
 pub mod metrics;
+pub mod provider_validation;
+pub mod quality;
 pub mod runtime_registry;
 pub mod service;
 
@@ -18,6 +20,11 @@ pub mod chart_understanding;
 #[cfg(feature = "remote-api")]
 pub mod diagram_understanding;
 
+#[cfg(feature = "native")]
+pub use application::{
+    FormulaRecognitionResult, ModelReloadReport, RecognitionIntegrationApi, RecognitionRequest,
+    RecognitionResult, RecognitionSession, RecognitionSessionBuilder, WarmupReport, WarmupRequest,
+};
 pub use config::EngineConfig;
 pub use engine::{
     EngineWarmupEntry, RecognizeMode, RecognizeRequest, RecognizeResponse, SnipperEngine,
@@ -26,6 +33,11 @@ pub use engine::{
 pub use job::{Job, JobQueue, JobStatus};
 pub use latexsnipper_pipeline::DocumentParseMode;
 pub use metrics::{MetricsBuilder, RecognitionMetrics, SerializableMetrics};
+pub use provider_validation::ProviderValidationStore;
+pub use quality::{
+    ModelQualityKey, ModelQualityMetrics, ModelQualityRecord, ModelQualityRegistry,
+    ModelQualityThresholds, ModelQualityValidation,
+};
 pub use runtime_registry::default_runtime_registry;
 #[cfg(feature = "runtime-plugins")]
 pub use runtime_registry::runtime_registry_with_plugins;
@@ -46,7 +58,9 @@ pub use diagram_understanding::{
 
 // Re-export api-types for backward compatibility (wasm/ffi use these via engine)
 pub use latexsnipper_api_types::{
-    CoreErrorCode, EngineReadiness, ModeReadiness, ModelReadiness, ProviderValidationLevel,
-    ProviderValidationReport, RecognitionProfile, RecognizeMode as ApiRecognizeMode,
-    RuntimeReadiness, StreamItem as ApiStreamItem, TaskReadiness, READINESS_SCHEMA_VERSION,
+    CoreErrorCode, EngineReadiness, ModeReadiness, ModelQualityReadiness, ModelQualityStatus,
+    ModelReadiness, ProviderValidationKey, ProviderValidationLevel, ProviderValidationPolicy,
+    ProviderValidationReport, ProviderValidationRequest, RecognitionAcceptance, RecognitionAction,
+    RecognitionProfile, RecognizeMode as ApiRecognizeMode, RuntimeReadiness,
+    StreamItem as ApiStreamItem, TaskReadiness, READINESS_SCHEMA_VERSION,
 };

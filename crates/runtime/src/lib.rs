@@ -19,6 +19,8 @@ pub mod resolver;
 pub mod runtime_registry;
 pub mod selection_policy;
 pub mod session;
+#[cfg(feature = "memory-map-model-experimental")]
+pub mod session_owner;
 
 pub use acceleration::AccelerationMode;
 pub use api_provider::{
@@ -79,4 +81,9 @@ pub use selection_policy::{
 pub use session::{
     RunRequest, RunResponse, RuntimeSession, SessionMetadata, TensorMap,
     TensorSpec as SessionTensorSpec,
+};
+#[cfg(feature = "memory-map-model-experimental")]
+pub use session_owner::{
+    ModelHash, ModelMapping, ModelMemoryOwner, ModelVersion, RuntimeSessionEntry,
+    RuntimeSessionOwnerCache,
 };

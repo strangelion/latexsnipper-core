@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Baseline trust-index hashes are byte-for-byte release evidence.
+quality/baselines/** -text

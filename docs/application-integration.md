@@ -13,7 +13,7 @@ Transport or UI
                     |
                     v
 Application API
-  RecognitionSession / request / result / health / progress / cancellation
+  RecognitionIntegrationApi / RecognitionSession / owned request and result DTOs
                     |
                     v
 SnipperEngine
@@ -185,3 +185,22 @@ Adapters should be thin owners of one `RecognitionSession`:
 
 None of those adapters requires a second engine lifecycle. They are
 intentionally not implemented by this module.
+
+## Stable Office facade
+
+`RecognitionIntegrationApi` is the common host contract for readiness, warmup,
+recognition, provider validation, and model reload. Its implementation is
+`RecognitionSession`. The facade accepts and returns owned DTOs and never
+exposes a manifest, native library handle, `Arc`, session, runtime factory, or
+registry.
+
+Formula results include raw, normalized, corrected, confidence, trusted model
+quality status, and a Core-computed `RecognitionAcceptance`. Office consumes
+`AutoAccept`, `RequireReview`, or `Reject`; it must not rebuild acceptance rules.
+OMML remains the preferred Word insertion format and is derived from the
+authoritative `Document`.
+
+`CroppedFormula` has wire spelling `croppedFormula` and CLI spelling
+`cropped-formula`. It requires only formula recognition and its plan contains
+no detector or crop node. This is the preferred profile when Office has already
+provided a single formula crop.

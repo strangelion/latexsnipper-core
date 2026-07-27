@@ -20,6 +20,7 @@ Document AST
 |---|---|---|---|
 | `nativeInit` | models_dir | i32 | 初始化引擎 |
 | `nativeRecognizeFormula` | data, len | *mut c_char (JSON) | 公式识别 |
+| `nativeRecognizeCroppedFormula` | data, len | *mut c_char (JSON) | 已裁剪单公式识别（跳过检测） |
 | `nativeRecognizeText` | data, len | *mut c_char (JSON) | 文字识别 |
 | `nativeRecognizeMixed` | data, len | *mut c_char (JSON) | 混合识别 |
 | `nativeRelease` | — | void | 释放资源 |

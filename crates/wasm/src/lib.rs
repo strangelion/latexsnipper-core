@@ -847,6 +847,9 @@ pub fn version() -> String {
 fn canonical_mode(mode: &str) -> String {
     match mode.to_ascii_lowercase().as_str() {
         "f" | "formula" => "formula".to_string(),
+        "cf" | "croppedformula" | "cropped_formula" | "cropped-formula" => {
+            "cropped_formula".to_string()
+        }
         "t" | "text" => "text".to_string(),
         "m" | "mixed" => "mixed".to_string(),
         "fl" | "formula_layout" => "formula_layout".to_string(),
@@ -859,6 +862,7 @@ fn canonical_mode(mode: &str) -> String {
 fn parse_mode(mode: &str) -> Result<RecognizeMode, WasmError> {
     match canonical_mode(mode).as_str() {
         "formula" => Ok(RecognizeMode::Formula),
+        "cropped_formula" => Ok(RecognizeMode::CroppedFormula),
         "text" => Ok(RecognizeMode::Text),
         "mixed" => Ok(RecognizeMode::Mixed),
         "formula_layout" => Ok(RecognizeMode::FormulaLayout),
@@ -974,5 +978,12 @@ mod tests {
 
         let oversized = validate_image(u32::MAX, u32::MAX, Vec::new()).unwrap_err();
         assert_eq!(oversized.code, WasmErrorCode::ImageLimitExceeded);
+    }
+
+    #[test]
+    fn cropped_formula_wire_aliases_are_stable() {
+        for value in ["croppedFormula", "cropped_formula", "cropped-formula", "cf"] {
+            assert_eq!(parse_mode(value).unwrap(), RecognizeMode::CroppedFormula);
+        }
     }
 }

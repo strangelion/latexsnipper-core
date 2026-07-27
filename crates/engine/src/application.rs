@@ -11,8 +11,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use latexsnipper_api_types::{EngineReadiness, ModeReadiness, RuntimeReadiness};
-use latexsnipper_ast::{Diagnostic, DiagnosticLevel, Document, ImportOptions, InputFormat};
+use latexsnipper_api_types::{
+    EngineReadiness, ModeReadiness, ModelQualityStatus, ProviderValidationReport,
+    ProviderValidationRequest, RecognitionAcceptance, RuntimeReadiness,
+};
+use latexsnipper_ast::{
+    Block, Diagnostic, DiagnosticLevel, Document, Formula, ImportOptions, InputFormat,
+};
 use latexsnipper_conversion::{DocumentConverter, DocumentImporter, OutputFormat};
 use latexsnipper_foundation::SnipperError;
 use latexsnipper_image::decode::{decode_with_options, ImageSource};
@@ -144,6 +149,21 @@ pub struct RecognitionResult {
     pub document: Document,
     pub diagnostics: Vec<Diagnostic>,
     pub metadata: RecognitionMetadata,
+    #[serde(default)]
+    pub formulas: Vec<FormulaRecognitionResult>,
+}
+
+/// Office-facing formula payload. It keeps each transformation stage and the
+/// Core-owned acceptance decision together so a host never reconstructs policy.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormulaRecognitionResult {
+    pub raw: String,
+    pub normalized: String,
+    pub corrected: String,
+    pub confidence: f32,
+    pub quality_status: ModelQualityStatus,
+    pub acceptance: RecognitionAcceptance,
 }
 
 impl RecognitionResult {
@@ -273,6 +293,36 @@ pub struct WarmupReport {
     pub diagnostics: Vec<Diagnostic>,
     pub elapsed: Duration,
     pub already_warm: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WarmupRequest {
+    pub profile: RecognitionProfile,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelReloadReport {
+    pub loaded_models: Vec<String>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Stable, transport-neutral contract consumed by Office, desktop, CLI, FFI,
+/// and WASM adapters. It exposes owned DTOs, never runtime registries,
+/// factories, sessions, manifests, or DLL probing.
+pub trait RecognitionIntegrationApi {
+    fn readiness(&self) -> EngineReadiness;
+    fn warmup(&mut self, request: WarmupRequest) -> Result<WarmupReport, ApplicationError>;
+    fn recognize(
+        &mut self,
+        request: RecognitionRequest,
+    ) -> Result<RecognitionResult, ApplicationError>;
+    fn validate_provider(
+        &self,
+        request: ProviderValidationRequest,
+    ) -> Result<ProviderValidationReport, ApplicationError>;
+    fn reload_models(&mut self) -> Result<ModelReloadReport, ApplicationError>;
 }
 
 /// Stable application error code. Wire names do not depend on Rust variants.
@@ -623,6 +673,7 @@ impl RecognitionSession {
             .parse_mode
             .unwrap_or(self.engine.config().parse_mode);
         let readiness = self.engine.readiness();
+        let formula_quality = formula_quality_status(request.profile, &readiness);
         let runtime = runtime_metadata(&readiness);
         report(
             &control.progress,
@@ -671,6 +722,7 @@ impl RecognitionSession {
             Some(1),
             None,
         );
+        let formulas = formula_results(&document, formula_quality);
         Ok(RecognitionResult {
             diagnostics: document.diagnostics.clone(),
             metadata: RecognitionMetadata {
@@ -681,6 +733,7 @@ impl RecognitionSession {
                 elapsed: started.elapsed(),
                 model_cache_hit: None,
             },
+            formulas,
             document,
         })
     }
@@ -885,6 +938,56 @@ impl Drop for RecognitionSession {
     }
 }
 
+impl RecognitionIntegrationApi for RecognitionSession {
+    fn readiness(&self) -> EngineReadiness {
+        self.engine.readiness()
+    }
+
+    fn warmup(&mut self, request: WarmupRequest) -> Result<WarmupReport, ApplicationError> {
+        RecognitionSession::warmup(self, request.profile)
+    }
+
+    fn recognize(
+        &mut self,
+        request: RecognitionRequest,
+    ) -> Result<RecognitionResult, ApplicationError> {
+        RecognitionSession::recognize(self, request)
+    }
+
+    fn validate_provider(
+        &self,
+        request: ProviderValidationRequest,
+    ) -> Result<ProviderValidationReport, ApplicationError> {
+        self.engine
+            .validate_provider(request)
+            .map_err(ApplicationError::from)
+    }
+
+    fn reload_models(&mut self) -> Result<ModelReloadReport, ApplicationError> {
+        self.ensure_open()?;
+        let report = self
+            .engine
+            .reload_all_models()
+            .map_err(ApplicationError::from)?;
+        self.warmups.clear();
+        Ok(ModelReloadReport {
+            loaded_models: report.loaded,
+            diagnostics: report
+                .issues
+                .into_iter()
+                .map(|issue| {
+                    Diagnostic::new(
+                        DiagnosticLevel::Warning,
+                        "MODEL_MANIFEST_INVALID",
+                        issue.message,
+                    )
+                    .with_recoverable(true)
+                })
+                .collect(),
+        })
+    }
+}
+
 struct ApplicationPipelineObserver {
     sink: Arc<dyn ProgressSink>,
 }
@@ -978,6 +1081,92 @@ fn runtime_metadata(readiness: &EngineReadiness) -> RuntimeMetadata {
     }
 }
 
+fn formula_quality_status(
+    profile: RecognitionProfile,
+    readiness: &EngineReadiness,
+) -> ModelQualityStatus {
+    if !matches!(
+        profile,
+        RecognitionProfile::Formula
+            | RecognitionProfile::CroppedFormula
+            | RecognitionProfile::Mixed
+            | RecognitionProfile::FormulaLayout
+            | RecognitionProfile::Table
+    ) {
+        return ModelQualityStatus::Unknown;
+    }
+    let selected = readiness
+        .modes
+        .iter()
+        .find(|mode| mode.mode == RecognizeMode::from(profile).label())
+        .and_then(|mode| {
+            mode.tasks
+                .iter()
+                .find(|task| task.task == "formula-recognition")
+        })
+        .and_then(|task| task.selected_model.as_deref());
+    selected
+        .and_then(|selected| readiness.models.iter().find(|model| model.id == selected))
+        .map_or(ModelQualityStatus::Unknown, |model| model.quality_status)
+}
+
+fn formula_results(
+    document: &Document,
+    quality_status: ModelQualityStatus,
+) -> Vec<FormulaRecognitionResult> {
+    document
+        .pages
+        .iter()
+        .flat_map(|page| page.blocks.iter())
+        .filter_map(|block| match block {
+            Block::Formula(block) => Some(&block.formula),
+            _ => None,
+        })
+        .map(|formula| formula_result(formula, quality_status))
+        .collect()
+}
+
+fn formula_result(
+    formula: &Formula,
+    quality_status: ModelQualityStatus,
+) -> FormulaRecognitionResult {
+    let (raw, normalized, corrected, parse_valid, structure_valid, review_required) =
+        match formula.recognition_evidence.as_deref() {
+            Some(evidence) => (
+                evidence.raw.clone(),
+                evidence.normalized.clone(),
+                evidence.corrected.clone(),
+                evidence.corrected_validation.syntax_valid(),
+                evidence.corrected_validation.matrix_shape_valid,
+                evidence.review_required,
+            ),
+            None => (
+                formula.as_latex().to_owned(),
+                formula.as_latex().to_owned(),
+                formula.as_latex().to_owned(),
+                false,
+                false,
+                true,
+            ),
+        };
+    let acceptance = RecognitionAcceptance::decide(
+        !corrected.trim().is_empty(),
+        quality_status,
+        formula.confidence,
+        parse_valid,
+        structure_valid,
+        review_required,
+    );
+    FormulaRecognitionResult {
+        raw,
+        normalized,
+        corrected,
+        confidence: formula.confidence,
+        quality_status,
+        acceptance,
+    }
+}
+
 fn model_status_from_readiness(
     profile: RecognitionProfile,
     readiness: &EngineReadiness,
@@ -991,7 +1180,9 @@ fn model_status_from_readiness(
         .cloned()
         .unwrap_or_else(|| ModeReadiness {
             mode: mode.label().to_string(),
-            ready: false,
+            technical_ready: false,
+            quality_ready: false,
+            production_recommended: false,
             tasks: Vec::new(),
         });
     let Some(warmup) = warmup else {
@@ -999,8 +1190,8 @@ fn model_status_from_readiness(
             .tasks
             .into_iter()
             .map(|mut task| {
-                if task.ready {
-                    task.ready = false;
+                if task.technical_ready {
+                    task.technical_ready = false;
                     task.code = Some(latexsnipper_api_types::CoreErrorCode::ProviderUnavailable);
                     task.message = Some(
                         "model artifacts resolve, but no application warmup has created a session"
@@ -1025,7 +1216,7 @@ fn model_status_from_readiness(
                 .iter()
                 .any(|model| model.task == task.task)
             {
-                task.ready = true;
+                task.technical_ready = true;
                 task.code = None;
                 task.message = None;
             } else if let Some(missing) = warmup
@@ -1033,7 +1224,7 @@ fn model_status_from_readiness(
                 .iter()
                 .find(|model| model.task == task.task)
             {
-                task.ready = false;
+                task.technical_ready = false;
                 task.code = Some(latexsnipper_api_types::CoreErrorCode::ProviderUnavailable);
                 task.message = Some(missing.reason.clone());
             }
