@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-27T12:15:16+08:00",
+  "baselineCommit": "b2267a029f4dd69f256057682497bb7bcdecfb80",
+  "testedCommit": "5acc3e9cec52773ae31226847b5db7c3b5fbb2fd",
+  "platform": {
+    "os": "windows",
+    "architecture": "x86_64",
+    "toolchain": "x86_64-pc-windows-msvc",
+    "rustc": "1.96.0",
+    "cargo": "1.96.0"
+  },
+  "gates": [
+    {
+      "name": "workspace-clippy",
+      "command": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+      "status": "passed"
+    },
+    {
+      "name": "workspace-tests",
+      "command": "cargo test --workspace --all-features",
+      "status": "passed",
+      "notes": [
+        "All executed unit, integration, and documentation tests passed.",
+        "Two existing opt-in WASM production-profile performance tests remained explicitly ignored."
+      ]
+    },
+    {
+      "name": "format",
+      "command": "cargo fmt --all -- --check",
+      "status": "passed"
+    },
+    {
+      "name": "contract-freeze",
+      "command": "python scripts/verify_v3_contract_freeze.py",
+      "status": "passed",
+      "details": "Verified 10 contract files and 17 public Rust source trees."
+    },
+    {
+      "name": "locked-metadata",
+      "command": "cargo metadata --locked --no-deps --format-version 1",
+      "status": "passed"
+    },
+    {
+      "name": "wasm-engine",
+      "command": "cargo check --locked -p latexsnipper-engine --no-default-features --features wasm --target wasm32-unknown-unknown",
+      "status": "passed"
+    },
+    {
+      "name": "wasm-package",
+      "command": "cargo check --locked -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown",
+      "status": "passed"
+    },
+    {
+      "name": "decoder-capture-script-syntax",
+      "command": "python -m py_compile tools/decoder/capture_paddle_while_state.py; PowerShell parser; bash -n tools/decoder/run_capture.sh",
+      "status": "passed"
+    },
+    {
+      "name": "privacy-scan",
+      "status": "passed",
+      "details": "No local username or absolute personal workspace path was admitted to the repository changes."
+    },
+    {
+      "name": "common-secret-pattern-scan",
+      "status": "passed"
+    }
+  ],
+  "qualityEvidence": {
+    "modelId": "trocr-deit",
+    "modelVersion": "models-v3.1.0",
+    "baselineStatus": "baselineFailed",
+    "normalizedExact": 0.0,
+    "cer": 1.3022407503908286,
+    "ter": 0.6284916201117319,
+    "baselineFileSha256": "60f691bbde4cb73d26e0e787eb1f1beb9c0c4b35220d15a84ae3958aa93f4282",
+    "productionRecommended": false
+  },
+  "externalEvidence": {
+    "realFormulaDataset": {
+      "status": "blocked",
+      "code": "REAL_DATASET_MISSING",
+      "admittedSamples": 0
+    },
+    "realTableDataset": {
+      "status": "blocked",
+      "code": "TABLE_QUALITY_BASELINE_MISSING",
+      "admittedSamples": 0
+    },
+    "decoderStateCapture": {
+      "status": "blocked",
+      "code": "DECODER_STATE_CAPTURE_UNAVAILABLE",
+      "fabricatedFixtureCommitted": false
+    }
+  }
+}
