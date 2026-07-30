@@ -172,8 +172,8 @@ pub fn extract_env<'a>(latex: &'a str, env: &str) -> Option<&'a str> {
 /// Split matrix rows by \\ separator
 pub fn split_matrix_rows(content: &str) -> Vec<Vec<&str>> {
     content
-        .split('\\')
-        .filter(|s| !s.trim().is_empty() && s.trim() != "\\")
+        .split("\\\\")
+        .filter(|s| !s.trim().is_empty())
         .map(|row| row.split('&').filter(|s| !s.trim().is_empty()).collect())
         .filter(|row: &Vec<&str>| !row.is_empty())
         .collect()

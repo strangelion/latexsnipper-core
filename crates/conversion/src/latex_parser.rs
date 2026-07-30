@@ -822,9 +822,12 @@ impl LatexParser {
 
     fn parse_matrix_content(content: &str) -> Vec<Vec<LatexNode>> {
         let mut rows = Vec::new();
-        for row_str in content.split('\\') {
+        // A matrix row ends at the LaTeX `\\` control symbol. Splitting on
+        // every single backslash corrupts commands inside a cell (`\geq`
+        // became a separate "geq" row, for example).
+        for row_str in content.split("\\\\") {
             let row_str = row_str.trim();
-            if row_str.is_empty() || row_str == "\\" {
+            if row_str.is_empty() {
                 continue;
             }
             let cells: Vec<LatexNode> = row_str
@@ -1060,6 +1063,17 @@ mod tests {
             }
             _ => panic!("Expected Sequence"),
         }
+    }
+
+    #[test]
+    fn matrix_rows_do_not_split_relation_commands() {
+        let node = parse_latex("\\begin{cases}x^2&x\\geq0\\\\-x&x<0\\end{cases}");
+        let LatexNode::Cases(rows) = node else {
+            panic!("Expected cases AST");
+        };
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        assert_eq!(rows[0].len(), 2, "{rows:?}");
+        assert!(format!("{:?}", rows[0][1]).contains("geq"), "{rows:?}");
     }
 
     #[test]

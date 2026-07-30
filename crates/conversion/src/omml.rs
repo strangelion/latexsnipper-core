@@ -111,12 +111,10 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Operator(name) => {
-            // Functions like \lim, \log, \sin, etc. A self-closing expression
-            // is valid here and must not be rewritten as an n-ary placeholder.
-            format!(
-                "<m:func>\n  <m:fName><m:r><m:t>{}</m:t></m:r></m:fName>\n  <m:e/>\n</m:func>",
-                name
-            )
+            // An OMML m:func with an empty m:e renders as a placeholder box in
+            // Word. Sequence rendering attaches a following argument when one
+            // exists; a standalone operator is an upright run.
+            wrap_normal_mtext(name)
         }
 
         LatexNode::Relation(name) => {
@@ -152,7 +150,10 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Superscript { base, exp } => {
-            let base_omml = ast_to_omml(base);
+            let base_omml = match base.as_ref() {
+                LatexNode::Operator(name) => wrap_normal_mtext(name),
+                _ => ast_to_omml(base),
+            };
             format!(
                 "<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>",
                 base_omml,
@@ -161,13 +162,18 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Subscript { base, sub } => {
-            // Non-large operators like \lim → use m:func with sub
-            let is_func = matches!(base.as_ref(), LatexNode::Operator(_));
-            if is_func {
-                let inner = ast_to_omml(base);
+            if let LatexNode::Operator(name) = base.as_ref() {
+                if is_limit_operator(name) {
+                    return format!(
+                        "<m:limLow><m:e>{}</m:e><m:lim>{}</m:lim></m:limLow>",
+                        wrap_normal_mtext(name),
+                        ast_to_omml(sub)
+                    );
+                }
                 return format!(
                     "<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>",
-                    inner, ast_to_omml(sub)
+                    wrap_normal_mtext(name),
+                    ast_to_omml(sub)
                 );
             }
             format!(
@@ -641,14 +647,46 @@ fn sequence_to_omml(nodes: &[LatexNode]) -> String {
 fn nary_segment_to_omml(nodes: &[LatexNode]) -> String {
     for (index, node) in nodes.iter().enumerate() {
         if let Some(mut nary) = normalize_nary_head(node) {
-            let mut output = nodes[..index].iter().map(ast_to_omml).collect::<String>();
+            let mut output = function_sequence_to_omml(&nodes[..index]);
             nary.body.extend(nodes[index + 1..].iter());
             output.push_str(&nary_to_omml(&nary));
             return output;
         }
     }
 
-    nodes.iter().map(ast_to_omml).collect()
+    function_sequence_to_omml(nodes)
+}
+
+fn function_sequence_to_omml(nodes: &[LatexNode]) -> String {
+    let mut output = String::new();
+    let mut index = 0;
+    while index < nodes.len() {
+        if let LatexNode::Operator(name) = &nodes[index] {
+            if !is_limit_operator(name)
+                && NaryOperator::from_name(name).is_none()
+                && index + 1 < nodes.len()
+                && !is_nary_operand_boundary(&nodes[index + 1])
+            {
+                output.push_str(&format!(
+                    "<m:func><m:fName>{}</m:fName><m:e>{}</m:e></m:func>",
+                    wrap_normal_mtext(name),
+                    ast_to_omml(&nodes[index + 1])
+                ));
+                index += 2;
+                continue;
+            }
+        }
+        output.push_str(&ast_to_omml(&nodes[index]));
+        index += 1;
+    }
+    output
+}
+
+fn is_limit_operator(name: &str) -> bool {
+    matches!(
+        name,
+        "lim" | "limsup" | "liminf" | "max" | "min" | "sup" | "inf"
+    )
 }
 
 fn is_nary_operand_boundary(node: &LatexNode) -> bool {
@@ -1330,12 +1368,17 @@ mod tests {
     #[test]
     fn test_function_with_limit() {
         let result = latex_to_omml("\\lim_{x \\to 0}");
-        assert!(result.contains("<m:func>"), "should have func: {}", result);
         assert!(
-            result.contains("<m:sSub>"),
-            "should have subscript: {}",
+            result.contains("<m:limLow>"),
+            "should have limLow: {}",
             result
         );
+        assert!(
+            result.contains("<m:lim>"),
+            "should have limit owner: {}",
+            result
+        );
+        assert!(!result.contains("<m:e/>"), "empty owner: {}", result);
     }
 
     #[test]
@@ -1879,10 +1922,27 @@ mod tests {
     #[test]
     fn limit_formula() {
         let r = latex_to_omml("\\lim_{x \\to 0} \\frac{\\sin x}{x}");
-        assert!(r.contains("<m:func>"), "function: {}", r);
-        assert!(r.contains("<m:sSub>"), "subscript: {}", r);
+        assert!(r.contains("<m:limLow>"), "limit: {}", r);
+        assert!(r.contains("<m:func>"), "sin function: {}", r);
         assert!(r.contains("<m:f>"), "fraction: {}", r);
         assert!(r.contains("→"), "arrow: {}", r);
+        assert!(!r.contains("<m:e/>"), "empty function owner: {}", r);
+    }
+
+    #[test]
+    fn cases_preserve_relation_commands_and_row_count() {
+        let r = latex_to_omml("f(x)=\\begin{cases}x^2&x\\geq0\\\\-x&x<0\\end{cases}");
+        assert_eq!(r.matches("<m:mr>").count(), 2, "{r}");
+        assert!(r.contains("≥"), "{r}");
+        assert!(!r.contains("geq"), "{r}");
+    }
+
+    #[test]
+    fn trigonometric_function_owns_its_argument() {
+        let r = latex_to_omml("\\frac{\\sin x}{x}");
+        assert!(r.contains("<m:func>"), "{r}");
+        assert!(r.contains("<m:e><m:r><m:t> x</m:t></m:r></m:e>"), "{r}");
+        assert!(!r.contains("<m:e/>"), "{r}");
     }
 
     #[test]
