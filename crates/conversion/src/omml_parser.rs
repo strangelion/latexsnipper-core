@@ -401,6 +401,16 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 rows.join(" \\\\ ")
             )
         }
+        "limLow" => {
+            let base = normalize_limit_base(&get_child(children, "e"));
+            let limit = normalize_limit_script(&get_child(children, "lim"));
+            format!("{}_{{{}}}", base, limit)
+        }
+        "limUpp" => {
+            let base = normalize_limit_base(&get_child(children, "e"));
+            let limit = normalize_limit_script(&get_child(children, "lim"));
+            format!("{}^{{{}}}", base, limit)
+        }
         "m" => {
             let rows: Vec<String> = children
                 .iter()
@@ -430,7 +440,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 cells.join(" & ")
             }
         }
-        "e" | "sub" | "sup" | "num" | "den" | "deg" | "limLow" | "limUpp" => children
+        "e" | "sub" | "sup" | "num" | "den" | "deg" | "lim" => children
             .iter()
             .map(|(_, v)| v.clone())
             .collect::<Vec<_>>()
@@ -609,13 +619,38 @@ fn map_nary(chr: &str) -> &str {
 }
 
 fn map_function_name(name: &str) -> String {
-    match name.trim() {
+    let trimmed = name.trim();
+    let normalized = trimmed
+        .strip_prefix("\\mathrm{")
+        .and_then(|value| value.strip_suffix('}'))
+        .unwrap_or(trimmed);
+    match normalized {
         "lim" | "limsup" | "liminf" | "max" | "min" | "sup" | "inf" | "log" | "ln" | "sin"
         | "cos" | "tan" | "cot" | "sec" | "csc" | "arcsin" | "arccos" | "arctan" | "sinh"
-        | "cosh" | "tanh" | "det" | "gcd" => format!("\\{}", name.trim()),
+        | "cosh" | "tanh" | "det" | "gcd" => format!("\\{}", normalized),
         other if !other.is_empty() => format!("\\operatorname{{{}}}", other),
         _ => String::new(),
     }
+}
+
+fn normalize_limit_base(base: &str) -> String {
+    let trimmed = base.trim();
+    let name = trimmed
+        .strip_prefix("\\mathrm{")
+        .and_then(|value| value.strip_suffix('}'))
+        .unwrap_or(trimmed);
+    match name {
+        "lim" | "limsup" | "liminf" | "max" | "min" | "sup" | "inf" => {
+            format!("\\{}", name)
+        }
+        _ => base.to_string(),
+    }
+}
+
+fn normalize_limit_script(script: &str) -> String {
+    script
+        .replace('\u{2192}', "\\to ")
+        .replace('\u{21D2}', "\\implies ")
 }
 
 fn map_accent(chr: &str, content: &str) -> String {
@@ -645,6 +680,27 @@ mod structural_tests {
             "nested nary limit was lost: {}",
             result
         );
+    }
+
+    #[test]
+    fn lower_limit_preserves_operator_and_relation_commands() {
+        let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:limLow><m:e><m:r><m:rPr><m:nor/></m:rPr><m:t>lim</m:t></m:r></m:e><m:lim><m:r><m:t>x→1</m:t></m:r></m:lim></m:limLow></m:oMath>"#;
+        let result = parse_omml_to_latex(xml).unwrap();
+        assert_eq!(result, "\\lim_{x\\to 1}");
+    }
+
+    #[test]
+    fn upper_limit_preserves_known_operator_command() {
+        let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:limUpp><m:e><m:r><m:rPr><m:nor/></m:rPr><m:t>sup</m:t></m:r></m:e><m:lim><m:r><m:t>n</m:t></m:r></m:lim></m:limUpp></m:oMath>"#;
+        let result = parse_omml_to_latex(xml).unwrap();
+        assert_eq!(result, "\\sup^{n}");
+    }
+
+    #[test]
+    fn function_name_normal_run_roundtrips_to_command() {
+        let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:func><m:fName><m:r><m:rPr><m:nor/></m:rPr><m:t>sin</m:t></m:r></m:fName><m:e><m:r><m:t>x</m:t></m:r></m:e></m:func></m:oMath>"#;
+        let result = parse_omml_to_latex(xml).unwrap();
+        assert_eq!(result, "\\sin{x}");
     }
 
     #[test]
