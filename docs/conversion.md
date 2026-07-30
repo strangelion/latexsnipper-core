@@ -235,16 +235,34 @@ Microsoft Word 对 OMML 处理有严格要求：
 
 ### nary 运算（求和/积分/连乘）
 
-`<m:e/>` 自闭合标签在 Word 中会渲染为方框。
-
-所有 `<m:nary>`,  `<m:sSub>`,  `<m:sSup>`,  `<m:sSubSup>` 中的 `<m:e/>` 必须包含具体内容：
+LaTeX AST 会先把同层的 n-ary 头（运算符及上下限）归一化，再把后续 operand
+绑定到该节点。积分、求和、连乘、并集等的被积式/求和项必须位于
+`<m:nary>/<m:e>`，不能作为 `</m:nary>` 之后的同级 run 输出。
 
 ```xml
-<!-- ❌ Word 渲染为方框 -->
-<m:e/>
-<!-- ✅ Word 正常显示 -->
-<m:e><m:r><m:t> </m:t></m:r></m:e>
+<m:nary>
+  <m:naryPr>
+    <m:chr m:val="∫"/>
+    <m:limLoc m:val="subSup"/>
+    <m:grow m:val="1"/>
+  </m:naryPr>
+  <m:sub>0</m:sub>
+  <m:sup>∞</m:sup>
+  <m:e>x dx</m:e>
+</m:nary>
 ```
+
+同层 operand 在 relation/equality 处结束；matrix、cases 与 alignment cell
+本身形成结构边界。连续积分从右向左绑定，因此外层积分的 `<m:e>` 包含内层
+`<m:nary>`。无 operand 的独立 n-ary 使用显式空表达式，不使用普通空格伪造
+operand。
+
+`<m:e/>` 是否有效取决于父元素。serializer 在生成具体 construct 时决定空
+表达式形式；`fix_omml()` 不再对全 XML 做 `<m:e/>` 字符串替换。例如
+`m:func` 的空 expression 会保持自闭合。
+
+canonical 结构与 tree ownership 案例位于
+`contracts/fixtures/omml-nary-canonical-v1.json`。
 
 ### xrightarrow / xleftarrow / overset / underset
 

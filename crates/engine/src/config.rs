@@ -6,6 +6,13 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub models_dir: PathBuf,
+    /// Trusted, release-owned model quality baselines.
+    ///
+    /// When unset, the engine retains the legacy
+    /// `<models parent>/quality/baselines` lookup for compatibility.
+    pub quality_baselines_dir: Option<PathBuf>,
+    /// Versioned tensor fixture used for explicit provider smoke validation.
+    pub provider_smoke_fixture: Option<PathBuf>,
     pub acceleration: AccelerationMode,
     pub max_threads: usize,
 
@@ -27,6 +34,8 @@ impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             models_dir: PathBuf::from("models"),
+            quality_baselines_dir: None,
+            provider_smoke_fixture: None,
             acceleration: AccelerationMode::Auto,
             max_threads: 4,
             formula_det_model: None,
@@ -49,6 +58,18 @@ impl EngineConfig {
             models_dir,
             ..Default::default()
         }
+    }
+
+    /// Set the trusted model quality baseline directory explicitly.
+    pub fn with_quality_baselines_dir(mut self, quality_baselines_dir: PathBuf) -> Self {
+        self.quality_baselines_dir = Some(quality_baselines_dir);
+        self
+    }
+
+    /// Set the versioned provider smoke fixture.
+    pub fn with_provider_smoke_fixture(mut self, provider_smoke_fixture: PathBuf) -> Self {
+        self.provider_smoke_fixture = Some(provider_smoke_fixture);
+        self
     }
 
     /// Set text detection model variant (e.g. "v6-medium", "ppocrv5-mobile").

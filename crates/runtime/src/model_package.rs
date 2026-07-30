@@ -251,12 +251,16 @@ impl PreparedModel {
 /// exact resolved runtime variant, with role-aware artifact selection
 /// (e.g. "encoder" vs "decoder" for TrOCR models).
 pub struct ModelExecutionContext {
+    /// Stable model identifier used by runtime observations.
+    pub model_id: String,
     /// Canonical runtime registry for creating sessions.
     pub runtime_registry: Arc<RuntimeRegistry>,
     /// The resolved runtime variant to use.
     pub resolved_runtime: ResolvedRuntimeVariant,
     /// Maximum intra-op threads.
     pub max_threads: usize,
+    /// Optional observer for actual executor/session/inference events.
+    pub runtime_observer: Option<Arc<dyn crate::ModelRuntimeObserver>>,
 }
 
 impl ModelExecutionContext {
@@ -285,7 +289,17 @@ impl ModelExecutionContext {
             resolved.options.max_threads = self.max_threads;
         }
 
-        self.runtime_registry.create_resolved_session(&resolved)
+        let session = self.runtime_registry.create_resolved_session(&resolved)?;
+        if let Some(observer) = &self.runtime_observer {
+            observer.observe(&self.model_id, crate::ModelRuntimeEvent::SessionCreated);
+            Ok(Box::new(ObservedRuntimeSession {
+                inner: session,
+                model_id: self.model_id.clone(),
+                observer: observer.clone(),
+            }))
+        } else {
+            Ok(session)
+        }
     }
 
     /// Create a legacy [`RuntimeBackend`] from the registry for adapters
@@ -331,6 +345,33 @@ impl ModelExecutionContext {
                 e
             ))
         })
+    }
+}
+
+struct ObservedRuntimeSession {
+    inner: Box<dyn crate::RuntimeSession>,
+    model_id: String,
+    observer: Arc<dyn crate::ModelRuntimeObserver>,
+}
+
+impl crate::RuntimeSession for ObservedRuntimeSession {
+    fn metadata(&self) -> &crate::SessionMetadata {
+        self.inner.metadata()
+    }
+
+    fn run(&self, request: crate::RunRequest) -> Result<crate::RunResponse> {
+        self.observer
+            .observe(&self.model_id, crate::ModelRuntimeEvent::InferenceStarted);
+        let result = self.inner.run(request);
+        self.observer.observe(
+            &self.model_id,
+            if result.is_ok() {
+                crate::ModelRuntimeEvent::InferenceCompleted
+            } else {
+                crate::ModelRuntimeEvent::InferenceFailed
+            },
+        );
+        result
     }
 }
 

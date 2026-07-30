@@ -2,19 +2,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use latexsnipper_api_types::{ProviderValidationLevel, ProviderValidationReport};
+use latexsnipper_api_types::{
+    ProviderValidationKey, ProviderValidationLevel, ProviderValidationReport,
+};
 use latexsnipper_runtime::providers::onnx_factory::OnnxRuntimeFactory;
 use latexsnipper_runtime::{
-    ExecutionProviderSpec, RunRequest, RuntimeArtifacts, RuntimeFactory, RuntimeKind,
-    RuntimeOptions, TensorMap,
+    tensor_map_sha256, ExecutionProviderSpec, ProviderEnvironmentFingerprint, ProviderSmokeFixture,
+    RunRequest, RuntimeArtifacts, RuntimeFactory, RuntimeKind, RuntimeOptions, RuntimeProbe,
+    TensorMap,
 };
-use latexsnipper_tensor::Tensor;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
-
-const INPUT_NAME: &str = "x";
-const INPUT_SHAPE: [usize; 4] = [1, 3, 48, 320];
-const TOLERANCE: f32 = 1.0e-6;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,13 +40,13 @@ struct ProviderSmokeResult {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let model =
+    let fixture_path =
         PathBuf::from(args.next().ok_or(
-            "usage: provider_smoke MODEL OUTPUT [PROVIDERS_CSV] [BENCHMARK_VALIDATED_CSV]",
+            "usage: provider_smoke FIXTURE OUTPUT [PROVIDERS_CSV] [BENCHMARK_PROVIDERS_CSV]",
         )?);
     let output =
         PathBuf::from(args.next().ok_or(
-            "usage: provider_smoke MODEL OUTPUT [PROVIDERS_CSV] [BENCHMARK_VALIDATED_CSV]",
+            "usage: provider_smoke FIXTURE OUTPUT [PROVIDERS_CSV] [BENCHMARK_PROVIDERS_CSV]",
         )?);
     let providers = args
         .next()
@@ -59,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|value| !value.is_empty())
         .map(str::to_ascii_lowercase)
         .collect::<Vec<_>>();
-    let benchmark_validated = args
+    let benchmark_requested = args
         .next()
         .unwrap_or_default()
         .split(',')
@@ -67,27 +64,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|value| !value.is_empty())
         .map(str::to_ascii_lowercase)
         .collect::<BTreeSet<_>>();
-    if !model.is_file() {
-        return Err(format!("smoke model is missing: {}", model.display()).into());
-    }
+    let fixture = ProviderSmokeFixture::load(&fixture_path)?;
+    let model = fixture.model_path();
+    let inputs = fixture.input_tensors()?;
+    let input_sha256 = tensor_map_sha256(&inputs)?;
 
-    let input_values = (0..INPUT_SHAPE.iter().product::<usize>())
-        .map(|index| (index % 17) as f32 / 17.0)
-        .collect::<Vec<_>>();
-    let input = Tensor::float32(INPUT_NAME, INPUT_SHAPE.to_vec(), input_values);
-    let input_sha256 =
-        tensor_map_sha256(&TensorMap::from([(INPUT_NAME.to_owned(), input.clone())]))?;
-
-    let (cpu_result, cpu_outputs) = run_provider(&model, "cpu", &input, None, false);
+    let (cpu_result, cpu_outputs) = run_provider(
+        &fixture,
+        &model,
+        "cpu",
+        &inputs,
+        None,
+        benchmark_requested.contains("cpu"),
+    );
     if !cpu_result.validation.smoke_inference_passed {
         let evidence = SmokeEvidence {
             schema_version: 1,
-            model: model.display().to_string(),
-            model_sha256: file_sha256(&model)?,
+            model: fixture.model.path.display().to_string(),
+            model_sha256: fixture.model_sha256().to_owned(),
             input_sha256,
             reference_provider: "cpu".to_owned(),
             reference_output_sha256: cpu_result.output_sha256.clone(),
-            tolerance: TOLERANCE,
+            tolerance: fixture.tolerance.unwrap_or_default(),
             validations: vec![cpu_result],
         };
         std::fs::write(output, serde_json::to_vec_pretty(&evidence)?)?;
@@ -100,28 +98,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let (result, _) = run_provider(
+            &fixture,
             &model,
             &provider,
-            &input,
+            &inputs,
             cpu_outputs.as_ref(),
-            benchmark_validated.contains(&provider),
+            benchmark_requested.contains(&provider),
         );
         by_provider.insert(provider, result);
     }
-    if let Some(cpu) = by_provider.get_mut("cpu") {
-        cpu.validation.benchmark_validated = benchmark_validated.contains("cpu");
-        if cpu.validation.benchmark_validated {
-            cpu.validation.validation_level = ProviderValidationLevel::BenchmarkValidated;
-        }
-    }
     let evidence = SmokeEvidence {
         schema_version: 1,
-        model: model.display().to_string(),
-        model_sha256: file_sha256(&model)?,
+        model: fixture.model.path.display().to_string(),
+        model_sha256: fixture.model_sha256().to_owned(),
         input_sha256,
         reference_provider: "cpu".to_owned(),
         reference_output_sha256: reference_hash,
-        tolerance: TOLERANCE,
+        tolerance: fixture.tolerance.unwrap_or_default(),
         validations: by_provider.into_values().collect(),
     };
     std::fs::write(output, serde_json::to_vec_pretty(&evidence)?)?;
@@ -129,11 +122,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_provider(
+    fixture: &ProviderSmokeFixture,
     model: &Path,
     provider: &str,
-    input: &Tensor,
+    inputs: &TensorMap,
     reference: Option<&TensorMap>,
-    benchmark_validated: bool,
+    benchmark_requested: bool,
 ) -> (ProviderSmokeResult, Option<TensorMap>) {
     let base = ProviderValidationReport {
         provider: provider.to_owned(),
@@ -171,6 +165,7 @@ fn run_provider(
             .to_path_buf(),
     );
     let probe = factory.probe();
+    result.validation.key = Some(provider_key(provider, &probe, fixture.model_sha256()));
     result.validation.library_detected = probe.available;
     if !probe.available {
         result.validation.diagnostics.push(
@@ -221,10 +216,7 @@ fn run_provider(
     result.validation.validation_level = ProviderValidationLevel::SessionCreated;
 
     let inference_started = Instant::now();
-    let response = match session.run(RunRequest::new(TensorMap::from([(
-        INPUT_NAME.to_owned(),
-        input.clone(),
-    )]))) {
+    let response = match session.run(RunRequest::new(inputs.clone())) {
         Ok(response) => response,
         Err(error) => {
             result
@@ -236,15 +228,24 @@ fn run_provider(
         }
     };
     result.inference_ms = Some(inference_started.elapsed().as_secs_f64() * 1000.0);
+    if let Err(error) = fixture.validate_outputs(&response.outputs) {
+        result
+            .validation
+            .diagnostics
+            .push(redact_machine_paths(&error.to_string()));
+        result.error_code = Some("PROVIDER_OUTPUT_MISMATCH".to_owned());
+        return (result, Some(response.outputs));
+    }
     result.output_sha256 = tensor_map_sha256(&response.outputs).ok();
     if let Some(reference) = reference {
+        let tolerance = fixture.tolerance.unwrap_or_default();
         match max_absolute_error(reference, &response.outputs) {
-            Some(error) if error <= TOLERANCE => result.max_absolute_error = Some(error),
+            Some(error) if error <= tolerance => result.max_absolute_error = Some(error),
             Some(error) => {
                 result.max_absolute_error = Some(error);
                 result.error_code = Some("PROVIDER_OUTPUT_MISMATCH".to_owned());
                 result.validation.diagnostics.push(format!(
-                    "maximum absolute error {error} exceeds tolerance {TOLERANCE}"
+                    "maximum absolute error {error} exceeds tolerance {tolerance}"
                 ));
                 return (result, Some(response.outputs));
             }
@@ -261,8 +262,14 @@ fn run_provider(
         result.max_absolute_error = Some(0.0);
     }
     result.validation.smoke_inference_passed = true;
-    result.validation.benchmark_validated = benchmark_validated;
-    result.validation.validation_level = if benchmark_validated {
+    result.validation.benchmark_validated = benchmark_requested
+        && (0..3).all(|_| {
+            session
+                .run(RunRequest::new(inputs.clone()))
+                .and_then(|response| fixture.validate_outputs(&response.outputs))
+                .is_ok()
+        });
+    result.validation.validation_level = if result.validation.benchmark_validated {
         ProviderValidationLevel::BenchmarkValidated
     } else {
         ProviderValidationLevel::SmokeInferencePassed
@@ -301,15 +308,27 @@ fn max_absolute_error(reference: &TensorMap, actual: &TensorMap) -> Option<f32> 
     Some(maximum)
 }
 
-fn tensor_map_sha256(tensors: &TensorMap) -> Result<String, serde_json::Error> {
-    Ok(format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(tensors)?)
-    ))
-}
-
-fn file_sha256(path: &Path) -> std::io::Result<String> {
-    Ok(format!("{:x}", Sha256::digest(std::fs::read(path)?)))
+fn provider_key(
+    provider: &str,
+    probe: &RuntimeProbe,
+    smoke_model_sha256: &str,
+) -> ProviderValidationKey {
+    let fingerprint = ProviderEnvironmentFingerprint::collect(
+        env!("CARGO_PKG_VERSION"),
+        provider,
+        probe,
+        Some(smoke_model_sha256),
+    );
+    ProviderValidationKey {
+        core_version: fingerprint.core_version,
+        runtime_version: fingerprint.runtime_version,
+        provider: fingerprint.provider,
+        provider_library_fingerprint: fingerprint.provider_library_fingerprint,
+        os: fingerprint.os,
+        architecture: fingerprint.architecture,
+        device_driver_fingerprint: fingerprint.device_driver_fingerprint,
+        smoke_model_sha256: fingerprint.smoke_model_sha256,
+    }
 }
 
 fn redact_machine_paths(message: &str) -> String {

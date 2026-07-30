@@ -7,6 +7,7 @@ pub mod factory;
 pub mod kind;
 pub mod legacy;
 pub mod model_handle;
+pub mod model_observation;
 pub mod model_package;
 pub mod model_plugin;
 pub mod model_registry;
@@ -14,6 +15,8 @@ pub mod model_resolver;
 pub mod model_validation;
 pub mod options;
 pub mod plugin_loader;
+pub mod provider_fingerprint;
+pub mod provider_smoke;
 pub mod providers;
 pub mod resolver;
 pub mod runtime_registry;
@@ -41,6 +44,7 @@ pub use legacy::{
     RuntimeSessionCompatibility,
 };
 pub use model_handle::ModelHandle;
+pub use model_observation::{ModelRuntimeEvent, ModelRuntimeObservation, ModelRuntimeObserver};
 pub use model_package::{
     DetectionQuad, DetectionResult, FormulaResult, InferenceContext, LayoutResult, ModelDescriptor,
     ModelExecutionContext, ModelExecutor, ModelInput, ModelOutput, ModelPackage, ModelTask,
@@ -61,6 +65,14 @@ pub use model_validation::{
 };
 pub use options::{DeviceKind, ExecutionProviderSpec, RuntimeOptions};
 pub use plugin_loader::load_plugins_from_dir;
+pub use provider_fingerprint::{
+    is_weak_observation, ProviderEnvironmentFingerprint, FINGERPRINT_NOT_APPLICABLE,
+    FINGERPRINT_UNAVAILABLE, FINGERPRINT_UNKNOWN,
+};
+pub use provider_smoke::{
+    tensor_map_sha256, ProviderSmokeFixture, ProviderSmokeOutcome, SmokeInput, SmokeInputGenerator,
+    SmokeModel, SmokeOutput,
+};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub use providers::onnx::OnnxRuntimeBackend;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]

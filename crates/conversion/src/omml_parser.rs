@@ -127,6 +127,19 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                     .find(|a| local(a.key.as_ref()) == "val")
                     .map(|a| String::from_utf8_lossy(&a.value).to_string())
                     .unwrap_or_default();
+                let val = if tag == "spacing" {
+                    match val.as_str() {
+                        "1" => "\\quad ".to_owned(),
+                        "2" => "\\qquad ".to_owned(),
+                        "3" => "\\,".to_owned(),
+                        "4" => "\\:".to_owned(),
+                        "5" => "\\;".to_owned(),
+                        "6" => "\\!".to_owned(),
+                        _ => String::new(),
+                    }
+                } else {
+                    val
+                };
                 if let Some((_, ref mut parent)) = stack.last_mut() {
                     parent.push((tag, val));
                 }
@@ -294,6 +307,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 format!("{}^{{{}}}_{{{}}}{{{}}}", op, sup, sub, body)
             }
         }
+        "naryPr" => get_child(children, "chr"),
         "func" => {
             let name = get_child(children, "fName");
             let arg = get_child(children, "e");
@@ -579,12 +593,15 @@ fn matrix_env_from_delimiters(beg: &str, end: &str) -> Option<&'static str> {
 
 fn map_nary(chr: &str) -> &str {
     match chr {
-        "\u{222B}" | "\u{222E}" => "\\int",
+        "\u{222B}" => "\\int",
+        "\u{222E}" => "\\oint",
         "\u{222C}" => "\\iint",
         "\u{222D}" => "\\iiint",
         "\u{2211}" => "\\sum",
         "\u{220F}" => "\\prod",
         "\u{2210}" => "\\coprod",
+        "\u{22C3}" => "\\bigcup",
+        "\u{22C2}" => "\\bigcap",
         "\u{2202}" => "\\partial",
         "\u{2207}" => "\\nabla",
         _ => "\\int",

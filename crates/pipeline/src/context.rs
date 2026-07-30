@@ -4,7 +4,8 @@ use crate::text_recognition_service::TextRecognitionService;
 use latexsnipper_ast::Document;
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::{
-    InferenceSession, ModelExecutionContext, ModelPackage, ModelTask, PreparedModel,
+    InferenceContext, InferenceSession, ModelExecutionContext, ModelExecutor, ModelInput,
+    ModelOutput, ModelPackage, ModelRuntimeEvent, ModelRuntimeObserver, ModelTask, PreparedModel,
     RuntimeBackend, RuntimeRegistry, SharedModelResolver,
 };
 use std::collections::HashMap;
@@ -105,6 +106,8 @@ pub struct PipelineContext {
     timeout_ms: Option<u64>,
     /// Optional node-boundary observer.
     progress_observer: Option<Arc<dyn PipelineProgressObserver>>,
+    /// Observer for actual per-model executor/session/inference events.
+    model_runtime_observer: Option<Arc<dyn ModelRuntimeObserver>>,
     /// Explicitly opt-in debug/benchmark crop store. Production defaults to
     /// `None`, so source pixels are never persisted by ordinary recognition.
     crop_artifact_store: Option<Arc<latexsnipper_artifact::DebugCropStore>>,
@@ -158,6 +161,7 @@ impl PipelineContext {
             deadline: None,
             timeout_ms: None,
             progress_observer: None,
+            model_runtime_observer: None,
             crop_artifact_store: None,
             models_dir: None,
             backend: None,
@@ -197,6 +201,7 @@ impl PipelineContext {
             };
             match TextRecognitionService::from_context(&exec_ctx) {
                 Ok(service) => {
+                    self.observe_model_runtime(&prepared.id, ModelRuntimeEvent::ExecutorCreated);
                     let svc = Arc::new(service);
                     self.text_rec_service = Some(svc.clone());
                     return Some(svc);
@@ -249,9 +254,11 @@ impl PipelineContext {
             )
         })?;
         Ok(ModelExecutionContext {
+            model_id: prepared.id.clone(),
             runtime_registry: registry,
             resolved_runtime: prepared.runtime.clone(),
             max_threads: self.max_threads,
+            runtime_observer: self.model_runtime_observer.clone(),
         })
     }
 
@@ -375,6 +382,33 @@ impl PipelineContext {
     /// Attach a cloneable external cancellation signal.
     pub fn set_cancellation_token(&mut self, token: PipelineCancellationToken) {
         self.cancellation_token = Some(token);
+    }
+
+    /// Attach an observer for actual per-model runtime events.
+    pub fn set_model_runtime_observer(&mut self, observer: Arc<dyn ModelRuntimeObserver>) {
+        self.model_runtime_observer = Some(observer);
+    }
+
+    fn observe_model_runtime(&self, model_id: &str, event: ModelRuntimeEvent) {
+        if let Some(observer) = &self.model_runtime_observer {
+            observer.observe(model_id, event);
+        }
+    }
+
+    fn observed_executor(
+        &self,
+        model_id: String,
+        executor: Box<dyn ModelExecutor>,
+    ) -> Box<dyn ModelExecutor> {
+        if let Some(observer) = &self.model_runtime_observer {
+            Box::new(ObservedModelExecutor {
+                inner: executor,
+                model_id,
+                observer: observer.clone(),
+            })
+        } else {
+            executor
+        }
     }
 
     /// Set a request deadline relative to now.
@@ -503,13 +537,16 @@ impl PipelineContext {
             })?;
 
             let exec_ctx = ModelExecutionContext {
+                model_id: prepared.id.clone(),
                 runtime_registry: registry,
                 resolved_runtime: prepared.runtime.clone(),
                 max_threads: self.max_threads,
+                runtime_observer: self.model_runtime_observer.clone(),
             };
 
             let executor = prepared.package.create_executor_with_context(&exec_ctx)?;
-            return Ok(Some(executor));
+            self.observe_model_runtime(&prepared.id, ModelRuntimeEvent::ExecutorCreated);
+            return Ok(Some(self.observed_executor(prepared.id.clone(), executor)));
         }
 
         // 2. Legacy path: bare package + backend
@@ -521,10 +558,43 @@ impl PipelineContext {
             })?;
 
             let executor = package.create_executor(backend)?;
-            return Ok(Some(executor));
+            let model_id = package.descriptor().id.composite_key();
+            self.observe_model_runtime(&model_id, ModelRuntimeEvent::ExecutorCreated);
+            return Ok(Some(self.observed_executor(model_id, executor)));
         }
 
         Ok(None)
+    }
+}
+
+struct ObservedModelExecutor {
+    inner: Box<dyn ModelExecutor>,
+    model_id: String,
+    observer: Arc<dyn ModelRuntimeObserver>,
+}
+
+impl ModelExecutor for ObservedModelExecutor {
+    fn run(
+        &mut self,
+        input: ModelInput,
+        ctx: &mut InferenceContext,
+    ) -> latexsnipper_foundation::Result<ModelOutput> {
+        self.observer
+            .observe(&self.model_id, ModelRuntimeEvent::InferenceStarted);
+        let result = self.inner.run(input, ctx);
+        self.observer.observe(
+            &self.model_id,
+            if result.is_ok() {
+                ModelRuntimeEvent::InferenceCompleted
+            } else {
+                ModelRuntimeEvent::InferenceFailed
+            },
+        );
+        result
+    }
+
+    fn descriptor(&self) -> &latexsnipper_runtime::ModelDescriptor {
+        self.inner.descriptor()
     }
 }
 

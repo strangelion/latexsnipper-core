@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "latex": "\\int_0^\\infty x\\,dx",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∫\"/><m:limLoc m:val=\"subSup\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∫",
+      "expectedBodyTokens": ["x", "dx"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "I=\\int_0^\\infty x\\,dx",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∫\"/><m:limLoc m:val=\"subSup\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∫",
+      "expectedBodyTokens": ["x", "dx"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "\\int_{-\\infty}^{\\infty}e^{-x^2}\\,dx",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∫\"/><m:limLoc m:val=\"subSup\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∫",
+      "expectedBodyTokens": ["e", "x", "dx"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "\\int_0^1(x^2+1)\\,dx",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∫\"/><m:limLoc m:val=\"subSup\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∫",
+      "expectedBodyTokens": ["x", "1", "dx"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "\\iint_D f(x,y)\\,dA",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∬\"/><m:limLoc m:val=\"subSup\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∬",
+      "expectedBodyTokens": ["f", "x", "y", "dA"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "\\sum_{i=1}^{n}x_i",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∑\"/><m:limLoc m:val=\"undOvr\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∑",
+      "expectedBodyTokens": ["x", "i"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "\\prod_{i=1}^{n}(1+x_i)",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∏\"/><m:limLoc m:val=\"undOvr\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∏",
+      "expectedBodyTokens": ["1", "x", "i"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "\\oint_C\\vec F\\cdot d\\vec r",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∮\"/><m:limLoc m:val=\"subSup\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∮",
+      "expectedBodyTokens": ["F", "d", "r"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "\\bigcup_{i=1}^{n}A_i",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"⋃\"/><m:limLoc m:val=\"undOvr\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "⋃",
+      "expectedBodyTokens": ["A", "i"],
+      "expectedNaryCount": 1
+    },
+    {
+      "latex": "\\int_0^1\\int_0^1f(x,y)\\,dx\\,dy",
+      "expectedFragment": "<m:nary><m:naryPr><m:chr m:val=\"∫\"/><m:limLoc m:val=\"subSup\"/><m:grow m:val=\"1\"/>",
+      "expectedOperator": "∫",
+      "expectedBodyTokens": ["f", "dx", "dy"],
+      "expectedNaryCount": 2
+    }
+  ]
+}

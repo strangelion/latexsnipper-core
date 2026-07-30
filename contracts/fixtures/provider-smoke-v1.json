@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "model": {
+    "path": "../../crates/wasm/tests/fixtures/tiny-text-rec.onnx",
+    "sha256": "ec6ecac6a32e663f67bd3967a6579171783c7185042cc61bb7ca84a92fdc5daa"
+  },
+  "inputs": [
+    {
+      "name": "x",
+      "dtype": "f32",
+      "shape": [1, 3, 48, 320],
+      "generator": {
+        "kind": "moduloRamp",
+        "modulus": 17,
+        "divisor": 17.0
+      }
+    }
+  ],
+  "inputSha256": "f4e0ec8e493d64ecab6aaa12e8407e758d871fb5f34cc372690f3a7bac3ac120",
+  "expectedOutputs": [
+    {
+      "name": "output",
+      "dtype": "f32",
+      "shape": [1, 3, 4]
+    }
+  ],
+  "expectedOutputSha256": "1c14430eb3db02ad9f9bf1c3a8d8f9018c69a18623cbefc014e831472d54a193",
+  "tolerance": 0.000001
+}

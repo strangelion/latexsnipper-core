@@ -260,6 +260,7 @@ pub fn map_large_op(latex: &str) -> Option<&str> {
     match latex {
         "\\sum" => Some("∑"),
         "\\prod" => Some("∏"),
+        "\\coprod" => Some("∐"),
         "\\int" => Some("∫"),
         "\\iint" => Some("∬"),
         "\\iiint" => Some("∭"),

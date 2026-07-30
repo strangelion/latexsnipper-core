@@ -79,6 +79,10 @@ pub fn latex_to_omml(latex: &str) -> String {
 
 /// Walk the AST and generate OMML XML.
 fn ast_to_omml(node: &LatexNode) -> String {
+    if let Some(nary) = normalize_nary_head(node) {
+        return nary_to_omml(&nary);
+    }
+
     match node {
         LatexNode::Text(s) => {
             if s.is_empty() {
@@ -107,30 +111,12 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Operator(name) => {
-            match name.as_str() {
-                "sum" | "prod" | "coprod" | "int" | "iint" | "iiint" | "oint"
-                | "bigcup" | "bigcap" => {
-                    if let Some(sym) = map_large_op(&format!("\\{}", name)) {
-                        // Word requires <m:e> to exist and NOT be self-closing (<m:e/> renders as box).
-                        // For nary operators with no subscript/superscript and no operand,
-                        // we still produce <m:e> with a space inside.
-                        format!(
-                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
-                            sym
-                        )
-                    } else {
-                        wrap_mtext(name)
-                    }
-                }
-                _ => {
-                    // Functions like \lim, \log, \sin, etc.
-                    // <m:e/> inside m:func is allowed (Word fills it automatically)
-                    format!(
-                        "<m:func>\n  <m:fName><m:r><m:t>{}</m:t></m:r></m:fName>\n  <m:e/>\n</m:func>",
-                        name
-                    )
-                }
-            }
+            // Functions like \lim, \log, \sin, etc. A self-closing expression
+            // is valid here and must not be rewritten as an n-ary placeholder.
+            format!(
+                "<m:func>\n  <m:fName><m:r><m:t>{}</m:t></m:r></m:fName>\n  <m:e/>\n</m:func>",
+                name
+            )
         }
 
         LatexNode::Relation(name) => {
@@ -166,35 +152,6 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Superscript { base, exp } => {
-            // Check if base is a Subscript wrapping an Operator (e.g. \sum_{i=1}^{n})
-            if let LatexNode::Subscript { base: inner_base, sub } = base.as_ref() {
-                if let LatexNode::Operator(name) = inner_base.as_ref() {
-                    if is_large_op(name) {
-                        let cmd = format!("\\{}", name);
-                        let sym = map_large_op(&cmd).unwrap_or(name.as_str());
-                        return format!(
-                            "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:sup>{}</m:sup><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
-                            sym,
-                            nary_limit_omml(sub),
-                            nary_limit_omml(exp)
-                        );
-                    }
-                }
-            }
-            // Check if base is a bare Operator (e.g. \sum^{n})
-            if let LatexNode::Operator(name) = base.as_ref() {
-                if is_large_op(name) {
-                    let cmd = format!("\\{}", name);
-                    let sym = map_large_op(&cmd).unwrap_or(name.as_str());
-                    return format!(
-                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sup>{}</m:sup><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
-                        sym,
-                        nary_limit_omml(exp)
-                    );
-                }
-            }
-            // Check if base is a Sequence or Group containing an Operator (e.g. {\sum}^{n})
-            // This handles the case where Latex parser outputs the operator inside a Group.
             let base_omml = ast_to_omml(base);
             format!(
                 "<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>",
@@ -204,18 +161,6 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Subscript { base, sub } => {
-            // Check if base is an Operator (e.g. \sum_{i=1})
-            if let LatexNode::Operator(name) = base.as_ref() {
-                if is_large_op(name) {
-                    let cmd = format!("\\{}", name);
-                    let sym = map_large_op(&cmd).unwrap_or(name.as_str());
-                    return format!(
-                        "<m:nary><m:naryPr><m:chr m:val=\"{}\"/></m:naryPr><m:sub>{}</m:sub><m:e><m:r><m:t> </m:t></m:r></m:e></m:nary>",
-                        sym,
-                        nary_limit_omml(sub)
-                    );
-                }
-            }
             // Non-large operators like \lim → use m:func with sub
             let is_func = matches!(base.as_ref(), LatexNode::Operator(_));
             if is_func {
@@ -346,12 +291,11 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Delimited { left, content, right } => {
-            let content_xml: Vec<String> = content.iter().map(ast_to_omml).collect();
             format!(
                 "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
                 xml_escape(left),
                 xml_escape(right),
-                content_xml.join("")
+                sequence_to_omml(content)
             )
         }
 
@@ -565,34 +509,181 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Group(nodes) => {
-            let parts: Vec<String> = nodes.iter().map(ast_to_omml).collect();
-            parts.join("")
+            sequence_to_omml(nodes)
         }
 
         LatexNode::Math { content, .. } => {
-            let parts: Vec<String> = content.iter().map(ast_to_omml).collect();
-            parts.join("")
+            sequence_to_omml(content)
         }
 
-        LatexNode::Sequence(nodes) => {
-            let parts: Vec<String> = nodes.iter().map(ast_to_omml).collect();
-            parts.join("")
-        }
+        LatexNode::Sequence(nodes) => sequence_to_omml(nodes),
     }
 }
 
 // ── Helper functions ──
 
-fn is_large_op(name: &str) -> bool {
-    matches!(
-        name,
-        "sum" | "prod" | "coprod" | "int" | "iint" | "iiint" | "oint" | "bigcup" | "bigcap"
-    )
+#[derive(Clone, Copy)]
+enum NaryOperator {
+    Integral,
+    DoubleIntegral,
+    TripleIntegral,
+    ContourIntegral,
+    Sum,
+    Product,
+    Coproduct,
+    Union,
+    Intersection,
 }
 
-/// Render nary sub/sup content as OMML while preserving nested math structure.
-fn nary_limit_omml(node: &LatexNode) -> String {
-    ast_to_omml(node)
+impl NaryOperator {
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "int" => Some(Self::Integral),
+            "iint" => Some(Self::DoubleIntegral),
+            "iiint" => Some(Self::TripleIntegral),
+            "oint" => Some(Self::ContourIntegral),
+            "sum" => Some(Self::Sum),
+            "prod" => Some(Self::Product),
+            "coprod" => Some(Self::Coproduct),
+            "bigcup" => Some(Self::Union),
+            "bigcap" => Some(Self::Intersection),
+            _ => None,
+        }
+    }
+
+    fn symbol(self) -> &'static str {
+        match self {
+            Self::Integral => "∫",
+            Self::DoubleIntegral => "∬",
+            Self::TripleIntegral => "∭",
+            Self::ContourIntegral => "∮",
+            Self::Sum => "∑",
+            Self::Product => "∏",
+            Self::Coproduct => "∐",
+            Self::Union => "⋃",
+            Self::Intersection => "⋂",
+        }
+    }
+
+    fn limit_location(self) -> &'static str {
+        match self {
+            Self::Integral
+            | Self::DoubleIntegral
+            | Self::TripleIntegral
+            | Self::ContourIntegral => "subSup",
+            Self::Sum | Self::Product | Self::Coproduct | Self::Union | Self::Intersection => {
+                "undOvr"
+            }
+        }
+    }
+}
+
+struct OmmlNary<'a> {
+    operator: NaryOperator,
+    sub: Option<&'a LatexNode>,
+    sup: Option<&'a LatexNode>,
+    body: Vec<&'a LatexNode>,
+}
+
+fn normalize_nary_head(node: &LatexNode) -> Option<OmmlNary<'_>> {
+    match node {
+        LatexNode::Operator(name) => Some(OmmlNary {
+            operator: NaryOperator::from_name(name)?,
+            sub: None,
+            sup: None,
+            body: Vec::new(),
+        }),
+        LatexNode::Subscript { base, sub } => {
+            if let LatexNode::Superscript { base: inner, exp } = base.as_ref() {
+                let mut nary = normalize_nary_head(inner)?;
+                nary.sub = Some(sub);
+                nary.sup = Some(exp);
+                Some(nary)
+            } else {
+                let mut nary = normalize_nary_head(base)?;
+                nary.sub = Some(sub);
+                Some(nary)
+            }
+        }
+        LatexNode::Superscript { base, exp } => {
+            if let LatexNode::Subscript { base: inner, sub } = base.as_ref() {
+                let mut nary = normalize_nary_head(inner)?;
+                nary.sub = Some(sub);
+                nary.sup = Some(exp);
+                Some(nary)
+            } else {
+                let mut nary = normalize_nary_head(base)?;
+                nary.sup = Some(exp);
+                Some(nary)
+            }
+        }
+        LatexNode::Group(nodes) if nodes.len() == 1 => normalize_nary_head(&nodes[0]),
+        _ => None,
+    }
+}
+
+fn sequence_to_omml(nodes: &[LatexNode]) -> String {
+    let mut output = String::new();
+    let mut segment_start = 0;
+
+    for (index, node) in nodes.iter().enumerate() {
+        if is_nary_operand_boundary(node) {
+            output.push_str(&nary_segment_to_omml(&nodes[segment_start..index]));
+            output.push_str(&ast_to_omml(node));
+            segment_start = index + 1;
+        }
+    }
+
+    output.push_str(&nary_segment_to_omml(&nodes[segment_start..]));
+    output
+}
+
+fn nary_segment_to_omml(nodes: &[LatexNode]) -> String {
+    for (index, node) in nodes.iter().enumerate() {
+        if let Some(mut nary) = normalize_nary_head(node) {
+            let mut output = nodes[..index].iter().map(ast_to_omml).collect::<String>();
+            nary.body.extend(nodes[index + 1..].iter());
+            output.push_str(&nary_to_omml(&nary));
+            return output;
+        }
+    }
+
+    nodes.iter().map(ast_to_omml).collect()
+}
+
+fn is_nary_operand_boundary(node: &LatexNode) -> bool {
+    match node {
+        LatexNode::Relation(_) => true,
+        LatexNode::Text(text) => matches!(text.trim(), "=" | "<" | ">"),
+        _ => false,
+    }
+}
+
+fn nary_to_omml(nary: &OmmlNary<'_>) -> String {
+    let mut properties = format!(
+        "<m:chr m:val=\"{}\"/><m:limLoc m:val=\"{}\"/><m:grow m:val=\"1\"/>",
+        nary.operator.symbol(),
+        nary.operator.limit_location()
+    );
+    if nary.sub.is_none() {
+        properties.push_str("<m:subHide m:val=\"1\"/>");
+    }
+    if nary.sup.is_none() {
+        properties.push_str("<m:supHide m:val=\"1\"/>");
+    }
+
+    let sub = nary.sub.map(ast_to_omml).unwrap_or_default();
+    let sup = nary.sup.map(ast_to_omml).unwrap_or_default();
+    let body = if nary.body.is_empty() {
+        "<m:r><m:t></m:t></m:r>".to_string()
+    } else {
+        let owned: Vec<LatexNode> = nary.body.iter().map(|node| (*node).clone()).collect();
+        sequence_to_omml(&owned)
+    };
+
+    format!(
+        "<m:nary><m:naryPr>{properties}</m:naryPr><m:sub>{sub}</m:sub><m:sup>{sup}</m:sup><m:e>{body}</m:e></m:nary>"
+    )
 }
 
 fn wrap_mtext(text: &str) -> String {
@@ -960,12 +1051,6 @@ fn fix_omml(omml: &str) -> String {
         }
     }
 
-    // Fix empty <m:t/>
-    s = s.replace("<m:t/>", "<m:t> </m:t>");
-
-    // Fix self-closing <m:e/> (Word renders these as boxes)
-    s = s.replace("<m:e/>", "<m:e><m:r><m:t> </m:t></m:r></m:e>");
-
     // Fix XSLT tag typos
     s = s.replace("<m:eqAr>", "<m:eqArr>");
     s = s.replace("</m:eqAr>", "</m:eqArr>");
@@ -995,6 +1080,128 @@ fn fix_omml(omml: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+    use serde::Deserialize;
+
+    #[derive(Debug)]
+    struct NarySnapshot {
+        operator: String,
+        body: String,
+    }
+
+    #[derive(Debug)]
+    struct ActiveNary {
+        snapshot_index: usize,
+        element_depth: usize,
+        body_depth: Option<usize>,
+    }
+
+    fn local_tag(name: &[u8]) -> String {
+        let name = std::str::from_utf8(name).expect("fixture tags must be UTF-8");
+        name.rsplit(':').next().unwrap_or(name).to_string()
+    }
+
+    fn nary_snapshots(xml: &str) -> Vec<NarySnapshot> {
+        let mut reader = Reader::from_str(xml);
+        let mut buffer = Vec::new();
+        let mut stack = Vec::<String>::new();
+        let mut active = Vec::<ActiveNary>::new();
+        let mut snapshots = Vec::<NarySnapshot>::new();
+
+        loop {
+            match reader.read_event_into(&mut buffer) {
+                Ok(Event::Start(event)) => {
+                    let tag = local_tag(event.name().as_ref());
+                    if tag == "nary" {
+                        snapshots.push(NarySnapshot {
+                            operator: String::new(),
+                            body: String::new(),
+                        });
+                        active.push(ActiveNary {
+                            snapshot_index: snapshots.len() - 1,
+                            element_depth: stack.len() + 1,
+                            body_depth: None,
+                        });
+                    } else if tag == "e" {
+                        if let Some(nary) = active.last_mut() {
+                            if stack.len() == nary.element_depth {
+                                nary.body_depth = Some(stack.len() + 1);
+                            }
+                        }
+                    }
+                    stack.push(tag);
+                }
+                Ok(Event::Empty(event)) => {
+                    if local_tag(event.name().as_ref()) == "chr" {
+                        if let Some(nary) = active.last() {
+                            if !snapshots[nary.snapshot_index].operator.is_empty() {
+                                buffer.clear();
+                                continue;
+                            }
+                            let value = event
+                                .attributes()
+                                .flatten()
+                                .find(|attribute| local_tag(attribute.key.as_ref()) == "val")
+                                .map(|attribute| {
+                                    String::from_utf8_lossy(attribute.value.as_ref()).into_owned()
+                                })
+                                .unwrap_or_default();
+                            snapshots[nary.snapshot_index].operator = value;
+                        }
+                    }
+                }
+                Ok(Event::Text(event)) => {
+                    let text =
+                        crate::xml_util::decode_and_unescape_text(&event).unwrap_or_default();
+                    for nary in &active {
+                        if nary
+                            .body_depth
+                            .is_some_and(|body_depth| stack.len() >= body_depth)
+                        {
+                            snapshots[nary.snapshot_index].body.push_str(&text);
+                        }
+                    }
+                }
+                Ok(Event::End(event)) => {
+                    let tag = local_tag(event.name().as_ref());
+                    if tag == "e" {
+                        if let Some(nary) = active.last_mut() {
+                            if nary.body_depth == Some(stack.len()) {
+                                nary.body_depth = None;
+                            }
+                        }
+                    } else if tag == "nary" {
+                        active.pop();
+                    }
+                    stack.pop();
+                }
+                Ok(Event::Eof) => break,
+                Ok(_) => {}
+                Err(error) => panic!("invalid generated OMML: {error}: {xml}"),
+            }
+            buffer.clear();
+        }
+
+        snapshots
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct NaryFixture {
+        schema_version: u32,
+        cases: Vec<NaryFixtureCase>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct NaryFixtureCase {
+        latex: String,
+        expected_fragment: String,
+        expected_operator: String,
+        expected_body_tokens: Vec<String>,
+        expected_nary_count: usize,
+    }
 
     #[test]
     fn test_integral_encoding() {
@@ -1028,9 +1235,13 @@ mod tests {
     }
 
     #[test]
-    fn debug_integral_limits() {
+    fn integral_operand_is_inside_nary_e() {
         let result = latex_to_omml("\\int_{0}^{1} x\\,dx");
-        eprintln!("=== integral with limits ===\n{}", result);
+        let naries = nary_snapshots(&result);
+        assert_eq!(naries.len(), 1, "{result}");
+        assert_eq!(naries[0].operator, "∫");
+        assert!(naries[0].body.contains('x'), "{result}");
+        assert!(naries[0].body.contains("dx"), "{result}");
     }
 
     #[test]
@@ -1517,6 +1728,89 @@ mod tests {
                 omml
             );
         }
+    }
+
+    #[test]
+    fn canonical_nary_fixture_owns_every_operand() {
+        let fixture: NaryFixture = serde_json::from_str(include_str!(
+            "../../../contracts/fixtures/omml-nary-canonical-v1.json"
+        ))
+        .expect("canonical n-ary fixture must be valid");
+        assert_eq!(fixture.schema_version, 1);
+
+        for case in fixture.cases {
+            let omml = latex_to_omml(&case.latex);
+            assert!(
+                omml.contains(&case.expected_fragment),
+                "canonical properties differ for {}: {}",
+                case.latex,
+                omml
+            );
+            let snapshots = nary_snapshots(&omml);
+            assert_eq!(
+                snapshots.len(),
+                case.expected_nary_count,
+                "n-ary count differs for {}: {}",
+                case.latex,
+                omml
+            );
+            assert_eq!(
+                snapshots[0].operator, case.expected_operator,
+                "{}",
+                case.latex
+            );
+            for token in case.expected_body_tokens {
+                assert!(
+                    snapshots[0].body.contains(&token),
+                    "{token:?} is not owned by the outer n-ary body for {}: {}",
+                    case.latex,
+                    omml
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn gaussian_integral_has_complete_nary_operand() {
+        let omml = latex_to_omml("\\int_{-\\infty}^{\\infty}e^{-x^2}\\,dx");
+        let snapshots = nary_snapshots(&omml);
+        assert_eq!(snapshots.len(), 1, "{omml}");
+        for token in ["e", "x", "2", "dx"] {
+            assert!(snapshots[0].body.contains(token), "{token}: {omml}");
+        }
+    }
+
+    #[test]
+    fn double_integral_nests_nary_operands() {
+        let omml = latex_to_omml("\\int_0^1\\int_0^1 f(x,y)\\,dx\\,dy");
+        let snapshots = nary_snapshots(&omml);
+        assert_eq!(snapshots.len(), 2, "{omml}");
+        assert!(snapshots[0].body.contains("dx"), "{omml}");
+        assert!(snapshots[0].body.contains("dy"), "{omml}");
+        assert!(snapshots[1].body.contains("dx"), "{omml}");
+    }
+
+    #[test]
+    fn relation_after_integral_stays_outside_operand() {
+        let omml = latex_to_omml("\\int_0^1 f(x)\\,dx = 1");
+        let snapshots = nary_snapshots(&omml);
+        assert_eq!(snapshots.len(), 1, "{omml}");
+        assert!(snapshots[0].body.contains("dx"), "{omml}");
+        assert!(!snapshots[0].body.contains('1'), "{omml}");
+        let nary_end = omml.find("</m:nary>").expect("n-ary closing tag");
+        assert!(omml[nary_end..].contains("<m:t>=</m:t>"), "{omml}");
+        assert!(omml[nary_end..].contains("<m:t> 1</m:t>"), "{omml}");
+    }
+
+    #[test]
+    fn nary_roundtrip_preserves_body() {
+        let omml = latex_to_omml("I=\\int_{0}^{\\infty}x\\,dx");
+        let wrapped = format!("<m:oMath>{omml}</m:oMath>");
+        let latex = crate::omml_parser::parse_omml_to_latex(&wrapped)
+            .expect("generated n-ary OMML must parse");
+        assert!(latex.contains("\\int"), "{latex}");
+        assert!(latex.contains('x'), "{latex}");
+        assert!(latex.contains("dx"), "{latex}");
     }
 
     #[test]

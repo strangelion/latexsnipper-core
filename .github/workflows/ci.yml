@@ -241,7 +241,7 @@ jobs:
       - name: Run fixed-model CPU session and inference
         run: >-
           cargo run --locked -p latexsnipper-runtime --example provider_smoke --
-          crates/wasm/tests/fixtures/tiny-text-rec.onnx
+          contracts/fixtures/provider-smoke-v1.json
           target/provider-smoke.json cpu cpu
       - name: Upload provider smoke evidence
         if: always()

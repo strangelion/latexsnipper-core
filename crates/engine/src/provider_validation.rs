@@ -7,6 +7,7 @@ use latexsnipper_api_types::{
     CoreErrorCode, ProviderValidationKey, ProviderValidationLevel, ProviderValidationReport,
 };
 use latexsnipper_foundation::{Result, SnipperError};
+use latexsnipper_runtime::is_weak_observation;
 
 #[derive(Default)]
 pub struct ProviderValidationStore {
@@ -23,6 +24,21 @@ impl ProviderValidationStore {
         if !key.provider.eq_ignore_ascii_case(&report.provider) {
             return Err(SnipperError::Runtime(
                 "provider validation key does not match report provider".to_owned(),
+            ));
+        }
+        if report.validation_level > ProviderValidationLevel::ProbePassed
+            && [
+                key.runtime_version.as_str(),
+                key.provider_library_fingerprint.as_str(),
+                key.device_driver_fingerprint.as_str(),
+                key.smoke_model_sha256.as_str(),
+            ]
+            .iter()
+            .any(|value| is_weak_observation(value))
+        {
+            return Err(SnipperError::Runtime(
+                "provider session/smoke evidence cannot be cached under an unknown or unavailable environment observation"
+                    .to_owned(),
             ));
         }
         report.stale = false;

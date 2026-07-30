@@ -493,6 +493,18 @@ impl RecognitionSessionBuilder {
         self
     }
 
+    /// Use an explicit release-owned directory for trusted quality baselines.
+    pub fn quality_baselines_dir(mut self, path: impl Into<PathBuf>) -> Self {
+        self.config.quality_baselines_dir = Some(path.into());
+        self
+    }
+
+    /// Use a versioned tensor fixture for explicit provider smoke validation.
+    pub fn provider_smoke_fixture(mut self, path: impl Into<PathBuf>) -> Self {
+        self.config.provider_smoke_fixture = Some(path.into());
+        self
+    }
+
     pub fn runtime_preference(mut self, preference: RuntimePreference) -> Self {
         self.config.acceleration = preference.into();
         self

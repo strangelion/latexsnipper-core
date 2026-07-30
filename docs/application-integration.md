@@ -55,6 +55,8 @@ use latexsnipper_engine::application::{
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut session = RecognitionSession::builder()
         .models_dir("models")
+        .quality_baselines_dir("resources/quality/baselines")
+        .provider_smoke_fixture("resources/contracts/provider-smoke-v1.json")
         .runtime_preference(RuntimePreference::Auto)
         .build()?;
 

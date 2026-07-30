@@ -24,6 +24,25 @@ Each model exposes the individual facts `manifestValid`, `artifactsValid`,
 `smokeInferencePassed`. Its quality status is one of `unknown`,
 `baselineMissing`, `baselineFailed`, `experimental`, or `validated`.
 
+The three runtime facts are event driven. Executor construction records only
+the selected model, successful runtime session creation records that model's
+session, and a completed call records inference. A successful mixed/table graph
+does not promote conditional or fallback models that were never executed.
+
+Provider validation keys are collected by the single
+`ProviderEnvironmentFingerprint` implementation. Unknown or unavailable
+library/device/smoke observations are explicit and cannot cache session or
+smoke evidence. `SmokeInference` loads the configured versioned tensor fixture,
+creates a provider session, executes it, and validates output names, dtypes,
+shapes, and optional SHA. `Benchmark` performs additional measured inference
+runs instead of treating model loading as a benchmark.
+
+Trusted model quality data should use
+`EngineConfig::with_quality_baselines_dir(...)`; the legacy
+`<models parent>/quality/baselines` derivation is used only when no explicit
+directory is configured. Provider smoke validation similarly uses
+`EngineConfig::with_provider_smoke_fixture(...)`.
+
 ## Compatibility
 
 Consumer DTOs ignore unknown fields. Missing v2 fields use safe defaults, and

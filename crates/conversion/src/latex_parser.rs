@@ -238,10 +238,10 @@ impl LatexParser {
             | "varPi" | "varTheta" | "Gamma" | "Delta" | "Theta" | "Lambda" | "Xi" | "Pi"
             | "Sigma" | "Upsilon" | "Phi" | "Psi" | "Omega" => Some(LatexNode::Greek(cmd)),
             // Operators
-            "int" | "iint" | "iiint" | "oint" | "sum" | "prod" | "coprod" | "lim" | "limsup"
-            | "liminf" | "max" | "min" | "sup" | "inf" | "log" | "ln" | "sin" | "cos" | "tan"
-            | "cot" | "sec" | "csc" | "arcsin" | "arccos" | "arctan" | "sinh" | "cosh" | "tanh"
-            | "det" | "gcd" => Some(LatexNode::Operator(cmd)),
+            "int" | "iint" | "iiint" | "oint" | "sum" | "prod" | "coprod" | "bigcup" | "bigcap"
+            | "lim" | "limsup" | "liminf" | "max" | "min" | "sup" | "inf" | "log" | "ln"
+            | "sin" | "cos" | "tan" | "cot" | "sec" | "csc" | "arcsin" | "arccos" | "arctan"
+            | "sinh" | "cosh" | "tanh" | "det" | "gcd" => Some(LatexNode::Operator(cmd)),
             // Relations
             "leq" | "le" | "geq" | "ge" | "neq" | "ne" | "approx" | "equiv" | "sim" | "propto"
             | "ll" | "gg" | "prec" | "succ" | "cong" => Some(LatexNode::Relation(cmd)),
