@@ -449,6 +449,7 @@ fn map_operator(text: &str) -> String {
         "\u{2260}" => "\\neq ".to_string(),
         "\u{2248}" => "\\approx ".to_string(),
         "\u{221E}" => "\\infty ".to_string(),
+        "\u{20D6}" | "\u{20D7}" => text.to_string(),
         "\u{2190}" | "\u{2192}" | "\u{2194}" | "\u{21D2}" | "\u{21D4}" => {
             let sym = match text {
                 "\u{2190}" => "\\leftarrow ",
@@ -510,7 +511,12 @@ fn map_over_accent(base: &str, accent: &str) -> String {
         "\u{0308}" => format!("\\ddot{{{}}}", base),
         "\u{030C}" | "\u{02C7}" => format!("\\check{{{}}}", base),
         "\u{0303}" | "\u{02DC}" => format!("\\tilde{{{}}}", base),
-        "\u{20D7}" => format!("\\vec{{{}}}", base),
+        "\u{20D7}" | "\u{2192}" | "\\rightarrow" | "\\rightarrow " => {
+            format!("\\vec{{{}}}", base)
+        }
+        "\u{20D6}" | "\u{2190}" | "\\leftarrow" | "\\leftarrow " => {
+            format!("\\overleftarrow{{{}}}", base)
+        }
         "\u{20E5}" => format!("\\cancel{{{}}}", base),
         _ => format!("\\overline{{{}}}", base),
     }
@@ -594,6 +600,18 @@ mod tests {
         let xml = r#"<math><mroot><mi>x</mi><mn>3</mn></mroot></math>"#;
         let result = parse_mathml_to_latex(xml).unwrap();
         assert_eq!(result, "\\sqrt[3]{x}");
+    }
+
+    #[test]
+    fn arrow_accents_roundtrip_without_symbol_loss() {
+        for (arrow, command) in [
+            ("\u{2192}", "\\vec{v}"),
+            ("\u{2190}", "\\overleftarrow{v}"),
+            ("\u{20D7}", "\\vec{v}"),
+        ] {
+            let xml = format!("<math><mover><mi>v</mi><mo>{arrow}</mo></mover></math>");
+            assert_eq!(parse_mathml_to_latex(&xml).unwrap(), command, "{arrow}");
+        }
     }
 
     #[test]

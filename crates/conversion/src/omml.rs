@@ -1803,6 +1803,53 @@ mod tests {
     }
 
     #[test]
+    fn vector_accent_owns_unbraced_argument() {
+        let omml = latex_to_omml("x^{\\vec v}");
+        assert!(omml.contains("<m:acc>"), "{omml}");
+        assert!(
+            omml.contains("<m:e><m:r><m:t>v</m:t></m:r></m:e>"),
+            "{omml}"
+        );
+        assert!(!omml.contains("<m:e></m:e>"), "{omml}");
+        let superscript = omml
+            .split("<m:sup>")
+            .nth(1)
+            .and_then(|value| value.split("</m:sup>").next())
+            .expect("superscript body");
+        assert!(superscript.contains("<m:acc>"), "{omml}");
+        assert!(superscript.contains("<m:t>v</m:t>"), "{omml}");
+    }
+
+    #[test]
+    fn vector_accents_remain_inside_integral_limits() {
+        let omml = latex_to_omml("\\int_{\\vec a}^{\\vec b} f(x)\\,dx");
+        let nary = nary_snapshots(&omml);
+        assert_eq!(nary.len(), 1, "{omml}");
+        assert!(omml.contains("<m:sub><m:acc>"), "{omml}");
+        assert!(omml.contains("<m:sup><m:acc>"), "{omml}");
+        assert!(omml.contains("<m:t>a</m:t>"), "{omml}");
+        assert!(omml.contains("<m:t>b</m:t>"), "{omml}");
+        assert!(!omml.contains("<m:e></m:e>"), "{omml}");
+    }
+
+    #[test]
+    fn long_arrow_commands_preserve_their_arguments() {
+        for (latex, character) in [
+            ("A^{\\overrightarrow{BC}}", "\u{20D7}"),
+            ("A^{\\overleftarrow{BC}}", "\u{20D6}"),
+        ] {
+            let omml = latex_to_omml(latex);
+            assert!(omml.contains("<m:acc>"), "{latex}: {omml}");
+            assert!(
+                omml.contains(&format!("<m:chr m:val=\"{character}\"/>")),
+                "{latex}: {omml}"
+            );
+            assert!(omml.contains("<m:t>BC</m:t>"), "{latex}: {omml}");
+            assert!(!omml.contains("<m:e></m:e>"), "{latex}: {omml}");
+        }
+    }
+
+    #[test]
     fn nary_roundtrip_preserves_body() {
         let omml = latex_to_omml("I=\\int_{0}^{\\infty}x\\,dx");
         let wrapped = format!("<m:oMath>{omml}</m:oMath>");

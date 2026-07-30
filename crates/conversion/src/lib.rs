@@ -675,6 +675,248 @@ mod tests {
         }
     }
 
+    #[test]
+    fn semantic_structure_fidelity_corpus_across_office_mathml_and_typst() {
+        struct Case {
+            latex: &'static str,
+            omml: &'static [&'static str],
+            mathml: &'static [&'static str],
+            typst: &'static [&'static str],
+        }
+        let cases = [
+            Case {
+                latex: "x^{\\vec v}",
+                omml: &["<m:sSup>", "<m:acc>", "<m:t>v</m:t>"],
+                mathml: &["<msup>", "<mover>", "<mi>v</mi>", "→"],
+                typst: &["x^(vec(v))"],
+            },
+            Case {
+                latex: "\\frac{\\alpha+\\beta}{\\sqrt{x_1^2}}",
+                omml: &["<m:f>", "<m:rad>", "α", "β", "<m:sSub>", "<m:sSup>"],
+                mathml: &["<mfrac>", "<msqrt>", "α", "β", "<msub>", "<msup>"],
+                typst: &["frac(", "alpha", "beta", "sqrt(", "x_(1)^(2)"],
+            },
+            Case {
+                latex: "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+                omml: &["<m:d>", "<m:m>", "<m:mr>", "<m:e>"],
+                mathml: &["<mtable>", "<mtr>", "<mtd>", "<mo>(</mo>", "<mo>)</mo>"],
+                typst: &["mat(", "a", "b", "c", "d"],
+            },
+            Case {
+                latex: "\\int_{\\vec a}^{\\vec b} f(x)\\,dx",
+                omml: &[
+                    "<m:nary>",
+                    "<m:sub><m:acc>",
+                    "<m:sup><m:acc>",
+                    "<m:t>dx</m:t>",
+                ],
+                mathml: &[
+                    "<munderover>",
+                    "<mo>∫</mo>",
+                    "<mover>",
+                    "→",
+                    "<mi>f</mi>",
+                    "<mo>(</mo>",
+                    "<mi>x</mi>",
+                    "<mo>)</mo>",
+                    "<mspace width=\"thinmathspace\"/>",
+                    "<mi>dx</mi>",
+                ],
+                typst: &["integral", "vec(a)", "vec(b)", "f(x)", "dx"],
+            },
+            Case {
+                latex: "\\alpha \\leq \\beta \\neq \\gamma \\to \\infty",
+                omml: &["α", "≤", "β", "≠", "γ", "→", "∞"],
+                mathml: &["α", "≤", "β", "≠", "γ", "→", "∞"],
+                typst: &[
+                    "alpha", "lt.eq", "beta", "neq", "gamma", "arrow.r", "infinity",
+                ],
+            },
+        ];
+
+        for case in cases {
+            let omml =
+                DocumentConverter::convert_latex_string(case.latex, OutputFormat::OMML).unwrap();
+            let mathml =
+                DocumentConverter::convert_latex_string(case.latex, OutputFormat::MathML).unwrap();
+            let typst =
+                DocumentConverter::convert_latex_string(case.latex, OutputFormat::Typst).unwrap();
+            for token in case.omml {
+                assert!(
+                    omml.contains(token),
+                    "OMML lost {token:?} for {}: {omml}",
+                    case.latex
+                );
+            }
+            for token in case.mathml {
+                assert!(
+                    mathml.contains(token),
+                    "MathML lost {token:?} for {}: {mathml}",
+                    case.latex
+                );
+            }
+            for token in case.typst {
+                assert!(
+                    typst.contains(token),
+                    "Typst lost {token:?} for {}: {typst}",
+                    case.latex
+                );
+            }
+            assert!(
+                !omml.contains("<m:e></m:e>"),
+                "empty OMML owner for {}: {omml}",
+                case.latex
+            );
+            assert!(
+                !mathml.contains("<mrow></mrow>"),
+                "empty MathML owner for {}: {mathml}",
+                case.latex
+            );
+        }
+    }
+
+    #[test]
+    fn typst_and_mathml_arrow_inputs_reach_omml_without_loss() {
+        let typst_omml =
+            DocumentConverter::convert_typst_string("vec(v)", OutputFormat::OMML).unwrap();
+        assert!(typst_omml.contains("<m:acc>"), "{typst_omml}");
+        assert!(typst_omml.contains("<m:t>v</m:t>"), "{typst_omml}");
+        assert!(!typst_omml.contains("<m:e></m:e>"), "{typst_omml}");
+
+        let mathml = "<math><msup><mi>x</mi><mover><mi>v</mi><mo>→</mo></mover></msup></math>";
+        let mathml_omml =
+            DocumentConverter::convert_mathml_string(mathml, OutputFormat::OMML).unwrap();
+        assert!(mathml_omml.contains("<m:sSup>"), "{mathml_omml}");
+        assert!(mathml_omml.contains("<m:acc>"), "{mathml_omml}");
+        assert!(mathml_omml.contains("<m:t>v</m:t>"), "{mathml_omml}");
+        assert!(!mathml_omml.contains("<m:e></m:e>"), "{mathml_omml}");
+
+        let mathml_typst =
+            DocumentConverter::convert_mathml_string(mathml, OutputFormat::Typst).unwrap();
+        assert!(mathml_typst.contains("x^(vec(v))"), "{mathml_typst}");
+    }
+
+    #[test]
+    fn high_risk_math_corpus_is_structural_and_xml_well_formed() {
+        struct Case {
+            latex: &'static str,
+            omml: &'static [&'static str],
+            mathml: &'static [&'static str],
+            typst: &'static [&'static str],
+        }
+
+        let cases = [
+            Case {
+                latex: "\\sum_{i=1}^{n}\\frac{x_i}{1+x_i^2}",
+                omml: &["<m:nary>", "<m:f>", "<m:sSub>", "<m:sSup>"],
+                mathml: &["<munderover>", "<mo>∑</mo>", "<mfrac>", "<msub>", "<msup>"],
+                typst: &["sum_(i = 1)^(n)", "frac(", "x_(i)", "x_(i)^(2)"],
+            },
+            Case {
+                latex: "\\sqrt[3]{\\frac{a}{b}}",
+                omml: &["<m:rad>", "<m:deg>", "<m:f>"],
+                mathml: &["<mroot>", "<mfrac>", "<mn>3</mn>"],
+                typst: &["root(3,", "frac(a, b)"],
+            },
+            Case {
+                latex: "\\left(\\frac{a}{b}\\right)^{\\vec v}",
+                omml: &["<m:sSup>", "<m:d>", "<m:f>", "<m:acc>", "<m:t>v</m:t>"],
+                mathml: &["<msup>", "<mfenced", "<mfrac>", "<mover>", "<mi>v</mi>"],
+                typst: &["lr(", "frac(a, b)", "vec(v)"],
+            },
+            Case {
+                latex: "\\hat{x}+\\bar{y}+\\tilde{z}+\\dot{q}+\\ddot{r}+\\vec v",
+                omml: &["<m:acc>", "<m:t>x</m:t>", "<m:t>v</m:t>"],
+                mathml: &["<mover>", "<mi>x</mi>", "<mi>v</mi>", "→"],
+                typst: &[
+                    "hat(x)",
+                    "overline(y)",
+                    "tilde(z)",
+                    "dot(q)",
+                    "dot.double(r)",
+                    "vec(v)",
+                ],
+            },
+            Case {
+                latex: "\\int_{\\int_0^1 a\\,da}^{\\sum_{i=1}^n i}f(x)\\,dx",
+                omml: &[
+                    "<m:nary>",
+                    "<m:sub><m:nary>",
+                    "<m:sup><m:nary>",
+                    "<m:t>dx</m:t>",
+                ],
+                mathml: &[
+                    "<mo>∫</mo>",
+                    "<mo>∑</mo>",
+                    "<mspace width=\"thinmathspace\"/>",
+                ],
+                typst: &["integral_", "sum_", "f(x)", "dx"],
+            },
+            Case {
+                latex: "\\frac{1}{\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}}",
+                omml: &["<m:f>", "<m:d>", "<m:m>", "<m:mr>"],
+                mathml: &["<mfrac>", "<mtable>", "<mtr>", "<mtd>"],
+                typst: &["frac(", "mat(", "a", "b", "c", "d"],
+            },
+            Case {
+                latex: "\\alpha\\leq\\beta\\neq\\gamma\\to\\infty",
+                omml: &["α", "≤", "β", "≠", "γ", "→", "∞"],
+                mathml: &["α", "≤", "β", "≠", "γ", "→", "∞"],
+                typst: &[
+                    "alpha", "lt.eq", "beta", "neq", "gamma", "arrow.r", "infinity",
+                ],
+            },
+        ];
+
+        fn assert_xml(label: &str, xml: &str, latex: &str) {
+            let mut reader = quick_xml::Reader::from_str(xml);
+            loop {
+                match reader.read_event() {
+                    Ok(quick_xml::events::Event::Eof) => break,
+                    Ok(_) => {}
+                    Err(error) => panic!("{label} XML is malformed for {latex}: {error}\n{xml}"),
+                }
+            }
+        }
+
+        for case in cases {
+            let omml =
+                DocumentConverter::convert_latex_string(case.latex, OutputFormat::OMML).unwrap();
+            let mathml =
+                DocumentConverter::convert_latex_string(case.latex, OutputFormat::MathML).unwrap();
+            let typst =
+                DocumentConverter::convert_latex_string(case.latex, OutputFormat::Typst).unwrap();
+
+            assert_xml("OMML", &omml, case.latex);
+            assert_xml("MathML", &mathml, case.latex);
+            for (label, output, required) in [
+                ("OMML", omml.as_str(), case.omml),
+                ("MathML", mathml.as_str(), case.mathml),
+                ("Typst", typst.as_str(), case.typst),
+            ] {
+                for token in required {
+                    assert!(
+                        output.contains(token),
+                        "{label} lost {token:?} for {}:\n{output}",
+                        case.latex
+                    );
+                }
+                assert!(
+                    !output.contains("\\vec")
+                        && !output.contains("\\int")
+                        && !output.contains("\\sum")
+                        && !output.contains("\\frac")
+                        && !output.contains("\\sqrt")
+                        && !output.contains("\\begin"),
+                    "{label} leaked a source control sequence for {}:\n{output}",
+                    case.latex
+                );
+            }
+            assert!(!omml.contains("<m:e></m:e>"), "{omml}");
+            assert!(!mathml.contains("<mrow></mrow>"), "{mathml}");
+        }
+    }
+
     /// Test roundtrip: OMML → LaTeX → OMML on nested formulas.
     #[test]
     fn roundtrip_omml_nested() {

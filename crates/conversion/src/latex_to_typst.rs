@@ -887,6 +887,18 @@ mod tests {
     }
 
     #[test]
+    fn vector_accents_own_braced_and_unbraced_arguments() {
+        for (latex, expected) in [
+            ("x^{\\vec v}", "x^(vec(v))"),
+            ("x^{\\vec{v}}", "x^(vec(v))"),
+            ("A^{\\overrightarrow{BC}}", "A^(vec(BC))"),
+        ] {
+            let result = latex_ast_to_typst(&parse_latex(latex));
+            assert_eq!(result, expected, "{latex}");
+        }
+    }
+
+    #[test]
     fn test_nested_superscript() {
         let result = latex_ast_to_typst(&parse_latex("x^{y^{z}}"));
         assert_eq!(result, "x^(y^(z))");

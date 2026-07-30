@@ -55,6 +55,9 @@ fn convert_typst_expr(s: &str) -> String {
             .iter()
             .map(|a| convert_typst_expr(a))
             .collect();
+        if items.len() == 1 {
+            return format!("\\vec{{{}}}", items[0]);
+        }
         return format!(
             "\\begin{{pmatrix}} {} \\end{{pmatrix}}",
             items.join(" \\\\ ")
@@ -139,7 +142,6 @@ fn convert_typst_expr(s: &str) -> String {
         ("dot(", "\\dot{"),
         ("bar(", "\\overline{"),
         ("tilde(", "\\tilde{"),
-        ("vec(", "\\vec{"),
         ("acute(", "\\acute{"),
         ("grave(", "\\grave{"),
         ("check(", "\\check{"),
@@ -147,20 +149,6 @@ fn convert_typst_expr(s: &str) -> String {
     ];
     for (prefix, latex_cmd) in &accents {
         if let Some(inner) = s.strip_prefix(prefix) {
-            if prefix == &"vec(" {
-                // vec(a,b) is a matrix, vec(x) is accent
-                if inner.contains(',') && !inner.contains(';') {
-                    // Might be matrix vec, check if it has exactly one arg
-                    if let Some(close) = inner.rfind(')') {
-                        let args = &inner[..close];
-                        if args.split(',').count() == 1 {
-                            // Single arg accent
-                            return format!("{}{}}}", latex_cmd, convert_typst_expr(args.trim()));
-                        }
-                        // Multi-arg is matrix - already handled above
-                    }
-                }
-            }
             let inner = inner.strip_suffix(')').unwrap_or(inner);
             return format!("{}{}}}", latex_cmd, convert_typst_expr(inner));
         }
@@ -538,6 +526,15 @@ mod tests {
     #[test]
     fn dot() {
         assert_eq!(parse_typst_to_latex("dot(x)"), "\\dot{x}");
+    }
+
+    #[test]
+    fn distinguishes_vector_accent_from_vector_literal() {
+        assert_eq!(parse_typst_to_latex("vec(v)"), "\\vec{v}");
+        assert_eq!(
+            parse_typst_to_latex("vec(a, b)"),
+            "\\begin{pmatrix} a \\\\ b \\end{pmatrix}"
+        );
     }
 
     #[test]

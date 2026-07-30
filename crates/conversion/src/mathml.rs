@@ -326,8 +326,9 @@ fn latex_to_mathml(latex: &str) -> String {
             .iter()
             .map(|part| {
                 if is_math_operator(part) {
-                    let op = map_symbol_mathml(part).unwrap_or(part);
-                    format!("<mo>{}</mo>", xml_escape(op))
+                    map_symbol_mathml(part)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("<mo>{}</mo>", xml_escape(part)))
                 } else {
                     latex_to_mathml(part)
                 }
@@ -474,18 +475,18 @@ fn render_nary_limits(latex: &str) -> Option<String> {
 
     let core = match (lower, upper) {
         (Some(lower), Some(upper)) => format!(
-            "<munderover><mo>{}</mo><mrow>{}</mrow><mrow>{}</mrow></munderover>",
+            "<munderover>{}<mrow>{}</mrow><mrow>{}</mrow></munderover>",
             op,
             latex_to_mathml(&lower),
             latex_to_mathml(&upper)
         ),
         (Some(lower), None) => format!(
-            "<munder><mo>{}</mo><mrow>{}</mrow></munder>",
+            "<munder>{}<mrow>{}</mrow></munder>",
             op,
             latex_to_mathml(&lower)
         ),
         (None, Some(upper)) => format!(
-            "<mover><mo>{}</mo><mrow>{}</mrow></mover>",
+            "<mover>{}<mrow>{}</mrow></mover>",
             op,
             latex_to_mathml(&upper)
         ),
@@ -553,8 +554,27 @@ fn read_script_argument(text: &str, pos: usize) -> Option<(String, usize)> {
 }
 
 fn is_math_operator(text: &str) -> bool {
-    matches!(text, "+" | "-" | "=" | "<" | ">" | "/" | "*" | "|")
-        || is_sequence_command_operator(text)
+    matches!(
+        text,
+        "+" | "-"
+            | "="
+            | "<"
+            | ">"
+            | "/"
+            | "*"
+            | "|"
+            | "("
+            | ")"
+            | "["
+            | "]"
+            | ","
+            | "\\,"
+            | "\\:"
+            | "\\;"
+            | "\\!"
+            | "\\quad"
+            | "\\qquad"
+    ) || is_sequence_command_operator(text)
 }
 
 fn is_sequence_command_operator(text: &str) -> bool {
@@ -588,6 +608,8 @@ fn render_accent_mathml(latex: &str) -> Option<String> {
         ("\\bar", "\u{00AF}"),
         ("\\overline", "\u{00AF}"),
         ("\\vec", "\u{2192}"),
+        ("\\overrightarrow", "\u{2192}"),
+        ("\\overleftarrow", "\u{2190}"),
         ("\\dot", "."),
         ("\\ddot", ".."),
         ("\\tilde", "~"),
@@ -596,8 +618,7 @@ fn render_accent_mathml(latex: &str) -> Option<String> {
     ]
     .iter()
     .find_map(|(command, accent)| latex.strip_prefix(command).map(|_| (*command, *accent)))?;
-    let chars: Vec<char> = latex.chars().collect();
-    let (inner, after_inner) = read_braced_group(&chars, command.len())?;
+    let (inner, after_inner) = read_script_argument(latex, command.len())?;
     if skip_ascii_whitespace(latex, after_inner) != latex.len() {
         return None;
     }
@@ -616,9 +637,7 @@ fn render_left_right_mathml(latex: &str) -> Option<String> {
     let right_pos = latex[content_start..].rfind("\\right")? + content_start;
     let right_rest = &latex[right_pos + "\\right".len()..];
     let right = right_rest.chars().next()?;
-    if skip_ascii_whitespace(latex, right_pos + "\\right".len() + right.len_utf8()) != latex.len() {
-        return None;
-    }
+    let mut pos = skip_ascii_whitespace(latex, right_pos + "\\right".len() + right.len_utf8());
     let content = &latex[content_start..right_pos];
     let open = if left == '.' {
         ""
@@ -632,12 +651,50 @@ fn render_left_right_mathml(latex: &str) -> Option<String> {
     } else {
         &latex[close_start..close_end]
     };
-    Some(format!(
+    let base = format!(
         "<mfenced open=\"{}\" close=\"{}\"><mrow>{}</mrow></mfenced>",
         xml_escape(open),
         xml_escape(close),
         latex_to_mathml(content)
-    ))
+    );
+
+    let mut sub = None;
+    let mut sup = None;
+    while pos < latex.len() {
+        match latex[pos..].chars().next()? {
+            '_' => {
+                let (value, next_pos) = read_script_argument(latex, pos + 1)?;
+                sub = Some(value);
+                pos = skip_ascii_whitespace(latex, next_pos);
+            }
+            '^' => {
+                let (value, next_pos) = read_script_argument(latex, pos + 1)?;
+                sup = Some(value);
+                pos = skip_ascii_whitespace(latex, next_pos);
+            }
+            _ => return None,
+        }
+    }
+
+    Some(match (sub, sup) {
+        (Some(sub), Some(sup)) => format!(
+            "<msubsup><mrow>{}</mrow><mrow>{}</mrow><mrow>{}</mrow></msubsup>",
+            base,
+            latex_to_mathml(&sub),
+            latex_to_mathml(&sup)
+        ),
+        (Some(sub), None) => format!(
+            "<msub><mrow>{}</mrow><mrow>{}</mrow></msub>",
+            base,
+            latex_to_mathml(&sub)
+        ),
+        (None, Some(sup)) => format!(
+            "<msup><mrow>{}</mrow><mrow>{}</mrow></msup>",
+            base,
+            latex_to_mathml(&sup)
+        ),
+        (None, None) => base,
+    })
 }
 
 fn split_math_sequence(latex: &str) -> Option<Vec<String>> {
@@ -664,7 +721,14 @@ fn split_math_sequence(latex: &str) -> Option<Vec<String>> {
                 pos += 1;
             }
             let command: String = chars[command_start..pos].iter().collect();
-            if brace_depth == 0 && bracket_depth == 0 && is_sequence_command_operator(&command) {
+            if brace_depth == 0
+                && bracket_depth == 0
+                && (is_sequence_command_operator(&command)
+                    || matches!(
+                        command.as_str(),
+                        "\\," | "\\:" | "\\;" | "\\!" | "\\quad" | "\\qquad"
+                    ))
+            {
                 let before_command_len = current.len() - command.len();
                 let before = current[..before_command_len].trim();
                 if !before.is_empty() {
@@ -693,7 +757,7 @@ fn split_math_sequence(latex: &str) -> Option<Vec<String>> {
                 bracket_depth -= 1;
                 current.push(ch);
             }
-            '+' | '-' | '=' | '<' | '>' | '/' | '*' | '|'
+            '+' | '-' | '=' | '<' | '>' | '/' | '*' | '|' | '(' | ')' | ','
                 if brace_depth == 0 && bracket_depth == 0 =>
             {
                 let trimmed = current.trim();
@@ -1037,8 +1101,13 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
         "\\geq" | "gt.eq" => Some("<mo>\u{2265}</mo>"),
         "\\neq" | "neq" => Some("<mo>\u{2260}</mo>"),
         "\\approx" | "approx" => Some("<mo>\u{2248}</mo>"),
-        "\\rightarrow" | "rightarrow" => Some("<mo>\u{2192}</mo>"),
+        "\\rightarrow" | "\\to" | "rightarrow" => Some("<mo>\u{2192}</mo>"),
         "\\leftarrow" | "leftarrow" => Some("<mo>\u{2190}</mo>"),
+        "\\leftrightarrow" | "leftrightarrow" => Some("<mo>\u{2194}</mo>"),
+        "\\mapsto" | "mapsto" => Some("<mo>\u{21A6}</mo>"),
+        "\\Rightarrow" => Some("<mo>\u{21D2}</mo>"),
+        "\\Leftarrow" => Some("<mo>\u{21D0}</mo>"),
+        "\\Leftrightarrow" => Some("<mo>\u{21D4}</mo>"),
         "\\implies" | "implies" => Some("<mo>\u{21D2}</mo>"),
         "\\sum" => Some("<mo>\u{2211}</mo>"),
         "\\prod" => Some("<mo>\u{220F}</mo>"),
@@ -1071,10 +1140,10 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
         // Math spacing
         "\\quad" | "quad" => Some("<mspace width=\"1em\"/>"),
         "\\qquad" | "qquad" => Some("<mspace width=\"2em\"/>"),
-        "," => Some("<mspace width=\"thinmathspace\"/>"),
-        ":" => Some("<mspace width=\"mediummathspace\"/>"),
-        ";" => Some("<mspace width=\"thickmathspace\"/>"),
-        "!" => Some("<mspace width=\"negativethinmathspace\"/>"),
+        "\\," => Some("<mspace width=\"thinmathspace\"/>"),
+        "\\:" => Some("<mspace width=\"mediummathspace\"/>"),
+        "\\;" => Some("<mspace width=\"thickmathspace\"/>"),
+        "\\!" => Some("<mspace width=\"negativethinmathspace\"/>"),
         _ => None,
     }
 }
@@ -1164,5 +1233,21 @@ mod tests {
 
         let script = latex_to_mathml("\\scriptstyle{x}");
         assert!(script.contains("displaystyle=\"false\" scriptlevel=\"1\""));
+    }
+
+    #[test]
+    fn accents_own_braced_and_unbraced_arguments() {
+        for latex in ["\\vec v", "\\vec{v}", "\\overrightarrow{BC}"] {
+            let mathml = latex_to_mathml(latex);
+            assert!(mathml.contains("<mover>"), "{latex}: {mathml}");
+            assert!(
+                mathml.contains("<mi>v</mi>") || mathml.contains("BC"),
+                "{latex}: {mathml}"
+            );
+            assert!(
+                mathml.contains('→') && !mathml.contains("<mrow></mrow>"),
+                "{latex}: {mathml}"
+            );
+        }
     }
 }

@@ -181,42 +181,7 @@ pub fn split_matrix_rows(content: &str) -> Vec<Vec<&str>> {
 
 /// Convert Typst to approximate LaTeX
 pub fn typst_to_latex(typst: &str) -> String {
-    let mut result = typst.to_string();
-    let mappings = [
-        ("sqrt(", "\\sqrt{"),
-        ("integral", "\\int"),
-        ("sum", "\\sum"),
-        ("product", "\\prod"),
-        ("infinity", "\\infty"),
-        ("pi", "\\pi"),
-        ("alpha", "\\alpha"),
-        ("beta", "\\beta"),
-        ("gamma", "\\gamma"),
-        ("delta", "\\delta"),
-        ("theta", "\\theta"),
-        ("lambda", "\\lambda"),
-        ("sigma", "\\sigma"),
-        ("omega", "\\omega"),
-        ("plus.minus", "\\pm"),
-        ("times", "\\times"),
-        ("div", "\\div"),
-        ("dot", "\\cdot"),
-        ("lt.eq", "\\leq"),
-        ("gt.eq", "\\geq"),
-        ("neq", "\\neq"),
-        ("approx", "\\approx"),
-        ("rightarrow", "\\rightarrow"),
-        ("leftarrow", "\\leftarrow"),
-        ("in", "\\in"),
-        ("notin", "\\notin"),
-        ("subset", "\\subset"),
-        ("cup", "\\cup"),
-        ("cap", "\\cap"),
-    ];
-    for (from, to) in &mappings {
-        result = result.replace(from, to);
-    }
-    result
+    crate::typst_parser::parse_typst_to_latex(typst)
 }
 
 /// Escape XML special characters

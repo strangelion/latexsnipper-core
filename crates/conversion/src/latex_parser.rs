@@ -114,6 +114,10 @@ impl LatexParser {
     }
 
     fn parse_single(&mut self) -> LatexNode {
+        // A space after a TeX control word terminates the command name; it is
+        // not the command argument. Commands such as `\vec v` therefore own
+        // `v`, rather than producing an empty accent followed by a sibling.
+        self.skip_whitespace();
         if self.pos >= self.chars.len() {
             return LatexNode::Text(String::new());
         }
@@ -302,8 +306,12 @@ impl LatexParser {
                 chr: "\u{0302}".to_string(),
                 content: Box::new(self.parse_single()),
             }),
-            "vec" => Some(LatexNode::Accent {
+            "vec" | "overrightarrow" => Some(LatexNode::Accent {
                 chr: "\u{20D7}".to_string(),
+                content: Box::new(self.parse_single()),
+            }),
+            "overleftarrow" => Some(LatexNode::Accent {
+                chr: "\u{20D6}".to_string(),
                 content: Box::new(self.parse_single()),
             }),
             "bar" | "overline" => Some(LatexNode::Accent {
