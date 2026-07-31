@@ -44,7 +44,9 @@ pub use legacy::{
     RuntimeSessionCompatibility,
 };
 pub use model_handle::ModelHandle;
-pub use model_observation::{ModelRuntimeEvent, ModelRuntimeObservation, ModelRuntimeObserver};
+pub use model_observation::{
+    LastInferenceOutcome, ModelRuntimeEvent, ModelRuntimeObservation, ModelRuntimeObserver,
+};
 pub use model_package::{
     DetectionQuad, DetectionResult, FormulaResult, InferenceContext, LayoutResult, ModelDescriptor,
     ModelExecutionContext, ModelExecutor, ModelInput, ModelOutput, ModelPackage, ModelTask,

@@ -163,6 +163,7 @@ pub enum ProviderValidationLevel {
     ProbePassed,
     SessionCreated,
     SmokeInferencePassed,
+    BenchmarkMeasured,
     BenchmarkValidated,
 }
 
@@ -214,6 +215,10 @@ pub struct ProviderValidationReport {
     pub session_created: bool,
     #[serde(default, deserialize_with = "null_default")]
     pub smoke_inference_passed: bool,
+    #[serde(default, deserialize_with = "null_default")]
+    pub benchmark_measured: bool,
+    /// Reserved for a benchmark evaluated against explicit, versioned
+    /// acceptance criteria. Merely collecting timing samples does not set it.
     #[serde(default, deserialize_with = "null_default")]
     pub benchmark_validated: bool,
     #[serde(default)]

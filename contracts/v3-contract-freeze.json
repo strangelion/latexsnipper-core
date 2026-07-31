@@ -14,10 +14,10 @@
   },
   "hashAlgorithm": "sha256-normalized-lf",
   "publicRustSourceTrees": {
-    "crates/api-types/src": "178705e40b22f9b49fcccf1612cc6fe124c6b2c0c0b641974bb48babb6d36cb4",
+    "crates/api-types/src": "b94a2bf64ec40e1c81fb62fe3b71098d57a803705295be780efc0f219620ec4f",
     "crates/ast/src": "9213fb1dbe59b2e2bf97744ae87de73a163b3aaec25e19e8a096d0fd5dfa89f1",
     "crates/conversion/src": "42b6732a915a34bc84994bb8703b2427b2d88cebc00fc864f659f5e2091a8700",
-    "crates/engine/src": "5e7bd91cb47dd883695f7bd5526f959ddff656248749f8c350030aae2b757b01",
+    "crates/engine/src": "79b9f050293adc7d9423e495cccf4a08cfbb6270c28775b17db2f9e47f67315e",
     "crates/export/src": "503ef470a53cef25d6f3739c83144af50ad7684c8eec6bfdcb698e6c75a370b0",
     "crates/ffi/src": "bab7ed37c8553a4068d92dd5e5ddfea6af1652ba7b85a02e27ea1d1c44885237",
     "crates/foundation/src": "afbbf9d5e3e47b3e7080eb6d02a182c0063f92005acb22358a03974f4f382fbe",
@@ -27,7 +27,7 @@
     "crates/pipeline/src": "f4ba8f2afb3932df6ec5e804555adc7dd819534a7238b32097e863c49707bcfd",
     "crates/plugin-wasi/src": "7c5bb16b853f03d4bb4bb5d14f0a21fff4cdd41cb9afdf34a59ae8c168f08061",
     "crates/plugin/src": "e7398dbf0021d54caf25f3bc93e4e1b6c14c9028145a29c03befef20707bab3c",
-    "crates/runtime/src": "a9da9c006412d04c7c77a54326d429bb9ee51c4f926c0844a745ea3d2dced9a3",
+    "crates/runtime/src": "46095de04ddd72f8c81de4e4fdab6fe882a519250494dbb447945eb65c15c1f0",
     "crates/syntax/src": "62622e92171f80e26730e90e8e0ba6846577200513c1db65f073fa777635167b",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
     "crates/wasm/src": "9c9a6a6eea443f825b5f6ce333725bac2ed047281aba9daeaa874c68c2b24a11"

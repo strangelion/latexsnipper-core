@@ -37,7 +37,7 @@ impl ProviderValidationStore {
             .any(|value| is_weak_observation(value))
         {
             return Err(SnipperError::Runtime(
-                "provider session/smoke evidence cannot be cached under an unknown or unavailable environment observation"
+                "provider session/smoke evidence cannot be cached under a weak, descriptive, unknown, or unavailable environment observation"
                     .to_owned(),
             ));
         }
@@ -70,6 +70,7 @@ impl ProviderValidationStore {
             report.validation_level = ProviderValidationLevel::ProbePassed;
             report.session_created = false;
             report.smoke_inference_passed = false;
+            report.benchmark_measured = false;
             report.benchmark_validated = false;
             report.key = Some(current.clone());
             report.stale = true;
@@ -124,6 +125,7 @@ mod tests {
             probe_passed: true,
             session_created: true,
             smoke_inference_passed: true,
+            benchmark_measured: false,
             benchmark_validated: false,
             key: Some(key),
             stale: false,
@@ -183,5 +185,16 @@ mod tests {
             .diagnostics
             .iter()
             .any(|message| message == "PROVIDER_SMOKE_INFERENCE_FAILED"));
+    }
+
+    #[test]
+    fn descriptive_runtime_hashes_cannot_key_smoke_cache() {
+        let store = ProviderValidationStore::default();
+        let mut weak = key("ort-1", "runtime-version-sha256:abc");
+        weak.device_driver_fingerprint = "runtime-device-sha256:def".to_owned();
+        let error = store.record(report(weak)).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("cannot be cached under a weak, descriptive"));
     }
 }

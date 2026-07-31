@@ -102,10 +102,12 @@ impl ProviderEnvironmentFingerprint {
 }
 
 pub fn is_weak_observation(value: &str) -> bool {
+    let value = value.trim().to_ascii_lowercase();
     matches!(
-        value.trim().to_ascii_lowercase().as_str(),
+        value.as_str(),
         "" | FINGERPRINT_UNKNOWN | FINGERPRINT_UNAVAILABLE | "unverified" | "not-run"
-    )
+    ) || value.starts_with("runtime-version-sha256:")
+        || value.starts_with("runtime-device-sha256:")
 }
 
 fn is_sha256(value: &str) -> bool {
@@ -141,7 +143,10 @@ mod tests {
             fingerprint.device_driver_fingerprint,
             FINGERPRINT_NOT_APPLICABLE
         );
-        assert!(fingerprint.is_strongly_keyed());
+        assert!(!fingerprint.is_strongly_keyed());
+        assert!(is_weak_observation(
+            &fingerprint.provider_library_fingerprint
+        ));
     }
 
     #[test]

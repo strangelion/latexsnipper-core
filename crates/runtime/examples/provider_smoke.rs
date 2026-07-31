@@ -136,6 +136,7 @@ fn run_provider(
         probe_passed: false,
         session_created: false,
         smoke_inference_passed: false,
+        benchmark_measured: false,
         benchmark_validated: false,
         key: None,
         stale: false,
@@ -262,15 +263,15 @@ fn run_provider(
         result.max_absolute_error = Some(0.0);
     }
     result.validation.smoke_inference_passed = true;
-    result.validation.benchmark_validated = benchmark_requested
+    result.validation.benchmark_measured = benchmark_requested
         && (0..3).all(|_| {
             session
                 .run(RunRequest::new(inputs.clone()))
                 .and_then(|response| fixture.validate_outputs(&response.outputs))
                 .is_ok()
         });
-    result.validation.validation_level = if result.validation.benchmark_validated {
-        ProviderValidationLevel::BenchmarkValidated
+    result.validation.validation_level = if result.validation.benchmark_measured {
+        ProviderValidationLevel::BenchmarkMeasured
     } else {
         ProviderValidationLevel::SmokeInferencePassed
     };

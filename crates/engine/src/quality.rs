@@ -181,6 +181,17 @@ impl ModelQualityRegistry {
     }
 
     pub fn validate(&self, expected: ModelQualityValidation<'_>) -> ModelQualityReadiness {
+        if expected.runtime.is_none_or(is_unknown_identity)
+            || expected.provider.is_none_or(is_unknown_identity)
+        {
+            return quality_failure(
+                &expected,
+                ModelQualityStatus::BaselineMissing,
+                CoreErrorCode::ModelBaselineMissing,
+                "runtime and effective provider must be known before quality evidence can match"
+                    .to_owned(),
+            );
+        }
         let exact_key = ModelQualityKey {
             model_id: expected.model_id.to_owned(),
             model_version: expected.model_version.to_owned(),
@@ -318,6 +329,13 @@ fn canonical_runtime(runtime: &str) -> String {
         .filter(|character| character.is_ascii_alphanumeric())
         .flat_map(char::to_lowercase)
         .collect()
+}
+
+fn is_unknown_identity(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "" | "unknown" | "unavailable" | "unverified" | "auto"
+    )
 }
 
 fn collect_json_files(root: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
@@ -469,6 +487,23 @@ mod tests {
         wrong.model_sha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
         assert_eq!(
             registry.validate(wrong).status,
+            ModelQualityStatus::BaselineMissing
+        );
+    }
+
+    #[test]
+    fn missing_or_unknown_provider_fails_closed() {
+        let (_root, registry) = load_record(&record());
+        let mut missing = validation();
+        missing.provider = None;
+        let result = registry.validate(missing);
+        assert_eq!(result.status, ModelQualityStatus::BaselineMissing);
+        assert!(result.message.unwrap().contains("effective provider"));
+
+        let mut unknown = validation();
+        unknown.provider = Some("unknown");
+        assert_eq!(
+            registry.validate(unknown).status,
             ModelQualityStatus::BaselineMissing
         );
     }

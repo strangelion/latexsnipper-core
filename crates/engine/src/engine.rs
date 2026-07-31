@@ -706,6 +706,7 @@ impl SnipperEngine {
                                 probe_passed: true,
                                 session_created: false,
                                 smoke_inference_passed: false,
+                                benchmark_measured: false,
                                 benchmark_validated: false,
                                 key: Some(key),
                                 stale: false,
@@ -750,7 +751,8 @@ impl SnipperEngine {
                             .options
                             .providers
                             .first()
-                            .map(|provider| provider.name.clone());
+                            .map(|provider| provider.name.clone())
+                            .unwrap_or_else(|| "unknown".to_owned());
                         let quality =
                             self.model_quality_registry.validate(ModelQualityValidation {
                                 model_id: &manifest.id,
@@ -758,7 +760,7 @@ impl SnipperEngine {
                                 model_sha256: &declared_model_sha256(manifest),
                                 dataset_version: None,
                                 runtime: Some(&runtime),
-                                provider: provider.as_deref(),
+                                provider: Some(&provider),
                             });
                         let state = technical_states
                             .get(&manifest.id)
@@ -766,7 +768,7 @@ impl SnipperEngine {
                             .unwrap_or_default();
                         let technical_ready = state.executor_created
                             && state.session_created
-                            && state.inference_completed;
+                            && state.latest_inference_succeeded();
                         let code = if technical_ready {
                             quality.code
                         } else {
@@ -790,11 +792,11 @@ impl SnipperEngine {
                                 runtime_resolved: true,
                                 executor_created: state.executor_created,
                                 session_created: state.session_created,
-                                smoke_inference_passed: state.inference_completed,
+                                smoke_inference_passed: state.latest_inference_succeeded(),
                                 technical_ready,
                                 quality_status: quality.status,
                                 runtime: Some(runtime),
-                                provider,
+                                provider: Some(provider),
                                 code,
                                 message,
                             },
@@ -990,6 +992,7 @@ impl SnipperEngine {
                 probe_passed: false,
                 session_created: false,
                 smoke_inference_passed: false,
+                benchmark_measured: false,
                 benchmark_validated: false,
                 key: request.key,
                 stale: false,
@@ -1021,7 +1024,7 @@ impl SnipperEngine {
                 ProviderValidationPolicy::ProbeOnly => cached.probe_passed,
                 ProviderValidationPolicy::CreateSession => cached.session_created,
                 ProviderValidationPolicy::SmokeInference => cached.smoke_inference_passed,
-                ProviderValidationPolicy::Benchmark => cached.benchmark_validated,
+                ProviderValidationPolicy::Benchmark => cached.benchmark_measured,
             };
             if sufficient && !cached.stale {
                 return Ok(cached);
@@ -1035,6 +1038,7 @@ impl SnipperEngine {
             probe_passed: true,
             session_created: false,
             smoke_inference_passed: false,
+            benchmark_measured: false,
             benchmark_validated: false,
             key: Some(key),
             stale: false,
@@ -1145,9 +1149,9 @@ impl SnipperEngine {
                                 ));
                             } else {
                                 samples.sort_by(f64::total_cmp);
-                                report.benchmark_validated = true;
+                                report.benchmark_measured = true;
                                 report.validation_level =
-                                    ProviderValidationLevel::BenchmarkValidated;
+                                    ProviderValidationLevel::BenchmarkMeasured;
                                 report.diagnostics.push(format!(
                                     "provider benchmark median over {} measured runs: {:.3} ms",
                                     samples.len(),
@@ -1168,7 +1172,7 @@ impl SnipperEngine {
             self.provider_validation_store.record(report.clone())?;
         } else {
             report.diagnostics.push(
-                "provider result was not cached because one or more environment observations are unavailable"
+                "provider result was not cached because one or more environment observations are weak, descriptive, or unavailable"
                     .to_owned(),
             );
         }
@@ -2429,7 +2433,7 @@ mod readiness_tests {
 
     #[cfg(feature = "native")]
     #[test]
-    fn provider_smoke_policy_executes_the_versioned_tensor_fixture() {
+    fn provider_benchmark_measures_without_claiming_validation() {
         let models = tempfile::tempdir().unwrap();
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -2444,12 +2448,18 @@ mod readiness_tests {
         let report = engine
             .validate_provider(ProviderValidationRequest {
                 provider: "cpu".to_owned(),
-                policy: ProviderValidationPolicy::SmokeInference,
+                policy: ProviderValidationPolicy::Benchmark,
                 key: None,
             })
             .unwrap();
         assert!(report.session_created, "{report:?}");
         assert!(report.smoke_inference_passed, "{report:?}");
+        assert!(report.benchmark_measured, "{report:?}");
+        assert!(!report.benchmark_validated, "{report:?}");
+        assert_eq!(
+            report.validation_level,
+            ProviderValidationLevel::BenchmarkMeasured
+        );
         let key = report.key.expect("smoke report must be environment keyed");
         assert_eq!(
             key.smoke_model_sha256,
@@ -2475,8 +2485,8 @@ mod readiness_tests {
             model_version: "models-v3.1.0",
             model_sha256: "c68629f7efe6b51e05833617f630aee90551dd505064a4a2d8e2529d11bff7f8",
             dataset_version: None,
-            runtime: None,
-            provider: None,
+            runtime: Some("onnxruntime"),
+            provider: Some("cpu"),
         });
         assert!(
             readiness.baseline_sha256.is_some(),
