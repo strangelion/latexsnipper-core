@@ -787,9 +787,19 @@ fn aggregate_optional_groups(
 
 fn strip_outer_math_delimiters(value: &str) -> &str {
     if value.len() >= 4 && value.starts_with("$$") && value.ends_with("$$") {
-        value[2..value.len() - 2].trim()
+        let inner = &value[2..value.len() - 2];
+        if contains_unescaped_dollar(inner) {
+            value
+        } else {
+            inner.trim()
+        }
     } else if value.len() >= 2 && value.starts_with('$') && value.ends_with('$') {
-        value[1..value.len() - 1].trim()
+        let inner = &value[1..value.len() - 1];
+        if contains_unescaped_dollar(inner) {
+            value
+        } else {
+            inner.trim()
+        }
     } else if value.len() >= 4
         && ((value.starts_with(r"\(") && value.ends_with(r"\)"))
             || (value.starts_with(r"\[") && value.ends_with(r"\]")))
@@ -798,6 +808,14 @@ fn strip_outer_math_delimiters(value: &str) -> &str {
     } else {
         value
     }
+}
+
+fn contains_unescaped_dollar(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes
+        .iter()
+        .enumerate()
+        .any(|(index, byte)| *byte == b'$' && !is_escaped(bytes, index))
 }
 
 fn delimiters_balanced(value: &str) -> bool {
@@ -963,6 +981,11 @@ mod tests {
         assert_eq!(
             normalize_formula(r"  $$\frac{a}{b}$$ ", &rules()),
             r"\frac{a}{b}"
+        );
+        assert_eq!(normalize_formula(r"$a$ and $b$", &rules()), r"$a$ and $b$");
+        assert_eq!(
+            normalize_formula(r"$\text{cost \$5} + x^2$", &rules()),
+            r"\text{cost \$5} + x^2"
         );
         assert_ne!(normalize_formula(r"\dfrac{a}{b}", &rules()), r"\frac{a}{b}");
     }
