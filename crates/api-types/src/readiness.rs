@@ -221,7 +221,10 @@ pub struct ProviderValidationKey {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EphemeralProviderKey {
-    pub process_id: u32,
+    /// Native process identity when the target exposes one. Browser WASM has
+    /// no process identifier, so the runtime instance and session generation
+    /// remain the authoritative ephemeral boundary there.
+    pub process_id: Option<u32>,
     pub runtime_instance_id: String,
     pub session_generation: u64,
     pub provider: String,

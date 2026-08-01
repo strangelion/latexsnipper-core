@@ -22,14 +22,15 @@ pub struct ProviderValidationStore {
 impl Default for ProviderValidationStore {
     fn default() -> Self {
         static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
+        let instance = NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed);
+        let runtime_instance_id = current_process_id().map_or_else(
+            || format!("wasm-{instance}"),
+            |process_id| format!("{process_id}-{instance}"),
+        );
         Self {
             ephemeral: RwLock::new(BTreeMap::new()),
             persistent: RwLock::new(BTreeMap::new()),
-            runtime_instance_id: format!(
-                "{}-{}",
-                std::process::id(),
-                NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed)
-            ),
+            runtime_instance_id,
             session_generation: AtomicU64::new(0),
         }
     }
@@ -61,7 +62,7 @@ impl ProviderValidationStore {
                     report.session_generation = self.next_session_generation();
                 }
                 let ephemeral_key = EphemeralProviderKey {
-                    process_id: std::process::id(),
+                    process_id: current_process_id(),
                     runtime_instance_id: report.runtime_instance_id.clone(),
                     session_generation: report.session_generation,
                     provider: report.provider.to_ascii_lowercase(),
@@ -109,7 +110,7 @@ impl ProviderValidationStore {
         let exact_ephemeral = ephemeral
             .iter()
             .filter(|(key, _)| {
-                key.process_id == std::process::id()
+                key.process_id == current_process_id()
                     && key.runtime_instance_id == self.runtime_instance_id
                     && key.provider.eq_ignore_ascii_case(&current.provider)
                     && key.smoke_model_sha256 == current.smoke_model_sha256
@@ -203,6 +204,16 @@ impl ProviderValidationStore {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn current_process_id() -> Option<u32> {
+    Some(std::process::id())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn current_process_id() -> Option<u32> {
+    None
 }
 
 fn persistent_key_is_strong(key: &ProviderValidationKey) -> bool {
