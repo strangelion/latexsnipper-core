@@ -28,6 +28,20 @@ pub struct ModelArtifactV3 {
     pub kind: ModelArtifactKindV3,
     pub sha256: String,
     pub size_bytes: Option<u64>,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub external_data: Vec<ExternalDataEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalDataEntry {
+    pub path: String,
+    pub sha256: String,
+    pub size_bytes: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +74,8 @@ pub struct ModelProfileV3 {
     pub source: String,
     pub license: String,
     pub artifacts: Vec<ModelArtifactV3>,
+    #[serde(default)]
+    pub quantization: Option<String>,
     #[serde(default)]
     pub supported_modes: Vec<String>,
     #[serde(default)]
@@ -151,6 +167,9 @@ impl ModelManifestV3 {
                         kind: artifact_kind(path),
                         sha256: digest.clone(),
                         size_bytes: None,
+                        role: artifact_role(path),
+                        format: artifact_format(path),
+                        external_data: Vec::new(),
                     });
                 }
                 if let Some(package) = &variant.zip_file {
@@ -171,6 +190,9 @@ impl ModelManifestV3 {
                         kind: ModelArtifactKindV3::Package,
                         sha256: digest.clone(),
                         size_bytes: None,
+                        role: Some("package".to_owned()),
+                        format: Some("archive".to_owned()),
+                        external_data: Vec::new(),
                     });
                 }
 
@@ -205,6 +227,7 @@ impl ModelManifestV3 {
                     source: profile_source,
                     license,
                     artifacts,
+                    quantization: None,
                     supported_modes: Vec::new(),
                     supported_languages: Vec::new(),
                     runtime_compatibility: Vec::new(),
@@ -287,6 +310,7 @@ impl ModelManifestV3 {
                     )));
                 }
                 let mut artifact_paths = std::collections::BTreeSet::new();
+                let mut graph_roles = std::collections::BTreeSet::new();
                 for artifact in &profile.artifacts {
                     if !valid_package_path(&artifact.path)
                         || !artifact_paths.insert(artifact.path.as_str())
@@ -297,10 +321,56 @@ impl ModelManifestV3 {
                             path: artifact.path.clone(),
                         });
                     }
+                    if is_dynamic_library(&artifact.path) {
+                        return Err(ModelManifestV3Error::InvalidContract(format!(
+                            "profile '{}' attempts to ship runtime library '{}'",
+                            profile.id, artifact.path
+                        )));
+                    }
+                    let mut external_paths = std::collections::BTreeSet::new();
+                    for external in &artifact.external_data {
+                        if artifact.kind != ModelArtifactKindV3::Model
+                            || !valid_package_path(&external.path)
+                            || is_dynamic_library(&external.path)
+                            || !valid_sha256(&external.sha256)
+                            || !external_paths.insert(external.path.as_str())
+                        {
+                            return Err(ModelManifestV3Error::InvalidContract(format!(
+                                "profile '{}' has invalid external-data mapping '{}'",
+                                profile.id, external.path
+                            )));
+                        }
+                    }
+                    if artifact.kind == ModelArtifactKindV3::Model {
+                        let role = artifact.role.as_deref().filter(|role| !role.is_empty());
+                        let format = artifact.format.as_deref();
+                        if profile.evidence.status != ModelEvidenceStatusV3::Unavailable
+                            && (role.is_none() || !matches!(format, Some("onnx" | "ort")))
+                        {
+                            return Err(ModelManifestV3Error::InvalidContract(format!(
+                                "profile '{}' model artifacts require explicit role and onnx/ort format",
+                                profile.id
+                            )));
+                        }
+                        if let Some(role) = role {
+                            if !graph_roles.insert(role) {
+                                return Err(ModelManifestV3Error::InvalidContract(format!(
+                                    "profile '{}' declares duplicate model role '{role}'",
+                                    profile.id
+                                )));
+                            }
+                        }
+                    }
                 }
                 if profile.evidence.status == ModelEvidenceStatusV3::Validated
                     && (profile.supported_modes.is_empty()
                         || profile.runtime_compatibility.is_empty()
+                        || profile.quantization.as_deref().is_none_or(|value| {
+                            !matches!(
+                                value.to_ascii_lowercase().as_str(),
+                                "fp32" | "fp16" | "int8"
+                            )
+                        })
                         || profile.memory_estimate_bytes.is_none()
                         || profile.preprocessing_schema.is_none()
                         || profile.postprocessing_schema.is_none()
@@ -475,6 +545,34 @@ fn artifact_kind(path: &str) -> ModelArtifactKindV3 {
     }
 }
 
+fn artifact_role(path: &str) -> Option<String> {
+    let name = std::path::Path::new(path).file_stem()?.to_str()?;
+    Some(match name.to_ascii_lowercase().as_str() {
+        "model" | "model_int8" | "model_fp16" => "model".to_owned(),
+        other => other.to_owned(),
+    })
+}
+
+fn artifact_format(path: &str) -> Option<String> {
+    let extension = std::path::Path::new(path)
+        .extension()?
+        .to_str()?
+        .to_ascii_lowercase();
+    matches!(extension.as_str(), "onnx" | "ort").then_some(extension)
+}
+
+fn is_dynamic_library(path: &str) -> bool {
+    std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "dll" | "so" | "dylib"
+            )
+        })
+}
+
 fn valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
@@ -595,6 +693,7 @@ mod tests {
         profile.supported_modes = vec!["text".to_string()];
         profile.supported_languages = vec!["en".to_string()];
         profile.runtime_compatibility = vec!["onnxruntime-cpu".to_string()];
+        profile.quantization = Some("fp32".to_owned());
         profile.memory_estimate_bytes = Some(1024);
         profile.preprocessing_schema = Some(serde_json::json!({"version": 1}));
         profile.postprocessing_schema = Some(serde_json::json!({"version": 1}));
@@ -622,5 +721,58 @@ mod tests {
         let adapted = migrated.to_runtime_adapter().unwrap();
         assert_eq!(adapted.categories["text-rec"].variants[0].id, "fixture");
         assert_eq!(adapted.checksums["model.onnx"], "b".repeat(64));
+    }
+
+    #[test]
+    fn model_roles_external_data_and_runtime_libraries_fail_closed() {
+        let mut manifest = ModelManifestV3::migrate_from_v2(source_manifest(true))
+            .unwrap()
+            .value;
+        let profile = &mut manifest.categories.get_mut("text-rec").unwrap().profiles[0];
+        profile.evidence.status = ModelEvidenceStatusV3::Experimental;
+        profile.artifacts.push(ModelArtifactV3 {
+            path: "decoder.onnx".to_owned(),
+            kind: ModelArtifactKindV3::Model,
+            sha256: "c".repeat(64),
+            size_bytes: Some(1),
+            role: Some("model".to_owned()),
+            format: Some("onnx".to_owned()),
+            external_data: Vec::new(),
+        });
+        assert!(manifest
+            .validate_contract()
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate model role"));
+
+        let profile = &mut manifest.categories.get_mut("text-rec").unwrap().profiles[0];
+        profile.artifacts.pop();
+        profile.artifacts[0].external_data = vec![ExternalDataEntry {
+            path: "../weights.bin".to_owned(),
+            sha256: "d".repeat(64),
+            size_bytes: 1,
+        }];
+        assert!(manifest
+            .validate_contract()
+            .unwrap_err()
+            .to_string()
+            .contains("invalid external-data mapping"));
+
+        let profile = &mut manifest.categories.get_mut("text-rec").unwrap().profiles[0];
+        profile.artifacts[0].external_data.clear();
+        profile.artifacts.push(ModelArtifactV3 {
+            path: "onnxruntime.dll".to_owned(),
+            kind: ModelArtifactKindV3::Other,
+            sha256: "e".repeat(64),
+            size_bytes: Some(1),
+            role: Some("runtime".to_owned()),
+            format: Some("dynamic_library".to_owned()),
+            external_data: Vec::new(),
+        });
+        assert!(manifest
+            .validate_contract()
+            .unwrap_err()
+            .to_string()
+            .contains("attempts to ship runtime library"));
     }
 }

@@ -58,9 +58,10 @@ pub use diagram_understanding::{
 
 // Re-export api-types for backward compatibility (wasm/ffi use these via engine)
 pub use latexsnipper_api_types::{
-    CoreErrorCode, EngineReadiness, ModeReadiness, ModelQualityReadiness, ModelQualityStatus,
-    ModelReadiness, ProviderValidationKey, ProviderValidationLevel, ProviderValidationPolicy,
-    ProviderValidationReport, ProviderValidationRequest, RecognitionAcceptance, RecognitionAction,
-    RecognitionProfile, RecognizeMode as ApiRecognizeMode, RuntimeReadiness,
-    StreamItem as ApiStreamItem, TaskReadiness, READINESS_SCHEMA_VERSION,
+    CoreErrorCode, EngineReadiness, EphemeralProviderKey, ModeReadiness, ModelQualityReadiness,
+    ModelQualityStatus, ModelReadiness, ProviderValidationKey, ProviderValidationLevel,
+    ProviderValidationPolicy, ProviderValidationReport, ProviderValidationRequest,
+    RecognitionAcceptance, RecognitionAction, RecognitionProfile,
+    RecognizeMode as ApiRecognizeMode, RuntimeReadiness, StreamItem as ApiStreamItem,
+    TaskReadiness, ValidationScope, READINESS_SCHEMA_VERSION,
 };

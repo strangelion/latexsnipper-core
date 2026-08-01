@@ -1,5 +1,7 @@
 pub mod config;
 #[cfg(feature = "native")]
+pub mod external_data;
+#[cfg(feature = "native")]
 pub mod manager;
 pub mod manifest;
 pub mod manifest_v3;
@@ -11,10 +13,16 @@ pub use config::{
     PostprocessConfig, PreprocessConfig, QuantizationConfig, ResizeConfig, TensorConfig,
 };
 #[cfg(feature = "native")]
+pub use external_data::{
+    publish_external_data_generation, validate_external_data, ExternalDataError,
+    ExternalDataLimits, ExternalDataValidation, ValidatedExternalData,
+};
+#[cfg(feature = "native")]
 pub use manager::{DownloadProgress, DownloadStatus, ModelManager, ModelSecurityLimits};
 pub use manifest::{LoadedModelManifest, ModelManifest};
 pub use manifest_v3::{
-    ModelArtifactKindV3, ModelArtifactV3, ModelCategoryV3, ModelEvidenceStatusV3, ModelEvidenceV3,
-    ModelManifestV3, ModelManifestV3Error, ModelProfileV3, MODEL_MANIFEST_SCHEMA_VERSION_V3,
+    ExternalDataEntry, ModelArtifactKindV3, ModelArtifactV3, ModelCategoryV3,
+    ModelEvidenceStatusV3, ModelEvidenceV3, ModelManifestV3, ModelManifestV3Error, ModelProfileV3,
+    MODEL_MANIFEST_SCHEMA_VERSION_V3,
 };
 pub use runtime_variant::{RuntimeVariant, VariantStatus};

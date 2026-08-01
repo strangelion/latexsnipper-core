@@ -1,0 +1,42 @@
+{
+  "contractVersion": 1,
+  "name": "Conversion and Office output contract",
+  "rules": [
+    {
+      "id": "CORE-PARSER-DIVERGENCE-001",
+      "description": "Cross-parser divergence reports the first structural AST path.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion", "evaluation"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-evaluation", "parser_divergence_reports_the_first_structural_path"]},
+      "failureMessage": "Parser divergence lacks a deterministic first-difference path."
+    },
+    {
+      "id": "CORE-CONVERSION-ROUNDTRIP-001",
+      "description": "Stable conversion round-trip corpus remains blocking.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "--test", "conversion_roundtrip"]},
+      "failureMessage": "A stable conversion round-trip regressed."
+    },
+    {
+      "id": "CORE-OFFICE-OUTPUT-001",
+      "description": "Document AST, LaTeX, OMML, insertion payload and expected read-back hash form one immutable bundle.",
+      "severity": "blocking",
+      "suite": "office-output",
+      "scope": ["conversion", "office-output"],
+      "evidence": {"kind": "hashManifest", "manifest": "contracts/fixtures/office-output-v1/manifest.json"},
+      "failureMessage": "Office output fixture bundle is incomplete or changed without hash review."
+    },
+    {
+      "id": "CORE-DRAWING-OFFICE-PAYLOAD-001",
+      "description": "Drawing Office payload is forward-compatible and hash-addressed.",
+      "severity": "blocking",
+      "suite": "office-output",
+      "scope": ["drawing", "office-output"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "office_payload_is_forward_compatible"]},
+      "failureMessage": "Drawing Office payload contract failed."
+    }
+  ]
+}

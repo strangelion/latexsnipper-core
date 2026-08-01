@@ -10,7 +10,7 @@ use super::provider;
 use crate::acceleration::AccelerationMode;
 use crate::legacy::{InferenceSession, RuntimeBackend};
 use crate::model_handle::ModelHandle;
-use crate::RuntimeOptions;
+use crate::{ProviderAttempt, RuntimeOptions};
 use latexsnipper_ast::{Diagnostic, DiagnosticLevel, W_GPU_PROVIDER_FALLBACK};
 use latexsnipper_foundation::{Result, SnipperError};
 
@@ -150,13 +150,15 @@ impl OnnxRuntimeBackend {
         let configured = provider::configure(builder, options, self.acceleration)?;
         builder = configured.builder;
         let selected = configured.selected;
+        let attempts = configured.attempts;
+        let diagnostics = configured.diagnostics;
         if let Ok(mut provider) = self.selected_provider.lock() {
             *provider = selected.clone();
         }
-        for fallback in configured.diagnostics {
+        for fallback in &diagnostics {
             log::warn!("{fallback}");
             if let Ok(mut fallbacks) = self.provider_fallbacks.lock() {
-                fallbacks.push(fallback);
+                fallbacks.push(fallback.clone());
             }
         }
 
@@ -207,6 +209,8 @@ impl OnnxRuntimeBackend {
         let cached = CachedSession {
             session: Arc::new(Mutex::new(session)),
             provider: selected,
+            attempts,
+            diagnostics,
         };
 
         // Store in cache (may race with another thread, that's fine)
@@ -253,6 +257,8 @@ fn available_execution_providers() -> Vec<String> {
 struct CachedSession {
     session: Arc<Mutex<Session>>,
     provider: String,
+    attempts: Vec<ProviderAttempt>,
+    diagnostics: Vec<String>,
 }
 
 impl RuntimeBackend for OnnxRuntimeBackend {
@@ -325,6 +331,8 @@ impl OnnxRuntimeBackend {
         Ok(Box::new(OnnxSession {
             session: cached.session,
             provider: cached.provider,
+            attempts: cached.attempts,
+            diagnostics: cached.diagnostics,
         }))
     }
 }
@@ -332,6 +340,8 @@ impl OnnxRuntimeBackend {
 struct OnnxSession {
     session: Arc<Mutex<Session>>,
     provider: String,
+    attempts: Vec<ProviderAttempt>,
+    diagnostics: Vec<String>,
 }
 
 impl InferenceSession for OnnxSession {
@@ -528,6 +538,18 @@ impl InferenceSession for OnnxSession {
         // Just add space at end (RapidOCR convention)
         chars.push(" ".to_string());
         Some(chars)
+    }
+
+    fn effective_provider(&self) -> Option<String> {
+        Some(self.provider.clone())
+    }
+
+    fn provider_attempts(&self) -> Vec<ProviderAttempt> {
+        self.attempts.clone()
+    }
+
+    fn fallback_diagnostics(&self) -> Vec<String> {
+        self.diagnostics.clone()
     }
 
     fn release(&mut self) {

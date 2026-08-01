@@ -130,6 +130,7 @@ impl FormulaBackendExecutor {
     fn ensure_backend(&mut self) -> Result<&OnnxFormulaBackend> {
         if self.backend.is_none() {
             let backend = OnnxFormulaBackend::load(&self.model_dir, &*self.runtime)?;
+            self.provider = self.runtime.selected_provider();
             self.backend = Some(backend);
         }
         Ok(self.backend.as_ref().unwrap())

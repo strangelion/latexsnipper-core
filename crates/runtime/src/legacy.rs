@@ -11,8 +11,8 @@ use latexsnipper_tensor::Tensor;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AccelerationMode, ArtifactValidation, RunRequest, RuntimeKind, RuntimeOptions, RuntimeRegistry,
-    RuntimeResolver,
+    AccelerationMode, ArtifactValidation, ProviderAttempt, RunRequest, RuntimeKind, RuntimeOptions,
+    RuntimeRegistry, RuntimeResolver,
 };
 
 /// Positional session retained for source compatibility.
@@ -23,6 +23,19 @@ pub trait InferenceSession: Send + Sync {
 
     fn get_character_list(&self) -> Option<Vec<String>> {
         None
+    }
+
+    /// Provider reported by the successfully created runtime session.
+    fn effective_provider(&self) -> Option<String> {
+        None
+    }
+
+    fn provider_attempts(&self) -> Vec<ProviderAttempt> {
+        Vec::new()
+    }
+
+    fn fallback_diagnostics(&self) -> Vec<String> {
+        Vec::new()
     }
 
     fn release(&mut self);
@@ -43,6 +56,18 @@ impl InferenceSession for Box<dyn InferenceSession> {
 
     fn get_character_list(&self) -> Option<Vec<String>> {
         (**self).get_character_list()
+    }
+
+    fn effective_provider(&self) -> Option<String> {
+        (**self).effective_provider()
+    }
+
+    fn provider_attempts(&self) -> Vec<ProviderAttempt> {
+        (**self).provider_attempts()
+    }
+
+    fn fallback_diagnostics(&self) -> Vec<String> {
+        (**self).fallback_diagnostics()
     }
 
     fn release(&mut self) {
@@ -444,6 +469,10 @@ mod tests {
             metadata: SessionMetadata {
                 runtime: RuntimeKind::OnnxRuntime,
                 model_id: None,
+                requested_providers: vec!["cpu".to_owned()],
+                effective_provider: Some("cpu".to_owned()),
+                fallback_chain: Vec::new(),
+                fallback_diagnostics: Vec::new(),
                 inputs: vec![
                     TensorSpec {
                         name: "input_0".to_owned(),
@@ -528,6 +557,10 @@ mod tests {
             metadata: SessionMetadata {
                 runtime: RuntimeKind::OnnxRuntime,
                 model_id: None,
+                requested_providers: vec!["cpu".to_owned()],
+                effective_provider: Some("cpu".to_owned()),
+                fallback_chain: Vec::new(),
+                fallback_diagnostics: Vec::new(),
                 inputs: vec![TensorSpec {
                     name: "input_0".to_owned(),
                     shape: vec![Some(1), Some(3), Some(48), Some(320)],

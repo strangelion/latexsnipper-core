@@ -1,0 +1,60 @@
+{
+  "contractVersion": 1,
+  "name": "Effective provider and validation contract",
+  "rules": [
+    {
+      "id": "CORE-PROVIDER-EFFECTIVE-001",
+      "description": "Readiness and provenance consume the effective provider rather than the first requested provider.",
+      "severity": "blocking",
+      "suite": "provider",
+      "scope": ["runtime", "engine", "inference"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-engine", "mixed_mode_observation_does_not_promote_unused_fallback_model"]},
+      "failureMessage": "Requested provider was treated as effective provider."
+    },
+    {
+      "id": "CORE-PROVIDER-EPHEMERAL-001",
+      "description": "Weak current-process smoke evidence is reusable only within the runtime instance.",
+      "severity": "blocking",
+      "suite": "provider",
+      "scope": ["engine"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-engine", "ephemeral_smoke_survives_readiness_refresh_but_not_session_reset"]},
+      "failureMessage": "Ephemeral provider validation lifecycle is invalid."
+    },
+    {
+      "id": "CORE-PROVIDER-EPHEMERAL-RESET-001",
+      "description": "Session reset invalidates current-process validation.",
+      "severity": "blocking",
+      "suite": "provider",
+      "scope": ["engine"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-engine", "ephemeral_smoke_survives_readiness_refresh_but_not_session_reset"]},
+      "failureMessage": "Current-process validation survived a reset."
+    },
+    {
+      "id": "CORE-PROVIDER-STALE-DETERMINISM-001",
+      "description": "Stale persistent evidence is selected deterministically and downgraded.",
+      "severity": "blocking",
+      "suite": "provider",
+      "scope": ["engine"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-engine", "stale_report_selection_is_deterministic_and_prefers_platform_then_time"]},
+      "failureMessage": "A nondeterministic or trusted stale report was selected."
+    },
+    {
+      "id": "CORE-PROVIDER-BENCHMARK-SEMANTICS-001",
+      "description": "Three timing samples are measured evidence, never validated benchmark evidence.",
+      "severity": "blocking",
+      "suite": "provider",
+      "scope": ["engine"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-engine", "provider_benchmark_measures_without_claiming_validation"]},
+      "failureMessage": "BenchmarkMeasured was incorrectly promoted to BenchmarkValidated."
+    },
+    {
+      "id": "CORE-PROVIDER-FALLBACK-PROPAGATION-001",
+      "description": "Fallback keeps request attempts but propagates the actual provider.",
+      "severity": "blocking",
+      "suite": "provider",
+      "scope": ["runtime", "engine", "inference"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "explicit_provider_order_is_preserved"]},
+      "failureMessage": "Fallback provider identity was not preserved or propagated."
+    }
+  ]
+}

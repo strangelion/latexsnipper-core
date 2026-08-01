@@ -40,6 +40,7 @@ models/
 
 # Test artifacts
 *.pdb
+/artifacts/
 
 # Local agent learnings
 .learnings/

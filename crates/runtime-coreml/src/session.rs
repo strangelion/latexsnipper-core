@@ -79,6 +79,10 @@ impl CoreMlSession {
             metadata: SessionMetadata {
                 runtime: RuntimeKind::CoreMl,
                 model_id: Some(path.to_string_lossy().into_owned()),
+                requested_providers: vec!["coreml-native".to_owned()],
+                effective_provider: Some("coreml-native".to_owned()),
+                fallback_chain: Vec::new(),
+                fallback_diagnostics: Vec::new(),
                 methods: vec!["predict".to_owned()],
                 inputs,
                 outputs,

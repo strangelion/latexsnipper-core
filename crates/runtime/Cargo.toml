@@ -36,13 +36,13 @@ memory-map-model-experimental = ["dep:memmap2"]
 runtime-mmap-experimental = ["memory-map-model-experimental"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
-ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-20", "cuda", "directml", "tensorrt"] }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-27", "cuda", "directml", "tensorrt"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-rustls", "api-20", "cuda", "tensorrt"] }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "half", "download-binaries", "tls-rustls", "api-27", "cuda", "tensorrt"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-20", "coreml"] }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "half", "download-binaries", "tls-native", "api-27", "coreml"] }
 
 [dev-dependencies]
 latexsnipper-api-types.workspace = true

@@ -15,7 +15,18 @@ pub enum CoreErrorCode {
     ModelManifestInvalid,
     ModelArtifactMissing,
     ModelArtifactHashMismatch,
+    ModelExternalDataMissing,
+    ModelExternalDataHashMismatch,
+    ModelExternalDataPathEscape,
+    ModelExternalDataSizeLimit,
+    ModelExternalDataCountLimit,
     ModelBaselineMissing,
+    ModelEffectiveProviderUnknown,
+    QualityBaselineDirectoryMissing,
+    QualityBaselineIndexInvalid,
+    QualityBaselineHashMismatch,
+    ModelBaselineProviderMismatch,
+    ModelBaselineDatasetMismatch,
     ModelBaselineFailed,
     ModelQualityNotValidated,
     AutoAcceptNotRecommended,
@@ -49,7 +60,18 @@ impl CoreErrorCode {
             Self::ModelManifestInvalid => "MODEL_MANIFEST_INVALID",
             Self::ModelArtifactMissing => "MODEL_ARTIFACT_MISSING",
             Self::ModelArtifactHashMismatch => "MODEL_ARTIFACT_HASH_MISMATCH",
+            Self::ModelExternalDataMissing => "MODEL_EXTERNAL_DATA_MISSING",
+            Self::ModelExternalDataHashMismatch => "MODEL_EXTERNAL_DATA_HASH_MISMATCH",
+            Self::ModelExternalDataPathEscape => "MODEL_EXTERNAL_DATA_PATH_ESCAPE",
+            Self::ModelExternalDataSizeLimit => "MODEL_EXTERNAL_DATA_SIZE_LIMIT",
+            Self::ModelExternalDataCountLimit => "MODEL_EXTERNAL_DATA_COUNT_LIMIT",
             Self::ModelBaselineMissing => "MODEL_BASELINE_MISSING",
+            Self::ModelEffectiveProviderUnknown => "MODEL_EFFECTIVE_PROVIDER_UNKNOWN",
+            Self::QualityBaselineDirectoryMissing => "QUALITY_BASELINE_DIRECTORY_MISSING",
+            Self::QualityBaselineIndexInvalid => "QUALITY_BASELINE_INDEX_INVALID",
+            Self::QualityBaselineHashMismatch => "QUALITY_BASELINE_HASH_MISMATCH",
+            Self::ModelBaselineProviderMismatch => "MODEL_BASELINE_PROVIDER_MISMATCH",
+            Self::ModelBaselineDatasetMismatch => "MODEL_BASELINE_DATASET_MISMATCH",
             Self::ModelBaselineFailed => "MODEL_BASELINE_FAILED",
             Self::ModelQualityNotValidated => "MODEL_QUALITY_NOT_VALIDATED",
             Self::AutoAcceptNotRecommended => "AUTO_ACCEPT_NOT_RECOMMENDED",
@@ -177,7 +199,7 @@ pub enum ProviderValidationPolicy {
     Benchmark,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderValidationKey {
     pub core_version: String,
@@ -188,6 +210,31 @@ pub struct ProviderValidationKey {
     pub architecture: String,
     pub device_driver_fingerprint: String,
     pub smoke_model_sha256: String,
+    #[serde(default)]
+    pub runtime_binary_sha256: String,
+    #[serde(default)]
+    pub provider_library_sha256: String,
+    #[serde(default)]
+    pub device_identity: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EphemeralProviderKey {
+    pub process_id: u32,
+    pub runtime_instance_id: String,
+    pub session_generation: u64,
+    pub provider: String,
+    pub smoke_model_sha256: String,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ValidationScope {
+    #[default]
+    CurrentProcess,
+    PersistentTrusted,
+    Stale,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -221,6 +268,20 @@ pub struct ProviderValidationReport {
     /// acceptance criteria. Merely collecting timing samples does not set it.
     #[serde(default, deserialize_with = "null_default")]
     pub benchmark_validated: bool,
+    #[serde(default)]
+    pub scope: ValidationScope,
+    #[serde(default, deserialize_with = "null_default")]
+    pub reusable_across_restart: bool,
+    #[serde(default)]
+    pub validated_at: u64,
+    #[serde(default)]
+    pub duration_ms: u64,
+    #[serde(default)]
+    pub runtime_instance_id: String,
+    #[serde(default)]
+    pub session_generation: u64,
+    #[serde(default)]
+    pub last_failure_code: Option<String>,
     #[serde(default)]
     pub key: Option<ProviderValidationKey>,
     #[serde(default, deserialize_with = "null_default")]

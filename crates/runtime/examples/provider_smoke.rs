@@ -138,6 +138,13 @@ fn run_provider(
         smoke_inference_passed: false,
         benchmark_measured: false,
         benchmark_validated: false,
+        scope: latexsnipper_api_types::ValidationScope::CurrentProcess,
+        reusable_across_restart: false,
+        validated_at: 0,
+        duration_ms: 0,
+        runtime_instance_id: String::new(),
+        session_generation: 0,
+        last_failure_code: None,
         key: None,
         stale: false,
         diagnostics: Vec::new(),
@@ -329,6 +336,9 @@ fn provider_key(
         architecture: fingerprint.architecture,
         device_driver_fingerprint: fingerprint.device_driver_fingerprint,
         smoke_model_sha256: fingerprint.smoke_model_sha256,
+        runtime_binary_sha256: fingerprint.runtime_binary_sha256,
+        provider_library_sha256: fingerprint.provider_library_sha256,
+        device_identity: fingerprint.device_identity,
     }
 }
 

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<m:oMathPara xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:oMath><m:nary><m:naryPr><m:chr m:val="∫"/><m:limLoc m:val="undOvr"/></m:naryPr><m:sub><m:r><m:t>0</m:t></m:r></m:sub><m:sup><m:r><m:t>1</m:t></m:r></m:sup><m:e><m:r><m:t>x dx</m:t></m:r></m:e></m:nary><m:r><m:t> x→1</m:t></m:r></m:oMath></m:oMathPara>

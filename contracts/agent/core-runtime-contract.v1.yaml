@@ -1,0 +1,33 @@
+{
+  "contractVersion": 1,
+  "name": "Core runtime truth contract",
+  "rules": [
+    {
+      "id": "CORE-SESSION-METADATA-ACTUAL-001",
+      "description": "Session metadata is returned by the created runtime session and records effective provider and fallback attempts.",
+      "severity": "blocking",
+      "suite": "runtime",
+      "scope": ["runtime"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "--lib"]},
+      "failureMessage": "Runtime session metadata or fallback behavior is invalid."
+    },
+    {
+      "id": "CORE-MODEL-OBSERVATION-GENERATION-001",
+      "description": "A new session resets old inference outcomes and advances its generation.",
+      "severity": "blocking",
+      "suite": "runtime",
+      "scope": ["runtime", "engine"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "new_session_resets_prior_inference_evidence"]},
+      "failureMessage": "Old inference evidence leaked into a new session generation."
+    },
+    {
+      "id": "CORE-PROVIDER-LAST-OUTCOME-001",
+      "description": "Last success and failure state is tied to the current session.",
+      "severity": "blocking",
+      "suite": "runtime",
+      "scope": ["runtime", "engine"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "latest_inference_result_replaces_older_success"]},
+      "failureMessage": "Readiness cannot distinguish current success, current failure, old success, and never-run."
+    }
+  ]
+}

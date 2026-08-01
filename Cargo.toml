@@ -29,6 +29,7 @@ members = [
     "crates/incremental",
     "crates/artifact",
     "crates/benchmark",
+    "crates/drawing",
     "crates/runtime-paddle",
     "crates/runtime-executorch",
     "crates/runtime-tensorrt",
@@ -80,6 +81,7 @@ latexsnipper-fidelity = { path = "crates/fidelity", version = "3.1.0" }
 latexsnipper-incremental = { path = "crates/incremental", version = "3.1.0" }
 latexsnipper-artifact = { path = "crates/artifact", version = "3.1.0" }
 latexsnipper-benchmark = { path = "crates/benchmark", version = "3.1.0" }
+latexsnipper-drawing = { path = "crates/drawing", version = "3.1.0" }
 latexsnipper-evaluation = { path = "crates/evaluation", version = "3.1.0" }
 latexsnipper-runtime-paddle = { path = "crates/runtime-paddle", version = "3.1.0" }
 latexsnipper-runtime-executorch = { path = "crates/runtime-executorch", version = "3.1.0" }

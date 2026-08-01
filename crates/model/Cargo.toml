@@ -21,7 +21,13 @@ ureq = { version = "2", features = ["json"], optional = true }
 zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 semver = "1"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
 [features]
 default = ["native"]
 native = ["dep:ureq", "dep:zip"]
 wasm = []
+
+[dev-dependencies]
+tempfile = "3"

@@ -92,13 +92,13 @@ impl ModelPackage for TrOcrFormulaPackage {
     ) -> Result<Box<dyn ModelExecutor>> {
         let enc_session = ctx.create_session("encoder")?;
         let dec_session = ctx.create_session("decoder")?;
-        let provider = ctx
-            .resolved_runtime
-            .options
-            .providers
-            .first()
-            .map(|provider| provider.name.clone())
-            .unwrap_or_else(|| "runtime-default".to_owned());
+        let encoder_provider = enc_session.metadata().effective_provider.clone();
+        let decoder_provider = dec_session.metadata().effective_provider.clone();
+        let runtime = enc_session.metadata().runtime.to_string();
+        let provider = match (encoder_provider, decoder_provider) {
+            (Some(encoder), Some(decoder)) if encoder.eq_ignore_ascii_case(&decoder) => encoder,
+            _ => "unknown".to_owned(),
+        };
         Ok(Box::new(TrOcrFormulaExecutor::new(
             self.descriptor.clone(),
             (
@@ -111,10 +111,7 @@ impl ModelPackage for TrOcrFormulaPackage {
                 Arc::new(Box::new(RuntimeSessionCompatibility::new(dec_session))),
             )),
             Arc::new(StubRuntime::new()),
-            ExecutionIdentity {
-                runtime: ctx.resolved_runtime.runtime.to_string(),
-                provider,
-            },
+            ExecutionIdentity { runtime, provider },
         )))
     }
 }

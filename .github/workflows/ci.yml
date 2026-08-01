@@ -252,6 +252,150 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  contract-runtime:
+    name: contract-runtime
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite runtime
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-runtime-${{ github.run_id }}
+          path: artifacts/contracts/contract-runtime.*
+          if-no-files-found: error
+
+  contract-provider:
+    name: contract-provider
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite provider
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-provider-${{ github.run_id }}
+          path: artifacts/contracts/contract-provider.*
+          if-no-files-found: error
+
+  contract-ort128:
+    name: contract-ort128
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite ort128
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-ort128-${{ github.run_id }}
+          path: artifacts/contracts/contract-ort128.*
+          if-no-files-found: error
+
+  contract-int8:
+    name: contract-int8
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite int8
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-int8-${{ github.run_id }}
+          path: artifacts/contracts/contract-int8.*
+          if-no-files-found: error
+
+  contract-conversion:
+    name: contract-conversion
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite conversion
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-conversion-${{ github.run_id }}
+          path: artifacts/contracts/contract-conversion.*
+          if-no-files-found: error
+
+  contract-office-output:
+    name: contract-office-output
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite office-output
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-office-output-${{ github.run_id }}
+          path: artifacts/contracts/contract-office-output.*
+          if-no-files-found: error
+
+  contract-failure-corpus:
+    name: contract-failure-corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite failure-corpus
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-failure-corpus-${{ github.run_id }}
+          path: artifacts/contracts/contract-failure-corpus.*
+          if-no-files-found: error
+
+  contract-model-package-security:
+    name: contract-model-package-security
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite model-package-security
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-model-package-security-${{ github.run_id }}
+          path: artifacts/contracts/contract-model-package-security.*
+          if-no-files-found: error
+
+  contract-drawing:
+    name: contract-drawing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python scripts/run_agent_contracts.py --suite drawing
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-drawing-${{ github.run_id }}
+          path: artifacts/contracts/contract-drawing.*
+          if-no-files-found: error
+
   fuzz-build:
     name: Compile all fuzz targets
     runs-on: ubuntu-latest

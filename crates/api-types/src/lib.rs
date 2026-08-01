@@ -10,10 +10,11 @@ pub mod readiness;
 pub mod v3;
 
 pub use readiness::{
-    CoreErrorCode, EngineReadiness, ModeReadiness, ModelQualityReadiness, ModelQualityStatus,
-    ModelReadiness, ProviderValidationKey, ProviderValidationLevel, ProviderValidationPolicy,
-    ProviderValidationReport, ProviderValidationRequest, RecognitionAcceptance, RecognitionAction,
-    RuntimeReadiness, TaskReadiness, READINESS_SCHEMA_VERSION,
+    CoreErrorCode, EngineReadiness, EphemeralProviderKey, ModeReadiness, ModelQualityReadiness,
+    ModelQualityStatus, ModelReadiness, ProviderValidationKey, ProviderValidationLevel,
+    ProviderValidationPolicy, ProviderValidationReport, ProviderValidationRequest,
+    RecognitionAcceptance, RecognitionAction, RuntimeReadiness, TaskReadiness, ValidationScope,
+    READINESS_SCHEMA_VERSION,
 };
 pub use v3::{
     ApiContractVersionsV3, ApiEnvelopeV3, ApiErrorV3, API_ENVELOPE_VERSION_V3,

@@ -1,17 +1,38 @@
 //! Process-local provider validation cache with environment-bound reuse.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use latexsnipper_api_types::{
-    CoreErrorCode, ProviderValidationKey, ProviderValidationLevel, ProviderValidationReport,
+    CoreErrorCode, EphemeralProviderKey, ProviderValidationKey, ProviderValidationLevel,
+    ProviderValidationReport, ValidationScope,
 };
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_runtime::is_weak_observation;
 
-#[derive(Default)]
 pub struct ProviderValidationStore {
-    reports: RwLock<HashMap<ProviderValidationKey, ProviderValidationReport>>,
+    ephemeral: RwLock<BTreeMap<EphemeralProviderKey, ProviderValidationReport>>,
+    persistent: RwLock<BTreeMap<ProviderValidationKey, ProviderValidationReport>>,
+    runtime_instance_id: String,
+    session_generation: AtomicU64,
+}
+
+impl Default for ProviderValidationStore {
+    fn default() -> Self {
+        static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
+        Self {
+            ephemeral: RwLock::new(BTreeMap::new()),
+            persistent: RwLock::new(BTreeMap::new()),
+            runtime_instance_id: format!(
+                "{}-{}",
+                std::process::id(),
+                NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed)
+            ),
+            session_generation: AtomicU64::new(0),
+        }
+    }
 }
 
 impl ProviderValidationStore {
@@ -26,27 +47,53 @@ impl ProviderValidationStore {
                 "provider validation key does not match report provider".to_owned(),
             ));
         }
-        if report.validation_level > ProviderValidationLevel::ProbePassed
-            && [
-                key.runtime_version.as_str(),
-                key.provider_library_fingerprint.as_str(),
-                key.device_driver_fingerprint.as_str(),
-                key.smoke_model_sha256.as_str(),
-            ]
-            .iter()
-            .any(|value| is_weak_observation(value))
-        {
-            return Err(SnipperError::Runtime(
-                "provider session/smoke evidence cannot be cached under a weak, descriptive, unknown, or unavailable environment observation"
-                    .to_owned(),
-            ));
+        if report.validated_at == 0 {
+            report.validated_at = now_unix_millis();
+        }
+        if report.runtime_instance_id.is_empty() {
+            report.runtime_instance_id = self.runtime_instance_id.clone();
         }
         report.stale = false;
-        self.reports
-            .write()
-            .map_err(|_| SnipperError::Runtime("provider validation store poisoned".to_owned()))?
-            .insert(key, report);
-        Ok(())
+        match report.scope {
+            ValidationScope::CurrentProcess => {
+                report.reusable_across_restart = false;
+                if report.session_generation == 0 {
+                    report.session_generation = self.next_session_generation();
+                }
+                let ephemeral_key = EphemeralProviderKey {
+                    process_id: std::process::id(),
+                    runtime_instance_id: report.runtime_instance_id.clone(),
+                    session_generation: report.session_generation,
+                    provider: report.provider.to_ascii_lowercase(),
+                    smoke_model_sha256: key.smoke_model_sha256.clone(),
+                };
+                self.ephemeral
+                    .write()
+                    .map_err(|_| {
+                        SnipperError::Runtime("provider validation store poisoned".to_owned())
+                    })?
+                    .insert(ephemeral_key, report);
+                Ok(())
+            }
+            ValidationScope::PersistentTrusted => {
+                if !report.reusable_across_restart || !persistent_key_is_strong(&key) {
+                    return Err(SnipperError::Runtime(
+                        "persistent provider evidence requires strong runtime binary, provider library, driver, device, and smoke-model identity"
+                            .to_owned(),
+                    ));
+                }
+                self.persistent
+                    .write()
+                    .map_err(|_| {
+                        SnipperError::Runtime("provider validation store poisoned".to_owned())
+                    })?
+                    .insert(key, report);
+                Ok(())
+            }
+            ValidationScope::Stale => Err(SnipperError::Runtime(
+                "stale provider evidence cannot be recorded as reusable validation".to_owned(),
+            )),
+        }
     }
 
     /// Return an exact cached result. If only a report for a different
@@ -55,23 +102,60 @@ impl ProviderValidationStore {
         &self,
         current: &ProviderValidationKey,
     ) -> Result<Option<ProviderValidationReport>> {
-        let reports = self
-            .reports
+        let ephemeral = self
+            .ephemeral
             .read()
             .map_err(|_| SnipperError::Runtime("provider validation store poisoned".to_owned()))?;
-        if let Some(report) = reports.get(current) {
+        let exact_ephemeral = ephemeral
+            .iter()
+            .filter(|(key, _)| {
+                key.process_id == std::process::id()
+                    && key.runtime_instance_id == self.runtime_instance_id
+                    && key.provider.eq_ignore_ascii_case(&current.provider)
+                    && key.smoke_model_sha256 == current.smoke_model_sha256
+            })
+            .max_by_key(|(key, _)| key.session_generation)
+            .map(|(_, report)| report.clone());
+        drop(ephemeral);
+        if exact_ephemeral.is_some() {
+            return Ok(exact_ephemeral);
+        }
+
+        let persistent = self
+            .persistent
+            .read()
+            .map_err(|_| SnipperError::Runtime("provider validation store poisoned".to_owned()))?;
+        if let Some(report) = persistent.get(current) {
             return Ok(Some(report.clone()));
         }
-        let stale = reports
+        let mut stale_candidates = persistent
             .values()
-            .find(|report| report.provider.eq_ignore_ascii_case(&current.provider))
-            .cloned();
+            .filter(|report| report.provider.eq_ignore_ascii_case(&current.provider))
+            .cloned()
+            .collect::<Vec<_>>();
+        stale_candidates.sort_by(|left, right| {
+            let left_key = left.key.as_ref();
+            let right_key = right.key.as_ref();
+            let left_platform = left_key.is_some_and(|key| {
+                key.os == current.os && key.architecture == current.architecture
+            });
+            let right_platform = right_key.is_some_and(|key| {
+                key.os == current.os && key.architecture == current.architecture
+            });
+            right_platform
+                .cmp(&left_platform)
+                .then_with(|| right.validated_at.cmp(&left.validated_at))
+                .then_with(|| left.runtime_instance_id.cmp(&right.runtime_instance_id))
+        });
+        let stale = stale_candidates.into_iter().next();
         Ok(stale.map(|mut report| {
             report.validation_level = ProviderValidationLevel::ProbePassed;
             report.session_created = false;
             report.smoke_inference_passed = false;
             report.benchmark_measured = false;
             report.benchmark_validated = false;
+            report.scope = ValidationScope::Stale;
+            report.reusable_across_restart = false;
             report.key = Some(current.clone());
             report.stale = true;
             report.diagnostics.push(format!(
@@ -83,21 +167,63 @@ impl ProviderValidationStore {
     }
 
     pub fn clear(&self) {
-        if let Ok(mut reports) = self.reports.write() {
+        self.clear_ephemeral();
+        if let Ok(mut reports) = self.persistent.write() {
             reports.clear();
         }
     }
 
+    pub fn clear_ephemeral(&self) {
+        if let Ok(mut reports) = self.ephemeral.write() {
+            reports.clear();
+        }
+        self.session_generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub fn runtime_instance_id(&self) -> &str {
+        &self.runtime_instance_id
+    }
+
+    pub fn next_session_generation(&self) -> u64 {
+        self.session_generation.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
     pub fn len(&self) -> usize {
-        self.reports
+        self.ephemeral
             .read()
             .map(|reports| reports.len())
             .unwrap_or_default()
+            + self
+                .persistent
+                .read()
+                .map(|reports| reports.len())
+                .unwrap_or_default()
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
+
+fn persistent_key_is_strong(key: &ProviderValidationKey) -> bool {
+    [
+        key.runtime_version.as_str(),
+        key.provider_library_fingerprint.as_str(),
+        key.device_driver_fingerprint.as_str(),
+        key.smoke_model_sha256.as_str(),
+        key.runtime_binary_sha256.as_str(),
+        key.provider_library_sha256.as_str(),
+        key.device_identity.as_str(),
+    ]
+    .iter()
+    .all(|value| !value.is_empty() && !is_weak_observation(value))
+}
+
+fn now_unix_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -114,6 +240,9 @@ mod tests {
             architecture: "x86_64".to_owned(),
             device_driver_fingerprint: "gpu-driver".to_owned(),
             smoke_model_sha256: "a".repeat(64),
+            runtime_binary_sha256: "b".repeat(64),
+            provider_library_sha256: "c".repeat(64),
+            device_identity: "pci:0000:01:00.0".to_owned(),
         }
     }
 
@@ -127,6 +256,13 @@ mod tests {
             smoke_inference_passed: true,
             benchmark_measured: false,
             benchmark_validated: false,
+            scope: ValidationScope::CurrentProcess,
+            reusable_across_restart: false,
+            validated_at: 1,
+            duration_ms: 5,
+            runtime_instance_id: String::new(),
+            session_generation: 0,
+            last_failure_code: None,
             key: Some(key),
             stale: false,
             diagnostics: Vec::new(),
@@ -149,7 +285,10 @@ mod tests {
     #[test]
     fn runtime_or_library_change_downgrades_to_probe() {
         let store = ProviderValidationStore::default();
-        store.record(report(key("ort-1", "library-a"))).unwrap();
+        let mut persistent = report(key("ort-1", "library-a"));
+        persistent.scope = ValidationScope::PersistentTrusted;
+        persistent.reusable_across_restart = true;
+        store.record(persistent).unwrap();
         for current in [key("ort-2", "library-a"), key("ort-1", "library-b")] {
             let cached = store.lookup(&current).unwrap().unwrap();
             assert_eq!(
@@ -192,9 +331,53 @@ mod tests {
         let store = ProviderValidationStore::default();
         let mut weak = key("ort-1", "runtime-version-sha256:abc");
         weak.device_driver_fingerprint = "runtime-device-sha256:def".to_owned();
-        let error = store.record(report(weak)).unwrap_err();
+        let mut persistent = report(weak);
+        persistent.scope = ValidationScope::PersistentTrusted;
+        persistent.reusable_across_restart = true;
+        let error = store.record(persistent).unwrap_err();
         assert!(error
             .to_string()
-            .contains("cannot be cached under a weak, descriptive"));
+            .contains("persistent provider evidence requires strong"));
+    }
+
+    #[test]
+    fn ephemeral_smoke_survives_readiness_refresh_but_not_session_reset() {
+        let store = ProviderValidationStore::default();
+        let current = key("ort-1", "runtime-version-sha256:abc");
+        store.record(report(current.clone())).unwrap();
+        assert!(
+            store
+                .lookup(&current)
+                .unwrap()
+                .unwrap()
+                .smoke_inference_passed
+        );
+        store.clear_ephemeral();
+        assert!(store.lookup(&current).unwrap().is_none());
+    }
+
+    #[test]
+    fn stale_report_selection_is_deterministic_and_prefers_platform_then_time() {
+        let store = ProviderValidationStore::default();
+        let mut older = report(key("ort-old", "library-a"));
+        older.scope = ValidationScope::PersistentTrusted;
+        older.reusable_across_restart = true;
+        older.validated_at = 10;
+        store.record(older).unwrap();
+
+        let mut newer_key = key("ort-new", "library-b");
+        newer_key.os = "linux".to_owned();
+        let mut newer = report(newer_key);
+        newer.scope = ValidationScope::PersistentTrusted;
+        newer.reusable_across_restart = true;
+        newer.validated_at = 20;
+        store.record(newer).unwrap();
+
+        let stale = store
+            .lookup(&key("ort-current", "library-c"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(stale.validated_at, 10);
+        assert_eq!(stale.scope, ValidationScope::Stale);
     }
 }

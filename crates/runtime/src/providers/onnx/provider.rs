@@ -9,12 +9,13 @@ use ort::session::builder::SessionBuilder;
 use serde_json::Value;
 
 use super::platform::Acceleration;
-use crate::{DeviceKind, ExecutionProviderSpec, RuntimeOptions};
+use crate::{DeviceKind, ExecutionProviderSpec, ProviderAttempt, RuntimeOptions};
 
 pub(super) struct ConfiguredProviders {
     pub builder: SessionBuilder,
     pub selected: String,
     pub active: Vec<String>,
+    pub attempts: Vec<ProviderAttempt>,
     pub diagnostics: Vec<String>,
 }
 
@@ -29,31 +30,58 @@ pub(super) fn configure(
         .iter()
         .any(|provider| provider.name.eq_ignore_ascii_case("cpu"));
     let mut active = Vec::new();
+    let mut attempts = Vec::new();
     let mut diagnostics = Vec::new();
 
     for spec in &specs {
         match provider_dispatch(spec)? {
-            ProviderDispatch::Cpu => {}
+            ProviderDispatch::Cpu => attempts.push(ProviderAttempt {
+                provider: "cpu".to_owned(),
+                selected: false,
+                code: None,
+                reason: None,
+            }),
             ProviderDispatch::Available { name, dispatch } => {
                 match builder.with_execution_providers([dispatch.error_on_failure()]) {
                     Ok(next) => {
                         builder = next;
                         active.push(name.to_owned());
+                        attempts.push(ProviderAttempt {
+                            provider: name.to_ascii_lowercase(),
+                            selected: false,
+                            code: None,
+                            reason: None,
+                        });
                     }
                     Err(error) => {
+                        let reason = error.to_string();
                         let message = format!(
                             "ONNX Runtime provider '{}' registration failed: {}; continuing with the declared fallback chain",
                             name.to_ascii_lowercase(),
-                            error
+                            reason
                         );
                         builder = error.recover();
+                        attempts.push(ProviderAttempt {
+                            provider: name.to_ascii_lowercase(),
+                            selected: false,
+                            code: Some("PROVIDER_LOAD_FAILED".to_owned()),
+                            reason: Some(reason),
+                        });
                         diagnostics.push(message);
                     }
                 }
             }
-            ProviderDispatch::Unavailable { name, reason } => diagnostics.push(format!(
-                "ONNX Runtime provider '{name}' is unavailable: {reason}"
-            )),
+            ProviderDispatch::Unavailable { name, reason } => {
+                attempts.push(ProviderAttempt {
+                    provider: name.clone(),
+                    selected: false,
+                    code: Some("PROVIDER_UNAVAILABLE".to_owned()),
+                    reason: Some(reason.clone()),
+                });
+                diagnostics.push(format!(
+                    "ONNX Runtime provider '{name}' is unavailable: {reason}"
+                ));
+            }
         }
     }
 
@@ -84,10 +112,17 @@ pub(super) fn configure(
     }
 
     let selected = active.first().cloned().unwrap_or_else(|| "CPU".to_owned());
+    if let Some(attempt) = attempts
+        .iter_mut()
+        .find(|attempt| attempt.provider.eq_ignore_ascii_case(&selected))
+    {
+        attempt.selected = true;
+    }
     Ok(ConfiguredProviders {
         builder,
         selected,
         active,
+        attempts,
         diagnostics,
     })
 }

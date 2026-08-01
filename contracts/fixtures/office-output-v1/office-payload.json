@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "payloadKind": "omml",
+  "semanticId": "integral-limit-arrow-v1",
+  "display": true,
+  "equationLabel": "(1)",
+  "sourceLanguage": "latex",
+  "source": "\\int_{0}^{1} x\\,dx \\quad x \\to 1",
+  "ommlRef": "omml.xml"
+}

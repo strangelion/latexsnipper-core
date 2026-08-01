@@ -93,7 +93,7 @@ pub use selection_policy::{
     SelectionPreference, SelectionReason,
 };
 pub use session::{
-    RunRequest, RunResponse, RuntimeSession, SessionMetadata, TensorMap,
+    ProviderAttempt, RunRequest, RunResponse, RuntimeSession, SessionMetadata, TensorMap,
     TensorSpec as SessionTensorSpec,
 };
 #[cfg(feature = "memory-map-model-experimental")]

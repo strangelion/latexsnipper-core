@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "office-output-v1",
+  "description": "Core-produced immutable input bundle; Office CI adds host read-back hashes without rewriting this bundle.",
+  "artifacts": [
+    {"path": "contracts/fixtures/office-output-v1/document-ast.json", "sha256": "29ac790f0e77d7cae990ff52fbc24e5ae3fd2f57eeef8082e75bc077bae3deff"},
+    {"path": "contracts/fixtures/office-output-v1/formula.tex", "sha256": "afedaaef3eac2fef3b6fbbd65add5d22c7f06346d619e528ae0aa4b8cc5385d1"},
+    {"path": "contracts/fixtures/office-output-v1/omml.xml", "sha256": "9f39b7715419ed3e763cf8aa3bc544b2ecd0b24eda03ed246347e5f1c363cf27"},
+    {"path": "contracts/fixtures/office-output-v1/office-payload.json", "sha256": "092b90697975ee5bb18066d51e7a7e819e0a6950e4d0f1960c1e6f32235d3840"},
+    {"path": "contracts/fixtures/office-output-v1/expected-readback.json", "sha256": "2e2098138fdab256dd4f0f8a6df19b13770d7af35aa02dac2f9bf8f5a54e6e71"}
+  ],
+  "officeResults": {
+    "wordOmmlHash": null,
+    "excelMetadataHash": null,
+    "powerPointMetadataHash": null,
+    "olePayloadHash": null,
+    "status": "notRun",
+    "reason": "Populated only by the Office repository on a supported Office host."
+  }
+}

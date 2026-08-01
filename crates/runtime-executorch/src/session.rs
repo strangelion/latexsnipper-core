@@ -60,6 +60,10 @@ impl ExecuTorchSession {
         let metadata = SessionMetadata {
             runtime: RuntimeKind::ExecuTorch,
             model_id,
+            requested_providers: vec!["executorch-native".to_owned()],
+            effective_provider: Some("executorch-native".to_owned()),
+            fallback_chain: Vec::new(),
+            fallback_diagnostics: Vec::new(),
             methods: methods.keys().cloned().collect(),
             inputs: default.inputs.clone(),
             outputs: default.outputs.clone(),

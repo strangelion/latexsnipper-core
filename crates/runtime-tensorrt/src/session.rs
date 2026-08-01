@@ -38,6 +38,10 @@ impl TensorRtSession {
             metadata: SessionMetadata {
                 runtime,
                 model_id,
+                requested_providers: vec!["tensorrt-native".to_owned()],
+                effective_provider: Some("tensorrt-native".to_owned()),
+                fallback_chain: Vec::new(),
+                fallback_diagnostics: Vec::new(),
                 methods: Vec::new(),
                 inputs,
                 outputs,

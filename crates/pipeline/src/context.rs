@@ -582,14 +582,13 @@ impl ModelExecutor for ObservedModelExecutor {
         self.observer
             .observe(&self.model_id, ModelRuntimeEvent::InferenceStarted);
         let result = self.inner.run(input, ctx);
-        self.observer.observe(
-            &self.model_id,
-            if result.is_ok() {
-                ModelRuntimeEvent::InferenceCompleted
-            } else {
-                ModelRuntimeEvent::InferenceFailed
+        let event = match &result {
+            Ok(_) => ModelRuntimeEvent::InferenceCompleted,
+            Err(error) => ModelRuntimeEvent::InferenceFailed {
+                code: Some(error.to_string()),
             },
-        );
+        };
+        self.observer.observe(&self.model_id, event);
         result
     }
 

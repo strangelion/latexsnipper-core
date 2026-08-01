@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "policyId": "latexsnipper-int8-quality-v1",
+  "tensorMaxAbsError": 0.02,
+  "normalizedExactMatchMinimum": 0.99,
+  "cerMaximum": 0.01,
+  "terMaximum": 0.01,
+  "astParseSuccessMinimum": 1.0,
+  "semanticMismatchRateMaximum": 0.0,
+  "officeReadBackMismatchRateMaximum": 0.0,
+  "hardNegativeFprMaximum": 0.01
+}

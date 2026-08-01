@@ -102,11 +102,23 @@ impl RuntimeFactory for OnnxRuntimeFactory {
         let inner = backend.create_session_with_options(&handle, options)?;
         let input_names = inner.input_names();
         let output_names = inner.output_names();
+        let requested_providers = options
+            .providers
+            .iter()
+            .map(|provider| provider.name.clone())
+            .collect();
+        let effective_provider = inner.effective_provider();
+        let fallback_chain = inner.provider_attempts();
+        let fallback_diagnostics = inner.fallback_diagnostics();
         Ok(Box::new(OnnxRegistrySession {
             inner,
             metadata: SessionMetadata {
                 runtime: RuntimeKind::OnnxRuntime,
                 model_id: Some(model_path.to_string_lossy().into_owned()),
+                requested_providers,
+                effective_provider,
+                fallback_chain,
+                fallback_diagnostics,
                 methods: Vec::new(),
                 inputs: input_names
                     .into_iter()

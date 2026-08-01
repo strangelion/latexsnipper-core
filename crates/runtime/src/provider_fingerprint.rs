@@ -1,6 +1,7 @@
 //! Canonical provider environment fingerprint collection.
 
 use sha2::{Digest, Sha256};
+use std::path::Path;
 
 use crate::RuntimeProbe;
 
@@ -18,6 +19,9 @@ pub struct ProviderEnvironmentFingerprint {
     pub architecture: String,
     pub device_driver_fingerprint: String,
     pub smoke_model_sha256: String,
+    pub runtime_binary_sha256: String,
+    pub provider_library_sha256: String,
+    pub device_identity: String,
 }
 
 impl ProviderEnvironmentFingerprint {
@@ -73,6 +77,25 @@ impl ProviderEnvironmentFingerprint {
             devices.sort();
             tagged_sha256("runtime-device-sha256", &devices.join("\n"))
         };
+        let runtime_binary_sha256 = std::env::var_os("ORT_DYLIB_PATH")
+            .as_deref()
+            .map(Path::new)
+            .and_then(hash_file)
+            .unwrap_or_else(|| FINGERPRINT_UNKNOWN.to_owned());
+        let provider_library_sha256 = std::env::var_os("LATEXSNIPPER_PROVIDER_LIBRARY_PATH")
+            .as_deref()
+            .map(Path::new)
+            .and_then(hash_file)
+            .or_else(|| (provider == "cpu").then(|| runtime_binary_sha256.clone()))
+            .unwrap_or_else(|| FINGERPRINT_UNKNOWN.to_owned());
+        let device_identity = if provider == "cpu" {
+            format!("cpu:{}:{}", std::env::consts::OS, std::env::consts::ARCH)
+        } else {
+            std::env::var("LATEXSNIPPER_DEVICE_IDENTITY")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| FINGERPRINT_UNKNOWN.to_owned())
+        };
 
         Self {
             core_version: core_version.into(),
@@ -86,6 +109,9 @@ impl ProviderEnvironmentFingerprint {
                 .filter(|sha| is_sha256(sha))
                 .map(str::to_ascii_lowercase)
                 .unwrap_or_else(|| FINGERPRINT_UNAVAILABLE.to_owned()),
+            runtime_binary_sha256,
+            provider_library_sha256,
+            device_identity,
         }
     }
 
@@ -95,10 +121,18 @@ impl ProviderEnvironmentFingerprint {
             self.provider_library_fingerprint.as_str(),
             self.device_driver_fingerprint.as_str(),
             self.smoke_model_sha256.as_str(),
+            self.runtime_binary_sha256.as_str(),
+            self.provider_library_sha256.as_str(),
+            self.device_identity.as_str(),
         ]
         .iter()
         .all(|value| !is_weak_observation(value))
     }
+}
+
+fn hash_file(path: &Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    Some(format!("{:x}", Sha256::digest(bytes)))
 }
 
 pub fn is_weak_observation(value: &str) -> bool {

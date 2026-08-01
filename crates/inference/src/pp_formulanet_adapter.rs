@@ -30,6 +30,8 @@ pub struct PPFormulaNetAdapter {
     name: String,
     model_id: String,
     variant_id: String,
+    runtime: String,
+    effective_provider: String,
     session: Box<dyn RuntimeSession>,
     input_name: String,
     config: BackendConfig,
@@ -72,11 +74,19 @@ impl PPFormulaNetAdapter {
             .ok_or_else(|| {
                 SnipperError::Model("PP-FormulaNet Paddle program declares no input".to_owned())
             })?;
+        let runtime = session.metadata().runtime.to_string();
+        let effective_provider = session
+            .metadata()
+            .effective_provider
+            .clone()
+            .unwrap_or_else(|| "unknown".to_owned());
 
         Ok(Self {
             name: "pp-formulanet-s".to_owned(),
             model_id: resolved.model_id.clone(),
             variant_id: resolved.variant_id.clone(),
+            runtime,
+            effective_provider,
             session,
             input_name,
             config: BackendConfig::from_config(model_config),
@@ -127,8 +137,8 @@ impl PPFormulaNetAdapter {
         result = result.with_provenance(RecognitionProvenance {
             model_id: self.model_id.clone(),
             model_version: self.variant_id.clone(),
-            runtime: RuntimeKind::PaddleInference.to_string(),
-            provider: "paddle-native".to_owned(),
+            runtime: self.runtime.clone(),
+            provider: self.effective_provider.clone(),
             source_region: None,
             raw_confidence: Some(0.0),
             normalized_confidence: Some(normalized_confidence),

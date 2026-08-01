@@ -50,6 +50,16 @@ pub enum ArtifactKind {
     RenderFragment,
     Export,
     PipelineStage,
+    DrawingSource,
+    DrawingAst,
+    DrawingScene,
+    DrawingSvg,
+    DrawingPdf,
+    DrawingPng,
+    DrawingWebP,
+    DrawingEps,
+    DrawingManifest,
+    DrawingOfficePayload,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

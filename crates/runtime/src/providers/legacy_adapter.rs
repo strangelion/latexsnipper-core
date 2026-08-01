@@ -86,12 +86,27 @@ impl RuntimeFactory for LegacyRuntimeAdapter {
         )?;
         let input_names = inner.input_names();
         let output_names = inner.output_names();
+        let requested_providers = options
+            .providers
+            .iter()
+            .map(|provider| provider.name.clone())
+            .collect();
+        let effective_provider = inner
+            .effective_provider()
+            .or_else(|| Some(self.backend.selected_provider()))
+            .filter(|provider| !provider.eq_ignore_ascii_case("unknown"));
+        let fallback_chain = inner.provider_attempts();
+        let fallback_diagnostics = inner.fallback_diagnostics();
 
         Ok(Box::new(LegacySession {
             inner,
             metadata: SessionMetadata {
                 runtime: self.kind(),
                 model_id: model_path.to_str().map(|s| s.to_string()),
+                requested_providers,
+                effective_provider,
+                fallback_chain,
+                fallback_diagnostics,
                 methods: Vec::new(),
                 inputs: input_names
                     .iter()

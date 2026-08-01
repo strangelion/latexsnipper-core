@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "runtime": "onnxruntime-1.28",
+  "rustBinding": "ort-2.0.0-rc.13",
+  "apiFeature": "api-27",
+  "cases": [
+    {"id": "windows-cpu-onnx-none-fp32-explicit", "os": "windows", "provider": "cpu", "format": "onnx", "externalData": "none", "quantization": "fp32", "providerPolicy": "explicit", "ciStatus": "required", "fallbackReportedAsRequested": false},
+    {"id": "windows-cpu-ort-single-int8-explicit", "os": "windows", "provider": "cpu", "format": "ort", "externalData": "single", "quantization": "int8", "providerPolicy": "explicit", "ciStatus": "required", "fallbackReportedAsRequested": false},
+    {"id": "windows-directml-onnx-multiple-int8", "os": "windows", "provider": "directml", "format": "onnx", "externalData": "multiple", "quantization": "int8", "providerPolicy": "fallback-disabled", "ciStatus": "notRun", "reason": "GitHub hosted runner GPU identity and DirectML execution are not guaranteed", "fallbackReportedAsRequested": false},
+    {"id": "linux-cpu-onnx-multiple-fp32", "os": "linux", "provider": "cpu", "format": "onnx", "externalData": "multiple", "quantization": "fp32", "providerPolicy": "explicit", "ciStatus": "required", "fallbackReportedAsRequested": false},
+    {"id": "linux-cuda-onnx-single-int8", "os": "linux", "provider": "cuda", "format": "onnx", "externalData": "single", "quantization": "int8", "providerPolicy": "fallback-disabled", "ciStatus": "notRun", "reason": "standard CI has no pinned CUDA device and driver", "fallbackReportedAsRequested": false},
+    {"id": "linux-tensorrt-ort-none-int8", "os": "linux", "provider": "tensorrt", "format": "ort", "externalData": "none", "quantization": "int8", "providerPolicy": "fallback-disabled", "ciStatus": "notRun", "reason": "standard CI has no pinned TensorRT engine and GPU", "fallbackReportedAsRequested": false},
+    {"id": "macos-cpu-onnx-single-fp16", "os": "macos", "provider": "cpu", "format": "onnx", "externalData": "single", "quantization": "fp16", "providerPolicy": "explicit", "ciStatus": "required", "fallbackReportedAsRequested": false},
+    {"id": "macos-coreml-onnx-none-int8", "os": "macos", "provider": "coreml", "format": "onnx", "externalData": "none", "quantization": "int8", "providerPolicy": "fallback-disabled", "ciStatus": "notRun", "reason": "requires a pinned Apple model/device capability result", "fallbackReportedAsRequested": false}
+  ]
+}

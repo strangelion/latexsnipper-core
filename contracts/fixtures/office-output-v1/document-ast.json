@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "kind": "displayMath",
+  "semanticId": "integral-limit-arrow-v1",
+  "children": [
+    {"kind": "largeOperator", "operator": "integral", "lower": "0", "upper": "1", "body": "x"},
+    {"kind": "relation", "operator": "rightArrow", "from": "x", "to": "1"}
+  ]
+}

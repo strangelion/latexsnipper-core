@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "thresholdPolicy": "quality/int8/thresholds.v1.json",
+  "fixedIdentity": ["modelSha256", "tokenizerSha256", "datasetSha256", "normalizationVersion", "astCanonicalizerVersion"],
+  "cases": [
+    {"id": "cpu-fp32-baseline", "requestedProvider": "cpu", "quantization": "fp32", "ciStatus": "required", "fallbackReportedAsRequested": false},
+    {"id": "cpu-int8", "requestedProvider": "cpu", "quantization": "int8", "ciStatus": "blocked", "reason": "no redistributable fixed INT8 formula model has been approved", "fallbackReportedAsRequested": false},
+    {"id": "directml-int8", "requestedProvider": "directml", "quantization": "int8", "ciStatus": "notRun", "reason": "no pinned DirectML GPU runner", "fallbackReportedAsRequested": false},
+    {"id": "cuda-int8", "requestedProvider": "cuda", "quantization": "int8", "ciStatus": "notRun", "reason": "no pinned CUDA GPU runner", "fallbackReportedAsRequested": false},
+    {"id": "tensorrt-int8", "requestedProvider": "tensorrt", "quantization": "int8", "ciStatus": "notRun", "reason": "no pinned TensorRT GPU runner", "fallbackReportedAsRequested": false},
+    {"id": "coreml-int8", "requestedProvider": "coreml", "quantization": "int8", "ciStatus": "notRun", "reason": "no approved CoreML INT8 capability evidence", "fallbackReportedAsRequested": false}
+  ]
+}

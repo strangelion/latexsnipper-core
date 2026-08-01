@@ -22,7 +22,16 @@ CONTRACT_FILES = (
     "crates/cli/src/main.rs",
     "crates/wasm/js/src/types.ts",
     "crates/evaluation/src/schema.rs",
+    "crates/evaluation/src/int8.rs",
+    "crates/evaluation/src/failure_corpus.rs",
     "crates/fidelity/src/lib.rs",
+    "contracts/agent/core-runtime-contract.v1.yaml",
+    "contracts/agent/core-provider-contract.v1.yaml",
+    "contracts/agent/core-quality-contract.v1.yaml",
+    "contracts/agent/core-conversion-contract.v1.yaml",
+    "contracts/agent/core-security-contract.v1.yaml",
+    "quality/failure-corpus/candidate.schema.json",
+    "quality/int8/thresholds.v1.json",
 )
 PUBLIC_RUST_TREES = (
     "crates/foundation/src",
@@ -42,6 +51,7 @@ PUBLIC_RUST_TREES = (
     "crates/plugin-wasi/src",
     "crates/ffi/src",
     "crates/wasm/src",
+    "crates/drawing/src",
 )
 
 

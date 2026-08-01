@@ -7,7 +7,7 @@ use latexsnipper_api_types::{
     CoreErrorCode, EngineReadiness, ModeReadiness, ModelQualityReadiness, ModelQualityStatus,
     ModelReadiness as ApiModelReadiness, ProviderValidationKey, ProviderValidationLevel,
     ProviderValidationPolicy, ProviderValidationReport, ProviderValidationRequest,
-    RuntimeReadiness, TaskReadiness, READINESS_SCHEMA_VERSION,
+    RuntimeReadiness, TaskReadiness, ValidationScope, READINESS_SCHEMA_VERSION,
 };
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
@@ -23,13 +23,12 @@ use latexsnipper_pipeline::{
 #[cfg(feature = "native")]
 use latexsnipper_runtime::FsModelResolver;
 use latexsnipper_runtime::{
-    is_weak_observation, AccelerationMode, ExecutionProviderSpec, ModelPackage, ModelRegistry,
-    ModelRuntimeEvent, ModelRuntimeObservation, ModelRuntimeObserver, ModelScanIssue,
-    ModelScanReport, ModelSelectionDecision, ModelSelectionPolicy, ModelSelectionRequest,
-    ModelTask, PreparedModel, ProviderEnvironmentFingerprint, ProviderSmokeFixture,
-    RegistryRuntimeBackend, ResolvedRuntimeVariant, RuntimeArtifacts, RuntimeBackend,
-    RuntimeFactory, RuntimeKind, RuntimeOptions, RuntimeProbe, RuntimeRegistry, RuntimeSession,
-    SharedModelResolver,
+    AccelerationMode, ExecutionProviderSpec, ModelPackage, ModelRegistry, ModelRuntimeEvent,
+    ModelRuntimeObservation, ModelRuntimeObserver, ModelScanIssue, ModelScanReport,
+    ModelSelectionDecision, ModelSelectionPolicy, ModelSelectionRequest, ModelTask, PreparedModel,
+    ProviderEnvironmentFingerprint, ProviderSmokeFixture, RegistryRuntimeBackend,
+    ResolvedRuntimeVariant, RuntimeArtifacts, RuntimeBackend, RuntimeFactory, RuntimeKind,
+    RuntimeOptions, RuntimeProbe, RuntimeRegistry, RuntimeSession, SharedModelResolver,
 };
 
 use crate::config::EngineConfig;
@@ -162,18 +161,10 @@ fn current_provider_key(
         architecture: fingerprint.architecture,
         device_driver_fingerprint: fingerprint.device_driver_fingerprint,
         smoke_model_sha256: fingerprint.smoke_model_sha256,
+        runtime_binary_sha256: fingerprint.runtime_binary_sha256,
+        provider_library_sha256: fingerprint.provider_library_sha256,
+        device_identity: fingerprint.device_identity,
     }
-}
-
-fn provider_key_is_strong(key: &ProviderValidationKey) -> bool {
-    [
-        key.runtime_version.as_str(),
-        key.provider_library_fingerprint.as_str(),
-        key.device_driver_fingerprint.as_str(),
-        key.smoke_model_sha256.as_str(),
-    ]
-    .iter()
-    .all(|value| !is_weak_observation(value))
 }
 
 fn declared_model_sha256(manifest: &latexsnipper_runtime::ModelManifest) -> String {
@@ -280,7 +271,14 @@ fn load_model_quality_registry(config: &EngineConfig) -> ModelQualityRegistry {
                 root.display(),
                 error
             );
-            ModelQualityRegistry::default()
+            let message = error.to_string();
+            let lower = message.to_ascii_lowercase();
+            let code = if lower.contains("hash mismatch") {
+                CoreErrorCode::QualityBaselineHashMismatch
+            } else {
+                CoreErrorCode::QualityBaselineIndexInvalid
+            };
+            ModelQualityRegistry::unavailable(code, message)
         }
     }
 }
@@ -708,6 +706,16 @@ impl SnipperEngine {
                                 smoke_inference_passed: false,
                                 benchmark_measured: false,
                                 benchmark_validated: false,
+                                scope: ValidationScope::CurrentProcess,
+                                reusable_across_restart: false,
+                                validated_at: 0,
+                                duration_ms: 0,
+                                runtime_instance_id: self
+                                    .provider_validation_store
+                                    .runtime_instance_id()
+                                    .to_owned(),
+                                session_generation: 0,
+                                last_failure_code: None,
                                 key: Some(key),
                                 stale: false,
                                 diagnostics: vec![
@@ -745,32 +753,30 @@ impl SnipperEngine {
             .into_iter()
             .map(|(manifest, model_dir)| {
                 match self.prepare_model_runtime(manifest, model_dir, None) {
-                    Ok(resolved) => {
-                        let runtime = resolved.runtime.to_string();
-                        let provider = resolved
-                            .options
-                            .providers
-                            .first()
-                            .map(|provider| provider.name.clone())
-                            .unwrap_or_else(|| "unknown".to_owned());
+                    Ok(_resolved) => {
+                        let state = technical_states
+                            .get(&manifest.id)
+                            .cloned()
+                            .unwrap_or_default();
+                        let runtime = state.runtime.clone();
+                        let provider = state.effective_provider.clone();
                         let quality =
                             self.model_quality_registry.validate(ModelQualityValidation {
                                 model_id: &manifest.id,
                                 model_version: &manifest.version,
                                 model_sha256: &declared_model_sha256(manifest),
                                 dataset_version: None,
-                                runtime: Some(&runtime),
-                                provider: Some(&provider),
+                                runtime: runtime.as_deref(),
+                                provider: provider.as_deref(),
                             });
-                        let state = technical_states
-                            .get(&manifest.id)
-                            .copied()
-                            .unwrap_or_default();
                         let technical_ready = state.executor_created
                             && state.session_created
-                            && state.latest_inference_succeeded();
+                            && state.latest_inference_succeeded()
+                            && provider.is_some();
                         let code = if technical_ready {
                             quality.code
+                        } else if provider.is_none() {
+                            Some(CoreErrorCode::ModelEffectiveProviderUnknown)
                         } else {
                             Some(CoreErrorCode::ProviderValidationRequired)
                         };
@@ -795,8 +801,8 @@ impl SnipperEngine {
                                 smoke_inference_passed: state.latest_inference_succeeded(),
                                 technical_ready,
                                 quality_status: quality.status,
-                                runtime: Some(runtime),
-                                provider: Some(provider),
+                                runtime,
+                                provider,
                                 code,
                                 message,
                             },
@@ -971,6 +977,7 @@ impl SnipperEngine {
         &self,
         request: ProviderValidationRequest,
     ) -> Result<ProviderValidationReport> {
+        let validation_started = std::time::Instant::now();
         let provider = request.provider.to_ascii_lowercase();
         let runtime_probe =
             self.runtime_registry
@@ -994,6 +1001,16 @@ impl SnipperEngine {
                 smoke_inference_passed: false,
                 benchmark_measured: false,
                 benchmark_validated: false,
+                scope: ValidationScope::CurrentProcess,
+                reusable_across_restart: false,
+                validated_at: 0,
+                duration_ms: 0,
+                runtime_instance_id: self
+                    .provider_validation_store
+                    .runtime_instance_id()
+                    .to_owned(),
+                session_generation: 0,
+                last_failure_code: Some(CoreErrorCode::ProviderUnavailable.as_str().to_owned()),
                 key: request.key,
                 stale: false,
                 diagnostics: vec![format!(
@@ -1040,6 +1057,16 @@ impl SnipperEngine {
             smoke_inference_passed: false,
             benchmark_measured: false,
             benchmark_validated: false,
+            scope: ValidationScope::CurrentProcess,
+            reusable_across_restart: false,
+            validated_at: 0,
+            duration_ms: 0,
+            runtime_instance_id: self
+                .provider_validation_store
+                .runtime_instance_id()
+                .to_owned(),
+            session_generation: 0,
+            last_failure_code: None,
             key: Some(key),
             stale: false,
             diagnostics: Vec::new(),
@@ -1059,15 +1086,40 @@ impl SnipperEngine {
                         .create_session(&runtime_kind, &artifacts, &options)
                     {
                         Ok(created) => {
-                            report.session_created = true;
-                            report.validation_level = ProviderValidationLevel::SessionCreated;
-                            session = Some(created);
+                            if let Some(effective) = created.metadata().effective_provider.clone() {
+                                report.provider = effective.to_ascii_lowercase();
+                                report.key =
+                                    Some(current_provider_key(&report.provider, &probe, smoke_sha));
+                                report.session_created = true;
+                                report.validation_level = ProviderValidationLevel::SessionCreated;
+                                report
+                                    .diagnostics
+                                    .extend(created.metadata().fallback_diagnostics.clone());
+                                session = Some(created);
+                            } else {
+                                report.last_failure_code = Some(
+                                    CoreErrorCode::ModelEffectiveProviderUnknown
+                                        .as_str()
+                                        .to_owned(),
+                                );
+                                report.diagnostics.push(format!(
+                                    "{}: runtime session did not report an effective provider",
+                                    CoreErrorCode::ModelEffectiveProviderUnknown.as_str()
+                                ));
+                            }
                         }
-                        Err(error) => report.diagnostics.push(format!(
-                            "{}: {}",
-                            CoreErrorCode::ProviderSessionCreateFailed.as_str(),
-                            error
-                        )),
+                        Err(error) => {
+                            report.last_failure_code = Some(
+                                CoreErrorCode::ProviderSessionCreateFailed
+                                    .as_str()
+                                    .to_owned(),
+                            );
+                            report.diagnostics.push(format!(
+                                "{}: {}",
+                                CoreErrorCode::ProviderSessionCreateFailed.as_str(),
+                                error
+                            ));
+                        }
                     }
                 }
                 Ok(None) if request.policy == ProviderValidationPolicy::CreateSession => {
@@ -1085,15 +1137,38 @@ impl SnipperEngine {
                             vec![ExecutionProviderSpec::new(report.provider.clone())];
                         match self.runtime_registry.create_resolved_session(&resolved) {
                             Ok(created) => {
-                                report.session_created = true;
-                                report.validation_level = ProviderValidationLevel::SessionCreated;
-                                session = Some(created);
-                                break;
+                                if let Some(effective) =
+                                    created.metadata().effective_provider.clone()
+                                {
+                                    report.provider = effective.to_ascii_lowercase();
+                                    report.key = Some(current_provider_key(
+                                        &report.provider,
+                                        &probe,
+                                        smoke_sha,
+                                    ));
+                                    report.session_created = true;
+                                    report.validation_level =
+                                        ProviderValidationLevel::SessionCreated;
+                                    report
+                                        .diagnostics
+                                        .extend(created.metadata().fallback_diagnostics.clone());
+                                    session = Some(created);
+                                    break;
+                                }
+                                failures.push(format!(
+                                    "{}: runtime session did not report an effective provider",
+                                    CoreErrorCode::ModelEffectiveProviderUnknown.as_str()
+                                ));
                             }
                             Err(error) => failures.push(error.to_string()),
                         }
                     }
                     if !report.session_created {
+                        report.last_failure_code = Some(
+                            CoreErrorCode::ProviderSessionCreateFailed
+                                .as_str()
+                                .to_owned(),
+                        );
                         report.diagnostics.push(format!(
                             "{}: no installed model session could be created ({})",
                             CoreErrorCode::ProviderSessionCreateFailed.as_str(),
@@ -1160,22 +1235,31 @@ impl SnipperEngine {
                             }
                         }
                     }
-                    Err(error) => report.diagnostics.push(format!(
-                        "{}: {}",
-                        CoreErrorCode::ProviderSmokeInferenceFailed.as_str(),
-                        error
-                    )),
+                    Err(error) => {
+                        report.last_failure_code = Some(
+                            CoreErrorCode::ProviderSmokeInferenceFailed
+                                .as_str()
+                                .to_owned(),
+                        );
+                        report.diagnostics.push(format!(
+                            "{}: {}",
+                            CoreErrorCode::ProviderSmokeInferenceFailed.as_str(),
+                            error
+                        ));
+                    }
                 }
             }
         }
-        if report.key.as_ref().is_some_and(provider_key_is_strong) {
-            self.provider_validation_store.record(report.clone())?;
-        } else {
-            report.diagnostics.push(
-                "provider result was not cached because one or more environment observations are weak, descriptive, or unavailable"
-                    .to_owned(),
-            );
-        }
+        report.validated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+            .unwrap_or_default();
+        report.duration_ms = validation_started
+            .elapsed()
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64;
+        report.session_generation = self.provider_validation_store.next_session_generation();
+        self.provider_validation_store.record(report.clone())?;
         Ok(report)
     }
 
@@ -1592,6 +1676,7 @@ impl SnipperEngine {
     /// Next inference call will create fresh sessions.
     pub fn clear_runtime_sessions(&self) {
         self.runtime_registry.clear_sessions();
+        self.provider_validation_store.clear_ephemeral();
         if let Ok(mut states) = self.model_technical_state.write() {
             states.clear();
         }
@@ -1604,6 +1689,7 @@ impl SnipperEngine {
     ///
     /// Returns a scan report describing what was loaded and any issues.
     pub fn rescan_models(&mut self) -> Result<ModelScanReport> {
+        self.provider_validation_store.clear_ephemeral();
         self.model_registry.clear_models();
 
         let report = self
@@ -1630,6 +1716,7 @@ impl SnipperEngine {
     /// After calling this, the next recognition will use the updated models.
     pub fn reload_all_models(&mut self) -> Result<ModelScanReport> {
         self.runtime_registry.clear_sessions();
+        self.provider_validation_store.clear_ephemeral();
         self.rescan_models()
     }
 
@@ -1639,6 +1726,7 @@ impl SnipperEngine {
     pub fn reload_model(&self, session_key: &str) -> Result<()> {
         info!("Reloading model: {}", session_key);
         self.runtime_registry.clear_sessions();
+        self.provider_validation_store.clear_ephemeral();
         Ok(())
     }
 
@@ -1649,6 +1737,7 @@ impl SnipperEngine {
 
     /// Set a new model resolver (for hot-swapping model sources).
     pub fn set_model_resolver(&mut self, resolver: SharedModelResolver) {
+        self.provider_validation_store.clear_ephemeral();
         self.model_resolver = Some(resolver);
     }
 
@@ -2415,7 +2504,10 @@ mod readiness_tests {
         };
         for event in [
             ModelRuntimeEvent::ExecutorCreated,
-            ModelRuntimeEvent::SessionCreated,
+            ModelRuntimeEvent::SessionCreated {
+                runtime: "onnxruntime".to_owned(),
+                effective_provider: "cpu".to_owned(),
+            },
             ModelRuntimeEvent::InferenceStarted,
             ModelRuntimeEvent::InferenceCompleted,
         ] {

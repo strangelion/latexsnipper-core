@@ -21,3 +21,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 [[bin]]
 name = "ocr-eval"
 path = "src/main.rs"
+
+[[bin]]
+name = "int8-contract"
+path = "src/bin/int8_contract.rs"

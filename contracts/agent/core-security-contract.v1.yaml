@@ -1,0 +1,168 @@
+{
+  "contractVersion": 1,
+  "name": "ORT 1.28, model package, and Drawing security contract",
+  "rules": [
+    {
+      "id": "CORE-DRAWING-TIKZ-001",
+      "description": "TikZ source remains editable and preserved through source-only parsing without a false lossless claim.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "source_adapters_preserve_advanced_languages_without_lossless_claims"]},
+      "failureMessage": "TikZ source preservation contract failed."
+    },
+    {
+      "id": "CORE-DRAWING-PGFPLOTS-001",
+      "description": "PGFPlots is a TikZ package profile and requires a versioned package lock.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "tikz_and_pgfplots_require_a_versioned_package_lock"]},
+      "failureMessage": "PGFPlots package-profile lock contract failed."
+    },
+    {
+      "id": "CORE-DRAWING-MERMAID-001",
+      "description": "Mermaid uses source-preserving parsing and strict-mode security.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "strict_defaults_block_shell_network_and_experimental_languages"]},
+      "failureMessage": "Mermaid strict security contract failed."
+    },
+    {
+      "id": "CORE-DRAWING-GRAPHVIZ-001",
+      "description": "Graphviz output is available only after probing the installed output plugin.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "graphviz_output_requires_a_probed_plugin"]},
+      "failureMessage": "Graphviz output was assumed rather than probed."
+    },
+    {
+      "id": "CORE-DRAWING-PLANTUML-001",
+      "description": "PlantUML remains experimental and blocks includes, imports and environment access by default.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "strict_defaults_block_shell_network_and_experimental_languages"]},
+      "failureMessage": "PlantUML sandbox contract failed."
+    },
+    {
+      "id": "CORE-DRAWING-ASYMPTOTE-001",
+      "description": "Asymptote remains experimental, local-only and unavailable without an explicit sidecar.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "readiness_never_promotes_missing_engines"]},
+      "failureMessage": "Asymptote readiness or remote-render policy overclaimed support."
+    },
+    {
+      "id": "CORE-DRAWING-CACHE-001",
+      "description": "Drawing cache identity changes with renderer, package lock and resource digests.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "cache_key_changes_with_renderer_package_and_resources"]},
+      "failureMessage": "Drawing cache key omitted a renderer or resource identity."
+    },
+    {
+      "id": "CORE-ORT128-MATRIX-001",
+      "description": "ORT 1.28 matrix explicitly distinguishes required, unsupported, blocked, and not-run cases.",
+      "severity": "blocking",
+      "suite": "ort128",
+      "scope": ["runtime", "model"],
+      "evidence": {"kind": "truthfulMatrix", "matrix": "tests/matrices/ort-1.28-matrix.yaml"},
+      "failureMessage": "ORT matrix contains an unsupported success claim."
+    },
+    {
+      "id": "CORE-ORT128-EXTERNAL-DATA-001",
+      "description": "External data validates paths, hashes, sizes, counts, duplicates and symlink containment.",
+      "severity": "blocking",
+      "suite": "ort128",
+      "scope": ["model"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-model", "external_data"]},
+      "failureMessage": "ONNX external data validation did not fail closed."
+    },
+    {
+      "id": "CORE-ORT128-FALLBACK-001",
+      "description": "Provider order is explicit and CPU fallback is never invented.",
+      "severity": "blocking",
+      "suite": "ort128",
+      "scope": ["runtime"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "onnx_provider_chain_does_not_invent_cpu_fallback"]},
+      "failureMessage": "ORT silently invented CPU fallback."
+    },
+    {
+      "id": "CORE-ORT128-EXTERNAL-DATA-UPDATE-001",
+      "description": "Model generation switching validates staged data before atomically publishing a manifest and retains old-session ownership.",
+      "severity": "blocking",
+      "suite": "ort128",
+      "scope": ["model", "runtime"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "--workspace", "external_data_update"]},
+      "failureMessage": "External-data generation update is not atomic or session-safe."
+    },
+    {
+      "id": "CORE-MODEL-PACKAGE-MAPPING-001",
+      "description": "Model artifacts declare role and format; dynamic libraries and role collisions are rejected.",
+      "severity": "blocking",
+      "suite": "model-package-security",
+      "scope": ["model"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-model"]},
+      "failureMessage": "Model package mapping or security validation failed."
+    },
+    {
+      "id": "CORE-ORT128-EXTERNAL-DATA-SESSION-001",
+      "description": "Active callers retain old model mappings while new sessions use the atomically published generation.",
+      "severity": "blocking",
+      "suite": "model-package-security",
+      "scope": ["runtime", "model"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "--features", "memory-map-model-experimental", "hot_reload_keeps_old_and_new_versions_alive_for_active_callers"]},
+      "failureMessage": "Model generation switch invalidated an active old session."
+    },
+    {
+      "id": "CORE-DRAWING-SVG-SANITIZE-001",
+      "description": "SVG scripts, event handlers, external references, DTDs and complexity bombs fail closed.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "svg"]},
+      "failureMessage": "Hostile SVG was accepted."
+    },
+    {
+      "id": "CORE-DRAWING-COMPILERS-001",
+      "description": "Missing or unpinned Drawing sidecars are blocked rather than represented as available.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "absent_sidecar_is_blocked_instead_of_claimed_available"]},
+      "failureMessage": "Drawing compiler readiness overclaimed unavailable tooling."
+    },
+    {
+      "id": "CORE-DRAWING-PACKAGE-PROFILE-001",
+      "description": "Experimental package profiles require explicit package locks.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "chemfig_is_experimental_and_requires_an_explicit_lock"]},
+      "failureMessage": "An unpinned Drawing package profile was enabled."
+    },
+    {
+      "id": "CORE-DRAWING-NATIVE-SHAPE-SUBSET-001",
+      "description": "Complex drawings fall back to sanitized SVG instead of lossy native shapes.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "office-output"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "native_shape_subset_falls_back_to_svg_for_complex_paths"]},
+      "failureMessage": "Unsupported native shape conversion lost drawing semantics."
+    },
+    {
+      "id": "CORE-DRAWING-FAILURE-CORPUS-001",
+      "description": "Drawing failure candidates retain hashes and diagnostics, not raw private source.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "quality"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "failure_candidate_contains_hash_not_raw_source"]},
+      "failureMessage": "Drawing failure candidate retained raw user source."
+    }
+  ]
+}

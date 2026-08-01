@@ -75,6 +75,10 @@ impl RuntimeFactory for TestFactory {
             metadata: SessionMetadata {
                 runtime: self.kind.clone(),
                 model_id: Some("echo".to_owned()),
+                requested_providers: vec!["test".to_owned()],
+                effective_provider: Some("test".to_owned()),
+                fallback_chain: Vec::new(),
+                fallback_diagnostics: Vec::new(),
                 methods: Vec::new(),
                 inputs: vec![SessionTensorSpec {
                     name: "x".to_owned(),

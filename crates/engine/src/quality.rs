@@ -76,6 +76,7 @@ struct BaselineTrustIndex {
 #[derive(Debug, Clone, Default)]
 pub struct ModelQualityRegistry {
     baselines: HashMap<ModelQualityKey, TrustedRecord>,
+    load_error: Option<(CoreErrorCode, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,7 +92,13 @@ pub struct ModelQualityValidation<'a> {
 impl ModelQualityRegistry {
     pub fn load(root: &Path) -> Result<Self> {
         if !root.exists() {
-            return Ok(Self::default());
+            return Ok(Self::unavailable(
+                CoreErrorCode::QualityBaselineDirectoryMissing,
+                format!(
+                    "quality baseline directory '{}' does not exist",
+                    root.display()
+                ),
+            ));
         }
         let index_path = root.join("index.json");
         let index_bytes = fs::read(&index_path).map_err(|error| {
@@ -181,13 +188,21 @@ impl ModelQualityRegistry {
     }
 
     pub fn validate(&self, expected: ModelQualityValidation<'_>) -> ModelQualityReadiness {
+        if let Some((code, message)) = &self.load_error {
+            return quality_failure(
+                &expected,
+                ModelQualityStatus::BaselineMissing,
+                *code,
+                message.clone(),
+            );
+        }
         if expected.runtime.is_none_or(is_unknown_identity)
             || expected.provider.is_none_or(is_unknown_identity)
         {
             return quality_failure(
                 &expected,
                 ModelQualityStatus::BaselineMissing,
-                CoreErrorCode::ModelBaselineMissing,
+                CoreErrorCode::ModelEffectiveProviderUnknown,
                 "runtime and effective provider must be known before quality evidence can match"
                     .to_owned(),
             );
@@ -216,36 +231,40 @@ impl ModelQualityRegistry {
         let mismatch = [
             (
                 "model SHA",
+                CoreErrorCode::ModelBaselineMissing,
                 !record
                     .model_sha256
                     .eq_ignore_ascii_case(expected.model_sha256),
             ),
             (
                 "dataset version",
+                CoreErrorCode::ModelBaselineDatasetMismatch,
                 expected
                     .dataset_version
                     .is_some_and(|value| value != record.dataset_version),
             ),
             (
                 "runtime",
+                CoreErrorCode::ModelBaselineMissing,
                 expected.runtime.is_some_and(|value| {
                     canonical_runtime(value) != canonical_runtime(&record.runtime)
                 }),
             ),
             (
                 "provider",
+                CoreErrorCode::ModelBaselineProviderMismatch,
                 expected
                     .provider
                     .is_some_and(|value| !value.eq_ignore_ascii_case(&record.provider)),
             ),
         ]
         .into_iter()
-        .find_map(|(name, differs)| differs.then_some(name));
-        if let Some(name) = mismatch {
+        .find_map(|(name, code, differs)| differs.then_some((name, code)));
+        if let Some((name, code)) = mismatch {
             return quality_failure(
                 &expected,
                 ModelQualityStatus::BaselineMissing,
-                CoreErrorCode::ModelBaselineMissing,
+                code,
                 format!(
                     "trusted baseline '{}' does not match the current {name}",
                     trusted.path.display()
@@ -294,6 +313,13 @@ impl ModelQualityRegistry {
 
     pub fn is_empty(&self) -> bool {
         self.baselines.is_empty()
+    }
+
+    pub fn unavailable(code: CoreErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            baselines: HashMap::new(),
+            load_error: Some((code, message.into())),
+        }
     }
 }
 

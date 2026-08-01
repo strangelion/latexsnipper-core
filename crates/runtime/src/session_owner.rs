@@ -148,6 +148,22 @@ impl RuntimeSessionOwnerCache {
             entries.clear();
         }
     }
+
+    /// Report files kept alive by active cached model mappings. Callers can
+    /// surface this list before upgrade/uninstall instead of hiding locks.
+    pub fn occupied_files(&self) -> Result<Vec<PathBuf>> {
+        let entries = self
+            .entries
+            .read()
+            .map_err(|_| SnipperError::Runtime("session owner cache poisoned".to_owned()))?;
+        let mut paths = entries
+            .values()
+            .filter_map(|entry| entry.memory_owner().map(|owner| owner.path().to_owned()))
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
 }
 
 #[cfg(test)]
@@ -166,6 +182,10 @@ mod tests {
                 metadata: SessionMetadata {
                     runtime: RuntimeKind::Custom("test".to_owned()),
                     model_id: Some(version.to_owned()),
+                    requested_providers: Vec::new(),
+                    effective_provider: Some("test".to_owned()),
+                    fallback_chain: Vec::new(),
+                    fallback_diagnostics: Vec::new(),
                     methods: Vec::new(),
                     inputs: Vec::new(),
                     outputs: Vec::new(),
@@ -245,6 +265,25 @@ mod tests {
         assert_ne!(
             active_old.memory_owner().unwrap().sha256(),
             active_new.memory_owner().unwrap().sha256()
+        );
+        assert_eq!(cache.occupied_files().unwrap().len(), 1);
+        assert_eq!(
+            active_old
+                .memory_owner()
+                .unwrap()
+                .path()
+                .file_name()
+                .unwrap(),
+            "v1.onnx"
+        );
+        assert_eq!(
+            active_new
+                .memory_owner()
+                .unwrap()
+                .path()
+                .file_name()
+                .unwrap(),
+            "v2.onnx"
         );
     }
 }

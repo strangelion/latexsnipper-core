@@ -39,6 +39,10 @@ impl PaddleSession {
             metadata: SessionMetadata {
                 runtime: RuntimeKind::PaddleInference,
                 model_id,
+                requested_providers: vec!["paddle-native".to_owned()],
+                effective_provider: Some("paddle-native".to_owned()),
+                fallback_chain: Vec::new(),
+                fallback_diagnostics: Vec::new(),
                 methods: Vec::new(),
                 inputs,
                 outputs,

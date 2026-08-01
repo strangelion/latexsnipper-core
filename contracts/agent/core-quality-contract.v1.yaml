@@ -1,0 +1,69 @@
+{
+  "contractVersion": 1,
+  "name": "Quality, INT8, and failure corpus contract",
+  "rules": [
+    {
+      "id": "CORE-INT8-MATRIX-TRUTH-001",
+      "description": "INT8 device matrix records absent hardware and models as blocked or not-run, never as fallback success.",
+      "severity": "blocking",
+      "suite": "int8",
+      "scope": ["evaluation", "runtime"],
+      "evidence": {"kind": "truthfulMatrix", "matrix": "tests/matrices/int8-device-matrix.v1.yaml"},
+      "failureMessage": "INT8 matrix contains a false hardware success claim."
+    },
+    {
+      "id": "CORE-QUALITY-PROVIDER-UNKNOWN-001",
+      "description": "Unknown effective provider fails quality readiness closed.",
+      "severity": "blocking",
+      "suite": "int8",
+      "scope": ["engine", "quality"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-engine", "missing_or_unknown_provider_fails_closed"]},
+      "failureMessage": "Unknown provider bypassed baseline identity validation."
+    },
+    {
+      "id": "CORE-INT8-AST-001",
+      "description": "INT8 comparison includes tensor, tokens, LaTeX, AST and conversion semantic hashes.",
+      "severity": "blocking",
+      "suite": "int8",
+      "scope": ["evaluation"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-evaluation", "int8_compares_ast_omml_and_office_with_versioned_thresholds"]},
+      "failureMessage": "INT8 semantic comparison did not enforce the versioned policy."
+    },
+    {
+      "id": "CORE-INT8-OFFICE-001",
+      "description": "Unsupported or fallback INT8 cannot pass; Office payload and read-back hashes are compared.",
+      "severity": "blocking",
+      "suite": "int8",
+      "scope": ["evaluation", "office-output"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-evaluation", "unsupported_int8_and_provider_fallback_never_pass"]},
+      "failureMessage": "Unsupported INT8 or fallback execution was represented as validated."
+    },
+    {
+      "id": "CORE-QUALITY-ERROR-DIAGNOSTICS-001",
+      "description": "Deployment, index, hash, missing baseline, provider and dataset errors remain distinct.",
+      "severity": "blocking",
+      "suite": "int8",
+      "scope": ["engine", "quality"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-engine", "quality::tests"]},
+      "failureMessage": "Quality baseline failures collapsed into an ambiguous status."
+    },
+    {
+      "id": "CORE-FAILURE-CORPUS-001",
+      "description": "Failure candidates require sanitization, redistribution permission, reproducibility, expected output and classification before promotion.",
+      "severity": "blocking",
+      "suite": "failure-corpus",
+      "scope": ["evaluation", "quality"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-evaluation", "failure_corpus"]},
+      "failureMessage": "A private or unreviewed candidate could be promoted."
+    },
+    {
+      "id": "CORE-FAILURE-CORPUS-LAYOUT-001",
+      "description": "Inbox, minimized, approved and regression stages have explicit policy files.",
+      "severity": "blocking",
+      "suite": "failure-corpus",
+      "scope": ["quality"],
+      "evidence": {"kind": "paths", "paths": ["quality/failure-corpus/inbox/README.md", "quality/failure-corpus/minimized/README.md", "quality/failure-corpus/approved/README.md", "quality/failure-corpus/regressions/index.json", "quality/failure-corpus/candidate.schema.json"]},
+      "failureMessage": "Failure corpus lifecycle directories or policy are missing."
+    }
+  ]
+}

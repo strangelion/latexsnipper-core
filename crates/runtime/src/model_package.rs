@@ -291,7 +291,17 @@ impl ModelExecutionContext {
 
         let session = self.runtime_registry.create_resolved_session(&resolved)?;
         if let Some(observer) = &self.runtime_observer {
-            observer.observe(&self.model_id, crate::ModelRuntimeEvent::SessionCreated);
+            let metadata = session.metadata();
+            observer.observe(
+                &self.model_id,
+                crate::ModelRuntimeEvent::SessionCreated {
+                    runtime: metadata.runtime.to_string(),
+                    effective_provider: metadata
+                        .effective_provider
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_owned()),
+                },
+            );
             Ok(Box::new(ObservedRuntimeSession {
                 inner: session,
                 model_id: self.model_id.clone(),
@@ -363,14 +373,13 @@ impl crate::RuntimeSession for ObservedRuntimeSession {
         self.observer
             .observe(&self.model_id, crate::ModelRuntimeEvent::InferenceStarted);
         let result = self.inner.run(request);
-        self.observer.observe(
-            &self.model_id,
-            if result.is_ok() {
-                crate::ModelRuntimeEvent::InferenceCompleted
-            } else {
-                crate::ModelRuntimeEvent::InferenceFailed
+        let event = match &result {
+            Ok(_) => crate::ModelRuntimeEvent::InferenceCompleted,
+            Err(error) => crate::ModelRuntimeEvent::InferenceFailed {
+                code: Some(error.to_string()),
             },
-        );
+        };
+        self.observer.observe(&self.model_id, event);
         result
     }
 }

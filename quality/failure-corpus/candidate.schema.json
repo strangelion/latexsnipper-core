@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://latexsnipper.dev/schemas/failure-candidate-v1.json",
+  "title": "LaTeXSnipper failure candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateId", "source", "inputHash", "inputType", "coreCommit", "diagnostics", "failureSignature", "redistributable", "sanitized", "reproducible", "hasExpectedResult", "status"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "candidateId": {"type": "string", "minLength": 1},
+    "source": {"type": "string", "minLength": 1},
+    "inputHash": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "inputType": {"type": "string", "minLength": 1},
+    "sanitizedInputRef": {"type": ["string", "null"]},
+    "expectedRef": {"type": ["string", "null"]},
+    "actualRef": {"type": ["string", "null"]},
+    "coreCommit": {"type": "string", "minLength": 7},
+    "model": {"type": ["string", "null"]},
+    "runtime": {"type": ["string", "null"]},
+    "provider": {"type": ["string", "null"]},
+    "diagnostics": {"type": "array", "items": {"type": "string"}},
+    "failureSignature": {"type": "string", "minLength": 1},
+    "astHash": {"type": ["string", "null"]},
+    "redistributable": {"type": "boolean"},
+    "license": {"type": ["string", "null"]},
+    "sanitized": {"type": "boolean"},
+    "reproducible": {"type": "boolean"},
+    "hasExpectedResult": {"type": "boolean"},
+    "errorClassification": {"type": ["string", "null"]},
+    "status": {"enum": ["new", "deduplicated", "minimized", "approved", "promoted", "rejected"]}
+  }
+}

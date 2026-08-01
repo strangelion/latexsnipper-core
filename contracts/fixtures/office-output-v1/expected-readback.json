@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "normalization": "omml-semantic-v1",
+  "semanticId": "integral-limit-arrow-v1",
+  "expectedStructures": ["nary:integral:sub-sup", "relation:rightArrow"],
+  "equationLabel": "(1)"
+}
