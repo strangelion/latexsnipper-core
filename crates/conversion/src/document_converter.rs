@@ -129,6 +129,7 @@ impl DocumentConverter {
     }
 
     /// Build the shared structural layout from any supported source format.
+    #[cfg(feature = "formula-layout")]
     pub fn formula_layout(formula: &Formula) -> Result<FormulaLayout> {
         formula
             .layout
@@ -325,6 +326,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "formula-layout")]
     fn formula_layout_adapter_supports_all_formula_sources() {
         let sources = [
             FormulaSource::Latex("\\frac{a}{b}".to_string()),

@@ -14,7 +14,7 @@ latexsnipper-foundation.workspace = true
 latexsnipper-ast.workspace = true
 latexsnipper-export = { workspace = true, optional = true }
 latexsnipper-syntax.workspace = true
-latexsnipper-inference.workspace = true
+latexsnipper-inference = { workspace = true, optional = true }
 log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -29,5 +29,12 @@ chrono = { version = "0.4", default-features = false, features = ["std"], option
 
 [features]
 default = ["native"]
-native = ["dep:latexsnipper-export", "dep:lopdf", "dep:zip", "dep:chrono"]
+native = [
+    "dep:latexsnipper-export",
+    "dep:lopdf",
+    "dep:zip",
+    "dep:chrono",
+    "formula-layout",
+]
+formula-layout = ["dep:latexsnipper-inference"]
 wasm = []
