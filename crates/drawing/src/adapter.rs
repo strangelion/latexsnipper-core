@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    validate_language_and_source, DrawingCompatibility, DrawingDocument, DrawingOutputFormat,
-    DrawingPackageProfile, DrawingSecurityError, DrawingSecurityPolicy, DrawingSource,
-    DrawingSourceLanguage,
+    validate_document_security, validate_language_and_source, DrawingCompatibility,
+    DrawingDocument, DrawingOutputFormat, DrawingPackageProfile, DrawingSecurityError,
+    DrawingSecurityPolicy, DrawingSource, DrawingSourceLanguage,
 };
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingAdapterCapabilities {
     pub source_editing: bool,
@@ -111,7 +112,7 @@ impl SourcePreservingAdapter {
             DrawingSourceLanguage::Tikz => (
                 DrawingAdapterCapabilities {
                     source_editing: true,
-                    structured_parse: true,
+                    structured_parse: false,
                     structured_emit: false,
                     lossless_round_trip: false,
                     native_compile: true,
@@ -292,6 +293,7 @@ impl DrawingSourceAdapter for SourcePreservingAdapter {
         policy: &DrawingSecurityPolicy,
     ) -> Result<DrawingCompilePlan, DrawingAdapterError> {
         self.inspect(&document.source.text, policy)?;
+        validate_document_security(document, request, policy)?;
         if self.language == DrawingSourceLanguage::Tikz
             && request.package_lock_sha256.as_deref().is_none_or(|digest| {
                 digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -319,9 +321,7 @@ impl DrawingSourceAdapter for SourcePreservingAdapter {
                     "'{key}' has no pinned executable identity"
                 ))
             })?;
-            if !identity.is_strong() {
-                return Err(DrawingSecurityError::ExecutableHashMismatch(key.to_owned()).into());
-            }
+            identity.verify_file_hash()?;
             Some(identity.path.to_string_lossy().into_owned())
         } else {
             None
@@ -513,16 +513,17 @@ mod tests {
             allow_external_processes: true,
             ..DrawingSecurityPolicy::default()
         };
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory
+            .path()
+            .join(if cfg!(windows) { "dot.exe" } else { "dot" });
+        std::fs::write(&executable, b"pinned graphviz fixture").unwrap();
         policy.allowed_executables.insert(
             "graphviz".to_owned(),
             crate::ExecutableIdentity {
-                path: if cfg!(windows) {
-                    std::path::PathBuf::from("C:\\Graphviz\\dot.exe")
-                } else {
-                    std::path::PathBuf::from("/opt/graphviz/bin/dot")
-                },
+                path: executable.canonicalize().unwrap(),
                 version: "pinned".to_owned(),
-                sha256: "a".repeat(64),
+                sha256: format!("{:x}", Sha256::digest(b"pinned graphviz fixture")),
             },
         );
         let error = adapter
@@ -540,5 +541,27 @@ mod tests {
         assert!(error
             .to_string()
             .contains("DRAWING_GRAPHVIZ_PLUGIN_UNAVAILABLE"));
+    }
+
+    #[test]
+    fn compile_plan_enforces_package_profile_allowlist() {
+        let adapter = SourcePreservingAdapter::for_language(DrawingSourceLanguage::Tikz);
+        let mut document = DrawingDocument::source_only("d", DrawingSourceLanguage::Tikz, "x");
+        document.package_profiles = vec![DrawingPackageProfile::ChemFig];
+        let error = adapter
+            .compile_plan(
+                &document,
+                &DrawingCompileRequest {
+                    output: DrawingOutputFormat::Svg,
+                    renderer_id: "tectonic".to_owned(),
+                    package_lock_sha256: Some("a".repeat(64)),
+                    resource_sha256: Vec::new(),
+                },
+                &DrawingSecurityPolicy::default(),
+            )
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("DRAWING_PACKAGE_PROFILE_NOT_ALLOWED"));
     }
 }

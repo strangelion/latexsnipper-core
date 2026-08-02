@@ -1,6 +1,7 @@
 //! Drawing-domain contracts kept separate from formula and model runtimes.
 
 mod adapter;
+mod compile;
 mod model;
 mod office;
 mod readiness;
@@ -8,6 +9,7 @@ mod security;
 mod svg;
 
 pub use adapter::*;
+pub use compile::*;
 pub use model::*;
 pub use office::*;
 pub use readiness::*;

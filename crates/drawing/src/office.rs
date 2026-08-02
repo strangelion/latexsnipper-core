@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -9,6 +11,7 @@ use crate::{
 pub const DRAWING_OFFICE_PAYLOAD_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingArtifactRef {
     pub format: DrawingOutputFormat,
@@ -18,6 +21,7 @@ pub struct DrawingArtifactRef {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct OfficeShapeScene {
     pub schema_version: u32,
@@ -26,18 +30,66 @@ pub struct OfficeShapeScene {
 
 impl OfficeShapeScene {
     pub fn from_document(document: &DrawingDocument) -> Option<Self> {
-        document
-            .objects
-            .iter()
-            .all(DrawingObject::is_native_office_shape_compatible)
-            .then(|| Self {
-                schema_version: 1,
-                objects: document.objects.clone(),
-            })
+        native_office_scene_is_valid(document).then(|| Self {
+            schema_version: 1,
+            objects: document.objects.clone(),
+        })
     }
 }
 
+fn native_office_scene_is_valid(document: &DrawingDocument) -> bool {
+    if document.objects.is_empty() || document.compatibility == DrawingCompatibility::SourceOnly {
+        return false;
+    }
+    let mut objects = BTreeMap::new();
+    for object in &document.objects {
+        let Some(id) = object.id() else {
+            return false;
+        };
+        if objects.insert(id, object).is_some() {
+            return false;
+        }
+    }
+    document.objects.iter().all(|object| {
+        validate_native_object(object, &objects, &mut BTreeSet::new(), &mut BTreeSet::new())
+    })
+}
+
+fn validate_native_object<'a>(
+    object: &'a DrawingObject,
+    objects: &BTreeMap<&'a str, &'a DrawingObject>,
+    visiting: &mut BTreeSet<&'a str>,
+    validated: &mut BTreeSet<&'a str>,
+) -> bool {
+    let Some(id) = object.id() else {
+        return false;
+    };
+    if validated.contains(id) {
+        return true;
+    }
+    if !object.is_native_office_shape_compatible() || !visiting.insert(id) {
+        return false;
+    }
+    let compatible = match object {
+        DrawingObject::Group { children, .. } => {
+            !children.is_empty()
+                && children.iter().all(|child_id| {
+                    objects.get(child_id.as_str()).is_some_and(|child| {
+                        validate_native_object(child, objects, visiting, validated)
+                    })
+                })
+        }
+        _ => true,
+    };
+    visiting.remove(id);
+    if compatible {
+        validated.insert(id);
+    }
+    compatible
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingOfficePayload {
     pub schema_version: u32,
@@ -297,5 +349,28 @@ mod tests {
         value["futureField"] = serde_json::json!({"v": 2});
         let parsed: DrawingOfficePayload = serde_json::from_value(value).unwrap();
         assert_eq!(parsed.schema_version, 1);
+    }
+
+    #[test]
+    fn empty_source_only_and_invalid_groups_never_claim_native_shapes() {
+        assert!(payload(Vec::new()).office_shape_scene.is_none());
+
+        let missing_child = payload(vec![DrawingObject::Group {
+            id: "group".to_owned(),
+            children: vec!["missing".to_owned()],
+        }]);
+        assert!(missing_child.office_shape_scene.is_none());
+
+        let cyclic = payload(vec![
+            DrawingObject::Group {
+                id: "a".to_owned(),
+                children: vec!["b".to_owned()],
+            },
+            DrawingObject::Group {
+                id: "b".to_owned(),
+                children: vec!["a".to_owned()],
+            },
+        ]);
+        assert!(cyclic.office_shape_scene.is_none());
     }
 }

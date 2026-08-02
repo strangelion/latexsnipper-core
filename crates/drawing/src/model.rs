@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 use crate::DRAWING_SCHEMA_VERSION;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DrawingSourceLanguage {
     Tikz,
@@ -20,6 +21,7 @@ pub enum DrawingSourceLanguage {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DrawingPackageProfile {
     BaseTikz,
@@ -31,6 +33,7 @@ pub enum DrawingPackageProfile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DrawingInterchangeFormat {
     DrawingJson,
@@ -40,6 +43,7 @@ pub enum DrawingInterchangeFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DrawingOutputFormat {
     Svg,
@@ -50,6 +54,7 @@ pub enum DrawingOutputFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DrawingCompatibility {
     VisualCompatible,
@@ -58,6 +63,7 @@ pub enum DrawingCompatibility {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingDocument {
     pub schema_version: u32,
@@ -112,18 +118,83 @@ impl DrawingDocument {
     }
 
     pub fn semantic_sha256(&self) -> Result<String, serde_json::Error> {
-        let bytes = serde_json::to_vec(self)?;
+        let mut value = serde_json::to_value(self)?;
+        canonicalize_document(&mut value);
+        let bytes = serde_json::to_vec(&value)?;
         Ok(format!("{:x}", Sha256::digest(bytes)))
     }
 }
 
+fn canonicalize_document(value: &mut serde_json::Value) {
+    let Some(document) = value.as_object_mut() else {
+        return;
+    };
+    // Identity and runtime provenance do not change the drawing's semantics.
+    document.remove("id");
+    document.remove("provenance");
+    for key in [
+        "packageProfiles",
+        "layers",
+        "objects",
+        "rawNodes",
+        "resources",
+        "datasets",
+    ] {
+        if let Some(serde_json::Value::Array(items)) = document.get_mut(key) {
+            for item in items.iter_mut() {
+                canonicalize_value(item);
+            }
+            items.sort_by_key(canonical_json_key);
+        }
+    }
+    canonicalize_value(value);
+}
+
+fn canonicalize_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Number(number) if number.is_f64() => {
+            if let Some(value) = number.as_f64() {
+                let quantized = if value == 0.0 {
+                    0.0
+                } else {
+                    (value * 1_000_000_000.0).round() / 1_000_000_000.0
+                };
+                if let Some(quantized) = serde_json::Number::from_f64(quantized) {
+                    *number = quantized;
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                canonicalize_value(item);
+            }
+        }
+        serde_json::Value::Object(fields) => {
+            for value in fields.values_mut() {
+                canonicalize_value(value);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn canonical_json_key(value: &serde_json::Value) -> String {
+    value
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| serde_json::to_string(value).unwrap_or_default())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingSource {
     pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingCanvas {
     pub width: f64,
@@ -142,6 +213,7 @@ impl Default for DrawingCanvas {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingLayer {
     pub id: String,
@@ -151,6 +223,7 @@ pub struct DrawingLayer {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DrawingObject {
     Point {
@@ -224,6 +297,27 @@ pub enum DrawingObject {
 }
 
 impl DrawingObject {
+    pub fn id(&self) -> Option<&str> {
+        match self {
+            Self::Point { id, .. }
+            | Self::Line { id, .. }
+            | Self::Arrow { id, .. }
+            | Self::Rect { id, .. }
+            | Self::Ellipse { id, .. }
+            | Self::Path { id, .. }
+            | Self::Node { id, .. }
+            | Self::Text { id, .. }
+            | Self::MathLabel { id, .. }
+            | Self::Axis { id, .. }
+            | Self::Plot { id, .. }
+            | Self::Graph { id, .. }
+            | Self::Tree { id, .. }
+            | Self::Group { id, .. }
+            | Self::Image { id, .. } => Some(id),
+            Self::Raw(_) => None,
+        }
+    }
+
     pub fn is_native_office_shape_compatible(&self) -> bool {
         matches!(
             self,
@@ -238,6 +332,7 @@ impl DrawingObject {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct RawDrawingNode {
     pub language: DrawingSourceLanguage,
@@ -246,6 +341,7 @@ pub struct RawDrawingNode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingResource {
     pub id: String,
@@ -255,6 +351,7 @@ pub struct DrawingResource {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingDataset {
     pub id: String,
@@ -264,6 +361,7 @@ pub struct DrawingDataset {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingProvenance {
     pub adapter_version: Option<String>,
@@ -303,5 +401,33 @@ mod tests {
             DrawingOutputFormat::Eps,
         ];
         assert_eq!(outputs.len(), 5);
+    }
+
+    #[test]
+    fn semantic_hash_ignores_identity_provenance_and_collection_order() {
+        let mut first =
+            DrawingDocument::source_only("first-id", DrawingSourceLanguage::DrawingJson, "{}");
+        first.compatibility = DrawingCompatibility::VisualCompatible;
+        first.raw_nodes.clear();
+        first.objects = vec![
+            DrawingObject::Rect {
+                id: "z".to_owned(),
+                bounds: [0.0, -0.0, 1.000_000_000_1, 2.0],
+            },
+            DrawingObject::Line {
+                id: "a".to_owned(),
+                from: [0.0, 0.0],
+                to: [1.0, 1.0],
+            },
+        ];
+        first.provenance.diagnostics.push("runtime-only".to_owned());
+        let mut second = first.clone();
+        second.id = "second-id".to_owned();
+        second.objects.reverse();
+        second.provenance.diagnostics = vec!["different".to_owned()];
+        assert_eq!(
+            first.semantic_sha256().unwrap(),
+            second.semantic_sha256().unwrap()
+        );
     }
 }

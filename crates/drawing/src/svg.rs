@@ -37,6 +37,7 @@ pub fn sanitize_svg(
     let mut elements = 0usize;
     let mut path_commands = 0usize;
     let mut view_box = None;
+    let mut style_depth = 0usize;
     loop {
         let event = reader.read_event().map_err(|error| {
             DrawingSecurityError::SvgExternalReferenceForbidden(error.to_string())
@@ -55,6 +56,10 @@ pub fn sanitize_svg(
                     return Err(DrawingSecurityError::SvgScriptForbidden(
                         "script elements are forbidden".to_owned(),
                     ));
+                }
+                if matches!(&event, Event::Start(_)) && (name.ends_with("style") || name == "style")
+                {
+                    style_depth = style_depth.saturating_add(1);
                 }
                 if name.ends_with("foreignobject") || name == "foreignobject" {
                     return Err(DrawingSecurityError::SvgExternalReferenceForbidden(
@@ -124,6 +129,25 @@ pub fn sanitize_svg(
                     }
                 }
             }
+            Event::Text(text) if style_depth > 0 => {
+                let decoded = text.decode().map_err(|error| {
+                    DrawingSecurityError::SvgExternalReferenceForbidden(error.to_string())
+                })?;
+                let css = quick_xml::escape::unescape(&decoded).map_err(|error| {
+                    DrawingSecurityError::SvgExternalReferenceForbidden(error.to_string())
+                })?;
+                validate_style_text(&css)?;
+            }
+            Event::CData(text) if style_depth > 0 => {
+                let css = String::from_utf8_lossy(text.as_ref());
+                validate_style_text(&css)?;
+            }
+            Event::End(end) => {
+                let name = String::from_utf8_lossy(end.name().as_ref()).to_ascii_lowercase();
+                if (name.ends_with("style") || name == "style") && style_depth > 0 {
+                    style_depth -= 1;
+                }
+            }
             Event::DocType(_) | Event::PI(_) => {
                 return Err(DrawingSecurityError::SvgExternalReferenceForbidden(
                     "DOCTYPE and processing instructions are forbidden".to_owned(),
@@ -159,6 +183,24 @@ pub fn sanitize_svg(
         event_attributes: 0,
         foreign_objects: 0,
     })
+}
+
+fn validate_style_text(css: &str) -> Result<(), DrawingSecurityError> {
+    let lower = css.to_ascii_lowercase();
+    if lower.contains("javascript:") || lower.contains("expression(") {
+        return Err(DrawingSecurityError::SvgScriptForbidden(
+            "active CSS content is forbidden".to_owned(),
+        ));
+    }
+    if lower.contains("@import")
+        || lower.contains("@font-face")
+        || (lower.contains("url(") && !only_local_fragment_urls(&lower))
+    {
+        return Err(DrawingSecurityError::SvgExternalReferenceForbidden(
+            "external CSS resources are forbidden".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 fn is_reference_attribute(key: &str) -> bool {
@@ -274,5 +316,22 @@ mod tests {
             &DrawingSecurityPolicy::default(),
         )
         .is_err());
+    }
+
+    #[test]
+    fn style_elements_cannot_hide_external_or_active_content() {
+        for source in [
+            r#"<svg viewBox="0 0 1 1"><style>@import url(https://example.invalid/a.css)</style></svg>"#,
+            r#"<svg viewBox="0 0 1 1"><style>@font-face { src: url(https://example.invalid/a.woff) }</style></svg>"#,
+            r#"<svg viewBox="0 0 1 1"><style>rect { fill: url(https://example.invalid/a.svg) }</style></svg>"#,
+            r#"<svg viewBox="0 0 1 1"><style>rect { color: expression(alert(1)) }</style></svg>"#,
+        ] {
+            assert!(sanitize_svg(source, &DrawingSecurityPolicy::default()).is_err());
+        }
+        sanitize_svg(
+            r##"<svg viewBox="0 0 1 1"><style>rect { fill: url(#gradient) }</style><rect/></svg>"##,
+            &DrawingSecurityPolicy::default(),
+        )
+        .unwrap();
     }
 }

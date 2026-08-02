@@ -1,0 +1,627 @@
+{
+  "schemaVersion": 1,
+  "adapters": [
+    {
+      "language": "tikz",
+      "level": "declared",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": false,
+        "structuredEmit": false,
+        "losslessRoundTrip": false,
+        "nativeCompile": true,
+        "wasmCompile": false,
+        "svgOutput": true,
+        "pdfOutput": true,
+        "pngOutput": true
+      },
+      "experimental": false,
+      "blocked": false,
+      "requiresSetup": true,
+      "diagnostic": "compiler identity is not pinned; smoke and golden evidence are notRun"
+    },
+    {
+      "language": "asymptote",
+      "level": "declared",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": false,
+        "structuredEmit": false,
+        "losslessRoundTrip": false,
+        "nativeCompile": true,
+        "wasmCompile": false,
+        "svgOutput": true,
+        "pdfOutput": true,
+        "pngOutput": true
+      },
+      "experimental": true,
+      "blocked": true,
+      "requiresSetup": false,
+      "diagnostic": "adapter is disabled by the active security policy"
+    },
+    {
+      "language": "mermaid",
+      "level": "declared",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": false,
+        "structuredEmit": false,
+        "losslessRoundTrip": false,
+        "nativeCompile": true,
+        "wasmCompile": true,
+        "svgOutput": true,
+        "pdfOutput": false,
+        "pngOutput": false
+      },
+      "experimental": false,
+      "blocked": false,
+      "requiresSetup": true,
+      "diagnostic": "compiler identity is not pinned; smoke and golden evidence are notRun"
+    },
+    {
+      "language": "graphviz_dot",
+      "level": "declared",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": false,
+        "structuredEmit": false,
+        "losslessRoundTrip": false,
+        "nativeCompile": true,
+        "wasmCompile": true,
+        "svgOutput": true,
+        "pdfOutput": true,
+        "pngOutput": false
+      },
+      "experimental": false,
+      "blocked": false,
+      "requiresSetup": true,
+      "diagnostic": "compiler identity is not pinned; smoke and golden evidence are notRun"
+    },
+    {
+      "language": "plant_uml",
+      "level": "declared",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": false,
+        "structuredEmit": false,
+        "losslessRoundTrip": false,
+        "nativeCompile": true,
+        "wasmCompile": false,
+        "svgOutput": true,
+        "pdfOutput": false,
+        "pngOutput": true
+      },
+      "experimental": true,
+      "blocked": true,
+      "requiresSetup": false,
+      "diagnostic": "adapter is disabled by the active security policy"
+    },
+    {
+      "language": "meta_post",
+      "level": "declared",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": false,
+        "structuredEmit": false,
+        "losslessRoundTrip": false,
+        "nativeCompile": true,
+        "wasmCompile": false,
+        "svgOutput": false,
+        "pdfOutput": true,
+        "pngOutput": false
+      },
+      "experimental": true,
+      "blocked": true,
+      "requiresSetup": false,
+      "diagnostic": "adapter is disabled by the active security policy"
+    },
+    {
+      "language": "pstricks",
+      "level": "declared",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": false,
+        "structuredEmit": false,
+        "losslessRoundTrip": false,
+        "nativeCompile": true,
+        "wasmCompile": false,
+        "svgOutput": false,
+        "pdfOutput": true,
+        "pngOutput": false
+      },
+      "experimental": true,
+      "blocked": true,
+      "requiresSetup": false,
+      "diagnostic": "adapter is disabled by the active security policy"
+    },
+    {
+      "language": "svg_source",
+      "level": "compilerDetected",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": true,
+        "structuredEmit": true,
+        "losslessRoundTrip": false,
+        "nativeCompile": false,
+        "wasmCompile": false,
+        "svgOutput": true,
+        "pdfOutput": false,
+        "pngOutput": false
+      },
+      "experimental": false,
+      "blocked": false,
+      "requiresSetup": false,
+      "diagnostic": null
+    },
+    {
+      "language": "drawing_json",
+      "level": "compilerDetected",
+      "capabilities": {
+        "sourceEditing": true,
+        "structuredParse": true,
+        "structuredEmit": true,
+        "losslessRoundTrip": true,
+        "nativeCompile": false,
+        "wasmCompile": false,
+        "svgOutput": true,
+        "pdfOutput": false,
+        "pngOutput": false
+      },
+      "experimental": false,
+      "blocked": false,
+      "requiresSetup": false,
+      "diagnostic": null
+    }
+  ],
+  "compilers": [
+    {
+      "id": "asymptote",
+      "detected": false,
+      "executableSha256": null,
+      "version": null,
+      "diagnostic": "not configured; compile contracts are notRun"
+    },
+    {
+      "id": "graphviz",
+      "detected": false,
+      "executableSha256": null,
+      "version": null,
+      "diagnostic": "not configured; compile contracts are notRun"
+    },
+    {
+      "id": "mermaid",
+      "detected": false,
+      "executableSha256": null,
+      "version": null,
+      "diagnostic": "not configured; compile contracts are notRun"
+    },
+    {
+      "id": "plantuml",
+      "detected": false,
+      "executableSha256": null,
+      "version": null,
+      "diagnostic": "not configured; compile contracts are notRun"
+    },
+    {
+      "id": "system-tex",
+      "detected": false,
+      "executableSha256": null,
+      "version": null,
+      "diagnostic": "not configured; compile contracts are notRun"
+    },
+    {
+      "id": "tectonic",
+      "detected": false,
+      "executableSha256": null,
+      "version": null,
+      "diagnostic": "not configured; compile contracts are notRun"
+    }
+  ],
+  "packageProfiles": [
+    {
+      "profile": "base_tikz",
+      "allowed": true,
+      "packageLockSha256": null,
+      "validated": false,
+      "experimental": false
+    },
+    {
+      "profile": "pgf_plots",
+      "allowed": true,
+      "packageLockSha256": null,
+      "validated": false,
+      "experimental": false
+    },
+    {
+      "profile": "circuit_tikz",
+      "allowed": true,
+      "packageLockSha256": null,
+      "validated": false,
+      "experimental": false
+    },
+    {
+      "profile": "tikz_cd",
+      "allowed": true,
+      "packageLockSha256": null,
+      "validated": false,
+      "experimental": false
+    },
+    {
+      "profile": "forest",
+      "allowed": true,
+      "packageLockSha256": null,
+      "validated": false,
+      "experimental": false
+    },
+    {
+      "profile": "chem_fig",
+      "allowed": false,
+      "packageLockSha256": null,
+      "validated": false,
+      "experimental": true
+    }
+  ],
+  "outputFormats": [
+    {
+      "language": "tikz",
+      "format": "svg",
+      "available": false,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": "required renderer is not hash-verified"
+    },
+    {
+      "language": "tikz",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "required renderer is not hash-verified"
+    },
+    {
+      "language": "tikz",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "required renderer is not hash-verified"
+    },
+    {
+      "language": "tikz",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "tikz",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "asymptote",
+      "format": "svg",
+      "available": false,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": "adapter is blocked by the active security policy"
+    },
+    {
+      "language": "asymptote",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter is blocked by the active security policy"
+    },
+    {
+      "language": "asymptote",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter is blocked by the active security policy"
+    },
+    {
+      "language": "asymptote",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "asymptote",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "mermaid",
+      "format": "svg",
+      "available": false,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": "required renderer is not hash-verified"
+    },
+    {
+      "language": "mermaid",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "mermaid",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "mermaid",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "mermaid",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "graphviz_dot",
+      "format": "svg",
+      "available": false,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": "required renderer is not hash-verified"
+    },
+    {
+      "language": "graphviz_dot",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "graphviz_dot",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "required renderer is not hash-verified"
+    },
+    {
+      "language": "graphviz_dot",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "graphviz_dot",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "plant_uml",
+      "format": "svg",
+      "available": false,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": "adapter is blocked by the active security policy"
+    },
+    {
+      "language": "plant_uml",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter is blocked by the active security policy"
+    },
+    {
+      "language": "plant_uml",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "plant_uml",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "plant_uml",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "meta_post",
+      "format": "svg",
+      "available": false,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "meta_post",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "meta_post",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter is blocked by the active security policy"
+    },
+    {
+      "language": "meta_post",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "meta_post",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "pstricks",
+      "format": "svg",
+      "available": false,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "pstricks",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "pstricks",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter is blocked by the active security policy"
+    },
+    {
+      "language": "pstricks",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "pstricks",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "svg_source",
+      "format": "svg",
+      "available": true,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": null
+    },
+    {
+      "language": "svg_source",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "svg_source",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "svg_source",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "svg_source",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "drawing_json",
+      "format": "svg",
+      "available": false,
+      "officeDefault": true,
+      "exportOnly": false,
+      "diagnostic": "required renderer is not hash-verified"
+    },
+    {
+      "language": "drawing_json",
+      "format": "png",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "drawing_json",
+      "format": "pdf",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "drawing_json",
+      "format": "web_p",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": false,
+      "diagnostic": "adapter does not declare this output"
+    },
+    {
+      "language": "drawing_json",
+      "format": "eps",
+      "available": false,
+      "officeDefault": false,
+      "exportOnly": true,
+      "diagnostic": "adapter does not declare this output"
+    }
+  ],
+  "securityPolicyReady": true
+}

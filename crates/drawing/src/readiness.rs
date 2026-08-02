@@ -8,6 +8,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum DrawingValidationLevel {
     Declared,
@@ -20,6 +21,7 @@ pub enum DrawingValidationLevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingAdapterReadiness {
     pub language: DrawingSourceLanguage,
@@ -32,6 +34,7 @@ pub struct DrawingAdapterReadiness {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingCompilerReadiness {
     pub id: String,
@@ -42,6 +45,7 @@ pub struct DrawingCompilerReadiness {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingPackageReadiness {
     pub profile: DrawingPackageProfile,
@@ -52,15 +56,19 @@ pub struct DrawingPackageReadiness {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingOutputReadiness {
+    pub language: DrawingSourceLanguage,
     pub format: DrawingOutputFormat,
     pub available: bool,
     pub office_default: bool,
     pub export_only: bool,
+    pub diagnostic: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "contract-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingReadiness {
     pub schema_version: u32,
@@ -106,7 +114,7 @@ pub fn drawing_readiness(
                 policy
                     .allowed_executables
                     .get(key)
-                    .is_some_and(crate::ExecutableIdentity::is_strong)
+                    .is_some_and(|identity| identity.verify_file_hash().is_ok())
             });
             let level = if capabilities.structured_parse && allowed {
                 if compiler_detected {
@@ -152,7 +160,7 @@ pub fn drawing_readiness(
         let identity = policy.allowed_executables.get(id);
         DrawingCompilerReadiness {
             id: id.to_owned(),
-            detected: identity.is_some_and(crate::ExecutableIdentity::is_strong),
+            detected: identity.is_some_and(|identity| identity.verify_file_hash().is_ok()),
             executable_sha256: identity.map(|identity| identity.sha256.clone()),
             version: identity.map(|identity| identity.version.clone()),
             diagnostic: identity
@@ -187,47 +195,75 @@ pub fn drawing_readiness(
         })
         .collect();
 
+    let output_formats = adapters
+        .iter()
+        .flat_map(|adapter| {
+            [
+                DrawingOutputFormat::Svg,
+                DrawingOutputFormat::Png,
+                DrawingOutputFormat::Pdf,
+                DrawingOutputFormat::WebP,
+                DrawingOutputFormat::Eps,
+            ]
+            .into_iter()
+            .map(move |format| {
+                let declared = capability_supports(adapter.capabilities, format);
+                let backend_ready = match compiler_key(adapter.language) {
+                    Some(key) => policy
+                        .allowed_executables
+                        .get(key)
+                        .is_some_and(|identity| identity.verify_file_hash().is_ok()),
+                    None => {
+                        adapter.language == DrawingSourceLanguage::SvgSource
+                            && format == DrawingOutputFormat::Svg
+                    }
+                };
+                let available = !adapter.blocked && declared && backend_ready;
+                DrawingOutputReadiness {
+                    language: adapter.language,
+                    format,
+                    available,
+                    office_default: format == DrawingOutputFormat::Svg,
+                    export_only: matches!(
+                        format,
+                        DrawingOutputFormat::Pdf | DrawingOutputFormat::Eps
+                    ),
+                    diagnostic: (!available).then(|| {
+                        if !declared {
+                            "adapter does not declare this output".to_owned()
+                        } else if adapter.blocked {
+                            "adapter is blocked by the active security policy".to_owned()
+                        } else {
+                            "required renderer is not hash-verified".to_owned()
+                        }
+                    }),
+                }
+            })
+        })
+        .collect();
+
     DrawingReadiness {
         schema_version: 1,
         adapters,
         compilers,
         package_profiles,
-        output_formats: vec![
-            DrawingOutputReadiness {
-                format: DrawingOutputFormat::Svg,
-                available: true,
-                office_default: true,
-                export_only: false,
-            },
-            DrawingOutputReadiness {
-                format: DrawingOutputFormat::Png,
-                available: true,
-                office_default: false,
-                export_only: false,
-            },
-            DrawingOutputReadiness {
-                format: DrawingOutputFormat::Pdf,
-                available: true,
-                office_default: false,
-                export_only: true,
-            },
-            DrawingOutputReadiness {
-                format: DrawingOutputFormat::WebP,
-                available: false,
-                office_default: false,
-                export_only: false,
-            },
-            DrawingOutputReadiness {
-                format: DrawingOutputFormat::Eps,
-                available: false,
-                office_default: false,
-                export_only: true,
-            },
-        ],
+        output_formats,
         security_policy_ready: !policy.allow_shell_escape
             && !policy.allow_network
             && !policy.allow_absolute_paths
             && !policy.allow_parent_path,
+    }
+}
+
+fn capability_supports(
+    capabilities: DrawingAdapterCapabilities,
+    format: DrawingOutputFormat,
+) -> bool {
+    match format {
+        DrawingOutputFormat::Svg => capabilities.svg_output,
+        DrawingOutputFormat::Pdf => capabilities.pdf_output,
+        DrawingOutputFormat::Png => capabilities.png_output,
+        DrawingOutputFormat::WebP | DrawingOutputFormat::Eps => false,
     }
 }
 
@@ -259,9 +295,19 @@ mod tests {
             .iter()
             .find(|adapter| adapter.language == DrawingSourceLanguage::Tikz)
             .unwrap();
-        assert_eq!(tikz.level, DrawingValidationLevel::ParserAvailable);
+        assert_eq!(tikz.level, DrawingValidationLevel::Declared);
+        assert!(!tikz.capabilities.structured_parse);
         assert!(tikz.requires_setup);
         assert!(!readiness.compilers.iter().any(|compiler| compiler.detected));
+        assert!(!readiness
+            .output_formats
+            .iter()
+            .any(|output| { output.language == DrawingSourceLanguage::Tikz && output.available }));
+        assert!(readiness.output_formats.iter().any(|output| {
+            output.language == DrawingSourceLanguage::SvgSource
+                && output.format == DrawingOutputFormat::Svg
+                && output.available
+        }));
         let pstricks = readiness
             .adapters
             .iter()

@@ -9,12 +9,20 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+contract-schema = ["dep:schemars"]
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 sha2.workspace = true
 quick-xml = "0.41"
+schemars = { version = "1", optional = true }
+tempfile = "3"
 
 [dev-dependencies]
-tempfile = "3"
+
+[[example]]
+name = "export_drawing_contracts"
+required-features = ["contract-schema"]

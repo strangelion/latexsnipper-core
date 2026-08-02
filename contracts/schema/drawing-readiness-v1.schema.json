@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawingReadiness",
+  "type": "object",
+  "properties": {
+    "adapters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DrawingAdapterReadiness"
+      }
+    },
+    "compilers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DrawingCompilerReadiness"
+      }
+    },
+    "outputFormats": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DrawingOutputReadiness"
+      }
+    },
+    "packageProfiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DrawingPackageReadiness"
+      }
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "securityPolicyReady": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "adapters",
+    "compilers",
+    "packageProfiles",
+    "outputFormats",
+    "securityPolicyReady"
+  ],
+  "$defs": {
+    "DrawingAdapterCapabilities": {
+      "type": "object",
+      "properties": {
+        "losslessRoundTrip": {
+          "type": "boolean"
+        },
+        "nativeCompile": {
+          "type": "boolean"
+        },
+        "pdfOutput": {
+          "type": "boolean"
+        },
+        "pngOutput": {
+          "type": "boolean"
+        },
+        "sourceEditing": {
+          "type": "boolean"
+        },
+        "structuredEmit": {
+          "type": "boolean"
+        },
+        "structuredParse": {
+          "type": "boolean"
+        },
+        "svgOutput": {
+          "type": "boolean"
+        },
+        "wasmCompile": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sourceEditing",
+        "structuredParse",
+        "structuredEmit",
+        "losslessRoundTrip",
+        "nativeCompile",
+        "wasmCompile",
+        "svgOutput",
+        "pdfOutput",
+        "pngOutput"
+      ]
+    },
+    "DrawingAdapterReadiness": {
+      "type": "object",
+      "properties": {
+        "blocked": {
+          "type": "boolean"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/DrawingAdapterCapabilities"
+        },
+        "diagnostic": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "experimental": {
+          "type": "boolean"
+        },
+        "language": {
+          "$ref": "#/$defs/DrawingSourceLanguage"
+        },
+        "level": {
+          "$ref": "#/$defs/DrawingValidationLevel"
+        },
+        "requiresSetup": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "language",
+        "level",
+        "capabilities",
+        "experimental",
+        "blocked",
+        "requiresSetup"
+      ]
+    },
+    "DrawingCompilerReadiness": {
+      "type": "object",
+      "properties": {
+        "detected": {
+          "type": "boolean"
+        },
+        "diagnostic": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executableSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "detected"
+      ]
+    },
+    "DrawingOutputFormat": {
+      "type": "string",
+      "enum": [
+        "svg",
+        "pdf",
+        "png",
+        "web_p",
+        "eps"
+      ]
+    },
+    "DrawingOutputReadiness": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "diagnostic": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exportOnly": {
+          "type": "boolean"
+        },
+        "format": {
+          "$ref": "#/$defs/DrawingOutputFormat"
+        },
+        "language": {
+          "$ref": "#/$defs/DrawingSourceLanguage"
+        },
+        "officeDefault": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "language",
+        "format",
+        "available",
+        "officeDefault",
+        "exportOnly"
+      ]
+    },
+    "DrawingPackageProfile": {
+      "type": "string",
+      "enum": [
+        "base_tikz",
+        "pgf_plots",
+        "circuit_tikz",
+        "tikz_cd",
+        "forest",
+        "chem_fig"
+      ]
+    },
+    "DrawingPackageReadiness": {
+      "type": "object",
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "experimental": {
+          "type": "boolean"
+        },
+        "packageLockSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "$ref": "#/$defs/DrawingPackageProfile"
+        },
+        "validated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "profile",
+        "allowed",
+        "validated",
+        "experimental"
+      ]
+    },
+    "DrawingSourceLanguage": {
+      "type": "string",
+      "enum": [
+        "tikz",
+        "asymptote",
+        "mermaid",
+        "graphviz_dot",
+        "plant_uml",
+        "meta_post",
+        "pstricks",
+        "svg_source",
+        "drawing_json"
+      ]
+    },
+    "DrawingValidationLevel": {
+      "type": "string",
+      "enum": [
+        "declared",
+        "parserAvailable",
+        "compilerDetected",
+        "packageSetValidated",
+        "smokeCompilePassed",
+        "goldenRenderPassed",
+        "productionRecommended"
+      ]
+    }
+  }
+}

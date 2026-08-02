@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "drawingId": "drawing-contract-v1",
+  "sourceLanguage": "drawing_json",
+  "packageProfiles": [],
+  "source": "{\"kind\":\"rect\",\"bounds\":[0,0,160,90]}",
+  "drawingDocument": {
+    "schemaVersion": 1,
+    "id": "drawing-contract-v1",
+    "sourceLanguage": "drawing_json",
+    "packageProfiles": [],
+    "source": {
+      "text": "{\"kind\":\"rect\",\"bounds\":[0,0,160,90]}"
+    },
+    "compatibility": "visual_compatible",
+    "canvas": {
+      "width": 160.0,
+      "height": 90.0,
+      "viewBox": [
+        0.0,
+        0.0,
+        160.0,
+        90.0
+      ]
+    },
+    "layers": [],
+    "objects": [
+      {
+        "kind": "rect",
+        "id": "rect-1",
+        "bounds": [
+          0.0,
+          0.0,
+          160.0,
+          90.0
+        ]
+      }
+    ],
+    "rawNodes": [],
+    "resources": [],
+    "datasets": [],
+    "provenance": {
+      "adapterVersion": null,
+      "compilerFingerprint": null,
+      "packageLockSha256": null,
+      "resourceHashes": [],
+      "diagnostics": []
+    }
+  },
+  "compatibility": "visual_compatible",
+  "preferredArtifact": {
+    "format": "svg",
+    "contentRef": "artifacts/drawing-contract-v1.svg",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sanitizerReportSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "fallbackArtifacts": [
+    {
+      "format": "png",
+      "contentRef": "artifacts/drawing-contract-v1.png",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "sanitizerReportSha256": null
+    }
+  ],
+  "officeShapeScene": {
+    "schemaVersion": 1,
+    "objects": [
+      {
+        "kind": "rect",
+        "id": "rect-1",
+        "bounds": [
+          0.0,
+          0.0,
+          160.0,
+          90.0
+        ]
+      }
+    ]
+  },
+  "widthPoints": 160.0,
+  "heightPoints": 90.0,
+  "sourceSha256": "fb5e6cf40f2f8b96b0bb376ef0130b524444d27688ac3ce01e577c14a54556f5",
+  "sceneSha256": "726670d317e0f7d3e7678e3971f0801b05e33b1b3fc103b0afa8bb9c6a023d94",
+  "renderSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "compilerFingerprint": "contract-renderer@1+sha256:verified",
+  "packageLockSha256": null,
+  "resourcesSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

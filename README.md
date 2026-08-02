@@ -83,6 +83,7 @@ LaTeXSnipper Core is more than an image-to-LaTeX wrapper. It provides a shared d
 - **Native and browser execution** — ONNX Runtime, Paddle Inference, ExecuTorch, TensorRT, and Core ML on desktop; Tract in WebAssembly.
 - **Operational tooling** — CLI, SDK, capability inspection, model management, plugin package management, diagnostics, batch reports, shell completions, and man pages.
 - **Security-oriented parsing** — signature-first detection, bounded archive/XML processing, safe package paths, checksum verification, and structured failures.
+- **Drawing contracts and compilation** — source-preserving Drawing documents, Core-owned Office payload/readiness schemas, sanitized SVG, and fail-closed supervised TikZ/PGFPlots and Graphviz routes. See [Drawing domain and adapter policy](docs/drawing-domain.md).
 
 ---
 

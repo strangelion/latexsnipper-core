@@ -37,6 +37,15 @@
       "scope": ["drawing", "office-output"],
       "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "office_payload_is_forward_compatible"]},
       "failureMessage": "Drawing Office payload contract failed."
+    },
+    {
+      "id": "CORE-DRAWING-CROSSREPO-SCHEMA-001",
+      "description": "Core-owned Drawing payload and readiness schemas and fixtures are generated from the Rust DTOs without drift.",
+      "severity": "blocking",
+      "suite": "office-output",
+      "scope": ["drawing", "office-output"],
+      "evidence": {"kind": "command", "command": ["cargo", "run", "--locked", "-p", "latexsnipper-drawing", "--features", "contract-schema", "--example", "export_drawing_contracts", "--", "--check"]},
+      "failureMessage": "Core-owned Drawing cross-repository contracts drifted."
     }
   ]
 }

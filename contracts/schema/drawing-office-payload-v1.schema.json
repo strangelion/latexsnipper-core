@@ -1,0 +1,861 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawingOfficePayload",
+  "type": "object",
+  "properties": {
+    "compatibility": {
+      "$ref": "#/$defs/DrawingCompatibility"
+    },
+    "compilerFingerprint": {
+      "type": "string"
+    },
+    "drawingDocument": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DrawingDocument"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "drawingId": {
+      "type": "string"
+    },
+    "fallbackArtifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DrawingArtifactRef"
+      }
+    },
+    "heightPoints": {
+      "type": "number",
+      "format": "double"
+    },
+    "officeShapeScene": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OfficeShapeScene"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "packageLockSha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "packageProfiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DrawingPackageProfile"
+      }
+    },
+    "preferredArtifact": {
+      "$ref": "#/$defs/DrawingArtifactRef"
+    },
+    "renderSha256": {
+      "type": "string"
+    },
+    "resourcesSha256": {
+      "type": "string"
+    },
+    "sceneSha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "source": {
+      "type": "string"
+    },
+    "sourceLanguage": {
+      "$ref": "#/$defs/DrawingSourceLanguage"
+    },
+    "sourceSha256": {
+      "type": "string"
+    },
+    "widthPoints": {
+      "type": "number",
+      "format": "double"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "drawingId",
+    "sourceLanguage",
+    "packageProfiles",
+    "source",
+    "compatibility",
+    "preferredArtifact",
+    "fallbackArtifacts",
+    "widthPoints",
+    "heightPoints",
+    "sourceSha256",
+    "renderSha256",
+    "compilerFingerprint",
+    "resourcesSha256"
+  ],
+  "$defs": {
+    "DrawingArtifactRef": {
+      "type": "object",
+      "properties": {
+        "contentRef": {
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/$defs/DrawingOutputFormat"
+        },
+        "sanitizerReportSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "contentRef",
+        "sha256"
+      ]
+    },
+    "DrawingCanvas": {
+      "type": "object",
+      "properties": {
+        "height": {
+          "type": "number",
+          "format": "double"
+        },
+        "viewBox": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        },
+        "width": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "viewBox"
+      ]
+    },
+    "DrawingCompatibility": {
+      "type": "string",
+      "enum": [
+        "visual_compatible",
+        "mixed",
+        "source_only"
+      ]
+    },
+    "DrawingDataset": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "default": {}
+        },
+        "id": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "sha256"
+      ]
+    },
+    "DrawingDocument": {
+      "type": "object",
+      "properties": {
+        "canvas": {
+          "$ref": "#/$defs/DrawingCanvas"
+        },
+        "compatibility": {
+          "$ref": "#/$defs/DrawingCompatibility"
+        },
+        "datasets": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DrawingDataset"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "layers": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DrawingLayer"
+          }
+        },
+        "objects": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DrawingObject"
+          }
+        },
+        "packageProfiles": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DrawingPackageProfile"
+          }
+        },
+        "provenance": {
+          "$ref": "#/$defs/DrawingProvenance"
+        },
+        "rawNodes": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RawDrawingNode"
+          }
+        },
+        "resources": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DrawingResource"
+          }
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "source": {
+          "$ref": "#/$defs/DrawingSource"
+        },
+        "sourceLanguage": {
+          "$ref": "#/$defs/DrawingSourceLanguage"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "sourceLanguage",
+        "source",
+        "compatibility",
+        "canvas",
+        "provenance"
+      ]
+    },
+    "DrawingLayer": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "objectIds": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "DrawingObject": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "point"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "x",
+            "y"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "line"
+            },
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "arrow"
+            },
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bounds": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 4,
+              "minItems": 4
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "rect"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "bounds"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bounds": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 4,
+              "minItems": 4
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "ellipse"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "bounds"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "path"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "node"
+            },
+            "label": {
+              "type": "string"
+            },
+            "position": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "position",
+            "label"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "text"
+            },
+            "position": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "position",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "math_label"
+            },
+            "latex": {
+              "type": "string"
+            },
+            "position": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "position",
+            "latex"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bounds": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 4,
+              "minItems": 4
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "axis"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "bounds"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dataset_id": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "plot"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "dataset_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "graph"
+            },
+            "source_ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "source_ref"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "tree"
+            },
+            "source_ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "source_ref"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "children"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bounds": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 4,
+              "minItems": 4
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "image"
+            },
+            "resource_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "resource_id",
+            "bounds"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "raw"
+            }
+          },
+          "$ref": "#/$defs/RawDrawingNode",
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "DrawingOutputFormat": {
+      "type": "string",
+      "enum": [
+        "svg",
+        "pdf",
+        "png",
+        "web_p",
+        "eps"
+      ]
+    },
+    "DrawingPackageProfile": {
+      "type": "string",
+      "enum": [
+        "base_tikz",
+        "pgf_plots",
+        "circuit_tikz",
+        "tikz_cd",
+        "forest",
+        "chem_fig"
+      ]
+    },
+    "DrawingProvenance": {
+      "type": "object",
+      "properties": {
+        "adapterVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "compilerFingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "packageLockSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resourceHashes": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "DrawingResource": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "relativePath",
+        "sha256",
+        "sizeBytes"
+      ]
+    },
+    "DrawingSource": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "DrawingSourceLanguage": {
+      "type": "string",
+      "enum": [
+        "tikz",
+        "asymptote",
+        "mermaid",
+        "graphviz_dot",
+        "plant_uml",
+        "meta_post",
+        "pstricks",
+        "svg_source",
+        "drawing_json"
+      ]
+    },
+    "OfficeShapeScene": {
+      "type": "object",
+      "properties": {
+        "objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DrawingObject"
+          }
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "objects"
+      ]
+    },
+    "RawDrawingNode": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "$ref": "#/$defs/DrawingSourceLanguage"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "language",
+        "source",
+        "reason"
+      ]
+    }
+  }
+}

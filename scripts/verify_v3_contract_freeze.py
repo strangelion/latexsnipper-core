@@ -32,6 +32,10 @@ CONTRACT_FILES = (
     "contracts/agent/core-security-contract.v1.yaml",
     "quality/failure-corpus/candidate.schema.json",
     "quality/int8/thresholds.v1.json",
+    "contracts/schema/drawing-office-payload-v1.schema.json",
+    "contracts/schema/drawing-readiness-v1.schema.json",
+    "contracts/fixtures/drawing-office-payload-v1.json",
+    "contracts/fixtures/drawing-readiness-v1.json",
 )
 PUBLIC_RUST_TREES = (
     "crates/foundation/src",

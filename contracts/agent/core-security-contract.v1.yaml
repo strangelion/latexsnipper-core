@@ -163,6 +163,24 @@
       "scope": ["drawing", "quality"],
       "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "failure_candidate_contains_hash_not_raw_source"]},
       "failureMessage": "Drawing failure candidate retained raw user source."
+    },
+    {
+      "id": "CORE-DRAWING-COMPILE-SERVICE-001",
+      "description": "Drawing compilation sanitizes SVG output and automatically records privacy-safe failures.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security", "quality"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing", "compile::tests"]},
+      "failureMessage": "Drawing compile service or failure intake contract failed."
+    },
+    {
+      "id": "CORE-DRAWING-SECURITY-ENFORCEMENT-001",
+      "description": "Drawing compile plans verify executable bytes, profile allowlists, resources, active CSS, and structural limits before execution.",
+      "severity": "blocking",
+      "suite": "drawing",
+      "scope": ["drawing", "security"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-drawing"]},
+      "failureMessage": "Drawing compile security enforcement regressed."
     }
   ]
 }
