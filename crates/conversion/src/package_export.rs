@@ -1317,7 +1317,7 @@ mod tests {
         let document_xml = package_entry_text(artifact.as_bytes().unwrap(), "word/document.xml");
 
         assert!(
-            document_xml.contains("<w:p><m:oMathPara>"),
+            document_xml.contains("<w:p><m:oMathPara"),
             "display OMML must be hosted inside a Word paragraph",
         );
 

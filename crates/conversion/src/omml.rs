@@ -8,6 +8,8 @@ use crate::latex_utils::*;
 
 pub struct OmmlConverter;
 
+const OMML_NAMESPACE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+
 impl Converter for OmmlConverter {
     fn convert(&self, doc: &Document) -> Result<String> {
         let mut parts = Vec::new();
@@ -62,11 +64,14 @@ fn convert_formula_to_omml(f: &Formula) -> String {
     };
     if f.display_mode {
         format!(
-            "<m:oMathPara>\n<m:oMath>{}\n</m:oMath>\n</m:oMathPara>",
-            content
+            "<m:oMathPara xmlns:m=\"{}\">\n<m:oMath>{}\n</m:oMath>\n</m:oMathPara>",
+            OMML_NAMESPACE, content
         )
     } else {
-        format!("<m:oMath>{}\n</m:oMath>", content)
+        format!(
+            "<m:oMath xmlns:m=\"{}\">{}\n</m:oMath>",
+            OMML_NAMESPACE, content
+        )
     }
 }
 
@@ -1118,6 +1123,22 @@ fn fix_omml(omml: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn converter_emits_a_standalone_namespace_bound_fragment() {
+        let formula = Formula {
+            source: FormulaSource::Latex(r"\int_0^1 x\,dx".to_string()),
+            display_mode: true,
+            confidence: 1.0,
+            source_info: None,
+            layout: None,
+            recognition_provenance: None,
+            recognition_evidence: None,
+        };
+        let output = convert_formula_to_omml(&formula);
+        assert!(output.starts_with("<m:oMathPara xmlns:m="));
+        assert!(output.contains(OMML_NAMESPACE));
+    }
     use quick_xml::events::Event;
     use quick_xml::Reader;
     use serde::Deserialize;
