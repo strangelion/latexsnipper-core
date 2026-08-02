@@ -354,10 +354,20 @@ pub(crate) fn validate_language_and_source(
         )));
     }
     let lower = source.to_ascii_lowercase();
+    // XML namespace identifiers are stable vocabulary identifiers, not fetched
+    // resources. Keep them available to standards-compliant SVG while the SVG
+    // sanitizer separately rejects external href/src/style URLs.
+    let network_scan = if language == DrawingSourceLanguage::SvgSource {
+        lower
+            .replace("http://www.w3.org/2000/svg", "")
+            .replace("http://www.w3.org/1999/xlink", "")
+    } else {
+        lower.clone()
+    };
     if !policy.allow_network
         && ["http://", "https://", "ftp://", "!includeurl"]
             .iter()
-            .any(|token| lower.contains(token))
+            .any(|token| network_scan.contains(token))
     {
         return Err(DrawingSecurityError::RemoteIncludeForbidden(
             "network references are disabled".to_owned(),
@@ -482,6 +492,27 @@ mod tests {
             .unwrap_err()
             .code(),
             "DRAWING_ASYMPTOTE_REMOTE_RENDER_FORBIDDEN"
+        );
+    }
+
+    #[test]
+    fn svg_namespace_identifiers_are_not_misclassified_as_network_access() {
+        let policy = DrawingSecurityPolicy::default();
+        validate_language_and_source(
+            DrawingSourceLanguage::SvgSource,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>"#,
+            &policy,
+        )
+        .unwrap();
+        assert_eq!(
+            validate_language_and_source(
+                DrawingSourceLanguage::SvgSource,
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><image href="https://example.invalid/a.png"/></svg>"#,
+                &policy,
+            )
+            .unwrap_err()
+            .code(),
+            "DRAWING_REMOTE_INCLUDE_FORBIDDEN"
         );
     }
 
