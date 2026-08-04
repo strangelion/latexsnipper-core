@@ -63,6 +63,9 @@ pub use latexsnipper_foundation::SnipperError;
 
 // Re-export region graph types
 pub use crate::region_graph::RegionKind;
+pub use crate::region_graph::{
+    split_text_region_around_formulae, RegionFragment, RegionFragmentProvenance, TextSplitPolicy,
+};
 
 // Re-export commonly used AST types (used in pipeline output)
 pub use latexsnipper_ast::{

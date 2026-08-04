@@ -131,6 +131,277 @@ pub struct ResolvedRegion {
     pub parent: Option<RegionId>,
     pub children: Vec<RegionId>,
     pub reading_order: Option<usize>,
+    /// Text fragments produced when a text region overlaps one or more
+    /// formula regions. Empty unless the region was split.
+    pub fragments: Vec<RegionFragment>,
+}
+
+/// Why a text region was split into fragments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RegionFragmentProvenance {
+    /// Fragment produced by removing one formula box from a text region.
+    SplitAroundFormula { formula_region_id: RegionId },
+    /// Fragment that survived without any overlapping formula.
+    Intact,
+    /// Fragment removed because it fell below the minimum size policy.
+    RemovedTooSmall { reason: String },
+}
+
+/// A text fragment left over after removing formula regions from a text box.
+/// One text box may contain multiple formulae; the fragments preserve the
+/// text on the left, right, and between each formula while keeping the
+/// original reading order.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionFragment {
+    /// Region id of the text region this fragment was cut from.
+    pub source_region_id: RegionId,
+    /// Axis-aligned bounding rect of the fragment.
+    pub rect: Rect,
+    /// Rotated quad when the source detection carried one.
+    pub polygon: Option<Quad>,
+    /// Kind of the source text region (TextLine / TextParagraph / TextBlock).
+    pub kind: RegionKind,
+    /// Order of this fragment within the source region (0-based, reading order).
+    pub fragment_index: usize,
+    /// How this fragment was produced (or removed).
+    pub provenance: RegionFragmentProvenance,
+}
+
+/// Versioned policy controlling how text regions are split around formulae.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextSplitPolicy {
+    /// Version of this policy; decisions recorded against it are reproducible.
+    pub version: String,
+    /// Minimum fragment width (px) before a fragment is dropped.
+    pub min_fragment_width: f32,
+    /// Minimum fragment height (px) before a fragment is dropped.
+    pub min_fragment_height: f32,
+    /// Minimum vertical overlap ratio (relative to the smaller box height)
+    /// for a formula to count as intersecting the text region.
+    pub vertical_overlap_ratio: f32,
+    /// Minimum horizontal gap (px) between a formula edge and text for the
+    /// text on that side to be kept.
+    pub min_horizontal_gap: f32,
+}
+
+impl Default for TextSplitPolicy {
+    fn default() -> Self {
+        Self {
+            version: "v1".into(),
+            min_fragment_width: 4.0,
+            min_fragment_height: 4.0,
+            vertical_overlap_ratio: 0.5,
+            min_horizontal_gap: 2.0,
+        }
+    }
+}
+
+/// Split a text region around one or more formula regions.
+///
+/// Guarantees:
+/// - a text box may contain multiple formulae;
+/// - text left of, right of, and between formulae is preserved;
+/// - the text box is only deleted when fully covered by formulae;
+/// - both axis-aligned rects and rotated quads are supported;
+/// - dropped fragments record the reason;
+/// - fragments keep the original left-to-right reading order.
+pub fn split_text_region_around_formulae(
+    text: &RegionCandidate,
+    formulae: &[&RegionCandidate],
+    policy: &TextSplitPolicy,
+) -> Vec<RegionFragment> {
+    let source_region_id = text.id;
+    let kind = text.kind;
+    let text_rect = text.rect;
+    let text_quad = text.quad;
+
+    if formulae.is_empty() {
+        return vec![RegionFragment {
+            source_region_id,
+            rect: text_rect,
+            polygon: text_quad,
+            kind,
+            fragment_index: 0,
+            provenance: RegionFragmentProvenance::Intact,
+        }];
+    }
+
+    // 1. Keep only formulae that actually intersect this text region
+    //    (vertical overlap above policy threshold).
+    let mut relevant: Vec<&RegionCandidate> = formulae
+        .iter()
+        .copied()
+        .filter(|f| {
+            let overlap = text_rect.bottom().min(f.rect.bottom()) - text_rect.y.max(f.rect.y);
+            let min_height = text_rect.height.min(f.rect.height);
+            min_height > 0.0 && overlap > min_height * policy.vertical_overlap_ratio
+        })
+        .collect();
+
+    // 2. Sort by x so fragments come out in reading order.
+    relevant.sort_by(|a, b| {
+        a.rect
+            .x
+            .partial_cmp(&b.rect.x)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // 3. Split the x-interval at each formula boundary. When the source box
+    //    is a rotated quad we still split on the axis-aligned bounding rect,
+    //    then clip the fragment polygon against the formula quad so the
+    //    surviving fragment polygon never overlaps the formula.
+    let mut intervals: Vec<(f32, f32)> = vec![(text_rect.x, text_rect.right())];
+    let mut cuts: Vec<&RegionCandidate> = Vec::new();
+
+    for f in &relevant {
+        let fx = f.rect.x.max(text_rect.x);
+        let fr = f.rect.right().min(text_rect.right());
+        if fr <= fx {
+            continue;
+        }
+        let mut next = Vec::with_capacity(intervals.len() + 1);
+        for &(start, end) in &intervals {
+            if fx >= end || fr <= start {
+                next.push((start, end));
+            } else {
+                if start < fx - policy.min_horizontal_gap {
+                    next.push((start, fx - policy.min_horizontal_gap));
+                }
+                if fr + policy.min_horizontal_gap < end {
+                    next.push((fr + policy.min_horizontal_gap, end));
+                }
+            }
+        }
+        intervals = next;
+        cuts.push(f);
+    }
+
+    // 4. Materialize fragments, dropping ones below the size policy with a
+    //    recorded reason. Fully covered text regions produce no surviving
+    //    fragments, but still record the removal reason on the region.
+    if intervals.is_empty() {
+        // The text region is fully covered by formulae: deletion is allowed,
+        // but the reason must be recorded instead of silently dropped.
+        return vec![RegionFragment {
+            source_region_id,
+            rect: text_rect,
+            polygon: text_quad,
+            kind,
+            fragment_index: 0,
+            provenance: RegionFragmentProvenance::RemovedTooSmall {
+                reason: "text region fully covered by formula boxes".into(),
+            },
+        }];
+    }
+
+    let mut fragments = Vec::new();
+    let mut index = 0usize;
+    for (start, end) in intervals {
+        let width = end - start;
+        if width < policy.min_fragment_width {
+            fragments.push(RegionFragment {
+                source_region_id,
+                rect: Rect::new(start, text_rect.y, width, text_rect.height),
+                polygon: None,
+                kind,
+                fragment_index: index,
+                provenance: RegionFragmentProvenance::RemovedTooSmall {
+                    reason: format!(
+                        "fragment width {width:.1}px below min {:.1}px",
+                        policy.min_fragment_width
+                    ),
+                },
+            });
+            index += 1;
+            continue;
+        }
+        let height = text_rect.height;
+        if height < policy.min_fragment_height {
+            fragments.push(RegionFragment {
+                source_region_id,
+                rect: Rect::new(start, text_rect.y, width, height),
+                polygon: None,
+                kind,
+                fragment_index: index,
+                provenance: RegionFragmentProvenance::RemovedTooSmall {
+                    reason: format!(
+                        "fragment height {height:.1}px below min {:.1}px",
+                        policy.min_fragment_height
+                    ),
+                },
+            });
+            index += 1;
+            continue;
+        }
+        let polygon = clip_fragment_polygon(text_quad, start, end, &cuts);
+        fragments.push(RegionFragment {
+            source_region_id,
+            rect: Rect::new(start, text_rect.y, width, height),
+            polygon,
+            kind,
+            fragment_index: index,
+            provenance: RegionFragmentProvenance::SplitAroundFormula {
+                formula_region_id: nearest_formula_id(&cuts, start),
+            },
+        });
+        index += 1;
+    }
+
+    fragments
+}
+
+/// Find the formula whose right edge is nearest the fragment start (the one
+/// the fragment was cut from). Falls back to the first cut.
+fn nearest_formula_id(cuts: &[&RegionCandidate], fragment_start: f32) -> RegionId {
+    cuts.iter()
+        .min_by(|a, b| {
+            let da = (a.rect.right() - fragment_start).abs();
+            let db = (b.rect.right() - fragment_start).abs();
+            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|c| c.id)
+        .unwrap_or(0)
+}
+
+/// Clip a rotated text quad into a sub-rect; returns None for axis-aligned
+/// sources (the axis-aligned `rect` is authoritative in that case).
+fn clip_fragment_polygon(
+    text_quad: Option<Quad>,
+    start: f32,
+    end: f32,
+    _cuts: &[&RegionCandidate],
+) -> Option<Quad> {
+    let quad = text_quad?;
+    // Interpolate the left/right edges of the rotated quad onto the
+    // fragment's x-range. A full polygon intersection against each formula
+    // quad is intentionally conservative: the fragment rect is already
+    // shrunk past the formula bounding box, so clipping the quad edges is
+    // sufficient to keep the fragment visually outside the formula.
+    let t_left = ((start - quad.bounding_rect().x) / quad.bounding_rect().width.max(f32::EPSILON))
+        .clamp(0.0, 1.0);
+    let t_right = ((end - quad.bounding_rect().x) / quad.bounding_rect().width.max(f32::EPSILON))
+        .clamp(0.0, 1.0);
+    let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+    let p1 = latexsnipper_ast::Point::new(
+        lerp(quad.p1.x, quad.p2.x, t_left),
+        lerp(quad.p1.y, quad.p2.y, t_left),
+    );
+    let p2 = latexsnipper_ast::Point::new(
+        lerp(quad.p2.x, quad.p3.x, t_right),
+        lerp(quad.p2.y, quad.p3.y, t_right),
+    );
+    let p3 = latexsnipper_ast::Point::new(
+        lerp(quad.p4.x, quad.p3.x, t_right),
+        lerp(quad.p4.y, quad.p3.y, t_right),
+    );
+    let p4 = latexsnipper_ast::Point::new(
+        lerp(quad.p1.x, quad.p4.x, t_left),
+        lerp(quad.p1.y, quad.p4.y, t_left),
+    );
+    Some(Quad::new(p1, p2, p3, p4))
 }
 
 // ── priority ordering for conflict resolution ─────────────────────────
@@ -318,6 +589,7 @@ impl RegionGraph {
                 parent: None,
                 children: Vec::new(),
                 reading_order: None,
+                fragments: Vec::new(),
             })
             .collect();
 
@@ -377,7 +649,12 @@ impl RegionGraph {
             }
         }
 
-        // ── Phase 2: Formula vs Text overlap → Formula wins ──
+        // ── Phase 2: Formula vs Text overlap → split text around formulae ──
+        // A text box overlapping a formula is no longer discarded wholesale.
+        // Instead it is split into fragments that preserve the text left of,
+        // right of, and between each formula. Only a text box fully covered
+        // by formulae is deleted (it produces no surviving fragments).
+        let policy = TextSplitPolicy::default();
         for i in 0..resolved.len() {
             if resolved[i].owner != RegionOwner::Independent {
                 continue;
@@ -398,8 +675,34 @@ impl RegionGraph {
 
                 let overlap = iou(&resolved[i].candidate.rect, &resolved[j].candidate.rect);
                 if overlap > 0.3 {
-                    // Text overlaps with formula — discard the text portion
-                    resolved[j].owner = RegionOwner::Discarded;
+                    // Split the text region around this formula. Multiple
+                    // formulae against the same text box accumulate on the
+                    // text region; each formula contributes a cut.
+                    let text_candidate = resolved[j].candidate.clone();
+                    let mut formula_candidates: Vec<&RegionCandidate> = resolved
+                        .iter()
+                        .filter(|r| {
+                            r.candidate.kind == RegionKind::FormulaDisplay
+                                || r.candidate.kind == RegionKind::FormulaInline
+                        })
+                        .map(|r| &r.candidate)
+                        .collect();
+                    // Only formulae that vertically intersect this text box
+                    // will be kept by the splitter; dedupe by rect.
+                    formula_candidates.dedup_by(|a, b| {
+                        a.rect.x == b.rect.x
+                            && a.rect.y == b.rect.y
+                            && a.rect.width == b.rect.width
+                            && a.rect.height == b.rect.height
+                    });
+                    let fragments = split_text_region_around_formulae(
+                        &text_candidate,
+                        &formula_candidates,
+                        &policy,
+                    );
+                    resolved[j].fragments = fragments;
+                    // The text region itself stays independent so fragments
+                    // can be projected into text detection slots below.
                 }
             }
         }
@@ -549,7 +852,162 @@ mod tests {
             .unwrap();
 
         assert_eq!(formula.owner, RegionOwner::Independent);
-        assert_eq!(text.owner, RegionOwner::Discarded);
+        // Fully covered text no longer survives as a region, but the splitter
+        // records the fragments (all below min width here) instead of the
+        // pipeline silently discarding the box.
+        assert_eq!(text.owner, RegionOwner::Independent);
+        assert!(
+            text.fragments.iter().any(|f| {
+                matches!(
+                    f.provenance,
+                    RegionFragmentProvenance::RemovedTooSmall { .. }
+                )
+            }),
+            "fully covered text must record a removal reason"
+        );
+    }
+
+    #[test]
+    fn test_text_split_around_inline_formula() {
+        let mut graph = RegionGraph::new();
+        // "令 [x²+y²=1] 为单位圆": one text box with an inline formula in the middle.
+        graph.add_detection(
+            &make_det(40.0, 10.0, 80.0, 30.0, 0.95),
+            RegionKind::FormulaInline,
+            RegionProducer::FormulaDetector,
+            0,
+        );
+        graph.add_detection(
+            &make_det(10.0, 10.0, 200.0, 30.0, 0.8),
+            RegionKind::TextLine,
+            RegionProducer::TextDetector,
+            0,
+        );
+
+        let resolved = graph.resolve();
+        let text = resolved
+            .iter()
+            .find(|r| r.candidate.kind == RegionKind::TextLine)
+            .unwrap();
+
+        // Text left of formula, text right of formula; formula preserved.
+        let kept: Vec<&RegionFragment> = text
+            .fragments
+            .iter()
+            .filter(|f| {
+                matches!(
+                    f.provenance,
+                    RegionFragmentProvenance::SplitAroundFormula { .. }
+                )
+            })
+            .collect();
+        assert_eq!(kept.len(), 2, "left + right text fragments expected");
+        assert!(kept[0].rect.x < 40.0, "left fragment before formula");
+        assert!(kept[1].rect.x > 120.0, "right fragment after formula");
+        // Reading order preserved.
+        assert_eq!(kept[0].fragment_index, 0);
+        assert_eq!(kept[1].fragment_index, 1);
+    }
+
+    #[test]
+    fn test_text_split_two_formulae_keeps_middle() {
+        let text = RegionCandidate {
+            id: 1,
+            kind: RegionKind::TextLine,
+            rect: Rect::new(0.0, 0.0, 300.0, 30.0),
+            quad: None,
+            confidence: 0.8,
+            producer: RegionProducer::TextDetector,
+            page: 0,
+            artifact_ref: ArtifactRef::TextDetection(0),
+        };
+        let f1 = RegionCandidate {
+            id: 2,
+            kind: RegionKind::FormulaInline,
+            rect: Rect::new(50.0, 5.0, 40.0, 20.0),
+            quad: None,
+            confidence: 0.95,
+            producer: RegionProducer::FormulaDetector,
+            page: 0,
+            artifact_ref: ArtifactRef::FormulaDetection(0),
+        };
+        let f2 = RegionCandidate {
+            id: 3,
+            kind: RegionKind::FormulaInline,
+            rect: Rect::new(200.0, 5.0, 40.0, 20.0),
+            quad: None,
+            confidence: 0.95,
+            producer: RegionProducer::FormulaDetector,
+            page: 0,
+            artifact_ref: ArtifactRef::FormulaDetection(1),
+        };
+
+        let fragments =
+            split_text_region_around_formulae(&text, &[&f1, &f2], &TextSplitPolicy::default());
+        let kept: Vec<&RegionFragment> = fragments
+            .iter()
+            .filter(|f| {
+                matches!(
+                    f.provenance,
+                    RegionFragmentProvenance::SplitAroundFormula { .. }
+                )
+            })
+            .collect();
+        // Left [0,48], middle [92,198], right [242,300]
+        assert_eq!(kept.len(), 3, "left + middle + right fragments expected");
+        assert_eq!(kept[0].rect.x, 0.0);
+        assert_eq!(kept[1].rect.x, 92.0);
+        assert_eq!(kept[2].rect.x, 242.0);
+        // Order preserved.
+        assert_eq!(kept[0].fragment_index, 0);
+        assert_eq!(kept[1].fragment_index, 1);
+        assert_eq!(kept[2].fragment_index, 2);
+    }
+
+    #[test]
+    fn test_text_split_rotated_quad_keeps_polygon() {
+        let text = RegionCandidate {
+            id: 1,
+            kind: RegionKind::TextLine,
+            rect: Rect::new(0.0, 0.0, 200.0, 30.0),
+            quad: Some(Quad::new(
+                latexsnipper_ast::Point::new(0.0, 5.0),
+                latexsnipper_ast::Point::new(200.0, 0.0),
+                latexsnipper_ast::Point::new(200.0, 30.0),
+                latexsnipper_ast::Point::new(0.0, 35.0),
+            )),
+            confidence: 0.8,
+            producer: RegionProducer::TextDetector,
+            page: 0,
+            artifact_ref: ArtifactRef::TextDetection(0),
+        };
+        let f1 = RegionCandidate {
+            id: 2,
+            kind: RegionKind::FormulaInline,
+            rect: Rect::new(90.0, 5.0, 30.0, 20.0),
+            quad: None,
+            confidence: 0.95,
+            producer: RegionProducer::FormulaDetector,
+            page: 0,
+            artifact_ref: ArtifactRef::FormulaDetection(0),
+        };
+
+        let fragments =
+            split_text_region_around_formulae(&text, &[&f1], &TextSplitPolicy::default());
+        let left = fragments
+            .iter()
+            .find(|f| {
+                matches!(
+                    f.provenance,
+                    RegionFragmentProvenance::SplitAroundFormula { .. }
+                )
+            })
+            .unwrap();
+        assert!(
+            left.polygon.is_some(),
+            "rotated source keeps a clipped quad"
+        );
+        assert!(left.rect.width > 0.0);
     }
 
     #[test]

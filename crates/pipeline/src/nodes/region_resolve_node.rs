@@ -12,6 +12,7 @@ use crate::node::PipelineNode;
 use crate::region_graph::{
     ArtifactRef, RecognitionTarget, RegionCandidate, RegionGraph, RegionKind, RegionProducer,
 };
+use latexsnipper_inference::DetectionBox;
 
 /// Pipeline node that resolves region conflicts across detectors.
 pub struct RegionResolveNode {
@@ -127,10 +128,16 @@ impl PipelineNode for RegionResolveNode {
         // ── Step 2: resolve conflicts ───────────────────────────────────────
         let resolved = graph.resolve();
 
-        // ── Step 3: build RecognitionTarget list from resolved regions ──────
+        // ── Step 3+4: build recognition targets and rewrite legacy detections ──
         // Only Independent regions become top-level recognition targets.
         // Child regions (table cell children) are recognized by the table path.
+        // Text regions split around formulae project their surviving fragments
+        // as independent text detections; the original (formula-contaminated)
+        // detection is dropped. This keeps `recognition_targets` indexes
+        // consistent with the rewritten `text_detections` list.
         let mut targets = Vec::new();
+        let mut new_text_detections = Vec::new();
+        let mut new_formula_detections = Vec::new();
 
         for r in &resolved {
             if r.owner != crate::region_graph::RegionOwner::Independent {
@@ -138,14 +145,44 @@ impl PipelineNode for RegionResolveNode {
             }
             match r.candidate.artifact_ref {
                 ArtifactRef::TextDetection(idx) => {
-                    targets.push(RecognitionTarget::TopLevelText {
-                        detection_index: idx,
-                    });
+                    let original = ctx.artifacts.text_detections.get(idx).cloned();
+                    if !r.fragments.is_empty() {
+                        // Region was split around formulae: only surviving
+                        // fragments become recognition targets.
+                        for f in r.fragments.iter().filter(|f| {
+                            !matches!(
+                                f.provenance,
+                                crate::region_graph::RegionFragmentProvenance::RemovedTooSmall { .. }
+                            )
+                        }) {
+                            let slot = new_text_detections.len();
+                            targets.push(RecognitionTarget::TopLevelText {
+                                detection_index: slot,
+                            });
+                            new_text_detections.push(DetectionBox::rect(
+                                f.rect,
+                                r.candidate.confidence,
+                                0,
+                                "text".into(),
+                            ));
+                        }
+                        let _ = original;
+                    } else if let Some(det) = original {
+                        let slot = new_text_detections.len();
+                        targets.push(RecognitionTarget::TopLevelText {
+                            detection_index: slot,
+                        });
+                        new_text_detections.push(det);
+                    }
                 }
                 ArtifactRef::FormulaDetection(idx) => {
-                    targets.push(RecognitionTarget::TopLevelFormula {
-                        detection_index: idx,
-                    });
+                    if let Some(det) = ctx.artifacts.formula_detections.get(idx).cloned() {
+                        let slot = new_formula_detections.len();
+                        targets.push(RecognitionTarget::TopLevelFormula {
+                            detection_index: slot,
+                        });
+                        new_formula_detections.push(det);
+                    }
                 }
                 ArtifactRef::HandwritingDetection(idx) => {
                     targets.push(RecognitionTarget::TopLevelHandwriting {
@@ -167,41 +204,8 @@ impl PipelineNode for RegionResolveNode {
             }
         }
 
-        // ── Step 4: update legacy artifacts ────────────────────────────────
-        // Filter formula/text detections to only those that are top-level
-        let top_level_formula: std::collections::HashSet<usize> = targets
-            .iter()
-            .filter_map(|t| match t {
-                RecognitionTarget::TopLevelFormula { detection_index } => Some(*detection_index),
-                _ => None,
-            })
-            .collect();
-
-        let top_level_text: std::collections::HashSet<usize> = targets
-            .iter()
-            .filter_map(|t| match t {
-                RecognitionTarget::TopLevelText { detection_index } => Some(*detection_index),
-                _ => None,
-            })
-            .collect();
-
-        ctx.artifacts.formula_detections = ctx
-            .artifacts
-            .formula_detections
-            .drain(..)
-            .enumerate()
-            .filter(|(i, _)| top_level_formula.contains(i))
-            .map(|(_, d)| d)
-            .collect();
-
-        ctx.artifacts.text_detections = ctx
-            .artifacts
-            .text_detections
-            .drain(..)
-            .enumerate()
-            .filter(|(i, _)| top_level_text.contains(i))
-            .map(|(_, d)| d)
-            .collect();
+        ctx.artifacts.text_detections = new_text_detections;
+        ctx.artifacts.formula_detections = new_formula_detections;
 
         // ── Step 5: store resolved regions and targets ─────────────────────
         ctx.artifacts.resolved_regions = resolved;
