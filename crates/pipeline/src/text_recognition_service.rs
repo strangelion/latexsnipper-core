@@ -166,6 +166,21 @@ impl TextRecognitionService {
             .map(|result| result.text)
     }
 
+    /// Recognize a pre-cropped (possibly masked) image directly.
+    ///
+    /// Used when a background-aware formula mask has already been applied by
+    /// CropNode — the OCR model must receive the masked pixels, not a fresh
+    /// crop of the original image.
+    pub fn recognize_crop(&self, image: &SnipperImage) -> Result<RecognitionResult> {
+        recognize_text_with_keys(
+            image,
+            self.session.as_ref().as_ref(),
+            &self.keys,
+            self.first_char_id,
+            &self.params,
+        )
+    }
+
     /// Recognize a region while preserving OCR confidence.
     pub fn recognize_region_result(
         &self,

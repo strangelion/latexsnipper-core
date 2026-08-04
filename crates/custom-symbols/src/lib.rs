@@ -8,6 +8,7 @@
 pub mod pack;
 pub mod symbol;
 pub mod transfer;
+pub mod transforms;
 
 pub use pack::{
     validate_symbol_pack_archive, SymbolPackManifest, SymbolPackValidationError,
@@ -22,3 +23,4 @@ pub use transfer::{
     BinaryArtifact, CustomSymbolTransferBundle, FormulaTransferBundle,
     TRANSFER_BUNDLE_SCHEMA_VERSION,
 };
+pub use transforms::{apply_transforms, TransformedGlyph};

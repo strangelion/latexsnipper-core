@@ -2,6 +2,10 @@ use async_trait::async_trait;
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
+use latexsnipper_inference::batch_recognizer::{
+    provider_family, BatchRegionRecognizer, BatchRuntimeEvidence, BatchSizePolicy,
+    RegionRecognitionRequest, RegionRecognitionResult, RegionRequestKind,
+};
 use latexsnipper_inference::formula_lines::{plan_formula_segmentation, FormulaSegmentationClass};
 use latexsnipper_inference::{
     load_keys, load_tokenizer_from_str, recognize_formula, recognize_formula_with_tokenizer,
@@ -359,130 +363,231 @@ impl RecognizerNode {
         detections: Vec<latexsnipper_inference::types::DetectionBox>,
         recognize_crop: impl Fn(&latexsnipper_image::SnipperImage) -> Result<RecognitionResult>,
     ) -> Result<()> {
-        let mut blocks = Vec::new();
-        for det in detections {
-            let x = det.rect.x as u32;
-            let y = det.rect.y as u32;
-            let w = det.rect.width as u32;
-            let h = det.rect.height as u32;
+        // Build the batch request list first: whole-image formula crops and
+        // every segmented row crop become requests, then run through
+        // BatchRegionRecognizer so production recognition actually uses the
+        // batch scheduler (batch sizing from effective provider evidence).
+        let mut requests: Vec<RegionRecognitionRequest> = Vec::new();
+        let mut plans: Vec<Option<latexsnipper_inference::formula_lines::FormulaSegmentPlan>> =
+            Vec::new();
+        // request meta: (detection index, Option<group index>)
+        let mut request_meta: Vec<(usize, Option<usize>)> = Vec::new();
 
-            if let Some(ref image) = ctx.image {
-                if w >= 4 && h >= 4 {
-                    let cropped =
-                        operations::crop(image, Rect::new(x as f32, y as f32, w as f32, h as f32));
-                    let plan = plan_formula_segmentation(&cropped);
+        if let Some(ref image) = ctx.image {
+            for det in &detections {
+                let x = det.rect.x as u32;
+                let y = det.rect.y as u32;
+                let w = det.rect.width as u32;
+                let h = det.rect.height as u32;
+                if w < 4 || h < 4 {
+                    plans.push(None);
+                    continue;
+                }
+                let cropped =
+                    operations::crop(image, Rect::new(x as f32, y as f32, w as f32, h as f32));
+                let plan = plan_formula_segmentation(&cropped);
 
-                    if plan.groups.is_empty() || plan.groups[0].crops.is_empty() {
-                        match recognize_crop(&cropped) {
-                            Ok(result) => {
-                                let provenance = result.provenance.clone();
-                                let evidence = result.postprocess.clone();
-                                let mut f = Formula::latex(result.text);
-                                f.confidence = result.confidence;
-                                f.recognition_provenance = provenance.map(Box::new);
-                                f.recognition_evidence = evidence.map(Box::new);
-                                blocks.push(Block::Formula(FormulaBlock {
-                                    formula: f,
-                                    label: None,
-                                    number: None,
-                                    environment: None,
-                                    geometry: Some(Rect::new(
-                                        x as f32, y as f32, w as f32, h as f32,
-                                    )),
-                                    source: Some(
-                                        SourceInfo::new()
-                                            .with_page(ctx.current_page)
-                                            .with_confidence(det.confidence)
-                                            .with_region(det.rect),
-                                    ),
-                                }));
-                            }
-                            Err(e) => log::warn!("Formula rec failed: {}", e),
-                        }
-                    } else {
-                        let mut all_results = Vec::new();
-                        let mut segmented_latency = std::time::Duration::ZERO;
-                        for group in &plan.groups {
-                            for crop in &group.crops {
-                                let crop_img = latexsnipper_image::SnipperImage::new(
+                if plan.groups.is_empty() || plan.groups[0].crops.is_empty() {
+                    // Whole-image recognition: one request.
+                    let id = format!("f{}", requests.len());
+                    requests.push(RegionRecognitionRequest {
+                        id: id.clone(),
+                        kind: RegionRequestKind::FormulaCrop,
+                        image: cropped.clone(),
+                    });
+                    request_meta.push((plans.len(), None));
+                } else {
+                    // Segmented rows: one request per row crop.
+                    for (gi, group) in plan.groups.iter().enumerate() {
+                        for crop in &group.crops {
+                            let id = format!("f{}", requests.len());
+                            requests.push(RegionRecognitionRequest {
+                                id: id.clone(),
+                                kind: RegionRequestKind::FormulaSegmentCrop,
+                                image: latexsnipper_image::SnipperImage::new(
                                     crop.width,
                                     crop.height,
                                     latexsnipper_image::color::PixelFormat::Rgb,
                                     crop.pixels.clone(),
-                                );
-                                let start = std::time::Instant::now();
-                                match recognize_crop(&crop_img) {
-                                    Ok(result) => {
-                                        segmented_latency += start.elapsed();
-                                        all_results.push(result.text);
-                                    }
-                                    Err(e) => {
-                                        segmented_latency += start.elapsed();
-                                        log::warn!("Formula line rec failed: {}", e);
-                                    }
-                                }
-                            }
-                        }
-
-                        if !all_results.is_empty() {
-                            // Multi-line derivations are reconstructed as a
-                            // structured aligned environment instead of a
-                            // space-joined blob.
-                            let merged = match plan.classification {
-                                FormulaSegmentationClass::MultiLine => format!(
-                                    "\\begin{{aligned}} {} \\end{{aligned}}",
-                                    all_results.join("\\\\ ")
                                 ),
-                                FormulaSegmentationClass::WideSingleLine => all_results.join(" "),
-                                _ => all_results.join(" "),
-                            };
-
-                            // Segment-vs-whole arbitration: recognize the
-                            // whole image as a retry candidate and pick the
-                            // better one with explainable provenance.
-                            let policy =
-                                latexsnipper_inference::FormulaArbitrationPolicy::default();
-                            let whole_start = std::time::Instant::now();
-                            let whole_result = recognize_crop(&cropped);
-                            let whole_latency = whole_start.elapsed();
-
-                            let mut candidates = Vec::new();
-                            candidates.push(latexsnipper_inference::build_candidate(
-                                latexsnipper_inference::FormulaCandidateSource::Segmented,
-                                merged.clone(),
-                                0.9,
-                                segmented_latency,
-                                &policy,
-                            ));
-                            if let Ok(result) = whole_result {
-                                candidates.push(latexsnipper_inference::build_candidate(
-                                    latexsnipper_inference::FormulaCandidateSource::WholeImageRetry,
-                                    result.text.clone(),
-                                    result.confidence,
-                                    whole_latency,
-                                    &policy,
-                                ));
-                            }
-                            let arbitration =
-                                latexsnipper_inference::arbitrate_candidates(candidates, &policy);
-                            let selected = arbitration
-                                .selected_index
-                                .map(|idx| arbitration.candidates[idx].latex.clone())
-                                .unwrap_or(merged.clone());
-
-                            let mut f = Formula::latex(selected);
-                            f.confidence = 0.9;
-                            blocks.push(Block::Formula(FormulaBlock {
-                                formula: f,
-                                label: None,
-                                number: None,
-                                environment: None,
-                                geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
-                                source: Some(SourceInfo::new().with_page(ctx.current_page)),
-                            }));
+                            });
+                            request_meta.push((plans.len(), Some(gi)));
                         }
                     }
+                    // Whole-image retry candidate (used for arbitration).
+                    let id = format!("f{}", requests.len());
+                    requests.push(RegionRecognitionRequest {
+                        id: id.clone(),
+                        kind: RegionRequestKind::FormulaCrop,
+                        image: cropped.clone(),
+                    });
+                    request_meta.push((plans.len(), None));
                 }
+                plans.push(Some(plan));
+            }
+        }
+
+        if requests.is_empty() {
+            ctx.artifacts.formula_blocks = Vec::new();
+            return Ok(());
+        }
+
+        // Run the batch through the batch scheduler.
+        let mut batch_recognizer = ClosureBatchRecognizer {
+            recognize_crop: &recognize_crop,
+        };
+        let mut inf_ctx = latexsnipper_runtime::InferenceContext::new();
+        let policy = BatchSizePolicy::default();
+        let evidence = batch_evidence(ctx);
+        let (results, run_evidence) = batch_recognizer
+            .run_batched(&requests, &mut inf_ctx, &policy, &evidence)
+            .map_err(SnipperError::Inference)?;
+        ctx.metadata.insert(
+            "formulaBatchEvidence".into(),
+            serde_json::to_value(&run_evidence).unwrap_or_default(),
+        );
+        log::info!(
+            "Formula batch: batch_size={} count={} provider={} padding={:.3} fallback={}",
+            run_evidence.batch_size,
+            run_evidence.batch_count,
+            run_evidence.effective_provider,
+            run_evidence.padding_ratio,
+            run_evidence.fallback
+        );
+
+        // Reassemble results per detection.
+        let mut results_by_det: std::collections::HashMap<
+            usize,
+            Vec<(Option<usize>, RecognitionResult)>,
+        > = std::collections::HashMap::new();
+        for (result, (det_index, group_index)) in results.iter().zip(request_meta.iter()) {
+            if result.text.is_empty() {
+                continue;
+            }
+            results_by_det.entry(*det_index).or_default().push((
+                *group_index,
+                RecognitionResult::new(result.text.clone(), result.confidence),
+            ));
+        }
+
+        let mut blocks = Vec::new();
+        for (det_index, det) in detections.iter().enumerate() {
+            let Some(plan) = plans.get(det_index).and_then(|p| p.as_ref()) else {
+                continue;
+            };
+            let x = det.rect.x as u32;
+            let y = det.rect.y as u32;
+            let w = det.rect.width as u32;
+            let h = det.rect.height as u32;
+            let per_det = results_by_det.remove(&det_index).unwrap_or_default();
+
+            if plan.groups.is_empty() || plan.groups[0].crops.is_empty() {
+                // Whole-image path.
+                let Some((_, result)) = per_det.first() else {
+                    continue;
+                };
+                let provenance = result.provenance.clone();
+                let evidence = result.postprocess.clone();
+                let mut f = Formula::latex(result.text.clone());
+                f.confidence = result.confidence;
+                f.recognition_provenance = provenance.map(Box::new);
+                f.recognition_evidence = evidence.map(Box::new);
+                blocks.push(Block::Formula(FormulaBlock {
+                    formula: f,
+                    label: None,
+                    number: None,
+                    environment: None,
+                    geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                    source: Some(
+                        SourceInfo::new()
+                            .with_page(ctx.current_page)
+                            .with_confidence(det.confidence)
+                            .with_region(det.rect),
+                    ),
+                }));
+            } else {
+                // Segmented path with segment-vs-whole arbitration. Row
+                // results carry Some(group_index); the whole retry is the
+                // trailing None result.
+                let mut row_results: Vec<(usize, &RecognitionResult)> = per_det
+                    .iter()
+                    .filter_map(|(gi, r)| gi.map(|g| (g, r)))
+                    .collect();
+                row_results.sort_by_key(|(g, _)| *g);
+                let all_rows: Vec<&RecognitionResult> =
+                    row_results.iter().map(|(_, r)| *r).collect();
+
+                if all_rows.is_empty() {
+                    continue;
+                }
+
+                let merged = match plan.classification {
+                    FormulaSegmentationClass::MultiLine => format!(
+                        "\\begin{{aligned}} {} \\end{{aligned}}",
+                        all_rows
+                            .iter()
+                            .map(|r| r.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\\\\ ")
+                    ),
+                    _ => all_rows
+                        .iter()
+                        .map(|r| r.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                };
+                let segmented_confidence =
+                    all_rows.iter().map(|r| r.confidence).fold(0.0f32, f32::max);
+                let segmented_latency = std::time::Duration::ZERO;
+
+                let policy = latexsnipper_inference::FormulaArbitrationPolicy::default();
+                let mut candidates = Vec::new();
+                candidates.push(latexsnipper_inference::build_candidate(
+                    latexsnipper_inference::FormulaCandidateSource::Segmented,
+                    merged.clone(),
+                    segmented_confidence,
+                    segmented_latency,
+                    &policy,
+                ));
+                if let Some((_, whole)) = per_det.iter().find(|(gi, _)| gi.is_none()) {
+                    candidates.push(latexsnipper_inference::build_candidate(
+                        latexsnipper_inference::FormulaCandidateSource::WholeImageRetry,
+                        whole.text.clone(),
+                        whole.confidence,
+                        std::time::Duration::ZERO,
+                        &policy,
+                    ));
+                }
+                let arbitration = latexsnipper_inference::arbitrate_candidates(candidates, &policy);
+                // Persist the arbitration as recognition provenance so the
+                // choice and every rejection reason are observable.
+                ctx.metadata.insert(
+                    format!("formulaArbitration-{det_index}"),
+                    serde_json::to_value(&arbitration).unwrap_or_default(),
+                );
+                let selected = arbitration
+                    .selected_index
+                    .map(|idx| {
+                        let candidate = &arbitration.candidates[idx];
+                        (candidate.latex.clone(), candidate.confidence)
+                    })
+                    .unwrap_or_else(|| (merged.clone(), segmented_confidence));
+
+                let mut f = Formula::latex(selected.0);
+                f.confidence = selected.1;
+                blocks.push(Block::Formula(FormulaBlock {
+                    formula: f,
+                    label: None,
+                    number: None,
+                    environment: None,
+                    geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                    source: Some(
+                        SourceInfo::new()
+                            .with_page(ctx.current_page)
+                            .with_confidence(selected.1)
+                            .with_region(det.rect),
+                    ),
+                }));
             }
         }
 
@@ -507,7 +612,33 @@ impl RecognizerNode {
         // Try shared text recognition service first (context-owned)
         if let Some(service) = ctx.get_or_init_text_rec_service() {
             let mut blocks = Vec::new();
-            if let Some(ref image) = ctx.image {
+            // Prefer the masked crops produced by CropNode so the OCR model
+            // receives the background-aware formula mask. Fall back to
+            // region-based recognition only when no crop is available.
+            let crops = ctx.artifacts.text_crops.clone();
+            if crops.len() == detections.len() {
+                for (det, crop) in detections.iter().zip(crops.iter()) {
+                    let result = match service.recognize_crop(&crop.image) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            log::warn!("Text rec failed: {}", e);
+                            continue;
+                        }
+                    };
+                    if !result.text.is_empty() {
+                        blocks.push(Block::Paragraph(ParagraphBlock {
+                            inlines: vec![Inline::Text(TextRun::new(result.text))],
+                            geometry: Some(det.rect),
+                            source: Some(
+                                SourceInfo::new()
+                                    .with_page(ctx.current_page)
+                                    .with_confidence(result.confidence),
+                            ),
+                            style: None,
+                        }));
+                    }
+                }
+            } else if let Some(ref image) = ctx.image {
                 for det in &detections {
                     let text = match service.recognize_region(image, &det.rect, det.quad.as_ref()) {
                         Ok(t) => t,
@@ -562,49 +693,50 @@ impl RecognizerNode {
 
         let mut blocks = Vec::new();
 
-        for det in detections {
+        // Prefer the masked crops from CropNode (background-aware formula
+        // mask applied); fall back to re-cropping the original image.
+        let crops = ctx.artifacts.text_crops.clone();
+        let use_crops = crops.len() == detections.len();
+
+        for (det_idx, det) in detections.iter().enumerate() {
             let x = det.rect.x as u32;
             let y = det.rect.y as u32;
             let w = det.rect.width as u32;
             let h = det.rect.height as u32;
 
-            if let Some(ref image) = ctx.image {
-                if w >= 4 && h >= 4 {
+            if w >= 4 && h >= 4 {
+                let cropped = if use_crops {
+                    crops[det_idx].image.clone()
+                } else if let Some(ref image) = ctx.image {
                     let pad_y = (h as f32 * 0.2).max(4.0) as u32;
                     let crop_y = y.saturating_sub(pad_y);
                     let crop_h = h + pad_y * 2;
                     let crop_y_end = (crop_y + crop_h).min(image.height());
                     let final_h = crop_y_end - crop_y;
-                    let cropped = operations::crop(
+                    operations::crop(
                         image,
                         Rect::new(x as f32, crop_y as f32, w as f32, final_h as f32),
-                    );
-                    match recognize_text_with_keys(
-                        &cropped,
-                        &*session,
-                        &keys,
-                        first_char_id,
-                        &params,
-                    ) {
-                        Ok(result) => {
-                            if !result.text.is_empty() {
-                                blocks.push(Block::Paragraph(ParagraphBlock {
-                                    inlines: vec![Inline::Text(TextRun::new(result.text))],
-                                    geometry: Some(Rect::new(
-                                        x as f32, y as f32, w as f32, h as f32,
-                                    )),
-                                    source: Some(
-                                        SourceInfo::new()
-                                            .with_page(ctx.current_page)
-                                            .with_confidence(det.confidence)
-                                            .with_region(det.rect),
-                                    ),
-                                    style: None,
-                                }));
-                            }
+                    )
+                } else {
+                    continue;
+                };
+                match recognize_text_with_keys(&cropped, &*session, &keys, first_char_id, &params) {
+                    Ok(result) => {
+                        if !result.text.is_empty() {
+                            blocks.push(Block::Paragraph(ParagraphBlock {
+                                inlines: vec![Inline::Text(TextRun::new(result.text))],
+                                geometry: Some(Rect::new(x as f32, y as f32, w as f32, h as f32)),
+                                source: Some(
+                                    SourceInfo::new()
+                                        .with_page(ctx.current_page)
+                                        .with_confidence(det.confidence)
+                                        .with_region(det.rect),
+                                ),
+                                style: None,
+                            }));
                         }
-                        Err(e) => log::warn!("Text rec failed: {}", e),
                     }
+                    Err(e) => log::warn!("Text rec failed: {}", e),
                 }
             }
         }
@@ -612,6 +744,65 @@ impl RecognizerNode {
         ctx.artifacts.text_blocks = blocks;
         log::info!("Recognized {} text blocks", ctx.artifacts.text_blocks.len());
         Ok(())
+    }
+}
+
+/// Adapter that runs a per-crop recognition closure through the batch
+/// scheduler. This is what wires production formula recognition into
+/// BatchRegionRecognizer: requests are grouped by the batch policy and a
+/// failing batch falls back to per-request recognition.
+struct ClosureBatchRecognizer<'a> {
+    recognize_crop: &'a dyn Fn(&latexsnipper_image::SnipperImage) -> Result<RecognitionResult>,
+}
+
+impl BatchRegionRecognizer for ClosureBatchRecognizer<'_> {
+    fn recognize_batch(
+        &mut self,
+        requests: &[RegionRecognitionRequest],
+        _context: &mut latexsnipper_runtime::InferenceContext,
+    ) -> std::result::Result<Vec<RegionRecognitionResult>, String> {
+        let mut results = Vec::with_capacity(requests.len());
+        for request in requests {
+            match (self.recognize_crop)(&request.image) {
+                Ok(result) => results.push(RegionRecognitionResult {
+                    id: request.id.clone(),
+                    kind: request.kind,
+                    text: result.text,
+                    confidence: result.confidence,
+                    latency_ms: 0,
+                }),
+                Err(e) => {
+                    results.push(RegionRecognitionResult {
+                        id: request.id.clone(),
+                        kind: request.kind,
+                        text: String::new(),
+                        confidence: 0.0,
+                        latency_ms: 0,
+                    });
+                    log::warn!("Batch formula request {} failed: {}", request.id, e);
+                }
+            }
+        }
+        Ok(results)
+    }
+}
+
+/// Build batch runtime evidence from the context. The effective provider is
+/// read from real runtime metadata (never the configured preference); when
+/// the runtime has not reported one the evidence records it as unknown and
+/// the batch size falls back to the CPU policy — we never invent a provider.
+fn batch_evidence(ctx: &PipelineContext) -> BatchRuntimeEvidence {
+    let effective_provider = ctx
+        .metadata
+        .get("effectiveProvider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    BatchRuntimeEvidence {
+        effective_provider: effective_provider.clone(),
+        provider_family: provider_family(&effective_provider),
+        manifest_batch_limit: None,
+        available_memory_bytes: None,
     }
 }
 

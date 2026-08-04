@@ -74,6 +74,21 @@ impl PipelineNode for DetectorNode {
             None => return Ok(()),
         };
 
+        // Formula-dominant fast path: when the dominance node decided the
+        // image is formula-only, text detection is skipped entirely and the
+        // pipeline runs whole-image FormulaRecognition instead.
+        if self.task == ModelTask::TextDetection {
+            if let Some(fast_path) = ctx.metadata.get("fastPath").and_then(|v| v.as_str()) {
+                if fast_path == "formulaDominant" {
+                    ctx.artifacts.text_detections.clear();
+                    log::info!(
+                        "DetectorNode: skipping text detection (formula-dominant fast path)"
+                    );
+                    return Ok(());
+                }
+            }
+        }
+
         // Try using ModelPackage if available
         if let Some(package) = ctx.get_model_package(&self.task) {
             return self.detect_via_package(ctx, &image, &*package).await;

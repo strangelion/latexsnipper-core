@@ -159,12 +159,16 @@ impl PipelineNode for RegionResolveNode {
                             targets.push(RecognitionTarget::TopLevelText {
                                 detection_index: slot,
                             });
-                            new_text_detections.push(DetectionBox::rect(
+                            // Preserve the clipped quad so downstream crop/
+                            // warp stages keep supporting rotated text.
+                            let mut det = DetectionBox::rect(
                                 f.rect,
                                 r.candidate.confidence,
                                 0,
                                 "text".into(),
-                            ));
+                            );
+                            det.quad = f.polygon;
+                            new_text_detections.push(det);
                         }
                         let _ = original;
                     } else if let Some(det) = original {

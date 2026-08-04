@@ -219,6 +219,7 @@ fn hybrid_plan(profile: PipelineProfile, parse_mode: DocumentParseMode) -> Pipel
         vec![
             PipelineNodeSpec::Layout,
             PipelineNodeSpec::DetectFormula,
+            PipelineNodeSpec::CheckFormulaDominance,
             PipelineNodeSpec::DetectText,
             PipelineNodeSpec::DetectTable,
             PipelineNodeSpec::Crop,
@@ -236,6 +237,14 @@ fn hybrid_plan(profile: PipelineProfile, parse_mode: DocumentParseMode) -> Pipel
                     PipelineNodeSpec::DetectFormula,
                     PipelineNodeSpec::DetectText,
                 ],
+            ),
+            dependency(
+                PipelineNodeSpec::CheckFormulaDominance,
+                &[PipelineNodeSpec::DetectFormula],
+            ),
+            dependency(
+                PipelineNodeSpec::DetectText,
+                &[PipelineNodeSpec::CheckFormulaDominance],
             ),
             dependency(
                 PipelineNodeSpec::ResolveRegions,
@@ -316,9 +325,12 @@ mod tests {
     fn hybrid_profile_is_declarative_and_preserves_existing_graph_shape() {
         let plan = PipelinePlanner.plan(PipelineProfile::Mixed, DocumentParseMode::OpenDocHybrid);
         assert_eq!(plan.id, "Mixed_pipeline");
-        assert_eq!(plan.nodes.len(), 11);
+        assert_eq!(plan.nodes.len(), 12);
         assert!(plan.nodes.contains(&PipelineNodeSpec::ResolveRegions));
-        assert_eq!(plan.build_graph().len(), 11);
+        assert!(plan
+            .nodes
+            .contains(&PipelineNodeSpec::CheckFormulaDominance));
+        assert_eq!(plan.build_graph().len(), 12);
     }
 
     #[test]

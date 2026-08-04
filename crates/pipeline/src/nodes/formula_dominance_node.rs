@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use latexsnipper_foundation::Result;
+use latexsnipper_inference::DetectionBox;
 
 use crate::context::PipelineContext;
 use crate::formula_dominance::{decide_formula_dominance, FormulaBoxInput};
@@ -51,7 +52,9 @@ impl PipelineNode for FormulaDominanceNode {
             .iter()
             .map(|det| FormulaBoxInput {
                 rect: det.rect,
-                isolated: true,
+                // Read the real isolated/display label from the detector
+                // instead of assuming every detection is display mode.
+                isolated: det.class_name == "isolated" || det.class_name == "display",
                 confidence: det.confidence,
             })
             .collect();
@@ -68,8 +71,24 @@ impl PipelineNode for FormulaDominanceNode {
         };
 
         if decision.dominant {
-            // Formula-dominant fast path: skip text pipeline entirely.
+            // Formula-dominant fast path: skip text detection entirely and
+            // replace per-box detections with a single whole-image formula
+            // detection, so RecognizeFormula runs whole-image recognition
+            // and produces one FormulaBlock (fastPath = formulaDominant).
             ctx.artifacts.text_detections.clear();
+            let full_rect =
+                latexsnipper_ast::Rect::new(0.0, 0.0, image.width() as f32, image.height() as f32);
+            let best_confidence = formula_detections
+                .iter()
+                .map(|det| det.confidence)
+                .fold(0.0f32, f32::max)
+                .max(0.9);
+            ctx.artifacts.formula_detections = vec![DetectionBox::rect(
+                full_rect,
+                best_confidence,
+                1,
+                "isolated".into(),
+            )];
             ctx.metadata
                 .insert("fastPath".into(), serde_json::json!("formulaDominant"));
             ctx.metadata.insert(

@@ -112,7 +112,10 @@ impl PipelineNode for CropNode {
                     &intersecting,
                     &crate::formula_mask::FormulaMaskOptions::default(),
                 );
-                if !masked.evidence.fell_back {
+                // Record evidence for every text crop that intersects a
+                // formula, including fallback runs: a fallback must be
+                // observable, not silently dropped.
+                if !intersecting.is_empty() {
                     mask_evidence.push(crate::artifacts::TextCropMaskEvidence {
                         text_detection_index: det_idx,
                         mask: masked.evidence,

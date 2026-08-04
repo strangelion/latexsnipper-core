@@ -98,11 +98,12 @@ pub fn detect_columns(blocks: &[Block], page_width: f32, min_gutter: f32) -> Col
         .min(page_width);
     let top = geoms.iter().map(|g| g.y).fold(f32::MAX, f32::min);
     let bottom = geoms.iter().map(|g| g.bottom()).fold(0.0, f32::max);
-    let _content_height = (bottom - top).max(1.0);
+    let content_height = (bottom - top).max(1.0);
 
     // Sample the x-axis for vertical whitespace runs wide enough to be a
-    // real gutter (a genuine multi-column page). A column x-position is
-    // "empty" when no block covers it.
+    // real gutter. A gutter must also span most of the content height: a
+    // wide gap that only cuts a few lines (e.g. between a heading and the
+    // body) is an intra-line gap, not a column gutter.
     let sample_step = 4.0f32;
     let mut x = min_x;
     let mut gaps: Vec<(f32, f32)> = Vec::new();
@@ -114,7 +115,7 @@ pub fn detect_columns(blocks: &[Block], page_width: f32, min_gutter: f32) -> Col
             gap_start = Some(x);
         } else if covered {
             if let Some(start) = gap_start.take() {
-                if x - start >= min_gutter {
+                if x - start >= min_gutter && gap_span(&geoms, start, x) >= content_height * 0.5 {
                     gaps.push((start, x));
                 }
             }
@@ -122,7 +123,7 @@ pub fn detect_columns(blocks: &[Block], page_width: f32, min_gutter: f32) -> Col
         x += sample_step;
     }
     if let Some(start) = gap_start.take() {
-        if max_x - start >= min_gutter {
+        if max_x - start >= min_gutter && gap_span(&geoms, start, max_x) >= content_height * 0.5 {
             gaps.push((start, max_x));
         }
     }
@@ -147,6 +148,31 @@ pub fn detect_columns(blocks: &[Block], page_width: f32, min_gutter: f32) -> Col
     ColumnBounds { columns }
 }
 
+/// Vertical span covered by blocks on both sides of the gap. A real column
+/// gutter is flanked by content (left column + right column) spanning most
+/// of the content height; a gap cutting a single line has a shallow span.
+fn gap_span(geoms: &[Rect], gap_start: f32, gap_end: f32) -> f32 {
+    let mut min_y = f32::MAX;
+    let mut max_y = 0.0f32;
+    let mut found = false;
+    for g in geoms {
+        // The block is entirely left of the gap or entirely right of it —
+        // either way it flanks the gutter.
+        let on_left = g.right() <= gap_start;
+        let on_right = g.x >= gap_end;
+        if (on_left || on_right) && g.width > 1.0 {
+            min_y = min_y.min(g.y);
+            max_y = max_y.max(g.bottom());
+            found = true;
+        }
+    }
+    if !found {
+        0.0
+    } else {
+        (max_y - min_y).max(0.0)
+    }
+}
+
 /// Assign structured layout positions to every block on a page.
 ///
 /// For each block with geometry it computes:
@@ -166,8 +192,11 @@ pub fn assign_layout_positions(
     page_height: f32,
     page_index: usize,
 ) {
-    // Detect columns from geometry.
-    let bounds = detect_columns(blocks, page_width, 40.0);
+    // Detect columns from geometry. The gutter threshold scales with the
+    // page (a 40px gutter on a 800px page is a real column gap; on a
+    // 2000px page it is not).
+    let gutter = (page_width * 0.03).clamp(24.0, 120.0);
+    let bounds = detect_columns(blocks, page_width, gutter);
 
     // Assign column per block.
     let mut column_lines: Vec<Vec<usize>> = vec![Vec::new(); bounds.columns.len()];
@@ -202,8 +231,10 @@ pub fn assign_layout_positions(
                 .then_with(|| ga.x.partial_cmp(&gb.x).unwrap_or(std::cmp::Ordering::Equal))
         });
 
-        let y_threshold = 20.0f32;
-        let paragraph_gap = 24.0f32;
+        // Line/paragraph thresholds scale with the page so the same layout
+        // produces the same structure at any DPI.
+        let y_threshold = (page_height * 0.012).max(8.0);
+        let paragraph_gap = (page_height * 0.02).max(14.0);
         let mut line_id = 0usize;
         let mut paragraph_id = 0usize;
         let mut prev_y: Option<f32> = None;
@@ -253,25 +284,35 @@ pub fn assign_layout_positions(
 }
 
 /// Infer the reading-order role of a block from geometry heuristics.
+///
+/// Order matters: page numbers (small, right-aligned in the footer band)
+/// are detected before generic footers so a footer-page number is not
+/// misclassified. A display formula is a paragraph-level content block, not
+/// a lead-in; `FormulaLeadIn` is only for short text immediately preceding
+/// a display formula (detected by the caller when applicable).
 fn infer_role(block: &Block, geom: &Rect, page_height: f32) -> ReadingOrderRole {
     if matches!(block, Block::Heading(_)) {
         return ReadingOrderRole::Heading;
     }
-    if matches!(block, Block::Formula(f) if f.geometry.is_some()) {
-        return ReadingOrderRole::FormulaLeadIn;
-    }
-    // Header / footer / page number bands.
+    // Header band (top 6%).
     if geom.y < page_height * 0.06 {
         return ReadingOrderRole::Header;
     }
+    // Footer band (bottom 6%): a small isolated box there is a page number.
     if geom.bottom() > page_height * 0.94 {
+        let normalized_height = geom.height / page_height.max(1.0);
+        let normalized_width = geom.width / page_height.max(1.0);
+        let looks_like_page_number = normalized_height <= 0.03 && normalized_width <= 0.1;
+        if looks_like_page_number {
+            return ReadingOrderRole::PageNumber;
+        }
         return ReadingOrderRole::Footer;
-    }
-    if geom.height <= 14.0 && geom.width <= 60.0 && geom.y > page_height * 0.9 {
-        return ReadingOrderRole::PageNumber;
     }
     if matches!(block, Block::Figure(_)) {
         return ReadingOrderRole::Caption;
+    }
+    if matches!(block, Block::Formula(_)) {
+        return ReadingOrderRole::Paragraph;
     }
     ReadingOrderRole::Paragraph
 }
@@ -391,7 +432,8 @@ mod tests {
         assert_eq!(p1.reading_order, 1);
         assert_eq!(pf.reading_order, 2);
         assert!(pf.is_display_formula);
-        assert_eq!(pf.role, ReadingOrderRole::FormulaLeadIn);
+        // A display formula is paragraph-level content, not a lead-in.
+        assert_eq!(pf.role, ReadingOrderRole::Paragraph);
         // Different lines.
         assert_ne!(p0.line_id, p1.line_id);
     }

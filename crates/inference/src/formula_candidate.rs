@@ -213,7 +213,11 @@ pub fn build_candidate(
     let latex = latex.into();
     let mut quality_flags = check_quality_flags(&latex, confidence, policy);
     let ast_semantic_hash = match parse_formula_latex(&latex) {
-        Ok(_) => Some(semantic_hash(&latex)),
+        Ok(layout) => {
+            // Semantic hash over the canonical AST projection, so equivalent
+            // formulas (modulo whitespace/source spelling) share a hash.
+            Some(semantic_hash(&layout.canonical_latex()))
+        }
         Err(_) => {
             quality_flags.push(FormulaQualityFlag::AstParseFailure);
             None
@@ -265,10 +269,11 @@ pub fn arbitrate_candidates(
                         reason: format!("scored {score}, below best {best_score}"),
                     });
                 } else {
-                    // Tie: prefer the later whole-image retry (more complete).
+                    // Tie: keep the earlier candidate (stable, deterministic
+                    // choice) and record the tie explicitly.
                     rejected_reasons.push(RejectedCandidate {
                         candidate_index: idx,
-                        reason: "tie broken in favor of earlier candidate".into(),
+                        reason: "tie broken in favor of earlier candidate (deterministic)".into(),
                     });
                 }
             }
@@ -426,6 +431,18 @@ mod tests {
     fn empty_candidates_arbitrate_to_none() {
         let arbitration = arbitrate_candidates(Vec::new(), &FormulaArbitrationPolicy::default());
         assert!(arbitration.selected_index.is_none());
+    }
+
+    #[test]
+    fn semantic_hash_stable_across_equivalent_latex() {
+        // Whitespace differences must not change the semantic hash.
+        let a = cand(FormulaCandidateSource::Segmented, r"x+y=1", 0.9);
+        let b = cand(FormulaCandidateSource::Segmented, r"x + y = 1", 0.9);
+        assert!(a.ast_semantic_hash.is_some());
+        assert_eq!(a.ast_semantic_hash, b.ast_semantic_hash);
+        // Semantically different formulas differ.
+        let c = cand(FormulaCandidateSource::Segmented, r"x+2y=1", 0.9);
+        assert_ne!(a.ast_semantic_hash, c.ast_semantic_hash);
     }
 
     #[test]

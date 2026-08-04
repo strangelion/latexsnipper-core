@@ -5,7 +5,7 @@ use latexsnipper_inference::LanguageDetector;
 
 use crate::context::PipelineContext;
 use crate::node::PipelineNode;
-use crate::reading_order::ReadingOrder;
+use crate::reading_order::{assign_layout_positions, ReadingOrder};
 
 /// Post-processes recognition results (sort by reading order, merge, and
 /// apply language-specific text cleanup for multilingual output).
@@ -56,6 +56,18 @@ impl PipelineNode for PostprocessNode {
 
         // Sort by reading order (y-bucket + x tie-breaker)
         ReadingOrder::sort(&mut blocks, self.y_threshold);
+
+        // Assign structured layout positions (columnId, lineId, paragraphId,
+        // readingOrder, role, isDisplayFormula) so the final AST carries
+        // two-column / paragraph / header-footer evidence.
+        let (page_width, page_height) = ctx
+            .image
+            .as_ref()
+            .map(|img| (img.width() as f32, img.height() as f32))
+            .unwrap_or((0.0, 0.0));
+        if page_width > 0.0 && page_height > 0.0 {
+            assign_layout_positions(&mut blocks, page_width, page_height, ctx.current_page);
+        }
 
         // Apply language-specific postprocessing recursively to all text blocks.
         // Recursively handles Paragraph, Heading, Table cells, List, Quote, etc.
