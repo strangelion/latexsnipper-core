@@ -1,7 +1,7 @@
 use crate::{
-    CropNode, DetectorNode, DocumentParseMode, FormulaLayoutNode, HandwritingRecognizerNode,
-    LayoutNode, PipelineCapability, PipelineGraph, PipelineNode, PostprocessNode, RecognizerNode,
-    RegionResolveNode, TableRecognizerNode, TableStructureNode,
+    CropNode, DetectorNode, DocumentParseMode, FormulaDominanceNode, FormulaLayoutNode,
+    HandwritingRecognizerNode, LayoutNode, PipelineCapability, PipelineGraph, PipelineNode,
+    PostprocessNode, RecognizerNode, RegionResolveNode, TableRecognizerNode, TableStructureNode,
 };
 
 /// A controlled node vocabulary that can be safely selected by a profile.
@@ -9,6 +9,7 @@ use crate::{
 pub enum PipelineNodeSpec {
     Layout,
     DetectFormula,
+    CheckFormulaDominance,
     DetectText,
     DetectTable,
     DetectHandwriting,
@@ -28,6 +29,7 @@ impl PipelineNodeSpec {
         match self {
             Self::Layout => "layout_analysis",
             Self::DetectFormula => "detect_formula",
+            Self::CheckFormulaDominance => "formula_dominance",
             Self::DetectText => "detect_text",
             Self::DetectTable => "detect_table",
             Self::DetectHandwriting => "detect_handwriting",
@@ -47,6 +49,7 @@ impl PipelineNodeSpec {
         match self {
             Self::Layout => Box::new(LayoutNode::new()),
             Self::DetectFormula => Box::new(DetectorNode::formula()),
+            Self::CheckFormulaDominance => Box::new(FormulaDominanceNode::new()),
             Self::DetectText => Box::new(DetectorNode::text()),
             Self::DetectTable => Box::new(DetectorNode::table()),
             Self::DetectHandwriting => Box::new(DetectorNode::handwriting()),

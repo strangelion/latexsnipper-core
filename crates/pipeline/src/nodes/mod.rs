@@ -1,5 +1,6 @@
 pub mod crop_node;
 pub mod detector_node;
+pub mod formula_dominance_node;
 pub mod formula_layout_node;
 pub mod handwriting_recognizer_node;
 pub mod layout_node;

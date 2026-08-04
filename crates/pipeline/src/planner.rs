@@ -78,6 +78,7 @@ impl PipelinePlanner {
                 parse_mode,
                 vec![
                     PipelineNodeSpec::DetectFormula,
+                    PipelineNodeSpec::CheckFormulaDominance,
                     PipelineNodeSpec::DetectText,
                     PipelineNodeSpec::Crop,
                     PipelineNodeSpec::RecognizeFormula,
@@ -91,6 +92,14 @@ impl PipelinePlanner {
                             PipelineNodeSpec::DetectFormula,
                             PipelineNodeSpec::DetectText,
                         ],
+                    ),
+                    dependency(
+                        PipelineNodeSpec::CheckFormulaDominance,
+                        &[PipelineNodeSpec::DetectFormula],
+                    ),
+                    dependency(
+                        PipelineNodeSpec::DetectText,
+                        &[PipelineNodeSpec::CheckFormulaDominance],
                     ),
                     dependency(
                         PipelineNodeSpec::RecognizeFormula,
@@ -353,5 +362,40 @@ mod tests {
                     .nodes
                     .len()
         );
+    }
+
+    #[test]
+    fn mixed_plan_gates_text_detection_on_formula_dominance() {
+        let plan =
+            PipelinePlanner.plan(PipelineProfile::Mixed, DocumentParseMode::SpecializedStable);
+        let formula_idx = plan
+            .nodes
+            .iter()
+            .position(|n| *n == PipelineNodeSpec::DetectFormula)
+            .unwrap();
+        let dominance_idx = plan
+            .nodes
+            .iter()
+            .position(|n| *n == PipelineNodeSpec::CheckFormulaDominance)
+            .unwrap();
+        let text_idx = plan
+            .nodes
+            .iter()
+            .position(|n| *n == PipelineNodeSpec::DetectText)
+            .unwrap();
+        assert!(
+            formula_idx < dominance_idx && dominance_idx < text_idx,
+            "dominance check must run after formula detection and gate text detection"
+        );
+        // The dominance gate edge must exist.
+        assert!(plan.edges.iter().any(|e| {
+            e.node == PipelineNodeSpec::CheckFormulaDominance
+                && e.depends_on.contains(&PipelineNodeSpec::DetectFormula)
+        }));
+        assert!(plan.edges.iter().any(|e| {
+            e.node == PipelineNodeSpec::DetectText
+                && e.depends_on
+                    .contains(&PipelineNodeSpec::CheckFormulaDominance)
+        }));
     }
 }

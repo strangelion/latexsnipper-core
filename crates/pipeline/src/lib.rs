@@ -1,6 +1,7 @@
 pub mod artifacts;
 pub mod capability;
 pub mod context;
+pub mod formula_dominance;
 pub mod formula_mask;
 pub mod graph;
 pub mod manifest;
@@ -26,6 +27,9 @@ pub use crate::opendoc_hybrid::DocumentParseMode;
 pub use artifacts::{CropRegion, PipelineArtifacts, RecognizedTable};
 pub use capability::PipelineCapability;
 pub use context::{PipelineCancellationToken, PipelineContext, PipelineProgressObserver};
+pub use formula_dominance::{
+    decide_formula_dominance, FormulaBoxInput, FormulaDominanceDecision, FormulaDominancePolicy,
+};
 pub use formula_mask::{
     apply_formula_mask, BackgroundEstimate, FormulaMaskEvidence, FormulaMaskOptions, MaskedCrop,
     MASK_ALGORITHM_VERSION, MIXED_FORMULA_MASK_FALLBACK,
@@ -39,6 +43,7 @@ pub use manifest::PipelineManifest;
 pub use node::{PipelineNode, TransformNode};
 pub use nodes::crop_node::CropNode;
 pub use nodes::detector_node::DetectorNode;
+pub use nodes::formula_dominance_node::FormulaDominanceNode;
 pub use nodes::formula_layout_node::FormulaLayoutNode;
 pub use nodes::handwriting_recognizer_node::HandwritingRecognizerNode;
 pub use nodes::layout_node::LayoutNode;
