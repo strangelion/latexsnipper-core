@@ -1,6 +1,7 @@
 pub mod artifacts;
 pub mod capability;
 pub mod context;
+pub mod formula_mask;
 pub mod graph;
 pub mod manifest;
 pub mod node;
@@ -25,6 +26,10 @@ pub use crate::opendoc_hybrid::DocumentParseMode;
 pub use artifacts::{CropRegion, PipelineArtifacts, RecognizedTable};
 pub use capability::PipelineCapability;
 pub use context::{PipelineCancellationToken, PipelineContext, PipelineProgressObserver};
+pub use formula_mask::{
+    apply_formula_mask, BackgroundEstimate, FormulaMaskEvidence, FormulaMaskOptions, MaskedCrop,
+    MASK_ALGORITHM_VERSION, MIXED_FORMULA_MASK_FALLBACK,
+};
 pub use graph::PipelineGraph;
 pub use latexsnipper_artifact::{
     ArtifactEdge, ArtifactEdgeKind, ArtifactGraph, ArtifactId, ArtifactKind, ArtifactRecord,

@@ -27,6 +27,7 @@ log.workspace = true
 thiserror.workspace = true
 async-trait = "0.1"
 serde_yaml = "0.9"
+sha2 = "0.10"
 
 [features]
 default = ["native"]

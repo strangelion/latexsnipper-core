@@ -40,6 +40,18 @@ pub struct PipelineArtifacts {
 
     // Routing: what each recognizer should process
     pub recognition_targets: Vec<RecognitionTarget>,
+
+    // Formula-mask evidence: one entry per text crop that was masked before
+    // OCR (background-aware formula masking, P0-2).
+    pub text_crop_mask_evidence: Vec<TextCropMaskEvidence>,
+}
+
+/// Evidence of the formula mask applied to a text crop before OCR.
+#[derive(Debug, Clone)]
+pub struct TextCropMaskEvidence {
+    /// Index of the text detection the mask was applied to.
+    pub text_detection_index: usize,
+    pub mask: crate::formula_mask::FormulaMaskEvidence,
 }
 
 /// A recognized table with its bounding box and grid cells.

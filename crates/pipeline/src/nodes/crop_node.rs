@@ -67,10 +67,14 @@ impl PipelineNode for CropNode {
         }
         ctx.artifacts.formula_crops = formula_crops;
 
-        // Crop text detections — use quad warp when available, fall back to rect crop
+        // Crop text detections — use quad warp when available, fall back to rect crop.
+        // Text crops overlapping formula regions are masked with the estimated
+        // local background so the OCR model only sees pure text.
         let text_detections = ctx.artifacts.text_detections.clone();
+        let formula_detections = ctx.artifacts.formula_detections.clone();
         let mut text_crops = Vec::new();
-        for det in &text_detections {
+        let mut mask_evidence = Vec::new();
+        for (det_idx, det) in text_detections.iter().enumerate() {
             let w = det.rect.width as u32;
             let h = det.rect.height as u32;
 
@@ -87,14 +91,42 @@ impl PipelineNode for CropNode {
                         latexsnipper_ast::Rect::new(x as f32, y as f32, w as f32, h as f32),
                     )
                 };
+
+                // Background-aware formula mask: fill any formula region that
+                // intersects this text crop before OCR.
+                let intersecting: Vec<latexsnipper_ast::Rect> = formula_detections
+                    .iter()
+                    .filter(|fd| {
+                        let overlap_x =
+                            det.rect.right().min(fd.rect.right()) - det.rect.x.max(fd.rect.x);
+                        let overlap_y =
+                            det.rect.bottom().min(fd.rect.bottom()) - det.rect.y.max(fd.rect.y);
+                        overlap_x > 0.0 && overlap_y > 0.0
+                    })
+                    .map(|fd| fd.rect)
+                    .collect();
+                let masked = crate::formula_mask::apply_formula_mask(
+                    &image,
+                    cropped,
+                    det.rect,
+                    &intersecting,
+                    &crate::formula_mask::FormulaMaskOptions::default(),
+                );
+                if !masked.evidence.fell_back {
+                    mask_evidence.push(crate::artifacts::TextCropMaskEvidence {
+                        text_detection_index: det_idx,
+                        mask: masked.evidence,
+                    });
+                }
                 text_crops.push(CropRegion {
                     rect: det.rect,
-                    image: cropped,
+                    image: masked.image,
                 });
                 total_crops += 1;
             }
         }
         ctx.artifacts.text_crops = text_crops;
+        ctx.artifacts.text_crop_mask_evidence = mask_evidence;
 
         // Crop handwriting detections
         let handwriting_detections = ctx.artifacts.handwriting_detections.clone();
