@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "mixed-mask-dark-theme-bleed",
+  "source": "mixed-ocr/mask",
+  "inputHash": "5eb6f483dfa891c7dbaf1e4847c186a995714f2456ff1673801e271756754b09",
+  "inputType": "text-crop",
+  "sanitizedInputRef": null,
+  "expectedRef": null,
+  "actualRef": null,
+  "coreCommit": "pending",
+  "model": null,
+  "runtime": null,
+  "provider": null,
+  "diagnostics": [
+    "dark-theme background estimate diverged from true background by >threshold"
+  ],
+  "failureSignature": "MIXED_FORMULA_MASK_DARK_BG_ESTIMATE_OFF",
+  "astHash": null,
+  "redistributable": true,
+  "license": "CC0-1.0",
+  "sanitized": true,
+  "reproducible": false,
+  "hasExpectedResult": false,
+  "errorClassification": "mixed-ocr",
+  "status": "new"
+}

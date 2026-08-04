@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "mixed-dominant-misjudged-ink",
+  "source": "mixed-ocr/dominance",
+  "inputHash": "748a9abae6fe42a0e4f010f03967d8bcf19231318d102689c41afab0c33fa53d",
+  "inputType": "page",
+  "sanitizedInputRef": null,
+  "expectedRef": null,
+  "actualRef": null,
+  "coreCommit": "pending",
+  "model": null,
+  "runtime": null,
+  "provider": null,
+  "diagnostics": [
+    "outside-formula ink crossing versioned threshold; dominant decision contested"
+  ],
+  "failureSignature": "FORMULA_DOMINANCE_OUTSIDE_INK_THRESHOLD_MISJUDGED",
+  "astHash": null,
+  "redistributable": true,
+  "license": "CC0-1.0",
+  "sanitized": true,
+  "reproducible": false,
+  "hasExpectedResult": false,
+  "errorClassification": "mixed-ocr",
+  "status": "new"
+}

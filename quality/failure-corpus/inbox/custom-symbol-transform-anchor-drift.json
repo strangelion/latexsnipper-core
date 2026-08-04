@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "custom-symbol-transform-anchor-drift",
+  "source": "custom-symbol/transform",
+  "inputHash": "5c40139a3505d1eb9f7e1967773cbbc57a3b62e98d42fc48b4a28c78e5f895f8",
+  "inputType": "symbol",
+  "sanitizedInputRef": null,
+  "expectedRef": null,
+  "actualRef": null,
+  "coreCommit": "pending",
+  "model": null,
+  "runtime": null,
+  "provider": null,
+  "diagnostics": [
+    "mirrored glyph anchor moved after transform; metrics not recomputed"
+  ],
+  "failureSignature": "SYMBOL_TRANSFORM_ANCHOR_DRIFT",
+  "astHash": null,
+  "redistributable": true,
+  "license": "CC0-1.0",
+  "sanitized": true,
+  "reproducible": false,
+  "hasExpectedResult": false,
+  "errorClassification": "mixed-ocr",
+  "status": "new"
+}

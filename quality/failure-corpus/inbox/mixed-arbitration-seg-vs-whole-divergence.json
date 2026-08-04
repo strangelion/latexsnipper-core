@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "mixed-arbitration-seg-vs-whole-divergence",
+  "source": "mixed-ocr/arbitration",
+  "inputHash": "320e3e05924a27d9cec5bad0f2db81286b8e8827d79fa6229aa81e9a39c7cae3",
+  "inputType": "formula-crop",
+  "sanitizedInputRef": null,
+  "expectedRef": null,
+  "actualRef": null,
+  "coreCommit": "pending",
+  "model": null,
+  "runtime": null,
+  "provider": null,
+  "diagnostics": [
+    "segmented result and whole retry differ semantically; arbitration tie broken"
+  ],
+  "failureSignature": "SEGMENT_WHOLE_SEMANTIC_DIVERGENCE",
+  "astHash": null,
+  "redistributable": true,
+  "license": "CC0-1.0",
+  "sanitized": true,
+  "reproducible": false,
+  "hasExpectedResult": false,
+  "errorClassification": "mixed-ocr",
+  "status": "new"
+}

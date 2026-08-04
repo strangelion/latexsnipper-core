@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "mixed-segment-matrix-row-split",
+  "source": "mixed-ocr/segmentation",
+  "inputHash": "03452a67015a6b33bc402b858a330351a9414ab5cd0ea3d3159cd70e3e17cea7",
+  "inputType": "formula-crop",
+  "sanitizedInputRef": null,
+  "expectedRef": null,
+  "actualRef": null,
+  "coreCommit": "pending",
+  "model": null,
+  "runtime": null,
+  "provider": null,
+  "diagnostics": [
+    "matrix-like column gaps below min_matrix_columns; rows mechanically split"
+  ],
+  "failureSignature": "SEGMENTATION_SPLIT_MATRIX_ROW_BANDS",
+  "astHash": null,
+  "redistributable": true,
+  "license": "CC0-1.0",
+  "sanitized": true,
+  "reproducible": false,
+  "hasExpectedResult": false,
+  "errorClassification": "mixed-ocr",
+  "status": "new"
+}

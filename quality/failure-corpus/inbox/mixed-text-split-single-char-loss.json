@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "mixed-text-split-single-char-loss",
+  "source": "mixed-ocr/split",
+  "inputHash": "7c51dcfba5cbcc7f1e84fd47ac5cee6d1ad2761e77615806817689d4be8717d8",
+  "inputType": "text-region",
+  "sanitizedInputRef": null,
+  "expectedRef": null,
+  "actualRef": null,
+  "coreCommit": "pending",
+  "model": null,
+  "runtime": null,
+  "provider": null,
+  "diagnostics": [
+    "text fragment width below min_fragment_width policy dropped with reason recorded"
+  ],
+  "failureSignature": "TEXT_SPLIT_SINGLE_CHAR_FRAGMENT_BELOW_MIN_WIDTH",
+  "astHash": null,
+  "redistributable": true,
+  "license": "CC0-1.0",
+  "sanitized": true,
+  "reproducible": false,
+  "hasExpectedResult": false,
+  "errorClassification": "mixed-ocr",
+  "status": "new"
+}

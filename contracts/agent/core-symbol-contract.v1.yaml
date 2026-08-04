@@ -1,0 +1,155 @@
+{
+  "contractVersion": 1,
+  "name": "Custom symbol domain: metrics, variants, assembly, packs, CustomGlyph AST, transfer bundles",
+  "rules": [
+    {
+      "id": "CORE-SYMBOL-DOMAIN-001",
+      "description": "CustomMathSymbol validates id/name/metrics; visual width comes from advance_width and bounding_box, never from byte counts.",
+      "severity": "blocking",
+      "suite": "custom-symbol",
+      "scope": [
+        "custom-symbol"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-custom-symbols",
+          "symbol::tests"
+        ]
+      },
+      "failureMessage": "Custom symbol domain contract failed."
+    },
+    {
+      "id": "CORE-SYMBOL-METRICS-001",
+      "description": "MathGlyphMetrics validation rejects non-finite/non-positive scales and degenerate bounding boxes.",
+      "severity": "blocking",
+      "suite": "custom-symbol",
+      "scope": [
+        "custom-symbol"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-custom-symbols",
+          "invalid_metrics_rejected"
+        ]
+      },
+      "failureMessage": "Glyph metrics validation did not reject invalid values."
+    },
+    {
+      "id": "CORE-SYMBOL-VARIANTS-001",
+      "description": "Glyph variants carry per-variant metrics; assembly presence drives scale capability (stretchable vs fixedScaleOnly).",
+      "severity": "blocking",
+      "suite": "custom-symbol",
+      "scope": [
+        "custom-symbol"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-custom-symbols",
+          "assembly_presence_drives_scale_capability"
+        ]
+      },
+      "failureMessage": "Variant/assembly scale capability contract failed."
+    },
+    {
+      "id": "CORE-SYMBOL-PACK-001",
+      "description": "Secure lsymbolpack validation: stored ZIP parsing without extraction, required manifest, referenced-file presence.",
+      "severity": "blocking",
+      "suite": "custom-symbol",
+      "scope": [
+        "custom-symbol"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-custom-symbols",
+          "valid_pack_validates"
+        ]
+      },
+      "failureMessage": "Symbol pack validation failed on a valid archive."
+    },
+    {
+      "id": "CORE-SYMBOL-SECURITY-001",
+      "description": "Symbol packs reject absolute paths, path traversal, symlinks, excessive entries, oversized entries and zip-bomb ratios.",
+      "severity": "blocking",
+      "suite": "custom-symbol",
+      "scope": [
+        "custom-symbol",
+        "security"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-custom-symbols",
+          "pack::tests"
+        ]
+      },
+      "failureMessage": "Symbol pack security checks failed."
+    },
+    {
+      "id": "CORE-SYMBOL-TRANSFER-001",
+      "description": "FormulaTransferBundle and CustomSymbolTransferBundle round-trip through JSON with schema version validation.",
+      "severity": "blocking",
+      "suite": "custom-symbol",
+      "scope": [
+        "custom-symbol"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-custom-symbols",
+          "transfer::tests"
+        ]
+      },
+      "failureMessage": "Transfer bundle round-trip contract failed."
+    },
+    {
+      "id": "CORE-SYMBOL-AST-001",
+      "description": "FormulaNode::CustomGlyph round-trips through JSON preserving symbolId, pack reference, metrics snapshot and fallback.",
+      "severity": "blocking",
+      "suite": "custom-symbol",
+      "scope": [
+        "custom-symbol",
+        "ast"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-inference",
+          "custom_glyph_node_roundtrips_through_json"
+        ]
+      },
+      "failureMessage": "CustomGlyph AST node failed JSON round-trip."
+    }
+  ]
+}

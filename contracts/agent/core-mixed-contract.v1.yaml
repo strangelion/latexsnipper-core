@@ -1,0 +1,237 @@
+{
+  "contractVersion": 1,
+  "name": "Mixed OCR: text/formula split, masking, dominance, segmentation, batch, reading order",
+  "rules": [
+    {
+      "id": "CORE-MIXED-TEXT-SPLIT-001",
+      "description": "A text box overlapping a formula is split around the formula instead of being discarded wholesale; left/right/middle text survives and removal reasons are recorded.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "text_split_around_inline_formula"
+        ]
+      },
+      "failureMessage": "Text was lost around an inline formula instead of being split into fragments."
+    },
+    {
+      "id": "CORE-MIXED-TEXT-SPLIT-MULTI-001",
+      "description": "One text box may contain multiple formulae; fragments keep the reading order.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "two_formulae_keeps_middle"
+        ]
+      },
+      "failureMessage": "Text between two formulae was not preserved."
+    },
+    {
+      "id": "CORE-MIXED-TEXT-SPLIT-QUAD-001",
+      "description": "Rotated text quads are supported by the splitter and keep a clipped polygon.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "rotated_quad_keeps_polygon"
+        ]
+      },
+      "failureMessage": "Rotated text regions were not split correctly."
+    },
+    {
+      "id": "CORE-MIXED-FORMULA-MASK-001",
+      "description": "Background-aware formula masking estimates the local background (white/gray/dark/colored) and records maskAlgorithmVersion, formulaMaskRects, maskMargin, backgroundEstimate and maskedImageSha256.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "formula_mask::tests"
+        ]
+      },
+      "failureMessage": "Formula masking did not produce the required evidence or estimated the wrong background."
+    },
+    {
+      "id": "CORE-MIXED-FORMULA-MASK-FALLBACK-001",
+      "description": "Mask failures fall back to the unmasked crop and record MIXED_FORMULA_MASK_FALLBACK; text is never silently swallowed.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "falls_back_without_silent_loss"
+        ]
+      },
+      "failureMessage": "Mask fallback lost text or omitted the fallback code."
+    },
+    {
+      "id": "CORE-MIXED-DOMINANT-001",
+      "description": "Formula-dominant fast path decisions use versioned thresholds and skip the text pipeline when isolated formulae cover the ink.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "formula_dominance::tests"
+        ]
+      },
+      "failureMessage": "Formula-dominance decision violated the versioned policy."
+    },
+    {
+      "id": "CORE-MIXED-DOMINANT-PLAN-001",
+      "description": "The mixed pipeline plan gates text detection behind the formula-dominance check.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "gates_text_detection_on_formula_dominance"
+        ]
+      },
+      "failureMessage": "Text detection was not gated by the dominance decision."
+    },
+    {
+      "id": "CORE-MIXED-SEGMENTATION-001",
+      "description": "Matrices, cases and compact fractions are recognized whole; only sufficient multi-line evidence splits rows; wide single lines may split horizontally.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-inference",
+          "formula_lines::tests"
+        ]
+      },
+      "failureMessage": "Formula segmentation classified or split the image incorrectly."
+    },
+    {
+      "id": "CORE-MIXED-WHOLE-FALLBACK-001",
+      "description": "Segment-vs-whole arbitration prefers AST-parsable, structurally complete candidates with stable semantic hashes and records every rejection reason.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-inference",
+          "formula_candidate::tests"
+        ]
+      },
+      "failureMessage": "Quality fallback arbitration did not select the best candidate with provenance."
+    },
+    {
+      "id": "CORE-MIXED-BATCH-001",
+      "description": "Batch sizes are derived from effective provider evidence (CPU/accelerated/WASM), manifest limits and memory; evidence records batchSize/batchCount/paddingRatio/effectiveProvider.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-inference",
+          "batch_recognizer::tests"
+        ]
+      },
+      "failureMessage": "Batch sizing ignored effective provider evidence or failed to record batch evidence."
+    },
+    {
+      "id": "CORE-MIXED-READING-ORDER-001",
+      "description": "Reading order assigns pageIndex/columnId/lineId/paragraphId/readingOrder/role/isDisplayFormula with column-major ordering and gutter-based column detection.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "reading_order::tests"
+        ]
+      },
+      "failureMessage": "Reading-order analysis did not produce the structured layout evidence."
+    }
+  ]
+}

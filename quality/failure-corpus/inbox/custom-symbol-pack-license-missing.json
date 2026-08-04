@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "custom-symbol-pack-license-missing",
+  "source": "custom-symbol/pack",
+  "inputHash": "bd6bd877fa4e086dd8e094f824e3d2e018a48b44d73f8097116ae1f0eb35ce97",
+  "inputType": "symbol-pack",
+  "sanitizedInputRef": null,
+  "expectedRef": null,
+  "actualRef": null,
+  "coreCommit": "pending",
+  "model": null,
+  "runtime": null,
+  "provider": null,
+  "diagnostics": [
+    "pack manifest entry lacks license while LICENSES/ exists"
+  ],
+  "failureSignature": "SYMBOL_PACK_LICENSE_FIELD_MISSING",
+  "astHash": null,
+  "redistributable": true,
+  "license": "CC0-1.0",
+  "sanitized": true,
+  "reproducible": false,
+  "hasExpectedResult": false,
+  "errorClassification": "mixed-ocr",
+  "status": "new"
+}

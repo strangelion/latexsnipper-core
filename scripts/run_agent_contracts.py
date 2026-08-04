@@ -33,6 +33,8 @@ ALL_SUITES = {
     "failure-corpus",
     "model-package-security",
     "drawing",
+    "mixed-ocr",
+    "custom-symbol",
 }
 
 
