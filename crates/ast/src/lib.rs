@@ -77,8 +77,8 @@ pub use report::{
     StageProducedArtifact, StageReport, StageSpec, StageStatus, UnsupportedFeature,
 };
 pub use span::{
-    BlockPolicy, CoordinateSpace, NodeId, NodeIdGenerator, PdfSourceInfo, Position, Provenance,
-    ProvenanceOperation, SourceInfo, Span,
+    BlockPolicy, CoordinateSpace, LayoutPosition, NodeId, NodeIdGenerator, PdfSourceInfo, Position,
+    Provenance, ProvenanceOperation, ReadingOrderRole, SourceInfo, Span,
 };
 pub use style::{
     effective_text_style, AccessibilityInfo, AnnotationKind, BorderSide, BoxStyle, BulletStyle,

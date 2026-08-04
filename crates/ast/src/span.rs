@@ -170,6 +170,46 @@ pub struct SourceInfo {
     /// PDF-specific source information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pdf: Option<PdfSourceInfo>,
+    /// Structured layout position (column/line/paragraph/role) when the
+    /// reading-order analysis has run.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout_position: Option<LayoutPosition>,
+}
+
+/// The role of a block inside the document reading flow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReadingOrderRole {
+    Heading,
+    Paragraph,
+    Header,
+    Footer,
+    PageNumber,
+    Caption,
+    Reference,
+    FormulaLeadIn,
+    Unknown,
+}
+
+/// Structured layout position assigned by reading-order analysis.
+///
+/// Present on `SourceInfo` after column/paragraph/line ordering ran.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutPosition {
+    /// Page index (0-based).
+    pub page_index: usize,
+    /// Detected column id (0-based; 0 for single-column pages).
+    pub column_id: usize,
+    /// Line id within the column (0-based).
+    pub line_id: usize,
+    /// Paragraph id within the column (0-based).
+    pub paragraph_id: usize,
+    /// Global reading order (0-based, across columns).
+    pub reading_order: usize,
+    pub role: ReadingOrderRole,
+    /// True for display (block) formulae, false for inline.
+    pub is_display_formula: bool,
 }
 
 impl SourceInfo {
@@ -231,6 +271,12 @@ impl SourceInfo {
     /// Tag this source info with a page index (for multi-page PDF input).
     pub fn with_page(mut self, page: usize) -> Self {
         self.page = Some(page);
+        self
+    }
+
+    /// Tag this source info with a structured layout position.
+    pub fn with_layout_position(mut self, position: LayoutPosition) -> Self {
+        self.layout_position = Some(position);
         self
     }
 }

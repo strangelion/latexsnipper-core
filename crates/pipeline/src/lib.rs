@@ -13,6 +13,7 @@ pub mod plan;
 pub mod planner;
 pub mod profile;
 pub mod reading_order;
+pub use reading_order::{assign_layout_positions, detect_columns, ColumnBounds};
 pub mod region_graph;
 #[deprecated(
     since = "1.1.0",
