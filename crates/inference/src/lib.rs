@@ -1,5 +1,6 @@
 pub mod adapter_registry;
 pub mod adapters;
+pub mod batch_recognizer;
 pub mod cell_candidate;
 pub mod decoder_state;
 pub mod formula_backend;
@@ -28,6 +29,11 @@ pub mod yolo_utils;
 
 pub use adapter_registry::register_builtin_adapters;
 pub use adapters::formula_backend_adapter::FormulaBackendPackage;
+pub use batch_recognizer::{
+    choose_batch_size, provider_family, time_call, Batch, BatchRegionRecognizer, BatchRunEvidence,
+    BatchRuntimeEvidence, BatchSizePolicy, ProviderFamily, RegionRecognitionRequest,
+    RegionRecognitionResult, RegionRequestKind,
+};
 pub use cell_candidate::{
     cell_recognition_route, looks_like_hard_negative, select_ambiguous_cell_candidate,
     CellCandidate, CellCandidateDecision, CellCandidateKind, CellCandidateScore,
