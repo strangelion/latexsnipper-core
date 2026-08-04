@@ -89,6 +89,53 @@ pub enum FormulaNode {
     },
     /// Plain text (for debugging or unrecognized content).
     Text(String),
+    /// A custom (user-imported) math symbol.
+    CustomGlyph(CustomGlyphNode),
+}
+
+/// Fallback behavior when a custom symbol's resource is missing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CustomGlyphFallback {
+    /// Show a MissingGlyph placeholder, keep the node intact.
+    MissingGlyph,
+    /// Use the recorded metrics snapshot for layout.
+    UseMetricsSnapshot,
+    /// Render the LaTeX alias command if available.
+    LatexAlias(String),
+}
+
+/// A custom math glyph node inside the formula AST.
+///
+/// Carries the symbol id, optional pack reference, a metrics snapshot (so the
+/// node survives even when the pack is absent) and a fallback policy. Nodes
+/// are never dropped when resources are missing — they degrade to a
+/// placeholder and keep symbolId + metrics for re-linking.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomGlyphNode {
+    pub symbol_id: String,
+    pub pack_id: Option<String>,
+    /// Snapshot of the glyph metrics at insert time (font units).
+    pub metrics_snapshot: GlyphMetricsSnapshot,
+    pub fallback: CustomGlyphFallback,
+    /// SHA-256 of the canonical SVG used at insert time (for re-linking).
+    pub asset_sha256: Option<String>,
+}
+
+/// Self-contained metrics snapshot (independent of the custom-symbols crate).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphMetricsSnapshot {
+    pub units_per_em: u16,
+    pub advance_width: f32,
+    pub baseline: f32,
+    pub math_axis: f32,
+    pub italic_correction: f32,
+    pub display_scale: f32,
+    pub text_scale: f32,
+    pub script_scale: f32,
+    pub scriptscript_scale: f32,
 }
 
 /// Information about a symbol.
@@ -234,6 +281,14 @@ fn canonical_latex(node: &FormulaNode) -> String {
             content,
         } => format!("\\sqrt{{{}}}", canonical_latex(content)),
         FormulaNode::Text(text) => text.clone(),
+        // Custom glyphs project to their LaTeX alias when one exists, else
+        // their id as a command placeholder (never silently dropped).
+        FormulaNode::CustomGlyph(glyph) => match &glyph.fallback {
+            CustomGlyphFallback::LatexAlias(alias) => alias.clone(),
+            CustomGlyphFallback::MissingGlyph | CustomGlyphFallback::UseMetricsSnapshot => {
+                format!("\\customsymbol{{{}}}", glyph.symbol_id)
+            }
+        },
     }
 }
 

@@ -38,8 +38,9 @@ pub use format::{
 };
 pub use formula::{Formula, FormulaSource};
 pub use formula_layout::{
-    categorize_symbol, CommandInfo, EnvInfo, FormulaLayout, FormulaNode, SemanticAnnotation,
-    SemanticRole, SymbolCategory, SymbolInfo,
+    categorize_symbol, CommandInfo, CustomGlyphFallback, CustomGlyphNode, EnvInfo, FormulaLayout,
+    FormulaNode, GlyphMetricsSnapshot, SemanticAnnotation, SemanticRole, SymbolCategory,
+    SymbolInfo,
 };
 pub use geometry::{Point, Quad, Rect, Size};
 pub use inline::{

@@ -2317,6 +2317,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "latexsnipper-custom-symbols"
+version = "3.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "latexsnipper-drawing"
 version = "3.1.0"
 dependencies = [

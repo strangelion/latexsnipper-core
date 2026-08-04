@@ -984,6 +984,8 @@ fn count_symbols(node: &latexsnipper_ast::FormulaNode) -> usize {
             index.as_deref().map(count_symbols).unwrap_or_default() + count_symbols(content)
         }
         FormulaNode::Text(t) => t.chars().count(),
+        // Custom glyphs count as one symbol.
+        FormulaNode::CustomGlyph(_) => 1,
     }
 }
 #[cfg(test)]
