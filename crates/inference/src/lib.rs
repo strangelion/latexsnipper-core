@@ -3,6 +3,7 @@ pub mod adapters;
 pub mod cell_candidate;
 pub mod decoder_state;
 pub mod formula_backend;
+pub mod formula_candidate;
 pub mod formula_detector;
 pub mod formula_lines;
 pub mod formula_parser;
@@ -37,6 +38,11 @@ pub use decoder_state::{
     DecoderStateObservation, DecoderStateRole, DecoderStateSchema,
 };
 pub use formula_backend::{BackendConfig, FormulaBackend, OnnxFormulaBackend};
+pub use formula_candidate::{
+    arbitrate_candidates, build_candidate, check_quality_flags, FormulaArbitration,
+    FormulaArbitrationPolicy, FormulaCandidate, FormulaCandidateSource, FormulaQualityFlag,
+    RejectedCandidate,
+};
 pub use formula_detector::{
     detect_formulas, filter_formula_detections, group_formula_detections, DetectionParams,
 };

@@ -401,6 +401,7 @@ impl RecognizerNode {
                         }
                     } else {
                         let mut all_results = Vec::new();
+                        let mut segmented_latency = std::time::Duration::ZERO;
                         for group in &plan.groups {
                             for crop in &group.crops {
                                 let crop_img = latexsnipper_image::SnipperImage::new(
@@ -409,9 +410,16 @@ impl RecognizerNode {
                                     latexsnipper_image::color::PixelFormat::Rgb,
                                     crop.pixels.clone(),
                                 );
+                                let start = std::time::Instant::now();
                                 match recognize_crop(&crop_img) {
-                                    Ok(result) => all_results.push(result.text),
-                                    Err(e) => log::warn!("Formula line rec failed: {}", e),
+                                    Ok(result) => {
+                                        segmented_latency += start.elapsed();
+                                        all_results.push(result.text);
+                                    }
+                                    Err(e) => {
+                                        segmented_latency += start.elapsed();
+                                        log::warn!("Formula line rec failed: {}", e);
+                                    }
                                 }
                             }
                         }
@@ -428,7 +436,41 @@ impl RecognizerNode {
                                 FormulaSegmentationClass::WideSingleLine => all_results.join(" "),
                                 _ => all_results.join(" "),
                             };
-                            let mut f = Formula::latex(merged);
+
+                            // Segment-vs-whole arbitration: recognize the
+                            // whole image as a retry candidate and pick the
+                            // better one with explainable provenance.
+                            let policy =
+                                latexsnipper_inference::FormulaArbitrationPolicy::default();
+                            let whole_start = std::time::Instant::now();
+                            let whole_result = recognize_crop(&cropped);
+                            let whole_latency = whole_start.elapsed();
+
+                            let mut candidates = Vec::new();
+                            candidates.push(latexsnipper_inference::build_candidate(
+                                latexsnipper_inference::FormulaCandidateSource::Segmented,
+                                merged.clone(),
+                                0.9,
+                                segmented_latency,
+                                &policy,
+                            ));
+                            if let Ok(result) = whole_result {
+                                candidates.push(latexsnipper_inference::build_candidate(
+                                    latexsnipper_inference::FormulaCandidateSource::WholeImageRetry,
+                                    result.text.clone(),
+                                    result.confidence,
+                                    whole_latency,
+                                    &policy,
+                                ));
+                            }
+                            let arbitration =
+                                latexsnipper_inference::arbitrate_candidates(candidates, &policy);
+                            let selected = arbitration
+                                .selected_index
+                                .map(|idx| arbitration.candidates[idx].latex.clone())
+                                .unwrap_or(merged.clone());
+
+                            let mut f = Formula::latex(selected);
                             f.confidence = 0.9;
                             blocks.push(Block::Formula(FormulaBlock {
                                 formula: f,
