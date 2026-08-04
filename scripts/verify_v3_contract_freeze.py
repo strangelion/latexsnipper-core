@@ -30,6 +30,8 @@ CONTRACT_FILES = (
     "contracts/agent/core-quality-contract.v1.yaml",
     "contracts/agent/core-conversion-contract.v1.yaml",
     "contracts/agent/core-security-contract.v1.yaml",
+    "contracts/agent/core-mixed-contract.v1.yaml",
+    "contracts/agent/core-symbol-contract.v1.yaml",
     "quality/failure-corpus/candidate.schema.json",
     "quality/int8/thresholds.v1.json",
     "contracts/schema/drawing-office-payload-v1.schema.json",
@@ -56,6 +58,7 @@ PUBLIC_RUST_TREES = (
     "crates/ffi/src",
     "crates/wasm/src",
     "crates/drawing/src",
+    "crates/custom-symbols/src",
 )
 
 
