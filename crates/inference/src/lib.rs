@@ -40,6 +40,10 @@ pub use formula_backend::{BackendConfig, FormulaBackend, OnnxFormulaBackend};
 pub use formula_detector::{
     detect_formulas, filter_formula_detections, group_formula_detections, DetectionParams,
 };
+pub use formula_lines::{
+    plan_formula_segmentation, split_formula_line_groups, FormulaLineCrop, FormulaLineGroup,
+    FormulaSegmentPlan, FormulaSegmentPolicy, FormulaSegmentationClass,
+};
 pub use formula_parser::parse_formula_latex;
 pub use formula_recognizer::{
     load_tokenizer_from_str, recognize_formula, recognize_formula_with_tokenizer, RecognitionParams,

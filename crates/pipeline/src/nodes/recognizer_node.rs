@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
 use latexsnipper_image::operations;
-use latexsnipper_inference::formula_lines::split_formula_line_groups;
+use latexsnipper_inference::formula_lines::{plan_formula_segmentation, FormulaSegmentationClass};
 use latexsnipper_inference::{
     load_keys, load_tokenizer_from_str, recognize_formula, recognize_formula_with_tokenizer,
     recognize_text_with_keys, DetectionBox, FormulaBackend, PPFormulaNetAdapter, RecognitionParams,
@@ -370,9 +370,9 @@ impl RecognizerNode {
                 if w >= 4 && h >= 4 {
                     let cropped =
                         operations::crop(image, Rect::new(x as f32, y as f32, w as f32, h as f32));
-                    let line_groups = split_formula_line_groups(&cropped);
+                    let plan = plan_formula_segmentation(&cropped);
 
-                    if line_groups.is_empty() {
+                    if plan.groups.is_empty() || plan.groups[0].crops.is_empty() {
                         match recognize_crop(&cropped) {
                             Ok(result) => {
                                 let provenance = result.provenance.clone();
@@ -401,7 +401,7 @@ impl RecognizerNode {
                         }
                     } else {
                         let mut all_results = Vec::new();
-                        for group in &line_groups {
+                        for group in &plan.groups {
                             for crop in &group.crops {
                                 let crop_img = latexsnipper_image::SnipperImage::new(
                                     crop.width,
@@ -417,7 +417,17 @@ impl RecognizerNode {
                         }
 
                         if !all_results.is_empty() {
-                            let merged = all_results.join(" ");
+                            // Multi-line derivations are reconstructed as a
+                            // structured aligned environment instead of a
+                            // space-joined blob.
+                            let merged = match plan.classification {
+                                FormulaSegmentationClass::MultiLine => format!(
+                                    "\\begin{{aligned}} {} \\end{{aligned}}",
+                                    all_results.join("\\\\ ")
+                                ),
+                                FormulaSegmentationClass::WideSingleLine => all_results.join(" "),
+                                _ => all_results.join(" "),
+                            };
                             let mut f = Formula::latex(merged);
                             f.confidence = 0.9;
                             blocks.push(Block::Formula(FormulaBlock {
