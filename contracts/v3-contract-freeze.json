@@ -2,7 +2,7 @@
   "contractRelease": "3.0.0",
   "files": {
     "contracts/agent/core-conversion-contract.v1.yaml": "0708c8aca726b037af455d6035b0c83087e0e52ba0cd380c7ce9cfc22d773409",
-    "contracts/agent/core-mixed-contract.v1.yaml": "4a94f2ece70bd0714d7d4a2a08353915361f725dc3d7073ff34e01d5d45b61c0",
+    "contracts/agent/core-mixed-contract.v1.yaml": "ed21fac733c14c1450709574d09d1af39d69b623178992630bb19e817b173844",
     "contracts/agent/core-provider-contract.v1.yaml": "98b888cf32cbd4efb41065eae9259e9402eb779e30b3b41f339243c03cdd7a30",
     "contracts/agent/core-quality-contract.v1.yaml": "cccf71d32fdd0762fb6a12de33e48fde4c9e5c87461640d8b252f39a88aa1c21",
     "contracts/agent/core-runtime-contract.v1.yaml": "f6c50a366126be7f2c022cb9cffba8acf45dd16372e73ed575bdefb891be59dd",

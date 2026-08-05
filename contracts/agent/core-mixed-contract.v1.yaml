@@ -232,6 +232,98 @@
         ]
       },
       "failureMessage": "Reading-order analysis did not produce the structured layout evidence."
+    },
+    {
+      "id": "CORE-MIXED-MASK-EXEC-001",
+      "description": "Masked text crops actually reach the OCR model: CropNode produces masked crops with evidence and RecognizerNode consumes them (integration test).",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "--test",
+          "mixed_execution",
+          "crop_node_produces_masked_crops_and_fallback_evidence"
+        ]
+      },
+      "failureMessage": "Masked text crops are not fed to the recognizer."
+    },
+    {
+      "id": "CORE-MIXED-DOMINANT-EXEC-001",
+      "description": "The formula-dominant fast path actually gates text detection: DetectorNode skips when fastPath=formulaDominant (integration test).",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "--test",
+          "mixed_execution",
+          "detector_node_skips_text_on_formula_dominant_fast_path"
+        ]
+      },
+      "failureMessage": "Text detection is not gated by the dominance decision at execution time."
+    },
+    {
+      "id": "CORE-MIXED-QUAD-EXEC-001",
+      "description": "Rotated fragment quads survive projection: RegionResolveNode propagates the clipped quad into the detection (integration test).",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "--test",
+          "mixed_execution",
+          "region_resolve_propagates_fragment_quad"
+        ]
+      },
+      "failureMessage": "Rotated fragment geometry is lost before OCR."
+    },
+    {
+      "id": "CORE-MIXED-FALLBACK-EVIDENCE-001",
+      "description": "Mask fallback evidence is recorded for every formula-intersecting crop including fallback runs; text is never silently lost.",
+      "severity": "blocking",
+      "suite": "mixed-ocr",
+      "scope": [
+        "mixed-ocr"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-pipeline",
+          "--test",
+          "mixed_execution",
+          "mask_fallback_records_evidence_without_losing_text"
+        ]
+      },
+      "failureMessage": "Mask fallback is not observable or drops text."
     }
   ]
 }
