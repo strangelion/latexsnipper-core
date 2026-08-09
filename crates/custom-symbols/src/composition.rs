@@ -12,6 +12,7 @@ use crate::symbol::{GlyphBoundingBox, MathGlyphMetrics, Point};
 pub const COMPOSITION_SCHEMA_VERSION: u32 = 1;
 pub const MAX_COMPOSITION_LAYERS: usize = 128;
 pub const MAX_PATH_DATA_BYTES: usize = 16 * 1024;
+pub const MAX_FORMULA_SOURCE_BYTES: usize = 4 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -205,6 +206,13 @@ pub enum CompositionLayerSource {
     Primitive {
         primitive: DrawingPrimitive,
     },
+    /// A locally rendered mathematical fragment. The source is preserved so
+    /// hosts can render it with their bundled math engine after a round-trip;
+    /// executable markup and external resources are never embedded here.
+    Formula {
+        latex: String,
+        metrics_snapshot: MathGlyphMetrics,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -226,6 +234,9 @@ impl CompositionLayer {
                 metrics_snapshot, ..
             } => metrics_snapshot.bounding_box,
             CompositionLayerSource::Primitive { primitive } => primitive.bounds(),
+            CompositionLayerSource::Formula {
+                metrics_snapshot, ..
+            } => metrics_snapshot.bounding_box,
         }
     }
 
@@ -249,6 +260,22 @@ impl CompositionLayer {
                 metrics_snapshot.validate()?;
             }
             CompositionLayerSource::Primitive { primitive } => primitive.validate()?,
+            CompositionLayerSource::Formula {
+                latex,
+                metrics_snapshot,
+            } => {
+                let latex = latex.trim();
+                if latex.is_empty() || latex.len() > MAX_FORMULA_SOURCE_BYTES {
+                    return Err("composition formula source is empty or too large".into());
+                }
+                if latex
+                    .chars()
+                    .any(|ch| ch.is_control() && !ch.is_ascii_whitespace())
+                {
+                    return Err("composition formula source contains control characters".into());
+                }
+                metrics_snapshot.validate()?;
+            }
         }
         Ok(())
     }
@@ -522,5 +549,28 @@ mod tests {
         let restored: MathGlyphComposition = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.schema_version, COMPOSITION_SCHEMA_VERSION);
         assert_eq!(restored.layers.len(), 1);
+    }
+
+    #[test]
+    fn formula_layers_roundtrip_and_reject_unsafe_source() {
+        let mut formula = layer("formula", 0.0);
+        formula.source = CompositionLayerSource::Formula {
+            latex: r"\overset{\star}{\longrightarrow}".to_string(),
+            metrics_snapshot: MathGlyphMetrics::default(),
+        };
+        let composition = MathGlyphComposition {
+            layers: vec![formula],
+            ..MathGlyphComposition::default()
+        };
+        composition.validate("owner").unwrap();
+        let json = serde_json::to_string(&composition).unwrap();
+        let restored: MathGlyphComposition = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, composition);
+
+        let mut invalid = composition;
+        if let CompositionLayerSource::Formula { latex, .. } = &mut invalid.layers[0].source {
+            *latex = "x\u{0000}y".to_string();
+        }
+        assert!(invalid.validate("owner").is_err());
     }
 }

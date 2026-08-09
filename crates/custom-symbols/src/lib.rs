@@ -14,6 +14,7 @@ pub mod transforms;
 pub use composition::{
     CompositionLayer, CompositionLayerSource, CompositionTransform, DrawingPrimitive,
     MathGlyphComposition, COMPOSITION_SCHEMA_VERSION, MAX_COMPOSITION_LAYERS,
+    MAX_FORMULA_SOURCE_BYTES,
 };
 pub use pack::{
     validate_symbol_pack_archive, SymbolPackManifest, SymbolPackValidationError,
