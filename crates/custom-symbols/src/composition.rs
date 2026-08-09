@@ -223,6 +223,10 @@ pub struct CompositionLayer {
     pub source: CompositionLayerSource,
     pub transform: CompositionTransform,
     pub opacity: f32,
+    /// Optional fixed sRGB color. `None` keeps the host's current math color.
+    /// Only six-digit hex is accepted so the value remains inert and portable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
     pub z_index: i32,
     pub visible: bool,
 }
@@ -247,6 +251,13 @@ impl CompositionLayer {
         self.transform.validate()?;
         if !self.opacity.is_finite() || !(0.0..=1.0).contains(&self.opacity) {
             return Err("composition opacity must be within 0..=1".into());
+        }
+        if let Some(color) = &self.color {
+            let bytes = color.as_bytes();
+            if bytes.len() != 7 || bytes[0] != b'#' || !bytes[1..].iter().all(u8::is_ascii_hexdigit)
+            {
+                return Err("composition color must be a six-digit hex value".into());
+            }
         }
         match &self.source {
             CompositionLayerSource::Symbol {
@@ -482,6 +493,7 @@ mod tests {
                 ..CompositionTransform::default()
             },
             opacity: 1.0,
+            color: None,
             z_index: 0,
             visible: true,
         }
@@ -571,6 +583,21 @@ mod tests {
         if let CompositionLayerSource::Formula { latex, .. } = &mut invalid.layers[0].source {
             *latex = "x\u{0000}y".to_string();
         }
+        assert!(invalid.validate("owner").is_err());
+    }
+
+    #[test]
+    fn layer_color_is_portable_and_rejects_css_content() {
+        let mut colored = layer("colored", 0.0);
+        colored.color = Some("#7C3AED".to_string());
+        let composition = MathGlyphComposition {
+            layers: vec![colored],
+            ..MathGlyphComposition::default()
+        };
+        composition.validate("owner").unwrap();
+
+        let mut invalid = composition;
+        invalid.layers[0].color = Some("url(https://example.invalid/x)".to_string());
         assert!(invalid.validate("owner").is_err());
     }
 }

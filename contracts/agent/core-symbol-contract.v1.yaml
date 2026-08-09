@@ -153,7 +153,7 @@
     },
     {
       "id": "CORE-SYMBOL-COMPOSITION-001",
-      "description": "Custom symbols can be composed from existing symbol snapshots, locally rendered LaTeX fragments and safe drawing primitives; visual bounds, advance width and anchors are recomputed and the versioned composition round-trips.",
+      "description": "Custom symbols can be composed from existing symbol snapshots, locally rendered LaTeX fragments and safe drawing primitives with inert per-layer hex colors; visual bounds, advance width and anchors are recomputed and the versioned composition round-trips.",
       "severity": "blocking",
       "suite": "custom-symbol",
       "scope": [
