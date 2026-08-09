@@ -150,6 +150,28 @@
         ]
       },
       "failureMessage": "CustomGlyph AST node failed JSON round-trip."
+    },
+    {
+      "id": "CORE-SYMBOL-COMPOSITION-001",
+      "description": "Custom symbols can be composed from existing symbol snapshots and safe drawing primitives; visual bounds, advance width and anchors are recomputed and the versioned composition round-trips.",
+      "severity": "blocking",
+      "suite": "custom-symbol",
+      "scope": [
+        "custom-symbol",
+        "composition"
+      ],
+      "evidence": {
+        "kind": "command",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "latexsnipper-custom-symbols",
+          "composition::tests"
+        ]
+      },
+      "failureMessage": "Visual custom-symbol composition validation or geometry recomputation failed."
     }
   ]
 }

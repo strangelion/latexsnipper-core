@@ -7,6 +7,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::composition::MathGlyphComposition;
+
 /// Schema version of the custom symbol model.
 pub const CUSTOM_SYMBOL_SCHEMA_VERSION: u32 = 1;
 
@@ -266,6 +268,10 @@ pub struct CustomMathSymbol {
     pub metrics: MathGlyphMetrics,
     pub variants: Vec<MathGlyphVariant>,
     pub assembly: Option<MathGlyphAssembly>,
+    /// Optional visual composition used when the symbol was made from other
+    /// symbols or safe drawing primitives.
+    #[serde(default)]
+    pub composition: Option<MathGlyphComposition>,
     pub transforms: SymbolTransforms,
     pub provenance: SymbolProvenance,
 }
@@ -294,6 +300,7 @@ impl CustomMathSymbol {
             metrics,
             variants: Vec::new(),
             assembly: None,
+            composition: None,
             transforms: SymbolTransforms::default(),
             provenance,
         }
@@ -315,6 +322,9 @@ impl CustomMathSymbol {
             if assembly.minimum_connector_overlap < 0.0 {
                 return Err("assembly minimum_connector_overlap must be non-negative".into());
             }
+        }
+        if let Some(composition) = &self.composition {
+            composition.validate(&self.id)?;
         }
         Ok(())
     }

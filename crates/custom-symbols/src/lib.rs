@@ -5,11 +5,16 @@
 //! - [`pack`]: secure `*.lsymbolpack` ZIP validation
 //! - [`transfer`]: neutral formula / custom-symbol transfer bundles
 
+pub mod composition;
 pub mod pack;
 pub mod symbol;
 pub mod transfer;
 pub mod transforms;
 
+pub use composition::{
+    CompositionLayer, CompositionLayerSource, CompositionTransform, DrawingPrimitive,
+    MathGlyphComposition, COMPOSITION_SCHEMA_VERSION, MAX_COMPOSITION_LAYERS,
+};
 pub use pack::{
     validate_symbol_pack_archive, SymbolPackManifest, SymbolPackValidationError,
     SYMBOL_PACK_MANIFEST_NAME,
