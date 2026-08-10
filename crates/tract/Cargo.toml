@@ -11,8 +11,17 @@ publish = false
 latexsnipper-foundation.workspace = true
 latexsnipper-runtime.workspace = true
 latexsnipper-tensor.workspace = true
-tract-onnx = "=0.22.2"
-tract-core = "=0.22.2"
+tract-onnx = "=0.21.10"
+tract-core = "=0.21.10"
+# Anchor the complete compatible tract family. The 0.21.x crates use caret
+# ranges internally, but later patch releases change graph translation for the
+# frozen production decoder model.
+tract-data = "=0.21.10"
+tract-linalg = "=0.21.10"
+tract-onnx-opl = "=0.21.10"
 ndarray = "0.16"
 log.workspace = true
 prost = "0.11"
+
+[dev-dependencies]
+tract-nnef = "=0.21.16"

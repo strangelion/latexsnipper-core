@@ -122,7 +122,7 @@ latexsnipper-export = { path = "crates/export" }
 serde_json.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
-lopdf = "0.44"
+lopdf = { version = "0.44", default-features = false }
 
 [[example]]
 name = "ast_demo"
@@ -167,3 +167,7 @@ path = "tests/integration.rs"
 [[test]]
 name = "table_e2e"
 path = "tests/table_e2e.rs"
+
+[patch.crates-io]
+tract-hir = { path = "vendor/tract-hir-0.21.10" }
+tract-nnef = { path = "vendor/tract-nnef-0.21.16-security-backport" }

@@ -33,10 +33,19 @@ unmaintained-only exceptions. None is a known vulnerability at this review.
 | RUSTSEC-2024-0436 (`paste`) | `image -> ravif -> rav1e` and `imageproc -> nalgebra -> simba` | Compile-time macro dependency; monitor the image stack and remove when upstream does. |
 | RUSTSEC-2026-0192 (`ttf-parser`) | `resvg/usvg` and `imageproc/ab_glyph` | Used for bounded font/SVG processing; no maintained compatible replacement is currently integrated. Re-evaluate upstream before GA. |
 | RUSTSEC-2026-0206 (`rustybuzz`) | `resvg -> usvg` | Used for text shaping in bounded rendering; track the resvg/usvg replacement path. |
+| RUSTSEC-2026-0009 (`time`) | `tract-linalg` build dependency only | The vulnerable parser is not called by tract's code generator and `time` is absent from shipped runtime dependency trees. Tract 0.22 breaks the verified production TrOCR model; remove this exception when a compatible tract release accepts `time >=0.3.47`. |
 
 Exceptions are exact advisory IDs, never wildcard categories. A vulnerability,
 unsoundness advisory, or changed dependency path blocks release until separately
 reviewed and fixed or explicitly accepted with release-owner approval.
+
+RUSTSEC-2026-0217 is fixed without an exception by the vendored
+`tract-nnef` 0.21.16 security backport. It applies upstream commit `34c7df2`
+to the production-compatible 0.21.10 graph stack and includes a regression test
+that rejects overflowing attacker-controlled tensor dimensions. The remaining
+tract packages are pinned to 0.21.10 because the upstream 0.21.16 graph
+translator rejects the frozen production decoder model; the exact production
+profile is exercised in CI.
 
 ## Independent review status
 
