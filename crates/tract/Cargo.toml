@@ -11,8 +11,8 @@ publish = false
 latexsnipper-foundation.workspace = true
 latexsnipper-runtime.workspace = true
 latexsnipper-tensor.workspace = true
-tract-onnx = "0.21"
-tract-core = "0.21"
+tract-onnx = "=0.22.2"
+tract-core = "=0.22.2"
 ndarray = "0.16"
 log.workspace = true
 prost = "0.11"

@@ -99,9 +99,6 @@ cap-fs-ext = "=4.0.2"
 tokenizers = { version = "0.21", default-features = false, features = ["fancy-regex"] }
 half = "2"
 
-[patch.crates-io]
-tract-hir = { path = "vendor/tract-hir-0.21.10" }
-
 # Root package for examples and tests
 [package]
 name = "latexsnipper-core"
