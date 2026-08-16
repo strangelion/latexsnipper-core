@@ -33,6 +33,7 @@ jobs:
           python scripts/verify_release_version.py \
             --expected "$VERSION" --tag "$GITHUB_REF_NAME" --stable
           python scripts/verify_v3_contract_freeze.py
+          python scripts/verify_release_approvals.py
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
 
   # ============================================================
