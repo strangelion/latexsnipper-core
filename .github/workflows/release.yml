@@ -34,6 +34,7 @@ jobs:
             --expected "$VERSION" --tag "$GITHUB_REF_NAME" --stable
           python scripts/verify_v3_contract_freeze.py
           python scripts/verify_release_approvals.py
+          python scripts/verify_publish_order.py
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
 
   # ============================================================
@@ -378,9 +379,9 @@ jobs:
             publish latexsnipper-syntax
             publish latexsnipper-model
             publish latexsnipper-image
+            publish latexsnipper-api-types
             publish latexsnipper-runtime
             publish latexsnipper-inference
-            publish latexsnipper-api-types
             publish latexsnipper-export
             publish latexsnipper-runtime-paddle
             publish latexsnipper-runtime-executorch
