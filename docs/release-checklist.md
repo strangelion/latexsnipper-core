@@ -37,6 +37,14 @@
       enable-state checks and host-side package re-verification.
 - [x] Obtain an independent security review before advertising third-party execution.
       See [SECURITY_REVIEW.md](../../SECURITY_REVIEW.md) for the full audit report.
+- [ ] Release owner explicitly approves the `RUSTSEC-2026-0009` (`time`) audit
+      exception before shipping. The exception is scoped to a `tract-linalg`
+      build dependency whose vulnerable parser is never invoked by tract's code
+      generator and is absent from shipped runtime trees; it is accepted pending
+      a compatible tract release with `time >= 0.3.47`. Reject or re-evaluate if
+      `time` enters a shipped runtime dependency tree or the exception is widened
+      beyond the exact advisory ID.
+      See [security-review.md](v3/security-review.md).
 - [ ] Obtain production OCR-model compatibility and accuracy evidence beyond the
       document-orientation compatibility smoke.
       See [model-evidence.md](model-evidence.md) for the evidence template and
@@ -51,7 +59,7 @@
 ## Pre-release documents
 
 | Document | Purpose | Status |
-|----------|---------|--------|
+| ---------- | --------- | -------- |
 | [SECURITY_REVIEW.md](../../SECURITY_REVIEW.md) | Independent security audit of plugin/WASI system | [x] Complete |
 | [model-evidence.md](model-evidence.md) | Model accuracy/runtime evidence template | [ ] Requires evaluation run |
 | [visual-smoke-checklist.md](visual-smoke-checklist.md) | Manual Office/PDF visual smoke test matrix | [ ] Requires manual execution |
