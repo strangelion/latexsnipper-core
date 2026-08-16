@@ -78,12 +78,17 @@ def main() -> None:
 
     workflow_path = Path(args.workflow)
     if not workflow_path.exists():
-        print(f"publish-order error: workflow not found: {workflow_path}", file=sys.stderr)
+        print(
+            f"publish-order error: workflow not found: {workflow_path}", file=sys.stderr
+        )
         raise SystemExit(1)
 
     sequence = publish_sequence(workflow_path.read_text(encoding="utf-8"))
     if not sequence:
-        print("publish-order error: no `publish latexsnipper-*` lines found", file=sys.stderr)
+        print(
+            "publish-order error: no `publish latexsnipper-*` lines found",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
 
     metadata = cargo_metadata()
@@ -121,10 +126,15 @@ def main() -> None:
     for name in internal:
         for dep in sorted(internal_deps(name)):
             if dep not in sequence:
-                violations.append(f"{name} depends on {dep} which is not in the publish sequence")
+                violations.append(
+                    f"{name} depends on {dep} which is not in the publish sequence"
+                )
 
     if violations:
-        print("publish-order error: crates.io publish sequence is not a topological order", file=sys.stderr)
+        print(
+            "publish-order error: crates.io publish sequence is not a topological order",
+            file=sys.stderr,
+        )
         for violation in violations:
             print(f"  - {violation}", file=sys.stderr)
         print(
