@@ -30,7 +30,9 @@ AUDIT_TOML = ROOT / ".cargo" / "audit.toml"
 TARGET_ADVISORY = "RUSTSEC-2026-0009"
 
 # The gate line in release-checklist.md must mention the advisory id.
-GATE_PATTERN = re.compile(r"^\s*-\s*\[(?P<state>[ xX])\]\s+.*" + re.escape(TARGET_ADVISORY), re.MULTILINE)
+GATE_PATTERN = re.compile(
+    r"^\s*-\s*\[(?P<state>[ xX])\]\s+.*" + re.escape(TARGET_ADVISORY), re.MULTILINE
+)
 
 # In audit.toml the ignore list must contain the exact ID. Any wildcard
 # ("RUSTSEC-...") or extra RUSTSEC entries beyond the reviewed set is a
