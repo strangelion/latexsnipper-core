@@ -30,6 +30,7 @@ CONTRACT_FILES = (
     "contracts/agent/core-quality-contract.v1.yaml",
     "contracts/agent/core-conversion-contract.v1.yaml",
     "contracts/agent/core-security-contract.v1.yaml",
+    "contracts/agent/core-model-transport-contract.v1.yaml",
     "contracts/agent/core-mixed-contract.v1.yaml",
     "contracts/agent/core-symbol-contract.v1.yaml",
     "quality/failure-corpus/candidate.schema.json",

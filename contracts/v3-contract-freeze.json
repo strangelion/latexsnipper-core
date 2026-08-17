@@ -3,6 +3,7 @@
   "files": {
     "contracts/agent/core-conversion-contract.v1.yaml": "0708c8aca726b037af455d6035b0c83087e0e52ba0cd380c7ce9cfc22d773409",
     "contracts/agent/core-mixed-contract.v1.yaml": "ed21fac733c14c1450709574d09d1af39d69b623178992630bb19e817b173844",
+    "contracts/agent/core-model-transport-contract.v1.yaml": "0ff4fdec673cde60f387d1b5f63caee9d7139199e6b262a25e3d7412d719291c",
     "contracts/agent/core-provider-contract.v1.yaml": "98b888cf32cbd4efb41065eae9259e9402eb779e30b3b41f339243c03cdd7a30",
     "contracts/agent/core-quality-contract.v1.yaml": "cccf71d32fdd0762fb6a12de33e48fde4c9e5c87461640d8b252f39a88aa1c21",
     "contracts/agent/core-runtime-contract.v1.yaml": "f6c50a366126be7f2c022cb9cffba8acf45dd16372e73ed575bdefb891be59dd",
@@ -13,7 +14,7 @@
     "contracts/schema/drawing-office-payload-v1.schema.json": "d6b85b534a8f2ef726317254f4675db4092188af4a7ad4804e41608e84bc45b0",
     "contracts/schema/drawing-readiness-v1.schema.json": "80b2b0564a8f6cbb93120f0fffdd9de9400999e292f1c5f9b37b75810e6f54a4",
     "crates/api-types/src/v3.rs": "c9ad460a6d7fd6d3de86145cd575ca9b3fb1d74fb5f2016113b4f26853f62ffb",
-    "crates/cli/src/main.rs": "7ea25e2d050d36cb185eb5b46496befdf53c102e35ad45dcd64bf59224ab1753",
+    "crates/cli/src/main.rs": "cfd4d314c5dd976cfea0a0bf90af9e23f5883e0876572f34690046b395f0cd4c",
     "crates/conversion/src/capability_registry.rs": "8d3dc7a94a3c77ed6f8b2fb26d424a2eb434663b6bb984e9ddd0f66a43a18a24",
     "crates/evaluation/src/failure_corpus.rs": "ab4e6012a2ae8c25786cdd616a4c711b996c73bd5a804940173e2d576ba4a80e",
     "crates/evaluation/src/int8.rs": "db9a4d1a6e6c60e7e5a3e431da8150b7d292fc1de719a4f9721d2923b4903d23",
@@ -44,7 +45,7 @@
     "crates/pipeline/src": "8b29d7a206c0bc48aed2a2dce8f42731cd1af2653119b0d269f9afdee6e83d80",
     "crates/plugin-wasi/src": "7c5bb16b853f03d4bb4bb5d14f0a21fff4cdd41cb9afdf34a59ae8c168f08061",
     "crates/plugin/src": "e7398dbf0021d54caf25f3bc93e4e1b6c14c9028145a29c03befef20707bab3c",
-    "crates/runtime/src": "189a4cd50157335b06448e7e6268768c933d2b18ba85a3f235e1b3cfa78b718b",
+    "crates/runtime/src": "c70472dafde78ca21fba1f31941d9c4a7991baba8d86d6d81697317dc9582761",
     "crates/syntax/src": "62622e92171f80e26730e90e8e0ba6846577200513c1db65f073fa777635167b",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
     "crates/wasm/src": "9c9a6a6eea443f825b5f6ce333725bac2ed047281aba9daeaa874c68c2b24a11"

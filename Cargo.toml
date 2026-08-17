@@ -40,7 +40,7 @@ members = [
 ]
 
 [workspace.package]
-version = "3.2.0"
+version = "3.2.1"
 edition = "2021"
 license = "AGPL-3.0"
 repository = "https://github.com/strangelion/latexsnipper-core"
@@ -57,39 +57,39 @@ thiserror = "2"
 log = "0.4"
 
 # Internal crates
-latexsnipper-foundation = { path = "crates/foundation", version = "3.2.0" }
-latexsnipper-ast = { path = "crates/ast", version = "3.2.0" }
-latexsnipper-tensor = { path = "crates/tensor", version = "3.2.0" }
-latexsnipper-image = { path = "crates/image", version = "3.2.0", default-features = false }
-latexsnipper-runtime = { path = "crates/runtime", version = "3.2.0" }
-latexsnipper-inference = { path = "crates/inference", version = "3.2.0" }
-latexsnipper-pipeline = { path = "crates/pipeline", version = "3.2.0", default-features = false }
-latexsnipper-syntax = { path = "crates/syntax", version = "3.2.0" }
-latexsnipper-conversion = { path = "crates/conversion", version = "3.2.0", default-features = false }
-latexsnipper-export = { path = "crates/export", version = "3.2.0" }
-latexsnipper-model = { path = "crates/model", version = "3.2.0", default-features = false }
-latexsnipper-engine = { path = "crates/engine", version = "3.2.0", default-features = false }
-latexsnipper-api-types = { path = "crates/api-types", version = "3.2.0" }
+latexsnipper-foundation = { path = "crates/foundation", version = "3.2.1" }
+latexsnipper-ast = { path = "crates/ast", version = "3.2.1" }
+latexsnipper-tensor = { path = "crates/tensor", version = "3.2.1" }
+latexsnipper-image = { path = "crates/image", version = "3.2.1", default-features = false }
+latexsnipper-runtime = { path = "crates/runtime", version = "3.2.1" }
+latexsnipper-inference = { path = "crates/inference", version = "3.2.1" }
+latexsnipper-pipeline = { path = "crates/pipeline", version = "3.2.1", default-features = false }
+latexsnipper-syntax = { path = "crates/syntax", version = "3.2.1" }
+latexsnipper-conversion = { path = "crates/conversion", version = "3.2.1", default-features = false }
+latexsnipper-export = { path = "crates/export", version = "3.2.1" }
+latexsnipper-model = { path = "crates/model", version = "3.2.1", default-features = false }
+latexsnipper-engine = { path = "crates/engine", version = "3.2.1", default-features = false }
+latexsnipper-api-types = { path = "crates/api-types", version = "3.2.1" }
 latexsnipper-mock = { path = "crates/mock" }
-latexsnipper-plugin = { path = "crates/plugin", version = "3.2.0" }
-latexsnipper-plugin-wasi = { path = "crates/plugin-wasi", version = "3.2.0" }
-latexsnipper-tract = { path = "crates/tract", version = "3.2.0" }
-latexsnipper-ffi = { path = "crates/ffi", version = "3.2.0" }
-latexsnipper-wasm = { path = "crates/wasm", version = "3.2.0" }
-latexsnipper-cli = { path = "crates/cli", version = "3.2.0" }
-latexsnipper-tests = { path = "crates/tests", version = "3.2.0" }
-latexsnipper-fidelity = { path = "crates/fidelity", version = "3.2.0" }
-latexsnipper-incremental = { path = "crates/incremental", version = "3.2.0" }
-latexsnipper-artifact = { path = "crates/artifact", version = "3.2.0" }
-latexsnipper-benchmark = { path = "crates/benchmark", version = "3.2.0" }
-latexsnipper-custom-symbols = { path = "crates/custom-symbols", version = "3.2.0" }
-latexsnipper-drawing = { path = "crates/drawing", version = "3.2.0" }
-latexsnipper-evaluation = { path = "crates/evaluation", version = "3.2.0" }
-latexsnipper-runtime-paddle = { path = "crates/runtime-paddle", version = "3.2.0" }
-latexsnipper-runtime-executorch = { path = "crates/runtime-executorch", version = "3.2.0" }
-latexsnipper-runtime-tensorrt = { path = "crates/runtime-tensorrt", version = "3.2.0" }
-latexsnipper-runtime-coreml = { path = "crates/runtime-coreml", version = "3.2.0" }
-latexsnipper-runtime-plugin-api = { path = "crates/runtime-plugin-api", version = "3.2.0" }
+latexsnipper-plugin = { path = "crates/plugin", version = "3.2.1" }
+latexsnipper-plugin-wasi = { path = "crates/plugin-wasi", version = "3.2.1" }
+latexsnipper-tract = { path = "crates/tract", version = "3.2.1" }
+latexsnipper-ffi = { path = "crates/ffi", version = "3.2.1" }
+latexsnipper-wasm = { path = "crates/wasm", version = "3.2.1" }
+latexsnipper-cli = { path = "crates/cli", version = "3.2.1" }
+latexsnipper-tests = { path = "crates/tests", version = "3.2.1" }
+latexsnipper-fidelity = { path = "crates/fidelity", version = "3.2.1" }
+latexsnipper-incremental = { path = "crates/incremental", version = "3.2.1" }
+latexsnipper-artifact = { path = "crates/artifact", version = "3.2.1" }
+latexsnipper-benchmark = { path = "crates/benchmark", version = "3.2.1" }
+latexsnipper-custom-symbols = { path = "crates/custom-symbols", version = "3.2.1" }
+latexsnipper-drawing = { path = "crates/drawing", version = "3.2.1" }
+latexsnipper-evaluation = { path = "crates/evaluation", version = "3.2.1" }
+latexsnipper-runtime-paddle = { path = "crates/runtime-paddle", version = "3.2.1" }
+latexsnipper-runtime-executorch = { path = "crates/runtime-executorch", version = "3.2.1" }
+latexsnipper-runtime-tensorrt = { path = "crates/runtime-tensorrt", version = "3.2.1" }
+latexsnipper-runtime-coreml = { path = "crates/runtime-coreml", version = "3.2.1" }
+latexsnipper-runtime-plugin-api = { path = "crates/runtime-plugin-api", version = "3.2.1" }
 sha2 = "0.10"
 cap-std = "=4.0.2"
 cap-fs-ext = "=4.0.2"

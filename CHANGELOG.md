@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-08-17
+
 ### Added
+
+- Add the frozen `.lsmodel` transport-v1 contract, Core-owned package and
+  inspection commands, declared-artifact and SHA-256 validation, and a
+  commit-bound GitHub workflow that migrates verified production models and
+  uploads them directly to the model Release.
 
 - Upgrade Engine readiness to schema v2 with separate technical, quality, and
   production-recommendation states; tolerant consumer DTOs; trusted model
@@ -53,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ONNX Runtime variants can opt into `.ort` role alternatives through the
   advertised `artifact-format:ort` capability. ONNX remains the default, and
   unsupported mmap requests now fail closed instead of being silently ignored.
+
+## [3.2.1] - 2026-08-17
+
+### Added
+
+- Publish `.lsmodel` transport v1 as a Core-owned contract with a mandatory
+  root `manifest.toml`, bounded fail-closed ZIP inspection, actionable nested
+  manifest diagnostics, and a deterministic package creator for applications.
 
 ## [3.0.1] - 2026-07-19
 

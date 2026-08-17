@@ -15,6 +15,7 @@ silently advance every serialized protocol.
 | Native process IPC | `1` | `1` | Preserved |
 | Component WIT | unavailable | `1` (`latexsnipper:plugin@1.0.0`) | WIT package, typed host, and real fixtures implemented |
 | Model manifest/profile | legacy v2 shape | `3` | Version-aware loader integrated; only evidenced v3 profiles enter runtime adapter |
+| `.lsmodel` ZIP transport | application-specific | `1` | Root `manifest.toml`, bounded inspection, safe deterministic packager |
 | Browser model cache | `2` | TBD by cache implementation | Unchanged |
 | Browser Worker protocol | `1` | `1` unless behavior requires change | Unchanged |
 | FFI response contract | unversioned v2-era surface | `3` | Self-describing JSON plus native numeric version query |

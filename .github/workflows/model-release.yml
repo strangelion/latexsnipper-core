@@ -1,0 +1,59 @@
+name: Model Release (.lsmodel v1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: Existing verified model Release to migrate
+        required: true
+        default: models-v3.1.0
+      release_tag:
+        description: Target .lsmodel Release tag
+        required: true
+        default: models-v3.2.1
+      model_version:
+        description: Version recorded in each manifest.toml
+        required: true
+        default: 3.2.1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: model-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Migrate, validate and publish models
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: model-release-v1
+
+      - name: Migrate and upload Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          MODEL_VERSION: ${{ inputs.model_version }}
+          TARGET_COMMIT: ${{ github.sha }}
+        run: |
+          bash scripts/publish-lsmodel-release.sh \
+            "$SOURCE_TAG" \
+            "$RELEASE_TAG" \
+            "$MODEL_VERSION" \
+            "$TARGET_COMMIT"

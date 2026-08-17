@@ -12,6 +12,7 @@ pub mod model_package;
 pub mod model_plugin;
 pub mod model_registry;
 pub mod model_resolver;
+pub mod model_transport;
 pub mod model_validation;
 pub mod options;
 pub mod plugin_loader;
@@ -60,6 +61,11 @@ pub use model_registry::{
 pub use model_resolver::{
     normalize_key, FsModelResolver, MemoryModelResolver, ModelId, ModelResolver,
     SharedModelResolver,
+};
+pub use model_transport::{
+    create_lsmodel_archive, create_lsmodel_archive_with_manifest, inspect_lsmodel_archive,
+    LsModelArchiveError, LsModelArchiveInspection, LsModelArchiveLayout, LSMODEL_EXTENSION,
+    LSMODEL_MANIFEST_PATH, LSMODEL_TRANSPORT_VERSION,
 };
 pub use model_validation::{
     compute_bytes_checksum, compute_checksum, load_checksums, validate_all_models, validate_model,

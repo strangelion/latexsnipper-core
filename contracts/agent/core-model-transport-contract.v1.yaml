@@ -1,0 +1,42 @@
+{
+  "contractVersion": 1,
+  "name": "Core .lsmodel transport v1 contract",
+  "rules": [
+    {
+      "id": "CORE-LSMODEL-ROOT-MANIFEST-001",
+      "description": "A .lsmodel archive stores manifest.toml at the ZIP root and never adds the source wrapper directory.",
+      "severity": "blocking",
+      "suite": "model-package-security",
+      "scope": ["model", "runtime", "security"],
+      "evidence": {
+        "kind": "command",
+        "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "model_transport::tests"]
+      },
+      "failureMessage": "The .lsmodel root-manifest layout contract failed."
+    },
+    {
+      "id": "CORE-LSMODEL-FAIL-CLOSED-001",
+      "description": "Inspection rejects unsafe, duplicate, symbolic-link, oversized, missing-artifact, and checksum-mismatched archive entries before extraction.",
+      "severity": "blocking",
+      "suite": "model-package-security",
+      "scope": ["model", "runtime", "security"],
+      "evidence": {
+        "kind": "command",
+        "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "model_transport::tests"]
+      },
+      "failureMessage": "The .lsmodel archive safety contract failed."
+    },
+    {
+      "id": "CORE-LSMODEL-DIAGNOSTIC-001",
+      "description": "A missing root manifest reports actual root entries and nested manifest locations.",
+      "severity": "blocking",
+      "suite": "model-package-security",
+      "scope": ["model", "runtime", "diagnostics"],
+      "evidence": {
+        "kind": "command",
+        "command": ["cargo", "test", "--locked", "-p", "latexsnipper-runtime", "nested_manifest_error_explains_the_actual_layout"]
+      },
+      "failureMessage": "The .lsmodel layout diagnostic lost actionable archive evidence."
+    }
+  ]
+}

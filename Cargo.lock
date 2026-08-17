@@ -2146,7 +2146,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-api-types"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-ast",
  "latexsnipper-image",
@@ -2157,7 +2157,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-artifact"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-ast",
  "serde",
@@ -2168,7 +2168,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-ast"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-benchmark"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "clap",
  "latexsnipper-ast",
@@ -2196,7 +2196,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-cli"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -2219,13 +2219,14 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "latexsnipper-conversion"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2247,7 +2248,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-core"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-ast",
  "latexsnipper-conversion",
@@ -2268,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-custom-symbols"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "schemars",
  "serde",
@@ -2280,7 +2281,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-drawing"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "quick-xml",
  "schemars",
@@ -2293,7 +2294,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-engine"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-api-types",
  "latexsnipper-ast",
@@ -2325,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-evaluation"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "clap",
  "image",
@@ -2338,7 +2339,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-export"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-ast",
  "latexsnipper-foundation",
@@ -2355,7 +2356,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-ffi"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "jni",
  "latexsnipper-api-types",
@@ -2374,7 +2375,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-fidelity"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "image",
  "latexsnipper-ast",
@@ -2389,7 +2390,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-foundation"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "log",
  "once_cell",
@@ -2400,7 +2401,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-image"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "image",
  "imageproc",
@@ -2416,7 +2417,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-incremental"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-artifact",
  "latexsnipper-ast",
@@ -2432,7 +2433,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-inference"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "getrandom 0.3.4",
  "latexsnipper-ast",
@@ -2453,7 +2454,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-mock"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-ast",
  "latexsnipper-export",
@@ -2470,7 +2471,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-model"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "hex",
  "latexsnipper-foundation",
@@ -2488,7 +2489,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-pipeline"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "async-trait",
  "env_logger",
@@ -2512,7 +2513,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-plugin"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "ed25519-dalek",
  "fs2",
@@ -2536,7 +2537,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-plugin-wasi"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -2559,7 +2560,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-runtime"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "base64 0.22.1",
  "half",
@@ -2581,11 +2582,12 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "toml",
+ "zip",
 ]
 
 [[package]]
 name = "latexsnipper-runtime-coreml"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "cc",
  "hex",
@@ -2599,7 +2601,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-runtime-executorch"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-foundation",
  "latexsnipper-runtime",
@@ -2611,7 +2613,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-runtime-paddle"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-foundation",
  "latexsnipper-image",
@@ -2629,7 +2631,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-runtime-plugin-api"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "hex",
  "latexsnipper-foundation",
@@ -2644,7 +2646,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-runtime-plugin-mock"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-foundation",
  "latexsnipper-runtime",
@@ -2656,7 +2658,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-runtime-tensorrt"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "hex",
  "latexsnipper-foundation",
@@ -2671,7 +2673,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-syntax"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-ast",
  "latexsnipper-foundation",
@@ -2684,7 +2686,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-tensor"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "half",
  "serde",
@@ -2693,7 +2695,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-tests"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-ast",
  "latexsnipper-conversion",
@@ -2718,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-tract"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "latexsnipper-foundation",
  "latexsnipper-runtime",
@@ -2736,7 +2738,7 @@ dependencies = [
 
 [[package]]
 name = "latexsnipper-wasm"
-version = "3.2.0"
+version = "3.2.1"
 dependencies = [
  "js-sys",
  "latexsnipper-api-types",

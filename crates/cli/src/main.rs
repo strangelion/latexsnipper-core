@@ -23,6 +23,7 @@ use std::io::{self, Read, Write};
 
 mod fs_util;
 mod migration;
+mod model_transport;
 
 use migration::{MigrationCommand, MigrationRunStatus};
 
@@ -398,6 +399,37 @@ enum JobCommand {
 
 #[derive(Subcommand)]
 enum ModelsCommand {
+    /// Build a transport-v1 .lsmodel from one verified legacy model directory
+    Package {
+        /// Directory containing config.json and model artifacts
+        #[arg(long)]
+        source: std::path::PathBuf,
+        /// Output .lsmodel path (must not already exist)
+        #[arg(long)]
+        output: std::path::PathBuf,
+        /// Model catalog containing adapter and runtimeVariants metadata
+        #[arg(long, default_value = "scripts/model-manifest.template.json")]
+        catalog: std::path::PathBuf,
+        /// Catalog category, for example formula-rec
+        #[arg(long)]
+        category: String,
+        /// Catalog variant id, for example trocr-deit
+        #[arg(long)]
+        variant: String,
+        /// Version written to manifest.toml
+        #[arg(long)]
+        model_version: String,
+    },
+
+    /// Inspect and validate a transport-v1 .lsmodel without extracting it
+    Inspect {
+        /// Input .lsmodel archive
+        archive: std::path::PathBuf,
+        /// Emit the complete inspection as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Download models from release
     #[command(long_about = "Download model packages from GitHub releases.\n\n\
         Downloads and extracts model packages to the models directory.\n\
@@ -1099,6 +1131,51 @@ fn main() {
         Commands::Play => play_game(),
 
         Commands::Models(cmd) => match cmd {
+            ModelsCommand::Package {
+                source,
+                output,
+                catalog,
+                category,
+                variant,
+                model_version,
+            } => {
+                let request = model_transport::LegacyPackageRequest {
+                    source: &source,
+                    output: &output,
+                    catalog: &catalog,
+                    category: &category,
+                    variant: &variant,
+                    version: &model_version,
+                };
+                match model_transport::package_legacy_model(request) {
+                    Ok(manifest) => println!("{}", manifest.id),
+                    Err(error) => exit_with_code(
+                        CliExitCode::MissingModel,
+                        "Model package creation failed",
+                        error,
+                    ),
+                }
+            }
+            ModelsCommand::Inspect { archive, json } => {
+                match model_transport::inspect_archive(&archive) {
+                    Ok(inspection) if json => println!(
+                        "{}",
+                        serde_json::to_string_pretty(&inspection)
+                            .expect("model inspection must serialize")
+                    ),
+                    Ok(inspection) => println!(
+                        "{} (transport v{}, {} entries)",
+                        inspection.manifest.id,
+                        inspection.layout.transport_version,
+                        inspection.layout.entry_count
+                    ),
+                    Err(error) => exit_with_code(
+                        CliExitCode::MissingModel,
+                        "Model package inspection failed",
+                        error,
+                    ),
+                }
+            }
             ModelsCommand::Download {
                 category,
                 all,
