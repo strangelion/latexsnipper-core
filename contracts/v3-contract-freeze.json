@@ -33,7 +33,7 @@
     "crates/api-types/src": "af916d1842bb732912633a9e225fbd53c1a1a06d75dc4e38a79f78c53bba8e49",
     "crates/ast/src": "c0a1cfae031bb791d7229a8a645bbb234414ad05cfb8cafcae521bae20838587",
     "crates/conversion/src": "73710bdf702a12d02af757c5c59f973aa75b53bedc5439819a6d065b02409414",
-    "crates/custom-symbols/src": "d346cddfc68fb653dd072fac03aa9fe48b03394fb339549e7fc3511824afebdb",
+    "crates/custom-symbols/src": "a4ec6686c6043b2c656828d0a0208c926d20a8e8f43854fa225323eeb10ae01d",
     "crates/drawing/src": "15fac751be3b834ae4d7cd3f2cad9f2c3c407c77cba2f3f3a3a77c990f0c1328",
     "crates/engine/src": "cbefa9b057295e80f1319c7326279747e9bf2131a86adf4dbdd333ff18c00d90",
     "crates/export/src": "503ef470a53cef25d6f3739c83144af50ad7684c8eec6bfdcb698e6c75a370b0",

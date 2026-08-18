@@ -65,31 +65,43 @@ impl CompositionTransform {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum DrawingPrimitive {
     Line {
         from: Point,
         to: Point,
+        #[serde(alias = "stroke_width")]
         stroke_width: f32,
     },
     Rectangle {
         bounds: GlyphBoundingBox,
+        #[serde(alias = "corner_radius")]
         corner_radius: f32,
+        #[serde(alias = "stroke_width")]
         stroke_width: f32,
         filled: bool,
     },
     Ellipse {
         center: Point,
+        #[serde(alias = "radius_x")]
         radius_x: f32,
+        #[serde(alias = "radius_y")]
         radius_y: f32,
+        #[serde(alias = "stroke_width")]
         stroke_width: f32,
         filled: bool,
     },
     /// Sanitized SVG path data only; elements, attributes and URLs are not
     /// accepted here. Hosts must render this as a path in the canonical SVG.
     Path {
+        #[serde(alias = "path_data")]
         path_data: String,
         bounds: GlyphBoundingBox,
+        #[serde(alias = "stroke_width")]
         stroke_width: f32,
         filled: bool,
     },
@@ -558,9 +570,26 @@ mod tests {
             ..MathGlyphComposition::default()
         };
         let json = serde_json::to_string(&composition).unwrap();
+        assert!(json.contains("\"strokeWidth\""));
+        assert!(!json.contains("\"stroke_width\""));
         let restored: MathGlyphComposition = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.schema_version, COMPOSITION_SCHEMA_VERSION);
         assert_eq!(restored.layers.len(), 1);
+    }
+
+    #[test]
+    fn primitive_wire_fields_accept_legacy_snake_case() {
+        let primitive: DrawingPrimitive = serde_json::from_str(
+            r#"{"kind":"line","from":{"x":0.0,"y":0.0},"to":{"x":1.0,"y":1.0},"stroke_width":2.0}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            primitive,
+            DrawingPrimitive::Line {
+                stroke_width: 2.0,
+                ..
+            }
+        ));
     }
 
     #[test]
