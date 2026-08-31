@@ -129,8 +129,11 @@ unsafe extern "C" fn run(
         unsafe { std::slice::from_raw_parts(input.data.cast::<u8>(), input.byte_len) }
     };
     let values = input_bytes
-        .chunks_exact(4)
-        .map(|chunk| f32::from_ne_bytes(chunk.try_into().expect("four-byte chunk")))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .copied()
+        .map(f32::from_ne_bytes)
         .collect::<Vec<_>>();
     let result = match method.as_str() {
         "predict" => values.into_iter().map(|value| value * 2.0).collect(),

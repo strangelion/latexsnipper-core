@@ -145,12 +145,11 @@ fn decode<const WIDTH: usize, T>(
         .ok_or_else(|| executorch_error("tensor byte length overflow"))?;
     validate_byte_len(name, bytes.len(), expected)?;
     Ok(bytes
-        .chunks_exact(WIDTH)
-        .map(|chunk| {
-            let mut array = [0; WIDTH];
-            array.copy_from_slice(chunk);
-            from_bytes(array)
-        })
+        .as_chunks::<WIDTH>()
+        .0
+        .iter()
+        .copied()
+        .map(from_bytes)
         .collect())
 }
 

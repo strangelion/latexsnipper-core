@@ -126,12 +126,11 @@ fn decode<const WIDTH: usize, T>(
         )));
     }
     Ok(bytes
-        .chunks_exact(WIDTH)
-        .map(|chunk| {
-            let mut value = [0; WIDTH];
-            value.copy_from_slice(chunk);
-            from_bytes(value)
-        })
+        .as_chunks::<WIDTH>()
+        .0
+        .iter()
+        .copied()
+        .map(from_bytes)
         .collect())
 }
 

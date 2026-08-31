@@ -367,7 +367,9 @@ fn to_grayscale(image: &SnipperImage) -> SnipperImage {
 
     let pixels = image
         .pixels()
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|pixel| {
             (0.299 * f32::from(pixel[0])
                 + 0.587 * f32::from(pixel[1])

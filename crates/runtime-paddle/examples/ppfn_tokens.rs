@@ -110,7 +110,10 @@ fn read_f32_tensor(path: &Path) -> Result<Vec<f32>, Box<dyn std::error::Error>> 
         return Err(format!("{} has a partial f32 value", path.display()).into());
     }
     Ok(bytes
-        .chunks_exact(size_of::<f32>())
-        .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("four-byte chunk")))
+        .as_chunks::<{ size_of::<f32>() }>()
+        .0
+        .iter()
+        .copied()
+        .map(f32::from_le_bytes)
         .collect())
 }

@@ -183,17 +183,17 @@ fn decode_rgb(path: &Path) -> Result<SnipperImage, Box<dyn std::error::Error>> {
     match image.format() {
         PixelFormat::Rgb => return Ok(image),
         PixelFormat::Rgba => {
-            for pixel in image.pixels().chunks_exact(4) {
+            for pixel in image.pixels().as_chunks::<4>().0 {
                 rgb.extend_from_slice(&pixel[..3]);
             }
         }
         PixelFormat::Bgr => {
-            for pixel in image.pixels().chunks_exact(3) {
+            for pixel in image.pixels().as_chunks::<3>().0 {
                 rgb.extend_from_slice(&[pixel[2], pixel[1], pixel[0]]);
             }
         }
         PixelFormat::Bgra => {
-            for pixel in image.pixels().chunks_exact(4) {
+            for pixel in image.pixels().as_chunks::<4>().0 {
                 rgb.extend_from_slice(&[pixel[2], pixel[1], pixel[0]]);
             }
         }

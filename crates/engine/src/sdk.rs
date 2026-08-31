@@ -303,7 +303,7 @@ fn is_raster_image(format: InputFormat) -> bool {
 
 fn rgba_to_rgb(img: &SnipperImage) -> SnipperImage {
     let mut rgb = Vec::with_capacity((img.width() * img.height() * 3) as usize);
-    for chunk in img.pixels().chunks_exact(4) {
+    for chunk in img.pixels().as_chunks::<4>().0 {
         rgb.push(chunk[0]);
         rgb.push(chunk[1]);
         rgb.push(chunk[2]);
