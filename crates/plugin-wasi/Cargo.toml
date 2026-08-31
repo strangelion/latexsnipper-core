@@ -17,7 +17,7 @@ sha2.workspace = true
 hex = "0.4"
 cap-std.workspace = true
 cap-fs-ext.workspace = true
-wasmtime = { version = "=36.0.13", default-features = false, features = [
+wasmtime = { version = "=36.0.14", default-features = false, features = [
     "component-model",
     "cranelift",
     "runtime",
