@@ -179,7 +179,7 @@ pub fn bgr_to_rgb(image: &SnipperImage) -> SnipperImage {
         return image.clone();
     }
     let mut pixels = image.pixels().to_vec();
-    for chunk in pixels.chunks_exact_mut(3) {
+    for chunk in pixels.as_chunks_mut::<3>().0 {
         chunk.swap(0, 2);
     }
     SnipperImage::new(image.width(), image.height(), PixelFormat::Rgb, pixels)
@@ -191,7 +191,7 @@ pub fn rgb_to_bgr(image: &SnipperImage) -> SnipperImage {
         return image.clone();
     }
     let mut pixels = image.pixels().to_vec();
-    for chunk in pixels.chunks_exact_mut(3) {
+    for chunk in pixels.as_chunks_mut::<3>().0 {
         chunk.swap(0, 2);
     }
     SnipperImage::new(image.width(), image.height(), PixelFormat::Bgr, pixels)
@@ -207,7 +207,7 @@ pub fn rgba_to_bgr(image: &SnipperImage) -> SnipperImage {
     let h = image.height();
     let pixels = image.pixels();
     let mut bgr = Vec::with_capacity((w * h * 3) as usize);
-    for chunk in pixels.chunks_exact(4) {
+    for chunk in pixels.as_chunks::<4>().0 {
         // chunk = [R, G, B, A]
         bgr.push(chunk[2]); // B
         bgr.push(chunk[1]); // G
