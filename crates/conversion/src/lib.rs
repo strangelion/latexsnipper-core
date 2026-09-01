@@ -34,6 +34,7 @@ pub mod package_export;
 pub mod pdf_native;
 #[cfg(feature = "native")]
 pub mod pdf_overlay;
+pub mod planner;
 #[cfg(feature = "native")]
 pub mod pptx_reader;
 pub mod svg_parser;
@@ -84,6 +85,11 @@ pub use package_export::DocumentExportService;
 pub use pdf_native::{extract_pdf_text, extract_pdf_text_bytes};
 #[cfg(feature = "native")]
 pub use pdf_overlay::{overlay_pdf, overlay_pdf_with_options, PdfOverlayOptions};
+pub use planner::{
+    plan_conversion, ArtifactKind, ConversionCandidate, ConversionLoss, ConversionPlan,
+    ConversionPlanStatus, ConversionRequest, ConversionRequirements, ConversionRoute,
+    LossDimension, LossSeverity, RouteCapability, RouteFidelity, CONVERSION_PLAN_SCHEMA_VERSION,
+};
 #[cfg(feature = "native")]
 pub use pptx_reader::{read_pptx, read_pptx_bytes};
 pub use svg_parser::{parse_svg, parse_svg_to_shapes, SvgParseResult};

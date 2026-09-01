@@ -11,6 +11,7 @@ mod invalidation;
 mod mapped_render_tree;
 mod metrics;
 mod node_index;
+mod semantic_patch;
 mod session;
 mod source_snapshot;
 
@@ -27,6 +28,9 @@ pub use latexsnipper_syntax::{ParsedDocument, SourceMap};
 pub use mapped_render_tree::MappedRenderTree;
 pub use metrics::SessionMetrics;
 pub use node_index::{NodeIndex, NodePath};
+pub use semantic_patch::{
+    PatchOutcome, SemanticPatch, SemanticPatchOperation, SEMANTIC_PATCH_SCHEMA_VERSION,
+};
 pub use session::{ArtifactHistoryPolicy, DocumentSession, EditOutcome, ReconcileOutcome};
 pub use source_snapshot::SourceSnapshot;
 

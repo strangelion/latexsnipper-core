@@ -22,4 +22,8 @@ pub enum SessionError {
     Render(String),
     #[error("parse failed: {0}")]
     Parse(String),
+    #[error("unsupported semantic patch schema version: {0}")]
+    UnsupportedPatchSchema(u16),
+    #[error("semantic patch operation {operation} failed: {message}")]
+    PatchOperationFailed { operation: usize, message: String },
 }

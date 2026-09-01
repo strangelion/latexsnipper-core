@@ -1,0 +1,25 @@
+{
+  "schema": "latexsnipper.object/v1",
+  "id": "formula-example",
+  "kind": "formula",
+  "revision": 0,
+  "source": {
+    "format": "latex",
+    "value": {
+      "source": "x^2"
+    },
+    "sha256": "10e9a128992604b8caa2d82467d339876c195d25ad5340f2845526ee66412890"
+  },
+  "previews": [
+    {
+      "format": "svg",
+      "mimeType": "image/svg+xml",
+      "contentRef": "objects/formula-example.svg",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "coreVersion": "3.2.1",
+  "checksum": "e4dbe4f7aa085b3acbbd3a729de300d53b4bb831491e2cddeec24083f8d16da5",
+  "layoutProfile": "academic",
+  "createdWith": "LaTeXSnipper"
+}

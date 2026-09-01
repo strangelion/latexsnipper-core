@@ -39,6 +39,8 @@ CONTRACT_FILES = (
     "contracts/schema/drawing-readiness-v1.schema.json",
     "contracts/fixtures/drawing-office-payload-v1.json",
     "contracts/fixtures/drawing-readiness-v1.json",
+    "contracts/schema/editable-object-v1.schema.json",
+    "contracts/fixtures/editable-object-v1.json",
 )
 PUBLIC_RUST_TREES = (
     "crates/foundation/src",

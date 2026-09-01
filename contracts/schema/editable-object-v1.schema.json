@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://latexsnipper.dev/schema/editable-object-v1.schema.json",
+  "title": "LaTeXSnipper Universal Editable Object v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "kind",
+    "revision",
+    "source",
+    "previews",
+    "coreVersion",
+    "checksum",
+    "createdWith"
+  ],
+  "properties": {
+    "schema": { "const": "latexsnipper.object/v1" },
+    "id": { "type": "string", "minLength": 1 },
+    "kind": {
+      "enum": ["formula", "drawing", "customSymbol", "image", "table"]
+    },
+    "revision": { "type": "integer", "minimum": 0 },
+    "source": { "$ref": "#/$defs/source" },
+    "ast": {},
+    "previews": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/preview" }
+    },
+    "coreVersion": { "type": "string", "minLength": 1 },
+    "checksum": { "$ref": "#/$defs/sha256" },
+    "layoutProfile": { "type": "string" },
+    "createdWith": { "type": "string", "minLength": 1 },
+    "metadata": { "type": "object" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{64}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "value", "sha256"],
+      "properties": {
+        "format": { "type": "string", "minLength": 1 },
+        "value": {},
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "mimeType", "contentRef", "sha256"],
+      "properties": {
+        "format": { "type": "string", "minLength": 1 },
+        "mimeType": { "type": "string", "minLength": 1 },
+        "contentRef": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "widthPoints": { "type": "number", "exclusiveMinimum": 0 },
+        "heightPoints": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@
 //! without changing the Document 1.0.0 wire schema.
 
 mod crop_store;
+mod editable_object;
 
 use std::collections::{HashMap, HashSet};
 
@@ -12,6 +13,12 @@ use serde::{Deserialize, Serialize};
 
 pub use crop_store::{
     CropArtifactPolicy, CropPrivacyConsent, DebugCropStore, DurableCropReference,
+};
+pub use editable_object::{
+    EditableObjectHealthReport, EditableObjectHealthStatus, EditableObjectIssue,
+    EditableObjectIssueCode, EditableObjectIssueSeverity, EditableObjectKind,
+    EditableObjectPreview, EditableObjectRepairAction, EditableObjectSource,
+    UniversalEditableObject, EDITABLE_OBJECT_SCHEMA,
 };
 
 pub const ARTIFACT_TRACE_SCHEMA_VERSION: u32 = 1;
@@ -60,6 +67,7 @@ pub enum ArtifactKind {
     DrawingEps,
     DrawingManifest,
     DrawingOfficePayload,
+    UniversalEditableObject,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
