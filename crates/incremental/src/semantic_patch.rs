@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{DocumentSession, InvalidationState, SessionEdit, SessionError};
 
 /// Wire schema for source-aware semantic patches.
-pub const SEMANTIC_PATCH_SCHEMA_VERSION: u16 = 1;
+pub const SEMANTIC_PATCH_SCHEMA_VERSION: u16 = 2;
 
 /// A revision-guarded, ordered set of semantic edits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,11 +36,35 @@ impl SemanticPatch {
 
 /// Stable-ID edits are preferred; source ranges are the lossless structural fallback.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "operation", rename_all = "camelCase")]
+#[serde(
+    tag = "operation",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum SemanticPatchOperation {
-    ReplaceFormulaSource { stable_id: String, latex: String },
-    ReplaceParagraphSource { stable_id: String, text: String },
-    ReplaceSourceRange { span: Span, replacement: String },
+    ReplaceFormulaSource {
+        stable_id: String,
+        latex: String,
+    },
+    ReplaceParagraphSource {
+        stable_id: String,
+        text: String,
+    },
+    ReplaceSourceRange {
+        span: Span,
+        replacement: String,
+    },
+    InsertBlockSource {
+        after_stable_id: Option<String>,
+        source: String,
+    },
+    DeleteBlock {
+        stable_id: String,
+    },
+    MoveBlock {
+        stable_id: String,
+        after_stable_id: Option<String>,
+    },
 }
 
 impl SemanticPatchOperation {
@@ -62,6 +86,26 @@ impl SemanticPatchOperation {
                 expected_revision,
                 span: *span,
                 replacement: replacement.clone(),
+            },
+            Self::InsertBlockSource {
+                after_stable_id,
+                source,
+            } => SessionEdit::InsertBlockSource {
+                expected_revision,
+                after_stable_id: after_stable_id.clone(),
+                source: source.clone(),
+            },
+            Self::DeleteBlock { stable_id } => SessionEdit::DeleteBlock {
+                expected_revision,
+                stable_id: stable_id.clone(),
+            },
+            Self::MoveBlock {
+                stable_id,
+                after_stable_id,
+            } => SessionEdit::MoveBlock {
+                expected_revision,
+                stable_id: stable_id.clone(),
+                after_stable_id: after_stable_id.clone(),
             },
         }
     }
@@ -298,10 +342,10 @@ mod tests {
             Err(SessionError::RevisionConflict { .. })
         ));
         patch.base_revision = 0;
-        patch.schema_version = 99;
+        patch.schema_version = 1;
         assert!(matches!(
             session.apply_semantic_patch(&patch),
-            Err(SessionError::UnsupportedPatchSchema(99))
+            Err(SessionError::UnsupportedPatchSchema(1))
         ));
     }
 
@@ -314,7 +358,116 @@ mod tests {
         let first = serde_json::to_string(&patch).unwrap();
         let second = serde_json::to_string(&patch).unwrap();
         assert_eq!(first, second);
-        assert!(first.contains("\"schemaVersion\":1"));
+        assert!(first.contains("\"schemaVersion\":2"));
         assert!(first.contains("\"operation\":\"replaceSourceRange\""));
+    }
+
+    #[test]
+    fn structural_patch_json_round_trips_v2_operations() {
+        let patch = SemanticPatch::new(7)
+            .push(SemanticPatchOperation::InsertBlockSource {
+                after_stable_id: None,
+                source: "$x$".to_string(),
+            })
+            .push(SemanticPatchOperation::MoveBlock {
+                stable_id: "formula-2".to_string(),
+                after_stable_id: Some("formula-1".to_string()),
+            })
+            .push(SemanticPatchOperation::DeleteBlock {
+                stable_id: "formula-3".to_string(),
+            });
+        let json = serde_json::to_string(&patch).unwrap();
+        assert!(json.contains("\"operation\":\"insertBlockSource\""));
+        assert!(json.contains("\"operation\":\"moveBlock\""));
+        assert!(json.contains("\"operation\":\"deleteBlock\""));
+        assert!(json.contains("\"afterStableId\":\"formula-1\""));
+        assert_eq!(serde_json::from_str::<SemanticPatch>(&json).unwrap(), patch);
+    }
+
+    #[test]
+    fn structural_patch_inserts_deletes_and_moves_source_blocks() {
+        let mut session = DocumentSession::from_latex("semantic", "$a$\n\n$b$\n\n$c$").unwrap();
+        let blocks = session.document().all_blocks();
+        let first_id = blocks[0].source().unwrap().stable_id.clone().unwrap();
+        let formula_id = blocks[1].source().unwrap().stable_id.clone().unwrap();
+        let moved_id = blocks[2].source().unwrap().stable_id.clone().unwrap();
+        let moved = SemanticPatch::new(0).push(SemanticPatchOperation::MoveBlock {
+            stable_id: moved_id.clone(),
+            after_stable_id: Some(first_id.clone()),
+        });
+        session.apply_semantic_patch(&moved).unwrap();
+        assert_eq!(source_for(&session, &first_id), "$a$");
+        assert_eq!(source_for(&session, &moved_id), "$c$");
+
+        let deleted = SemanticPatch::new(1).push(SemanticPatchOperation::DeleteBlock {
+            stable_id: formula_id,
+        });
+        session.apply_semantic_patch(&deleted).unwrap();
+        assert_eq!(source_for(&session, &first_id), "$a$");
+        assert_eq!(source_for(&session, &moved_id), "$c$");
+
+        let inserted = SemanticPatch::new(2).push(SemanticPatchOperation::InsertBlockSource {
+            after_stable_id: Some(first_id),
+            source: "$d$".to_string(),
+        });
+        let outcome = session.apply_semantic_patch(&inserted).unwrap();
+        assert_eq!(outcome.applied_operations, 1);
+        assert_eq!(outcome.revision, 3);
+        assert_eq!(session.source(), "$a$\n\n$d$\n\n$c$");
+        assert_eq!(
+            session.document().all_blocks()[2]
+                .source()
+                .and_then(|source| source.stable_id.as_deref()),
+            Some(moved_id.as_str())
+        );
+        assert!(session.verify_full_equivalence().unwrap());
+    }
+
+    #[test]
+    fn failed_structural_operation_rolls_back_prior_insert() {
+        let mut session = DocumentSession::from_latex("semantic", "First\n\nLast").unwrap();
+        let first_id = session.document().all_blocks()[0]
+            .source()
+            .unwrap()
+            .stable_id
+            .clone()
+            .unwrap();
+        let patch = SemanticPatch::new(0)
+            .push(SemanticPatchOperation::InsertBlockSource {
+                after_stable_id: Some(first_id),
+                source: "Inserted".to_string(),
+            })
+            .push(SemanticPatchOperation::MoveBlock {
+                stable_id: "missing".to_string(),
+                after_stable_id: None,
+            });
+
+        assert!(matches!(
+            session.apply_semantic_patch(&patch),
+            Err(SessionError::PatchOperationFailed { operation: 1, .. })
+        ));
+        assert_eq!(session.revision, 0);
+        assert_eq!(session.source(), "First\n\nLast");
+        assert!(session.invalidation().dirty_nodes.is_empty());
+    }
+
+    #[test]
+    fn insert_block_rejects_multiple_blocks() {
+        let mut session = DocumentSession::from_latex("semantic", "First").unwrap();
+        let patch = SemanticPatch::new(0).push(SemanticPatchOperation::InsertBlockSource {
+            after_stable_id: None,
+            source: "$x$\n\n$y$".to_string(),
+        });
+        assert!(matches!(
+            session.apply_semantic_patch(&patch),
+            Err(SessionError::PatchOperationFailed { operation: 0, .. })
+        ));
+        assert_eq!(session.revision, 0);
+        assert_eq!(session.source(), "First");
+    }
+
+    fn source_for<'a>(session: &'a DocumentSession, stable_id: &str) -> &'a str {
+        let span = session.source_map().span_for(stable_id).unwrap();
+        &session.source()[span.start..span.end]
     }
 }

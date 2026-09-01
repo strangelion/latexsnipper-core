@@ -1,6 +1,6 @@
 [package]
 name = "latexsnipper-incremental"
-description = "Experimental source-aware incremental document sessions"
+description = "Revision-guarded source-aware document sessions and semantic patches"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

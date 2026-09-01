@@ -1,4 +1,4 @@
-//! Experimental formula-first incremental document sessions.
+//! Revision-guarded DocumentSession 2.0 with source-aware semantic patches.
 //!
 //! This crate is additive and does not alter the `Document` 1.0.0 wire schema.
 

@@ -60,7 +60,7 @@ struct NodeDescriptor {
     block: usize,
 }
 
-/// Experimental, formula-first stateful document editor.
+/// Stateful document editor with stable identities, incremental artifacts and patches.
 #[derive(Debug, Clone)]
 pub struct DocumentSession {
     pub session_id: String,
@@ -285,6 +285,17 @@ impl DocumentSession {
             SessionEdit::ReplaceSourceRange {
                 span, replacement, ..
             } => self.replace_source_range(span, replacement)?,
+            SessionEdit::InsertBlockSource {
+                after_stable_id,
+                source,
+                ..
+            } => self.insert_block_source(after_stable_id.as_deref(), source)?,
+            SessionEdit::DeleteBlock { stable_id, .. } => self.delete_block_source(&stable_id)?,
+            SessionEdit::MoveBlock {
+                stable_id,
+                after_stable_id,
+                ..
+            } => self.move_block_source(&stable_id, after_stable_id.as_deref())?,
         };
         self.revision += 1;
         self.record_source_artifacts_for(&invalidation.dirty_nodes);
@@ -448,6 +459,119 @@ impl DocumentSession {
             .dependent_outputs
             .extend(outcome.invalidated_dependency_outputs);
         Ok(invalidation)
+    }
+
+    fn insert_block_source(
+        &mut self,
+        after_stable_id: Option<&str>,
+        source: String,
+    ) -> Result<InvalidationState, SessionError> {
+        let fragment = source.trim();
+        self.validate_single_block_source(fragment)?;
+        let offset = match after_stable_id {
+            Some(stable_id) => {
+                self.source_map
+                    .span_for(stable_id)
+                    .ok_or_else(|| SessionError::UnknownStableId(stable_id.to_string()))?
+                    .end
+            }
+            None => 0,
+        };
+        let separator_end = skip_ascii_whitespace(&self.source.text, offset);
+        let has_before = offset > 0;
+        let has_after = separator_end < self.source.text.len();
+        let mut replacement = String::new();
+        if has_before {
+            replacement.push_str("\n\n");
+        }
+        replacement.push_str(fragment);
+        if has_after {
+            replacement.push_str("\n\n");
+        }
+        self.replace_source_range(Span::new(offset, separator_end), replacement)
+    }
+
+    fn delete_block_source(&mut self, stable_id: &str) -> Result<InvalidationState, SessionError> {
+        let span = self.block_removal_span(stable_id)?;
+        self.replace_source_range(span, String::new())
+    }
+
+    fn move_block_source(
+        &mut self,
+        stable_id: &str,
+        after_stable_id: Option<&str>,
+    ) -> Result<InvalidationState, SessionError> {
+        if after_stable_id == Some(stable_id) {
+            return Err(SessionError::UnsupportedEdit);
+        }
+        let source_span = self
+            .source_map
+            .span_for(stable_id)
+            .ok_or_else(|| SessionError::UnknownStableId(stable_id.to_string()))?;
+        let fragment = self
+            .source
+            .text
+            .get(source_span.start..source_span.end)
+            .ok_or(SessionError::InvalidRange)?
+            .to_string();
+        let target_end = after_stable_id
+            .map(|target_id| {
+                self.source_map
+                    .span_for(target_id)
+                    .ok_or_else(|| SessionError::UnknownStableId(target_id.to_string()))
+                    .map(|span| span.end)
+            })
+            .transpose()?;
+        let removal = self.block_removal_span(stable_id)?;
+        let mut updated = self.source.text.clone();
+        updated.replace_range(removal.start..removal.end, "");
+        let offset = match target_end {
+            Some(end) if end >= removal.end => end - (removal.end - removal.start),
+            Some(end) => end,
+            None => 0,
+        };
+        let separator_end = skip_ascii_whitespace(&updated, offset);
+        let has_before = offset > 0;
+        let has_after = separator_end < updated.len();
+        let mut insertion = String::new();
+        if has_before {
+            insertion.push_str("\n\n");
+        }
+        insertion.push_str(&fragment);
+        if has_after {
+            insertion.push_str("\n\n");
+        }
+        updated.replace_range(offset..separator_end, &insertion);
+        self.replace_source_range(Span::new(0, self.source.text.len()), updated)
+    }
+
+    fn validate_single_block_source(&self, source: &str) -> Result<(), SessionError> {
+        if source.is_empty() {
+            return Err(SessionError::UnsupportedEdit);
+        }
+        let parsed = parse_latex_with_source_map(source)
+            .map_err(|error| SessionError::Parse(error.to_string()))?;
+        if parsed.document.block_count() != 1 {
+            return Err(SessionError::UnsupportedEdit);
+        }
+        Ok(())
+    }
+
+    fn block_removal_span(&self, stable_id: &str) -> Result<Span, SessionError> {
+        let span = self
+            .source_map
+            .span_for(stable_id)
+            .ok_or_else(|| SessionError::UnknownStableId(stable_id.to_string()))?;
+        let trailing_end = skip_ascii_whitespace(&self.source.text, span.end);
+        if trailing_end > span.end {
+            return Ok(Span::new(span.start, trailing_end));
+        }
+        let mut start = span.start;
+        let bytes = self.source.text.as_bytes();
+        while start > 0 && bytes[start - 1].is_ascii_whitespace() {
+            start -= 1;
+        }
+        Ok(Span::new(start, span.end))
     }
 
     fn replace_paragraph_source(
@@ -1011,6 +1135,14 @@ fn build_dependencies(document: &Document) -> DependencyGraph {
         }
     }
     graph
+}
+
+fn skip_ascii_whitespace(source: &str, mut offset: usize) -> usize {
+    let bytes = source.as_bytes();
+    while offset < bytes.len() && bytes[offset].is_ascii_whitespace() {
+        offset += 1;
+    }
+    offset
 }
 
 fn document_equivalent(left: &Document, right: &Document) -> Result<bool, SessionError> {
