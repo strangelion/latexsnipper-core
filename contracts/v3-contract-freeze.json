@@ -35,7 +35,7 @@
     "crates/conversion/src": "73710bdf702a12d02af757c5c59f973aa75b53bedc5439819a6d065b02409414",
     "crates/custom-symbols/src": "a4ec6686c6043b2c656828d0a0208c926d20a8e8f43854fa225323eeb10ae01d",
     "crates/drawing/src": "15fac751be3b834ae4d7cd3f2cad9f2c3c407c77cba2f3f3a3a77c990f0c1328",
-    "crates/engine/src": "88f855792908bb97e82e48b45858b9ab57fdbd6a55ddc2850362fcf8edbd3022",
+    "crates/engine/src": "fb387e00fb83d78b74abec9e3f023a23ddb6d40691470811d916dc39820c374a",
     "crates/export/src": "503ef470a53cef25d6f3739c83144af50ad7684c8eec6bfdcb698e6c75a370b0",
     "crates/ffi/src": "bab7ed37c8553a4068d92dd5e5ddfea6af1652ba7b85a02e27ea1d1c44885237",
     "crates/foundation/src": "afbbf9d5e3e47b3e7080eb6d02a182c0063f92005acb22358a03974f4f382fbe",

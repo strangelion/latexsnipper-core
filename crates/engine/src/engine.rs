@@ -1723,8 +1723,8 @@ impl SnipperEngine {
     /// Reload a specific model by clearing all cached sessions.
     /// Next inference call will create fresh sessions with the new model files.
     #[deprecated(note = "Use clear_runtime_sessions() or reload_all_models() instead")]
-    pub fn reload_model(&self, session_key: &str) -> Result<()> {
-        info!("Reloading model: {}", session_key);
+    pub fn reload_model(&self, _session_key: &str) -> Result<()> {
+        info!("Clearing cached model runtime sessions");
         self.runtime_registry.clear_sessions();
         self.provider_validation_store.clear_ephemeral();
         Ok(())

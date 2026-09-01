@@ -12,10 +12,17 @@ export type WorkerRequestValidationResult =
       message: string;
     };
 
+export interface WorkerRequestValidationOptions {
+  /** URL of the worker script used to resolve and constrain runtime assets. */
+  assetBaseUrl?: string;
+}
+
 const MAX_REQUEST_ID_LENGTH = 256;
 const MAX_NAME_LENGTH = 256;
 const MAX_URL_LENGTH = 8_192;
 const MAX_MODE_LENGTH = 128;
+const DEFAULT_ASSET_BASE_URL = "https://worker.invalid/";
+const ALLOWED_ASSET_PROTOCOLS = new Set(["http:", "https:", "blob:"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -39,7 +46,33 @@ function invalid(value: unknown, message: string): WorkerRequestValidationResult
   return { ok: false, requestId: requestIdFrom(value), code: "WORKER_INVALID_REQUEST", message };
 }
 
-function validateInitialize(value: Record<string, unknown>): WorkerRequestValidationResult {
+function validateAssetUrl(
+  value: string,
+  field: string,
+  baseUrl: string,
+): string | undefined {
+  let base: URL;
+  let resolved: URL;
+  try {
+    base = new URL(baseUrl);
+    resolved = new URL(value, base);
+  } catch {
+    return `${field} must be a valid URL`;
+  }
+
+  if (!ALLOWED_ASSET_PROTOCOLS.has(resolved.protocol)) {
+    return `${field} uses a forbidden URL scheme`;
+  }
+  if (resolved.origin !== base.origin) {
+    return `${field} must resolve to the worker origin`;
+  }
+  return undefined;
+}
+
+function validateInitialize(
+  value: Record<string, unknown>,
+  validationOptions: WorkerRequestValidationOptions,
+): WorkerRequestValidationResult {
   const options = value.options;
   if (!isRecord(options)) {
     return invalid(value, "Initialize request requires an options object");
@@ -49,6 +82,21 @@ function validateInitialize(value: Record<string, unknown>): WorkerRequestValida
   }
   if (!isOptionalString(options.wasmUrl, MAX_URL_LENGTH)) {
     return invalid(value, "Initialize options.wasmUrl must be a string when provided");
+  }
+  const baseUrl = validationOptions.assetBaseUrl ?? DEFAULT_ASSET_BASE_URL;
+  const moduleUrlError = validateAssetUrl(
+    options.moduleUrl,
+    "Initialize options.moduleUrl",
+    baseUrl,
+  );
+  if (moduleUrlError) return invalid(value, moduleUrlError);
+  if (options.wasmUrl !== undefined) {
+    const wasmUrlError = validateAssetUrl(
+      options.wasmUrl,
+      "Initialize options.wasmUrl",
+      baseUrl,
+    );
+    if (wasmUrlError) return invalid(value, wasmUrlError);
   }
   return { ok: true, request: value as unknown as WorkerRequest };
 }
@@ -98,7 +146,10 @@ function validateRecognize(value: Record<string, unknown>): WorkerRequestValidat
   return { ok: true, request: value as unknown as WorkerRequest };
 }
 
-export function validateWorkerRequest(value: unknown): WorkerRequestValidationResult {
+export function validateWorkerRequest(
+  value: unknown,
+  options: WorkerRequestValidationOptions = {},
+): WorkerRequestValidationResult {
   if (!isRecord(value)) {
     return invalid(value, "Worker message must be an object");
   }
@@ -115,7 +166,7 @@ export function validateWorkerRequest(value: unknown): WorkerRequestValidationRe
   }
   switch (value.type) {
     case "initialize":
-      return validateInitialize(value);
+      return validateInitialize(value, options);
     case "load-model":
       return validateLoadModel(value);
     case "recognize":

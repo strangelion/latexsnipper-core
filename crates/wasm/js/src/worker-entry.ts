@@ -103,7 +103,13 @@ async function handle(request: WorkerRequest): Promise<void> {
 }
 
 scope.onmessage = (event) => {
-  const validation = validateWorkerRequest(event.data);
+  // Dedicated-worker MessageEvents normally have an empty origin. Reject any
+  // unexpected foreign origin before reading attacker-controlled request data.
+  if (event.origin !== "" && event.origin !== scope.location.origin) return;
+
+  const validation = validateWorkerRequest(event.data, {
+    assetBaseUrl: scope.location.href,
+  });
 
   if (!validation.ok) {
     if (validation.requestId) {

@@ -14,6 +14,72 @@ test("accepts a valid initialize request", () => {
   assert.equal(result.ok, true);
 });
 
+test("accepts same-origin module and wasm asset URLs", () => {
+  const result = validateWorkerRequest(
+    {
+      protocolVersion: WORKER_PROTOCOL_VERSION,
+      type: "initialize",
+      requestId: "init:same-origin",
+      options: {
+        moduleUrl: "https://app.example/assets/pkg.js",
+        wasmUrl: "/assets/pkg_bg.wasm",
+      },
+    },
+    { assetBaseUrl: "https://app.example/workers/worker.js" },
+  );
+  assert.equal(result.ok, true);
+});
+
+test("accepts a same-origin blob module URL", () => {
+  const result = validateWorkerRequest(
+    {
+      protocolVersion: WORKER_PROTOCOL_VERSION,
+      type: "initialize",
+      requestId: "init:blob",
+      options: { moduleUrl: "blob:https://app.example/2e953931-b93f-43b2-a31f-18a0138c7bb1" },
+    },
+    { assetBaseUrl: "https://app.example/workers/worker.js" },
+  );
+  assert.equal(result.ok, true);
+});
+
+for (const [name, moduleUrl] of [
+  ["cross-origin", "https://cdn.example/pkg.js"],
+  ["data", "data:text/javascript,export default {}"],
+  ["javascript", "javascript:alert(1)"],
+  ["file", "file:///tmp/pkg.js"],
+  ["malformed", "http://[invalid"],
+] as const) {
+  test(`rejects ${name} module URL`, () => {
+    const result = validateWorkerRequest(
+      {
+        protocolVersion: WORKER_PROTOCOL_VERSION,
+        type: "initialize",
+        requestId: `init:${name}`,
+        options: { moduleUrl },
+      },
+      { assetBaseUrl: "https://app.example/workers/worker.js" },
+    );
+    assert.equal(result.ok, false);
+  });
+}
+
+test("rejects a cross-origin wasm URL", () => {
+  const result = validateWorkerRequest(
+    {
+      protocolVersion: WORKER_PROTOCOL_VERSION,
+      type: "initialize",
+      requestId: "init:foreign-wasm",
+      options: {
+        moduleUrl: "/assets/pkg.js",
+        wasmUrl: "https://cdn.example/pkg_bg.wasm",
+      },
+    },
+    { assetBaseUrl: "https://app.example/workers/worker.js" },
+  );
+  assert.equal(result.ok, false);
+});
+
 test("rejects non-object messages", () => {
   assert.equal(validateWorkerRequest(null).ok, false);
   assert.equal(validateWorkerRequest("bad").ok, false);
