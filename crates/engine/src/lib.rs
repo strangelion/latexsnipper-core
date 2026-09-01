@@ -22,7 +22,8 @@ pub mod diagram_understanding;
 
 #[cfg(feature = "native")]
 pub use application::{
-    FormulaRecognitionResult, ModelReloadReport, RecognitionIntegrationApi, RecognitionRequest,
+    FormulaRecognitionResult, ModelReloadReport, PartialRecognitionSnapshot, PartialResultSink,
+    ProgressiveRecognitionControl, RecognitionIntegrationApi, RecognitionRequest,
     RecognitionResult, RecognitionSession, RecognitionSessionBuilder, WarmupReport, WarmupRequest,
 };
 pub use config::EngineConfig;

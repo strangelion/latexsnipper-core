@@ -8,7 +8,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
 use std::time::{Duration, Instant};
 
 use latexsnipper_api_types::{
@@ -22,7 +25,9 @@ use latexsnipper_conversion::{DocumentConverter, DocumentImporter, OutputFormat}
 use latexsnipper_foundation::SnipperError;
 use latexsnipper_image::decode::{decode_with_options, ImageSource};
 use latexsnipper_image::SnipperImage;
-use latexsnipper_pipeline::{PipelineCancellationToken, PipelineProgressObserver};
+use latexsnipper_pipeline::{
+    PipelineCancellationToken, PipelineProgressObserver, PipelineProgressSnapshot,
+};
 use latexsnipper_runtime::{AccelerationMode, RuntimeRegistry};
 use serde::{Deserialize, Serialize};
 
@@ -226,9 +231,39 @@ pub trait ProgressSink: Send + Sync {
     fn report(&self, event: ProgressEvent);
 }
 
+/// Provisional recognition content emitted at safe pipeline boundaries.
+///
+/// `document` is always a Core AST rather than a derived LaTeX string. A
+/// consumer must treat it as read-only until `is_final` is true.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialRecognitionSnapshot {
+    pub sequence: u64,
+    pub stage: ProgressStage,
+    pub current: u64,
+    pub total: u64,
+    pub detected_regions: usize,
+    pub recognized_regions: usize,
+    pub document: Option<Document>,
+    pub is_final: bool,
+}
+
+pub trait PartialResultSink: Send + Sync {
+    fn report(&self, snapshot: PartialRecognitionSnapshot);
+}
+
 #[derive(Default)]
 pub struct RecognitionControl {
     pub progress: Option<Arc<dyn ProgressSink>>,
+    pub cancellation: Option<CancellationToken>,
+}
+
+/// Additive control surface for callers that opt in to progressive Document
+/// snapshots. The original [`RecognitionControl`] remains source-compatible.
+#[derive(Default)]
+pub struct ProgressiveRecognitionControl {
+    pub progress: Option<Arc<dyn ProgressSink>>,
+    pub partial_results: Option<Arc<dyn PartialResultSink>>,
     pub cancellation: Option<CancellationToken>,
 }
 
@@ -318,6 +353,33 @@ pub trait RecognitionIntegrationApi {
         &mut self,
         request: RecognitionRequest,
     ) -> Result<RecognitionResult, ApplicationError>;
+    /// Opt-in progressive recognition. Implementations that have not adopted
+    /// pipeline checkpoints remain compatible and emit one authoritative final
+    /// snapshot instead of inventing intermediate data.
+    fn recognize_progressive(
+        &mut self,
+        request: RecognitionRequest,
+        control: ProgressiveRecognitionControl,
+    ) -> Result<RecognitionResult, ApplicationError> {
+        let result = self.recognize(request)?;
+        if let Some(sink) = control.partial_results {
+            let document = result.document.clone();
+            let regions = document.block_count();
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                sink.report(PartialRecognitionSnapshot {
+                    sequence: 1,
+                    stage: ProgressStage::Completed,
+                    current: 1,
+                    total: 1,
+                    detected_regions: 0,
+                    recognized_regions: regions,
+                    document: Some(document),
+                    is_final: true,
+                })
+            }));
+        }
+        Ok(result)
+    }
     fn validate_provider(
         &self,
         request: ProviderValidationRequest,
@@ -658,7 +720,56 @@ impl RecognitionSession {
         request: RecognitionRequest,
         control: RecognitionControl,
     ) -> Result<RecognitionResult, ApplicationError> {
+        self.recognize_async_internal(request, control.progress, None, control.cancellation)
+            .await
+    }
+
+    pub fn recognize_progressive(
+        &mut self,
+        request: RecognitionRequest,
+        control: ProgressiveRecognitionControl,
+    ) -> Result<RecognitionResult, ApplicationError> {
         self.ensure_open()?;
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err(ApplicationError::new(
+                ApplicationErrorCode::InvalidInput,
+                "Synchronous progressive recognition cannot run inside a Tokio runtime; use recognize_async_progressive.",
+                None,
+                false,
+            ));
+        }
+        let runtime = self
+            .runtime
+            .as_ref()
+            .cloned()
+            .ok_or_else(closed_session_error)?;
+        runtime.block_on(self.recognize_async_progressive(request, control))
+    }
+
+    pub async fn recognize_async_progressive(
+        &mut self,
+        request: RecognitionRequest,
+        control: ProgressiveRecognitionControl,
+    ) -> Result<RecognitionResult, ApplicationError> {
+        self.recognize_async_internal(
+            request,
+            control.progress,
+            control.partial_results,
+            control.cancellation,
+        )
+        .await
+    }
+
+    async fn recognize_async_internal(
+        &mut self,
+        request: RecognitionRequest,
+        progress: Option<Arc<dyn ProgressSink>>,
+        partial_results: Option<Arc<dyn PartialResultSink>>,
+        cancellation: Option<CancellationToken>,
+    ) -> Result<RecognitionResult, ApplicationError> {
+        self.ensure_open()?;
+        let partial_sequence = Arc::new(AtomicU64::new(0));
+        let partial_counts = Arc::new(Mutex::new(None));
         let started = Instant::now();
         if request.options.include_source_asset {
             return Err(ApplicationError::new(
@@ -668,17 +779,11 @@ impl RecognitionSession {
                 false,
             ));
         }
-        check_cancelled(control.cancellation.as_ref())?;
-        report(
-            &control.progress,
-            ProgressStage::DecodingInput,
-            None,
-            None,
-            None,
-        );
+        check_cancelled(cancellation.as_ref())?;
+        report(&progress, ProgressStage::DecodingInput, None, None, None);
         let image = self.decode_input(request.input)?;
         let image_size = Some((image.width(), image.height()));
-        check_cancelled(control.cancellation.as_ref())?;
+        check_cancelled(cancellation.as_ref())?;
 
         let parse_mode = request
             .options
@@ -687,24 +792,24 @@ impl RecognitionSession {
         let readiness = self.engine.readiness();
         let formula_quality = formula_quality_status(request.profile, &readiness);
         let runtime = runtime_metadata(&readiness);
-        report(
-            &control.progress,
-            ProgressStage::ResolvingModels,
-            None,
-            None,
-            None,
-        );
-        let observer = control.progress.as_ref().map(|sink| {
-            Arc::new(ApplicationPipelineObserver { sink: sink.clone() })
-                as Arc<dyn PipelineProgressObserver>
-        });
+        report(&progress, ProgressStage::ResolvingModels, None, None, None);
+        let observer = if progress.is_some() || partial_results.is_some() {
+            Some(Arc::new(ApplicationPipelineObserver {
+                progress: progress.clone(),
+                partial_results: partial_results.clone(),
+                partial_sequence: partial_sequence.clone(),
+                last_counts: partial_counts.clone(),
+            }) as Arc<dyn PipelineProgressObserver>)
+        } else {
+            None
+        };
         let document = self
             .engine
             .recognize_controlled(
                 image,
                 RecognizeMode::from(request.profile),
                 parse_mode,
-                control.cancellation,
+                cancellation,
                 request.options.timeout,
                 observer,
             )
@@ -727,13 +832,26 @@ impl RecognitionSession {
                 false,
             ));
         }
-        report(
-            &control.progress,
-            ProgressStage::Completed,
-            Some(1),
-            Some(1),
-            None,
+        let final_detected_regions = partial_counts
+            .lock()
+            .ok()
+            .and_then(|counts| counts.as_ref().map(|(detected, _)| *detected))
+            .unwrap_or_default();
+        report_partial(
+            &partial_results,
+            &partial_sequence,
+            PartialRecognitionSnapshot {
+                sequence: 0,
+                stage: ProgressStage::Completed,
+                current: 1,
+                total: 1,
+                detected_regions: final_detected_regions,
+                recognized_regions: document.block_count(),
+                document: Some(document.clone()),
+                is_final: true,
+            },
         );
+        report(&progress, ProgressStage::Completed, Some(1), Some(1), None);
         let formulas = formula_results(&document, formula_quality);
         Ok(RecognitionResult {
             diagnostics: document.diagnostics.clone(),
@@ -966,6 +1084,14 @@ impl RecognitionIntegrationApi for RecognitionSession {
         RecognitionSession::recognize(self, request)
     }
 
+    fn recognize_progressive(
+        &mut self,
+        request: RecognitionRequest,
+        control: ProgressiveRecognitionControl,
+    ) -> Result<RecognitionResult, ApplicationError> {
+        RecognitionSession::recognize_progressive(self, request, control)
+    }
+
     fn validate_provider(
         &self,
         request: ProviderValidationRequest,
@@ -1001,7 +1127,10 @@ impl RecognitionIntegrationApi for RecognitionSession {
 }
 
 struct ApplicationPipelineObserver {
-    sink: Arc<dyn ProgressSink>,
+    progress: Option<Arc<dyn ProgressSink>>,
+    partial_results: Option<Arc<dyn PartialResultSink>>,
+    partial_sequence: Arc<AtomicU64>,
+    last_counts: Arc<Mutex<Option<(usize, usize)>>>,
 }
 
 impl PipelineProgressObserver for ApplicationPipelineObserver {
@@ -1012,8 +1141,7 @@ impl PipelineProgressObserver for ApplicationPipelineObserver {
             total: Some(total as u64),
             message: Some(public_node_message(node)),
         };
-        let sink = self.sink.clone();
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink.report(event)));
+        report_event(&self.progress, event);
     }
 
     fn node_completed(&self, node: &str, current: usize, total: usize) {
@@ -1023,8 +1151,67 @@ impl PipelineProgressObserver for ApplicationPipelineObserver {
             total: Some(total as u64),
             message: None,
         };
-        let sink = self.sink.clone();
+        report_event(&self.progress, event);
+    }
+
+    fn wants_checkpoints(&self) -> bool {
+        self.partial_results.is_some()
+    }
+
+    fn checkpoint(
+        &self,
+        node: &str,
+        current: usize,
+        total: usize,
+        snapshot: &PipelineProgressSnapshot,
+    ) {
+        if self.partial_results.is_none()
+            || (snapshot.detected_regions == 0
+                && snapshot.recognized_regions == 0
+                && snapshot.document.is_none())
+        {
+            return;
+        }
+        let counts = (snapshot.detected_regions, snapshot.recognized_regions);
+        if let Ok(mut last_counts) = self.last_counts.lock() {
+            if last_counts.as_ref() == Some(&counts) {
+                return;
+            }
+            *last_counts = Some(counts);
+        }
+        report_partial(
+            &self.partial_results,
+            &self.partial_sequence,
+            PartialRecognitionSnapshot {
+                sequence: 0,
+                stage: stage_for_node(node),
+                current: current as u64,
+                total: total as u64,
+                detected_regions: snapshot.detected_regions,
+                recognized_regions: snapshot.recognized_regions,
+                document: snapshot.document.clone(),
+                is_final: false,
+            },
+        );
+    }
+}
+
+fn report_event(sink: &Option<Arc<dyn ProgressSink>>, event: ProgressEvent) {
+    if let Some(sink) = sink {
+        let sink = sink.clone();
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink.report(event)));
+    }
+}
+
+fn report_partial(
+    sink: &Option<Arc<dyn PartialResultSink>>,
+    sequence: &AtomicU64,
+    mut snapshot: PartialRecognitionSnapshot,
+) {
+    if let Some(sink) = sink {
+        snapshot.sequence = sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        let sink = sink.clone();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink.report(snapshot)));
     }
 }
 

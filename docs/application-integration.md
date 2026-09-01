@@ -145,6 +145,23 @@ effect at the next safe boundary.
 Request timeouts use the same node boundaries and return
 `ApplicationErrorCode::Timeout`.
 
+### Progressive Document snapshots
+
+Call `recognize_progressive` or `recognize_async_progressive` with a
+`ProgressiveRecognitionControl` to receive immutable
+`PartialRecognitionSnapshot` values. These snapshots are emitted only after
+safe pipeline node boundaries and contain the Core `Document` AST when blocks
+are available; they never expose an intermediate LaTeX string as authority.
+
+Each snapshot has a strictly increasing request-local sequence number, stable
+progress stage, detected/recognized region counts, and an `is_final` marker.
+Provisional documents may be normalized or reordered by later nodes. The final
+snapshot is byte-shape equivalent to the returned authoritative `Document`.
+If a different `RecognitionIntegrationApi` implementation does not support
+pipeline checkpoints yet, its compatible default emits only that final
+snapshot rather than fabricating intermediate OCR results. Callback panics are
+isolated from recognition just like ordinary progress callbacks.
+
 ## Error contract
 
 `ApplicationError` exposes:

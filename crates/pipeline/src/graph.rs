@@ -94,6 +94,15 @@ impl PipelineGraph {
                 let _ = catch_unwind(AssertUnwindSafe(|| {
                     observer.node_completed(&name, i + 1, order.len());
                 }));
+                let wants_checkpoints =
+                    catch_unwind(AssertUnwindSafe(|| observer.wants_checkpoints()))
+                        .unwrap_or(false);
+                if wants_checkpoints {
+                    let snapshot = ctx.progress_snapshot();
+                    let _ = catch_unwind(AssertUnwindSafe(|| {
+                        observer.checkpoint(&name, i + 1, order.len(), &snapshot);
+                    }));
+                }
             }
             let stage_id = ArtifactId(format!("pipeline:{}:{}", self.name, name));
             ctx.artifacts.artifact_graph.insert(ArtifactRecord {
@@ -246,7 +255,37 @@ use std::collections::HashMap;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PipelineCancellationToken, TransformNode};
+    use crate::{
+        PipelineCancellationToken, PipelineProgressObserver, PipelineProgressSnapshot,
+        TransformNode,
+    };
+    use latexsnipper_ast::Page;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct SnapshotObserver {
+        snapshots: Mutex<Vec<PipelineProgressSnapshot>>,
+    }
+
+    impl PipelineProgressObserver for SnapshotObserver {
+        fn node_started(&self, _node: &str, _current: usize, _total: usize) {}
+
+        fn node_completed(&self, _node: &str, _current: usize, _total: usize) {}
+
+        fn wants_checkpoints(&self) -> bool {
+            true
+        }
+
+        fn checkpoint(
+            &self,
+            _node: &str,
+            _current: usize,
+            _total: usize,
+            snapshot: &PipelineProgressSnapshot,
+        ) {
+            self.snapshots.lock().unwrap().push(snapshot.clone());
+        }
+    }
 
     #[tokio::test]
     async fn run_records_stage_and_document_lineage() {
@@ -286,5 +325,31 @@ mod tests {
 
         let error = graph.run(&mut context).await.unwrap_err();
         assert!(matches!(error, SnipperError::Cancelled));
+    }
+
+    #[tokio::test]
+    async fn observer_receives_immutable_document_checkpoints() {
+        let mut graph = PipelineGraph::new("progressive");
+        graph.add_node(Box::new(TransformNode::new("assemble", |context| {
+            context.document.pages.push(Page {
+                width: 320.0,
+                height: 180.0,
+                blocks: Vec::new(),
+                page_number: Some(1),
+                layout: None,
+                background_asset_id: None,
+            });
+            Ok(())
+        })));
+        let observer = Arc::new(SnapshotObserver::default());
+        let mut context = PipelineContext::new();
+        context.set_progress_observer(observer.clone());
+
+        graph.run(&mut context).await.unwrap();
+
+        let snapshots = observer.snapshots.lock().unwrap();
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].document.as_ref().unwrap().pages.len(), 1);
+        assert_eq!(snapshots[0].recognized_regions, 0);
     }
 }

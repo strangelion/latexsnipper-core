@@ -1,7 +1,7 @@
 use crate::artifacts::PipelineArtifacts;
 use crate::opendoc_hybrid::DocumentParseMode;
 use crate::text_recognition_service::TextRecognitionService;
-use latexsnipper_ast::Document;
+use latexsnipper_ast::{Document, Page};
 use latexsnipper_image::SnipperImage;
 use latexsnipper_runtime::{
     InferenceContext, InferenceSession, ModelExecutionContext, ModelExecutor, ModelInput,
@@ -39,6 +39,34 @@ impl PipelineCancellationToken {
 pub trait PipelineProgressObserver: Send + Sync {
     fn node_started(&self, node: &str, current: usize, total: usize);
     fn node_completed(&self, node: &str, current: usize, total: usize);
+
+    /// Opt in to potentially expensive provisional Document snapshots.
+    fn wants_checkpoints(&self) -> bool {
+        false
+    }
+
+    /// Receive a provisional, immutable recognition snapshot after a node has
+    /// completed. Implementations may ignore it; the default preserves source
+    /// compatibility for progress-only observers.
+    fn checkpoint(
+        &self,
+        _node: &str,
+        _current: usize,
+        _total: usize,
+        _snapshot: &PipelineProgressSnapshot,
+    ) {
+    }
+}
+
+/// Request-scoped recognition state exposed at safe pipeline boundaries.
+///
+/// The document is provisional: later nodes may normalize, reorder, or replace
+/// blocks. It never becomes the authoritative result until the engine returns.
+#[derive(Debug, Clone)]
+pub struct PipelineProgressSnapshot {
+    pub detected_regions: usize,
+    pub recognized_regions: usize,
+    pub document: Option<Document>,
 }
 
 /// Diagnostic event level.
@@ -176,6 +204,39 @@ impl PipelineContext {
             diagnostics: Vec::new(),
             parse_mode: DocumentParseMode::default(),
             text_rec_service: None,
+        }
+    }
+
+    /// Build a progressive snapshot only when an observer explicitly asks for
+    /// one. This avoids cloning blocks during ordinary recognition.
+    pub fn progress_snapshot(&self) -> PipelineProgressSnapshot {
+        let recognized_regions = self.artifacts.block_count();
+        let document = if !self.document.pages.is_empty() {
+            Some(self.document.clone())
+        } else if recognized_regions > 0 {
+            let mut document = Document::new();
+            document.pages.push(Page {
+                width: self
+                    .image
+                    .as_ref()
+                    .map_or(0.0, |image| image.width() as f32),
+                height: self
+                    .image
+                    .as_ref()
+                    .map_or(0.0, |image| image.height() as f32),
+                blocks: self.artifacts.all_blocks(),
+                page_number: Some(1),
+                layout: None,
+                background_asset_id: None,
+            });
+            Some(document)
+        } else {
+            None
+        };
+        PipelineProgressSnapshot {
+            detected_regions: self.artifacts.detection_count(),
+            recognized_regions,
+            document,
         }
     }
 

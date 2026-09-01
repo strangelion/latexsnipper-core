@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex};
 
 use latexsnipper_ast::{ImportOptions, InputFormat};
 use latexsnipper_engine::application::{
-    ApplicationErrorCode, CancellationToken, ProgressEvent, ProgressSink, ProgressStage,
-    RecognitionControl, RecognitionProfile, RecognitionRequest, RecognitionSession,
+    ApplicationErrorCode, CancellationToken, PartialRecognitionSnapshot, PartialResultSink,
+    ProgressEvent, ProgressSink, ProgressStage, ProgressiveRecognitionControl, RecognitionControl,
+    RecognitionProfile, RecognitionRequest, RecognitionSession,
 };
 use latexsnipper_engine::{EngineConfig, SnipperEngine};
 use latexsnipper_image::color::PixelFormat;
@@ -395,6 +396,46 @@ fn progress_callback_failure_does_not_break_recognition() {
         },
     );
     assert!(result.is_ok());
+}
+
+#[derive(Default)]
+struct RecordingPartialResults {
+    snapshots: Mutex<Vec<PartialRecognitionSnapshot>>,
+}
+
+impl PartialResultSink for RecordingPartialResults {
+    fn report(&self, snapshot: PartialRecognitionSnapshot) {
+        self.snapshots.lock().unwrap().push(snapshot);
+    }
+}
+
+#[test]
+fn progressive_recognition_finishes_with_authoritative_document() {
+    let (_models, mut session) = session();
+    let sink = Arc::new(RecordingPartialResults::default());
+
+    let result = session
+        .recognize_progressive(
+            RecognitionRequest::from_image(blank_image()),
+            ProgressiveRecognitionControl {
+                progress: None,
+                partial_results: Some(sink.clone()),
+                cancellation: None,
+            },
+        )
+        .unwrap();
+
+    let snapshots = sink.snapshots.lock().unwrap();
+    let final_snapshot = snapshots.last().expect("final progressive snapshot");
+    assert!(final_snapshot.is_final);
+    assert_eq!(final_snapshot.stage, ProgressStage::Completed);
+    assert_eq!(
+        serde_json::to_value(final_snapshot.document.as_ref().unwrap()).unwrap(),
+        serde_json::to_value(&result.document).unwrap(),
+    );
+    assert!(snapshots
+        .windows(2)
+        .all(|pair| pair[0].sequence < pair[1].sequence));
 }
 
 struct ClearCountingRuntime {

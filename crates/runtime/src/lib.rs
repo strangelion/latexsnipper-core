@@ -21,6 +21,7 @@ pub mod provider_smoke;
 pub mod providers;
 pub mod resolver;
 pub mod runtime_registry;
+pub mod scheduling;
 pub mod selection_policy;
 pub mod session;
 #[cfg(feature = "memory-map-model-experimental")]
@@ -93,6 +94,11 @@ pub use resolver::{
     RuntimeResolutionAttempt, RuntimeResolver,
 };
 pub use runtime_registry::RuntimeRegistry;
+pub use scheduling::{
+    RuntimeAdmissionCode, RuntimeAdmissionDecision, RuntimeAdmissionScheduler, RuntimeJobRequest,
+    RuntimeReleaseOutcome, RuntimeResource, RuntimeSchedulerSnapshot, RuntimeSchedulingLimits,
+    ScheduledRuntimeJob, WorkloadPriority,
+};
 pub use selection_policy::{
     ModelBackend, ModelCandidate, ModelCapability, ModelEvidence, ModelReadiness,
     ModelSelectionDecision, ModelSelectionMetadata, ModelSelectionPolicy, ModelSelectionRequest,

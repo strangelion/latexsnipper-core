@@ -1953,7 +1953,11 @@ impl SnipperEngine {
         Ok(RecognizeResponse::new(doc, mode, region_count, elapsed))
     }
 
-    /// Recognize with streaming results.
+    /// Collect compatibility stream items after recognition completes.
+    ///
+    /// This method returns a `Vec` and therefore is not a live delivery API.
+    /// Applications that need real progressive output should use
+    /// `application::RecognitionSession::recognize_progressive`.
     pub async fn recognize_streaming(&self, request: RecognizeRequest) -> Result<Vec<StreamItem>> {
         let start = std::time::Instant::now();
         let mut items = Vec::new();
