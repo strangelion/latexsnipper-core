@@ -45,6 +45,7 @@ pub fn sanitize_svg(
         match &event {
             Event::Start(start) | Event::Empty(start) => {
                 elements = elements.saturating_add(1);
+                let is_root_element = elements == 1;
                 if elements > policy.max_svg_elements {
                     return Err(DrawingSecurityError::SvgComplexityLimit(format!(
                         "SVG contains more than {} elements",
@@ -123,7 +124,7 @@ pub fn sanitize_svg(
                             )));
                         }
                     }
-                    if name == "svg" && key == "viewbox" {
+                    if is_root_element && name == "svg" && key == "viewbox" {
                         validate_view_box(&value)?;
                         view_box = Some(value);
                     }
@@ -260,6 +261,13 @@ mod tests {
         let second = sanitize_svg(source, &DrawingSecurityPolicy::default()).unwrap();
         assert_eq!(first.canonical_sha256, second.canonical_sha256);
         assert_eq!(first.view_box, "0 0 10 10");
+    }
+
+    #[test]
+    fn nested_svg_cannot_replace_the_root_view_box() {
+        let source = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 20 300 120"><g><svg viewBox="0 0 12 8"><path d="M0 0L12 8"/></svg></g></svg>"#;
+        let report = sanitize_svg(source, &DrawingSecurityPolicy::default()).unwrap();
+        assert_eq!(report.view_box, "10 20 300 120");
     }
 
     #[test]
