@@ -208,11 +208,18 @@ impl DrawingPrimitive {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum CompositionLayerSource {
     Symbol {
+        #[serde(alias = "symbol_id")]
         symbol_id: String,
+        #[serde(alias = "pack_id")]
         pack_id: Option<String>,
+        #[serde(alias = "metrics_snapshot")]
         metrics_snapshot: MathGlyphMetrics,
     },
     Primitive {
@@ -223,6 +230,7 @@ pub enum CompositionLayerSource {
     /// executable markup and external resources are never embedded here.
     Formula {
         latex: String,
+        #[serde(alias = "metrics_snapshot")]
         metrics_snapshot: MathGlyphMetrics,
     },
 }
@@ -482,6 +490,44 @@ fn clamp_point(point: Point, bounds: GlyphBoundingBox) -> Point {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_fields_match_frontend_camel_case_and_accept_legacy_snake_case() {
+        for source in [
+            CompositionLayerSource::Symbol {
+                symbol_id: "divide".into(),
+                pack_id: Some("builtin-math".into()),
+                metrics_snapshot: MathGlyphMetrics::default(),
+            },
+            CompositionLayerSource::Formula {
+                latex: "x^2".into(),
+                metrics_snapshot: MathGlyphMetrics::default(),
+            },
+        ] {
+            let json = serde_json::to_value(&source).unwrap();
+            assert!(json.get("metricsSnapshot").is_some());
+            assert!(json.get("metrics_snapshot").is_none());
+            assert_eq!(
+                serde_json::from_value::<CompositionLayerSource>(json.clone()).unwrap(),
+                source
+            );
+            let mut legacy = json.as_object().unwrap().clone();
+            for (current, old) in [
+                ("symbolId", "symbol_id"),
+                ("packId", "pack_id"),
+                ("metricsSnapshot", "metrics_snapshot"),
+            ] {
+                if let Some(value) = legacy.remove(current) {
+                    legacy.insert(old.into(), value);
+                }
+            }
+            assert_eq!(
+                serde_json::from_value::<CompositionLayerSource>(serde_json::Value::Object(legacy))
+                    .unwrap(),
+                source
+            );
+        }
+    }
 
     fn layer(id: &str, x: f32) -> CompositionLayer {
         CompositionLayer {

@@ -160,6 +160,7 @@ impl RecognizerNode {
                             &image,
                             Rect::new(x as f32, y as f32, w as f32, h as f32),
                         );
+                        let cropped = operations::to_rgb(&cropped);
 
                         let pixels = cropped.pixels().to_vec();
                         let shape = vec![cropped.height() as usize, cropped.width() as usize, 3];

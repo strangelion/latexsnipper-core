@@ -12,6 +12,13 @@ use crate::{
     SessionMetadata, SessionTensorSpec, TensorMap,
 };
 
+const ONNX_RUNTIME_FEATURES: [&str; 4] = [
+    "artifact-format:onnx",
+    "artifact-format:ort",
+    "encoder-decoder",
+    "model-loading:file",
+];
+
 pub struct OnnxRuntimeFactory {
     models_dir: PathBuf,
     backend: OnceLock<std::result::Result<Arc<OnnxRuntimeBackend>, SnipperError>>,
@@ -64,15 +71,9 @@ impl RuntimeFactory for OnnxRuntimeFactory {
                         .into_iter()
                         .map(|provider| provider.to_ascii_lowercase()),
                 );
-                capabilities.features.extend(
-                    [
-                        "artifact-format:onnx",
-                        "artifact-format:ort",
-                        "model-loading:file",
-                    ]
-                    .into_iter()
-                    .map(str::to_owned),
-                );
+                capabilities
+                    .features
+                    .extend(ONNX_RUNTIME_FEATURES.into_iter().map(str::to_owned));
                 RuntimeProbe {
                     available: true,
                     version: Some(format!("api-{} ({})", ort::MINOR_VERSION, ort::info())),
@@ -144,6 +145,16 @@ impl RuntimeFactory for OnnxRuntimeFactory {
         if let Some(Ok(backend)) = self.backend.get() {
             backend.clear_sessions();
         }
+    }
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::ONNX_RUNTIME_FEATURES;
+
+    #[test]
+    fn probe_contract_declares_encoder_decoder_orchestration() {
+        assert!(ONNX_RUNTIME_FEATURES.contains(&"encoder-decoder"));
     }
 }
 

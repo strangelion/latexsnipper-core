@@ -185,6 +185,39 @@ pub fn bgr_to_rgb(image: &SnipperImage) -> SnipperImage {
     SnipperImage::new(image.width(), image.height(), PixelFormat::Rgb, pixels)
 }
 
+/// Convert any supported pixel layout to packed RGB.
+///
+/// Recognition model inputs declare an HWC shape with three channels. Keeping
+/// this conversion at the image boundary prevents an RGBA byte buffer from
+/// being mislabeled as RGB by downstream model adapters.
+pub fn to_rgb(image: &SnipperImage) -> SnipperImage {
+    let mut pixels = Vec::with_capacity((image.width() * image.height() * 3) as usize);
+    match image.format() {
+        PixelFormat::Gray => {
+            for value in image.pixels() {
+                pixels.extend_from_slice(&[*value, *value, *value]);
+            }
+        }
+        PixelFormat::Rgb => return image.clone(),
+        PixelFormat::Rgba => {
+            for chunk in image.pixels().as_chunks::<4>().0 {
+                pixels.extend_from_slice(&chunk[..3]);
+            }
+        }
+        PixelFormat::Bgr => {
+            for chunk in image.pixels().as_chunks::<3>().0 {
+                pixels.extend_from_slice(&[chunk[2], chunk[1], chunk[0]]);
+            }
+        }
+        PixelFormat::Bgra => {
+            for chunk in image.pixels().as_chunks::<4>().0 {
+                pixels.extend_from_slice(&[chunk[2], chunk[1], chunk[0]]);
+            }
+        }
+    }
+    SnipperImage::new(image.width(), image.height(), PixelFormat::Rgb, pixels)
+}
+
 /// Convert RGB to BGR.
 pub fn rgb_to_bgr(image: &SnipperImage) -> SnipperImage {
     if image.format() != PixelFormat::Rgb {
@@ -427,4 +460,27 @@ fn invert_homography(h: &[f64; 9]) -> [f64; 9] {
         (h[1] * h[6] - h[0] * h[7]) * inv_det,
         (h[0] * h[4] - h[1] * h[3]) * inv_det,
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_rgb_packs_all_supported_source_formats() {
+        let cases = [
+            (PixelFormat::Gray, vec![17], vec![17, 17, 17]),
+            (PixelFormat::Rgb, vec![1, 2, 3], vec![1, 2, 3]),
+            (PixelFormat::Rgba, vec![1, 2, 3, 4], vec![1, 2, 3]),
+            (PixelFormat::Bgr, vec![3, 2, 1], vec![1, 2, 3]),
+            (PixelFormat::Bgra, vec![3, 2, 1, 4], vec![1, 2, 3]),
+        ];
+
+        for (format, source, expected) in cases {
+            let image = SnipperImage::new(1, 1, format, source);
+            let rgb = to_rgb(&image);
+            assert_eq!(rgb.format(), PixelFormat::Rgb);
+            assert_eq!(rgb.pixels(), expected);
+        }
+    }
 }
