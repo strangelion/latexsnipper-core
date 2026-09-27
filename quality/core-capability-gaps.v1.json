@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "lastReviewed": "2026-09-27",
+  "statusVocabulary": [
+    "implemented",
+    "conditional",
+    "experimental",
+    "blocked",
+    "missing"
+  ],
+  "capabilities": [
+    {
+      "id": "real-formula-quality",
+      "status": "blocked",
+      "evidence": ["quality/real-dataset-status.json"],
+      "nextMilestone": "Admit licensed screenshots, scans, mobile photos, and hard negatives and publish reproducible metrics."
+    },
+    {
+      "id": "real-table-quality",
+      "status": "blocked",
+      "evidence": ["quality/real-dataset-status.json", "benchmarks/table-recognition/v1/README.md"],
+      "nextMilestone": "Admit at least 30 licensed real table images and publish the real TEDS baseline."
+    },
+    {
+      "id": "formula-structural-layout",
+      "status": "implemented",
+      "evidence": ["crates/ast/src/formula_layout.rs", "crates/inference/src/formula_parser.rs"],
+      "nextMilestone": "Keep cross-format parser parity and custom-glyph round-trip fixtures current."
+    },
+    {
+      "id": "native-math-typesetting",
+      "status": "missing",
+      "evidence": ["crates/export/src/svg.rs", "docs/v3/model-evidence.md"],
+      "nextMilestone": "Render FormulaLayout with a measured box model, script styles, radicals, fractions, matrices, OpenType MATH metrics, and CJK fallback."
+    },
+    {
+      "id": "unicode-pdf-font-embedding",
+      "status": "missing",
+      "evidence": ["crates/export/src/pdf.rs", "docs/export.md"],
+      "nextMilestone": "Embed and subset Unicode fonts instead of degrading characters outside WinAnsi."
+    },
+    {
+      "id": "tikz-pgfplots-rendering",
+      "status": "conditional",
+      "evidence": ["docs/drawing-domain.md", "crates/drawing/src/compile.rs"],
+      "nextMilestone": "Ship pinned local sidecars and package locks, then validate offline preview fixtures on every supported platform."
+    },
+    {
+      "id": "drawing-json-renderer",
+      "status": "missing",
+      "evidence": ["docs/drawing-domain.md"],
+      "nextMilestone": "Provide a deterministic renderer for the lossless Drawing JSON contract."
+    },
+    {
+      "id": "office-visual-roundtrip",
+      "status": "experimental",
+      "evidence": ["docs/production-capabilities.md", "fidelity/corpora/index.json"],
+      "nextMilestone": "Populate application-specific Word, Excel, and PowerPoint read-back and visual evidence on pinned Office runners."
+    },
+    {
+      "id": "mobile-native-core-inference",
+      "status": "missing",
+      "evidence": ["crates/ffi/src/android/jni_bridge.rs", "crates/ffi/src/ios/c_ffi.rs"],
+      "nextMilestone": "Replace StubRuntime bridges with a supported mobile runtime while preserving the working Android Java ONNX route until parity is proven."
+    },
+    {
+      "id": "persistent-rust-application-session",
+      "status": "implemented",
+      "evidence": ["crates/engine/src/application.rs", "crates/engine/tests/application_session.rs"],
+      "nextMilestone": "Keep lifecycle, warmup reuse, cancellation recovery, and cache cleanup contract tests blocking."
+    },
+    {
+      "id": "persistent-python-session-adapter",
+      "status": "experimental",
+      "evidence": [
+        "crates/ffi/examples/python_session.py",
+        "crates/ffi/src/application_c.rs",
+        "docs/application-adapter-roadmap.md"
+      ],
+      "nextMilestone": "Package an independently closable PyO3 Session as tested wheels while preserving the reference client's handle and error semantics."
+    },
+    {
+      "id": "opaque-c-application-session",
+      "status": "implemented",
+      "evidence": [
+        "crates/ffi/src/application_c.rs",
+        "crates/ffi/include/latexsnipper_session.h",
+        "docs/application-adapter-roadmap.md"
+      ],
+      "nextMilestone": "Keep ABI v1 lifecycle tests blocking and add release-library symbol checks on Windows, Linux, and macOS."
+    }
+  ]
+}

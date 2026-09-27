@@ -1,6 +1,6 @@
 [package]
 name = "latexsnipper-ffi"
-description = "FFI bindings — Android JNI, iOS C FFI"
+description = "FFI bindings — persistent C sessions, Android JNI, and iOS C FFI"
 version.workspace = true
 edition.workspace = true
 publish = false
@@ -24,3 +24,6 @@ jni = "0.21"
 
 [lib]
 crate-type = ["lib", "cdylib"]
+
+[dev-dependencies]
+tempfile = "3"

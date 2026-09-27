@@ -125,10 +125,15 @@ pub fn letterbox(image: &SnipperImage, target: u32) -> (SnipperImage, f32, f32, 
 /// Normalize pixels to float range, return as f32 vector in CHW layout.
 /// If image has more channels than mean/std, only uses first N channels.
 pub fn normalize(image: &SnipperImage, mean: &[f32], std: &[f32]) -> Vec<f32> {
+    let out_channels = mean.len().min(image.format().channels());
+    assert!(
+        std.len() >= out_channels,
+        "normalization std must contain at least {out_channels} values"
+    );
+
     let w = image.width() as usize;
     let h = image.height() as usize;
     let img_channels = image.format().channels();
-    let out_channels = mean.len().min(img_channels);
     let mut output = vec![0.0f32; out_channels * h * w];
 
     for y in 0..h {
@@ -482,5 +487,25 @@ mod tests {
             assert_eq!(rgb.format(), PixelFormat::Rgb);
             assert_eq!(rgb.pixels(), expected);
         }
+    }
+
+    #[test]
+    fn normalize_uses_chw_layout() {
+        let image = SnipperImage::new(2, 1, PixelFormat::Rgb, vec![0, 127, 255, 255, 127, 0]);
+        let output = normalize(&image, &[0.0, 0.5, 1.0], &[1.0, 0.5, 2.0]);
+        assert_eq!(output.len(), 6);
+        assert_eq!(output[0], 0.0);
+        assert_eq!(output[1], 1.0);
+        assert!((output[2] - (127.0 / 255.0 - 0.5) / 0.5).abs() < 1.0e-7);
+        assert!((output[3] - (127.0 / 255.0 - 0.5) / 0.5).abs() < 1.0e-7);
+        assert_eq!(output[4], 0.0);
+        assert_eq!(output[5], -0.5);
+    }
+
+    #[test]
+    #[should_panic(expected = "normalization std must contain at least 3 values")]
+    fn normalize_rejects_short_std_vector() {
+        let image = SnipperImage::new(1, 1, PixelFormat::Rgb, vec![0, 127, 255]);
+        let _ = normalize(&image, &[0.0, 0.5, 1.0], &[1.0, 0.5]);
     }
 }

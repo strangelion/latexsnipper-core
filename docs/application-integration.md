@@ -198,12 +198,37 @@ Adapters should be thin owners of one `RecognitionSession`:
 - a Python or PyO3 adapter maps Python objects to `RecognitionRequest` and
   exposes `Document` or derived conversions;
 - a Tauri adapter stores a session in managed state and maps events to its UI;
-- a C ABI adapter owns an opaque session handle and maps stable error codes;
+- the C ABI adapter in `latexsnipper-ffi` owns an opaque session handle and
+  maps stable error codes;
 - a JSONL or HTTP adapter maps transport requests to the same API and keeps
   framing, authentication, and compatibility DTOs outside Core.
 
-None of those adapters requires a second engine lifecycle. They are
-intentionally not implemented by this module.
+None of those adapters requires a second engine lifecycle. Python, Tauri, and
+long-running transport adapters remain outside this module. Their persistence
+boundary, delivery order, and acceptance gates are tracked in
+[`application-adapter-roadmap.md`](application-adapter-roadmap.md).
+
+## Opaque C application sessions
+
+`crates/ffi/include/latexsnipper_session.h` declares the stable v1 C session
+ABI. It creates process-local `u64` handles rather than returning Rust pointers,
+serializes calls per handle, bounds the registry to 64 live sessions, catches
+Rust panics at the ABI boundary, and returns v3 JSON envelopes. Callers must
+release every returned JSON string exactly once with
+`latexsnipper_string_free`.
+
+All incoming JSON and encoded-image buffers use explicit pointer-and-length
+pairs. Request JSON is limited to 1 MiB, so the ABI never scans caller memory
+for an unbounded terminator.
+
+Closing a handle removes it from the registry before clearing runtime caches.
+Consequently, new calls, stale handles, and duplicate closes receive the stable
+`SESSION_NOT_FOUND` error instead of accessing released state. Encoded image
+recognition is capped at 100 MiB and a request timeout is capped at ten minutes.
+`crates/ffi/examples/python_session.py` is a zero-dependency reference client
+that demonstrates persistent warmup state, independent model roots, failure
+recovery, context-manager cleanup, and the exact error-envelope mapping that a
+future PyO3 wheel must preserve.
 
 ## Stable Office facade
 
