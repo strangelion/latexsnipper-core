@@ -554,6 +554,7 @@ Benchmark smoke 用于验证执行路径，不会在共享 runner 上设置脆�
 | [CLI option matrix](docs/cli-option-matrix.md) | 参数传播与支持组合 |
 | [Export](docs/export.md) | 视觉和文档包导出行为 |
 | [Benchmarks](docs/benchmark.md) | 原生与浏览器 benchmark 方法 |
+| [收尾综合验证计划](docs/closing-plan.md) | 10,000 条公式、Office 回读、OLE、交叉引用与 release 收尾台账 |
 | [Release checklist](docs/release-checklist.md) | GA 条件、blocker 与后续工作 |
 | [Architecture](docs/architecture.md) | 核心架构概览 |
 | [Pipeline](docs/pipeline.md) | 识别与处理流水线 |

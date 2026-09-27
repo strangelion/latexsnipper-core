@@ -63,6 +63,7 @@
 | [SECURITY_REVIEW.md](../../SECURITY_REVIEW.md) | Independent security audit of plugin/WASI system | [x] Complete |
 | [model-evidence.md](model-evidence.md) | Model accuracy/runtime evidence template | [ ] Requires evaluation run |
 | [visual-smoke-checklist.md](visual-smoke-checklist.md) | Manual Office/PDF visual smoke test matrix | [ ] Requires manual execution |
+| [closing-plan.md](closing-plan.md) | 10,000-formula corpus, Office read-back, OLE, cross-reference, and release closeout ledger | [ ] Execution plan |
 | [governance-verification.md](governance-verification.md) | Final pre-release governance checks | [ ] Requires CI execution |
 
 ## Optional future enhancements

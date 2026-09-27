@@ -558,6 +558,7 @@ See the [Core 3 release checklist](docs/release-checklist.md) and [schema versio
 | [CLI option matrix](docs/cli-option-matrix.md) | Option propagation and supported combinations |
 | [Export](docs/export.md) | Visual and package export behavior |
 | [Benchmarks](docs/benchmark.md) | Native and browser performance benchmark methodology |
+| [Closing validation plan](docs/closing-plan.md) | 10,000-formula corpus, Office read-back, OLE, cross-reference, and release closeout ledger |
 | [OCR evaluation](docs/ocr-evaluation.md) | Licensed corpora, accuracy metrics, gates, and evidence identity |
 | [Release checklist](docs/release-checklist.md) | GA requirements, blockers, and future work |
 | [Architecture](docs/architecture.md) | Core architecture overview |

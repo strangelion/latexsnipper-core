@@ -1,0 +1,293 @@
+# LaTeXSnipper Core 与 Office 收尾计划
+
+> 状态：执行台账（不是已完成能力声明）  
+> 适用范围：`latexsnipper-core`、LaTeXSnipper Office 适配器、Windows Office 验收环境  
+> 更新规则：每完成一项必须补充证据、运行环境、commit 和已知限制；没有证据的项目保持未完成。
+
+## 1. 目标与边界
+
+本计划的目标是为 Core、Office 转换链路和真实 Office 应用建立一套可重复的收尾验收，最终让用户能够根据实测数据判断是否选择本应用。
+
+Core 负责解析、统一 AST、转换、渲染、包结构验证和可重复 benchmark。Office 应用负责 WebView2/Tauri UI、Office 自动化、OLE、托盘和真实应用交互。不能用 Core 的包结构测试替代 Word、Excel、PowerPoint 的真实打开、编辑、保存和回读。
+
+以下能力必须分开报告，不合并成一个容易误导的“总支持率”：
+
+- 普通数学公式、绘图（TikZ/PGFPlots）、化学公式、OCR 识别；
+- 结构有效、语义保留、视觉一致、可编辑、round-trip；
+- Word、Excel、PowerPoint 的不同插入方式；
+- 可自动化的 Core/包测试与需要本地 Office 的 GUI/OLE 测试。
+
+## 2. 当前基线
+
+### 已有基础
+
+- `crates/benchmark` 已有 Core smoke、转换耗时和增量编辑 benchmark。
+- 增量测试已经覆盖 10、100、1,000、10,000 条公式规模。
+- `crates/evaluation` 已提供语料和质量评估基础。
+- `crates/fidelity` 已提供 DOCX、PPTX、XLSX、PDF 的包结构、语义、资产、诊断和可选视觉证据。
+- `fidelity/corpora/index.json` 已有确定性 fixture 和 SHA-256 校验。
+- 现有转换 round-trip 测试已经覆盖矩阵、分段、嵌套结构、颜色和样式等部分场景。
+- v3 freeze 清单已修复，当前主线和最近 CI/WASM/CodeQL 结果为绿色。
+- Core C 会话接口和 Python 示例已经存在，可作为批量测试入口。
+
+### 仍未闭环
+
+| 领域 | 未闭环内容 | 必须提供的证据 |
+| --- | --- | --- |
+| 10,000 条综合语料 | 尚无固定 manifest、seed、类别配额和公开报告 | 语料清单、生成器版本、SHA-256、JSON 报告 |
+| 定界符和 Markdown | `$$...$$`、`\\(...\\)`、`\\[...\\]` 与混合 Markdown 尚未统一统计 | 每种包装形式的解析、转换和 round-trip 分数 |
+| 错误容忍 | 故意错误 LaTeX 的恢复和诊断需要专项评估 | 错误分类、位置诊断、无 panic/死循环证明 |
+| TikZ/PGFPlots | 需与普通公式分开衡量 | 生成、预览、SVG 安全化、Office 插入和尺寸证据 |
+| 化学公式 | 语法、解析器和导出支持范围需明确 | 支持/降级/拒绝矩阵及示例 |
+| Office 包 | 目前主要证明 OOXML 结构，不等于真实 Office 视觉一致 | DOCX/PPTX/XLSX 重新打开、保存、回读报告 |
+| Office GUI | Word/Excel/PowerPoint 的实际插入方式未形成完整矩阵 | 应用版本、截图/PDF、回读结果、失败原因 |
+| OLE | DLL 打包、安装、注册和回读仍需实际验证 | 安装日志、DLL 校验、OLE 插入/编辑/回读证据 |
+| 交叉引用 | 编号、书签、`SEQ`/`REF`、更新域尚未专项覆盖 | 保存前/后、重开后、更新域后的 OOXML 与截图 |
+| OCR 模型 | readiness 不等于准确率，长时间 `running` 需纳入测试 | 模型身份、完成率、CER/Token 距离、超时和资源数据 |
+| Office 应用 UI | 公式库、自定义符号、预览、源码着色、主题、颜色选择器、布局和托盘行为属于应用层 | 真机 WebView2/Tauri 回归录像或截图、控制台/日志 |
+| Zig 结合 | 尚无隔离 benchmark 和 ABI 对比 | 与 Rust baseline 的吞吐、内存、构建和兼容性报告 |
+
+## 3. 10,000 条公式语料规格
+
+数字表示公式记录数；另建 500 个复合 Office 文档场景，复用这些公式，不把复合文档重复计入公式总数。
+
+| 主类别 | 数量 |
+| --- | ---: |
+| 基础结构、分数、根号、上下标 | 1,400 |
+| 矩阵、行列式、数组 | 1,100 |
+| `align`、`gather`、多行环境 | 1,000 |
+| `cases`、分段函数、条件结构 | 800 |
+| 复杂嵌套积分、求和、极限 | 1,300 |
+| 概率、统计、分布、期望、贝叶斯公式 | 1,100 |
+| 化学公式和反应式 | 700 |
+| 自定义符号、字体、颜色、样式 | 600 |
+| TikZ、PGFPlots 绘图 | 1,000 |
+| 故意错误或不完整 LaTeX | 500 |
+| Office 复合文档和交叉引用场景 | 500 |
+| **合计** | **10,000** |
+
+下列是正交标签，每条记录至少带有一个标签：
+
+- 包装：`$$...$$`、`\\(...\\)`、`\\[...\\]`、无包装；
+- 上下文：纯公式、中文正文混排、标题、代码块、列表、表格、混合 Markdown；
+- 复杂度：L1 基础、L2 组合、L3 多层嵌套、L4 多行/绘图、L5 极限和压力样例；
+- 结果预期：有效、可恢复错误、必须拒绝；
+- 输出目标：LaTeX、MathML、OMML、Typst、SVG、PNG、DOCX、PPTX、XLSX；
+- 插入方式：原生公式、SVG、PNG、OLE、剪贴板、批量、行内、独立显示。
+
+语料必须保存：`id`、原文、规范化结果、预期 AST 摘要、预期诊断、类别标签、生成器版本、seed、许可证和哈希。外部数据必须记录来源和许可证，不能把未经授权的论文或截图直接纳入仓库。
+
+## 4. 指标与验收口径
+
+### Core 转换
+
+- 解析成功率；
+- AST 结构有效率；
+- 语义等价率；
+- MathML、OMML、Typst、SVG 输出有效率；
+- LaTeX ↔ MathML/OMML/Typst round-trip 成功率；
+- 错误诊断的类别、位置和可恢复性；
+- 无 panic、无死循环、无无期限等待。
+
+### 性能
+
+- 单条和批量 P50/P95/P99 延迟；
+- 100、1,000、10,000 条吞吐量；
+- 首次初始化、首次转换和热转换；
+- 峰值内存、输出大小、超时率；
+- 增量编辑的 touched/reparsed/converted 节点数和缓存命中率。
+
+### OCR
+
+- 完全匹配率、字符错误率 CER、Token 编辑距离；
+- 检测 IoU（公式区域）；
+- 模型加载、首次推理、热推理和任务总耗时；
+- `running` 超时、取消、重试和最终状态；
+- CPU/CUDA/DirectML/TensorRT/Paddle 等 provider 的真实可用性。
+
+### Office 六维证据
+
+沿用现有 fidelity contract，不能用一个布尔值替代：
+
+1. `structuralValidity`
+2. `semanticPreservation`
+3. `layoutPreservation`
+4. `visualFidelity`
+5. `editability`
+6. `roundTripFidelity`
+
+建议首轮基线目标如下，跑完 pilot 后再冻结为 release 门槛：
+
+- 有效输入无 panic/死循环：100%；
+- 有效公式解析成功率：至少 99.5%；
+- 输出结构有效率：至少 99.9%；
+- 核心普通公式语义等价率：至少 98%；
+- 无静默丢失的 round-trip：至少 99%；
+- 支持的 OOXML 包重新打开：100%；
+- 已声明支持的 Office GUI 场景：100%；
+- 性能相对基线回退超过 10% 时阻止 release。
+
+TikZ、PGFPlots、化学公式、OLE 和识别模型必须展示独立分数，不能用普通公式分数掩盖限制。
+
+## 5. Office 综合验证矩阵
+
+### Word
+
+- 原生 OMML；
+- SVG、PNG；
+- OLE；
+- 剪贴板粘贴；
+- 批量插入；
+- 行内/独立显示；
+- 字体、字号、颜色、对齐和尺寸；
+- 公式编号、书签、`SEQ`、`REF` 和域更新；
+- 保存、关闭、重开、回读、修改后再次转换。
+
+### Excel
+
+- 单元格附近公式图形；
+- SVG、PNG、OLE；
+- 批量单元格/图形插入；
+- 行列缩放和锚定；
+- 保存、重开、回读。
+
+### PowerPoint
+
+- 文本框或原生公式（按实际 API 能力标记）；
+- SVG、PNG、OLE；
+- 分组、旋转、缩放、对齐；
+- 多页批量插入；
+- 保存、重开、回读。
+
+不适用的原生能力标记为 `N/A`，不计入失败率；声明支持的能力必须有真实应用证据。
+
+## 6. 交叉引用专项
+
+至少建立 500 个复合文档场景，覆盖：
+
+- 公式、图、表编号；
+- 书签和超链接；
+- `SEQ` / `REF`；
+- 章节标题引用；
+- 删除前置对象后的编号更新；
+- Word 更新域后的引用指向；
+- 图文混排和跨页布局；
+- 转换后对象仍可编辑。
+
+每个场景保留保存前、保存后、重新打开后、更新域后的四组证据。
+
+## 7. CI、夜间任务与发布门槛
+
+### Pull Request smoke
+
+- 每类 20～50 条，总量约 300～500 条；
+- 覆盖全部定界符、主要输出格式、错误输入和至少一个 Office 包；
+- 不在共享 runner 上设置脆弱的绝对耗时门槛；
+- 目标完成时间 5～10 分钟。
+
+### Nightly full
+
+- 完整 10,000 条语料；
+- Core 在 Linux/macOS/Windows 的转换和性能；
+- Windows Office 包和应用专项；
+- 上传 JSON、CSV、截图、PDF、OOXML diff、环境 manifest；
+- 固定 commit、seed、字体、Office 版本和模型版本。
+
+### Release candidate
+
+- Core、WASM、CodeQL、依赖审计和 freeze 全绿；
+- 10,000 条报告完整生成；
+- DOCX/PPTX/XLSX 包重新打开通过；
+- 已声明支持的 Word/Excel/PowerPoint 插入方式通过；
+- OLE 未通过时必须阻止宣称“支持 OLE”，或明确标为实验能力；
+- README、生成文档和已知限制同步；
+- 发布 tag 前清理临时模型、临时 Office 文件和失败重试产物。
+
+## 8. README 与用户可见报告
+
+新增生成文档：`docs/generated/formula-office-benchmark.md`。
+
+README 中文和英文都应展示：
+
+- 10,000 条公式和 500 个复合文档的规模；
+- 类别、定界符、Office 产品和插入方式；
+- 语义、视觉、编辑、round-trip 分数；
+- P50/P95/P99、吞吐量和内存；
+- OCR 模型身份与准确率；
+- OLE、TikZ、PGFPlots、化学公式的独立状态；
+- 测试 commit、时间、操作系统、Office/字体版本；
+- 复现命令、详细 JSON 报告和已知限制。
+
+“已验证”“实验性”“未测量”“不支持”必须使用不同状态，不能把缺少证据显示为通过。
+
+## 9. 分阶段执行清单
+
+### 阶段 A：整理与冻结范围
+
+- [ ] 建立 Core / Office / GUI 三栏问题台账；
+- [ ] 为每一项指定负责人、仓库、证据类型和阻塞级别；
+- [ ] 冻结 10,000 条语料 schema、seed 和类别配额；
+- [ ] 明确普通公式、绘图、化学、OCR 的独立指标。
+
+### 阶段 B：Core 语料和 runner
+
+- [ ] 实现确定性语料生成器和 manifest；
+- [ ] 生成小规模 pilot，校准指标和门槛；
+- [ ] 接入 `crates/evaluation`、`crates/benchmark`；
+- [ ] 生成 JSON/CSV 报告和失败样例；
+- [ ] 覆盖定界符、Markdown、错误输入和复杂嵌套。
+
+### 阶段 C：Office 包和转换
+
+- [ ] 扩展 `fidelity/corpora/index.json`；
+- [ ] 增加 OMML、SVG、PNG、OLE、剪贴板、批量场景的包证据；
+- [ ] 增加交叉引用和域更新 fixture；
+- [ ] 生成 Office 六维能力报告；
+- [ ] 明确不支持能力和降级诊断。
+
+### 阶段 D：真实 Office 和 OLE
+
+- [ ] 在固定 Windows/Office 环境安装并校验 OLE DLL；
+- [ ] Word/Excel/PowerPoint 逐项执行插入、保存、重开、回读；
+- [ ] 保存截图、PDF、OOXML diff、安装日志和版本信息；
+- [ ] 记录 GUI、OLE、字体和尺寸问题；
+- [ ] 只把有真实证据的能力标为“支持”。
+
+### 阶段 E：Office 应用 UI 回归
+
+- [ ] MathLive/公式预览和自定义符号混合公式；
+- [ ] TikZ/PGFPlots/Graphviz/Mermaid 安全预览；
+- [ ] 公式库、自定义符号、源码语法着色；
+- [ ] 主题、颜色选择器、浅蓝默认风格、竖屏布局；
+- [ ] 符号素材栏和画布工具栏尺寸；
+- [ ] 托盘/任务栏缩略图左右键；
+- [ ] 真实 WebView2 CSP/WASM 和 Tauri release 启动。
+
+### 阶段 F：发布与清理
+
+- [ ] PR smoke、nightly full、release candidate 全部通过；
+- [ ] 更新中英文 README 和生成报告；
+- [ ] 更新 release checklist、已知限制和迁移文档；
+- [ ] 重新确认 freeze manifest、版本和 lockfile；
+- [ ] 清理临时模型、Office 测试文档、截图缓存和失败重试目录；
+- [ ] 只在证据完整且 CI 全绿后创建 release tag。
+
+## 10. Zig 与渲染后端的后续评估
+
+Zig 不作为本轮收尾的硬依赖。收尾完成后再建立隔离的 Zig interop benchmark：
+
+- 通过现有 C ABI 调用，不改变 Rust 公共契约；
+- 对比解析、AST 遍历、SVG 生成、批量转换的吞吐和峰值内存；
+- 比较静态链接、跨平台构建、WASM 兼容和调试成本；
+- 只有在真实数据证明收益并通过 ABI/安全审查后，才进入 Core 主线。
+
+MathLive/KaTeX 的替换也应先保留兼容 fallback，等 10,000 条渲染和 Office 预览数据通过后再移除依赖，避免把 UI 渲染重构和 Office 收尾混成一个不可回滚的大改动。
+
+## 11. 执行规则
+
+- 没有报告、截图、日志或可复现命令的项目不得标记为完成；
+- `unsupported`、`not-measured` 和 `failed` 必须分开；
+- 所有性能结论必须带平台、版本、seed 和重复次数；
+- 每次修改先跑最小相关测试，再跑对应 CI 层级；
+- 任何新发现的问题先追加到本计划，再决定是否阻止 release；
+- release tag 前必须由本计划、release checklist 和生成能力表三方交叉核对。
