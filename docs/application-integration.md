@@ -236,6 +236,13 @@ session, and later calls raise `LaTeXSnipperError` with the stable `code`,
 `detail`, and `retryable` fields. Build and installed-extension smoke commands
 are documented in `crates/python/README.md`.
 
+Stable tags build repaired CPython 3.13 wheels for Linux x86-64, Windows x86-64,
+and macOS arm64. Each release job installs its wheel into a clean Python
+environment and runs the same persistent-session smoke test before the wheel is
+attached to the GitHub Release. Other supported Python versions can build from
+source with maturin; broader prebuilt-wheel coverage remains a release-policy
+decision rather than an ABI claim.
+
 ## Opaque C application sessions
 
 `crates/ffi/include/latexsnipper_session.h` declares the stable v1 C session

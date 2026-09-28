@@ -120,6 +120,50 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.*
 
+  build-python:
+    name: Build Python wheel (${{ matrix.artifact }})
+    needs: release-guard
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: python-wheel-linux-amd64
+          - os: windows-latest
+            artifact: python-wheel-windows-amd64
+          - os: macos-15
+            artifact: python-wheel-macos-arm64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: crates/python/pyproject.toml
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: python-${{ matrix.artifact }}
+      - name: Install the declared Python build frontend
+        run: python -m pip install "maturin>=1.9,<2.0"
+      - name: Build a repaired wheel
+        working-directory: crates/python
+        run: python -m maturin build --release --out dist
+      - name: Install only the built wheel
+        working-directory: crates/python
+        run: python -m pip install --force-reinstall --no-index --find-links dist latexsnipper-core
+      - name: Validate the installed wheel
+        working-directory: crates/python
+        run: python tests/smoke.py
+      - name: Upload Python wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: crates/python/dist/*.whl
+          if-no-files-found: error
+
   supply-chain:
     name: SBOM, licenses, and source manifest
     needs: release-guard
@@ -441,7 +485,7 @@ jobs:
   # ============================================================
   release-cli:
     name: Release CLI
-    needs: [build-cli, build-wasm, verify-published-crates, supply-chain]
+    needs: [build-cli, build-python, build-wasm, verify-published-crates, supply-chain]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -486,6 +530,11 @@ jobs:
             latexsnipper-pipeline = "${{ steps.version.outputs.crate_version }}"
             ```
 
+            ### From Python
+
+            Download the wheel matching your operating system and CPython 3.13,
+            then install it with `python -m pip install <wheel>`.
+
             ## Usage
 
             ```bash
@@ -502,6 +551,7 @@ jobs:
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
             artifacts/**/*.tgz
+            artifacts/**/*.whl
             artifacts/**/*.json
             artifacts/**/*.txt
             artifacts/SHA256SUMS
