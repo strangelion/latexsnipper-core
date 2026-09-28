@@ -1,11 +1,11 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "cases": [
     {
       "id": "docx-office-rich-v1",
       "format": "docx",
       "fixture": "fidelity/fixtures/office-rich.docx",
-      "sha256": "d28e37e532c7865bde8a8aa6e455b62452b2423efad33ac82d0ff8a77c8e99e1",
+      "sha256": "62c55c5b46a1a1201f5e6bc1b6d87045e5a33e28a0d610c09b9f40ba704002b0",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -22,7 +22,11 @@
         { "feature": "notes", "evidenceToken": "word/footnotes.xml" },
         { "feature": "sections", "evidenceToken": "<w:sectPr" },
         { "feature": "comments-revisions", "evidenceToken": "<w:commentRangeStart" },
-        { "feature": "opaque-parts", "evidenceToken": "DOCX_OPAQUE_PART" }
+        { "feature": "opaque-parts", "evidenceToken": "DOCX_OPAQUE_PART" },
+        { "feature": "svg-images", "evidenceToken": "word/media/image2.svg" },
+        { "feature": "bookmarks", "evidenceToken": "<w:bookmarkStart" },
+        { "feature": "fields", "evidenceToken": "w:instr=\" SEQ Equation \\* ARABIC \"" },
+        { "feature": "cross-references", "evidenceToken": "w:instr=\" REF eq_energy \\h \"" }
       ],
       "expectedText": ["Office Fidelity Heading", "List item"],
       "requiredDiagnosticCodes": [
@@ -30,9 +34,56 @@
         "W_UNSUPPORTED_FEATURE"
       ],
       "requiredOpaqueParts": ["customXml/fidelity.xml"],
-      "minimumAssets": 1,
+      "minimumAssets": 2,
       "minimumSemanticSimilarity": 0.75,
-      "minimumLayoutSimilarity": 0.95
+      "minimumLayoutSimilarity": 0.95,
+      "capabilityExpectations": [
+        {
+          "feature": "native-omml",
+          "status": "preserved",
+          "evidenceTokens": ["<m:oMath"]
+        },
+        {
+          "feature": "png-image",
+          "status": "preserved",
+          "evidenceTokens": ["word/media/image1.png"]
+        },
+        {
+          "feature": "svg-image",
+          "status": "preserved",
+          "evidenceTokens": ["word/media/image2.svg"]
+        },
+        {
+          "feature": "bookmark",
+          "status": "preserved",
+          "evidenceTokens": ["<w:bookmarkStart", "w:name=\"eq_energy\""]
+        },
+        {
+          "feature": "sequence-field",
+          "status": "preserved",
+          "evidenceTokens": ["w:instr=\" SEQ Equation \\* ARABIC \""]
+        },
+        {
+          "feature": "cross-reference-field",
+          "status": "preserved",
+          "evidenceTokens": ["w:instr=\" REF eq_energy \\h \""]
+        },
+        {
+          "feature": "ole-editability",
+          "status": "not-measured",
+          "limitation": "the DOCX fixture does not install or activate an OLE server"
+        },
+        {
+          "feature": "clipboard-paste",
+          "status": "not-measured",
+          "limitation": "clipboard ownership and paste require an application harness"
+        },
+        {
+          "feature": "batch-insert",
+          "status": "not-measured",
+          "limitation": "batch insertion requires the Office adapter and application harness"
+        }
+      ]
     },
     {
       "id": "pptx-presentation-rich-v1",
@@ -54,7 +105,24 @@
       "requiredOpaqueParts": [],
       "minimumAssets": 1,
       "minimumSemanticSimilarity": 0.70,
-      "minimumLayoutSimilarity": 0.95
+      "minimumLayoutSimilarity": 0.95,
+      "capabilityExpectations": [
+        {
+          "feature": "png-image",
+          "status": "preserved",
+          "evidenceTokens": ["ppt/media/image1.png"]
+        },
+        {
+          "feature": "clipboard-paste",
+          "status": "not-measured",
+          "limitation": "clipboard ownership and paste require an application harness"
+        },
+        {
+          "feature": "batch-insert",
+          "status": "not-measured",
+          "limitation": "batch insertion requires the Office adapter and application harness"
+        }
+      ]
     },
     {
       "id": "xlsx-workbook-rich-v1",
@@ -85,7 +153,25 @@
       "requiredOpaqueParts": ["xl/customXml/fidelity.xml"],
       "minimumAssets": 0,
       "minimumSemanticSimilarity": 0.70,
-      "minimumLayoutSimilarity": 0.95
+      "minimumLayoutSimilarity": 0.95,
+      "capabilityExpectations": [
+        {
+          "feature": "ole-editability",
+          "status": "unsupported",
+          "requiredDiagnosticCodes": ["W_OLE_NOT_SUPPORTED"],
+          "limitation": "the embedded package part is opaque and is not semantically editable"
+        },
+        {
+          "feature": "clipboard-paste",
+          "status": "not-measured",
+          "limitation": "clipboard ownership and paste require an application harness"
+        },
+        {
+          "feature": "batch-insert",
+          "status": "not-measured",
+          "limitation": "batch insertion requires the Office adapter and application harness"
+        }
+      ]
     },
     {
       "id": "pdf-rich-v1",

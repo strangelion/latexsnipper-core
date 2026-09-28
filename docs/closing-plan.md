@@ -243,11 +243,16 @@ README 中文和英文都应展示：
 
 ### 阶段 C：Office 包和转换
 
-- [ ] 扩展 `fidelity/corpora/index.json`；
+- [x] 扩展 `fidelity/corpora/index.json`，加入包级能力期望和 round-trip token；
 - [ ] 增加 OMML、SVG、PNG、OLE、剪贴板、批量场景的包证据；
 - [ ] 增加交叉引用和域更新 fixture；
-- [ ] 生成 Office 六维能力报告；
-- [ ] 明确不支持能力和降级诊断。
+- [x] 生成 Office 六维包级能力报告；
+- [x] 明确包级不支持能力、未测量能力和降级诊断。
+
+当前增量已经验证 OMML、SVG、PNG、书签、`SEQ` 和 `REF` 在 Core
+DOCX round-trip 后仍有确定性包 token；XLSX OLE 编辑能力明确为
+`unsupported`。真实 Word 域更新、OLE 激活、剪贴板和批量插入仍属于
+阶段 D，不能由包测试代替。
 - [ ] Office 加载项功能排版和调整让用户可更舒适快捷使用。
 
 ### 阶段 D：真实 Office 和 OLE

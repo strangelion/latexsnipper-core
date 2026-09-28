@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-pub const FIDELITY_REPORT_SCHEMA_VERSION: &str = "1.0.0";
+pub const CORPUS_INDEX_SCHEMA_VERSION: &str = "1.1.0";
+pub const FIDELITY_REPORT_SCHEMA_VERSION: &str = "1.1.0";
 pub const REQUIRED_DOCX_FEATURES: &[&str] = &[
     "runs",
     "styles",
@@ -28,6 +29,10 @@ pub const REQUIRED_DOCX_FEATURES: &[&str] = &[
     "sections",
     "comments-revisions",
     "opaque-parts",
+    "svg-images",
+    "bookmarks",
+    "fields",
+    "cross-references",
 ];
 pub const REQUIRED_PPTX_FEATURES: &[&str] = &[
     "slides",
@@ -521,6 +526,8 @@ pub struct CorpusCase {
     pub minimum_layout_similarity: f64,
     #[serde(default)]
     pub visual_reference: Option<String>,
+    #[serde(default)]
+    pub capability_expectations: Vec<CapabilityExpectation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -532,12 +539,34 @@ pub struct FeatureEvidence {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum CapabilityExpectationStatus {
+    Preserved,
+    Unsupported,
+    NotMeasured,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CapabilityExpectation {
+    pub feature: String,
+    pub status: CapabilityExpectationStatus,
+    #[serde(default)]
+    pub evidence_tokens: Vec<String>,
+    #[serde(default)]
+    pub required_diagnostic_codes: Vec<String>,
+    #[serde(default)]
+    pub limitation: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum LayerKind {
     ReopenValidation,
     SemanticAstComparison,
     ExpectedDiagnosticComparison,
     AssetPreservation,
     OpaquePartPreservation,
+    CapabilityExpectationComparison,
     VisualRenderingComparison,
     ApplicationSpecificSmoke,
 }
@@ -642,7 +671,7 @@ pub trait FidelityHarness {
 pub fn load_and_validate_index(path: &Path, repository_root: &Path) -> Result<CorpusIndex> {
     let bytes = fs::read(path)?;
     let index: CorpusIndex = serde_json::from_slice(&bytes)?;
-    if index.schema_version != FIDELITY_REPORT_SCHEMA_VERSION {
+    if index.schema_version != CORPUS_INDEX_SCHEMA_VERSION {
         return Err(FidelityError::InvalidCorpus(format!(
             "unsupported schema version '{}'",
             index.schema_version
@@ -693,6 +722,47 @@ fn validate_case(case: &CorpusCase, repository_root: &Path) -> Result<()> {
             case.id
         )));
     }
+    let mut expectation_names = BTreeSet::new();
+    for expectation in &case.capability_expectations {
+        if expectation.feature.is_empty() || !expectation_names.insert(&expectation.feature) {
+            return Err(FidelityError::InvalidCorpus(format!(
+                "case '{}' contains an empty or duplicate capability expectation",
+                case.id
+            )));
+        }
+        match expectation.status {
+            CapabilityExpectationStatus::Preserved
+                if expectation.evidence_tokens.is_empty()
+                    || expectation.evidence_tokens.iter().any(String::is_empty) =>
+            {
+                return Err(FidelityError::InvalidCorpus(format!(
+                    "case '{}' preserved capability '{}' has no round-trip evidence token",
+                    case.id, expectation.feature
+                )));
+            }
+            CapabilityExpectationStatus::Unsupported
+                if expectation.required_diagnostic_codes.is_empty()
+                    || expectation
+                        .required_diagnostic_codes
+                        .iter()
+                        .any(String::is_empty) =>
+            {
+                return Err(FidelityError::InvalidCorpus(format!(
+                    "case '{}' unsupported capability '{}' has no required diagnostic",
+                    case.id, expectation.feature
+                )));
+            }
+            CapabilityExpectationStatus::NotMeasured
+                if expectation.limitation.as_deref().is_none_or(str::is_empty) =>
+            {
+                return Err(FidelityError::InvalidCorpus(format!(
+                    "case '{}' unmeasured capability '{}' has no limitation",
+                    case.id, expectation.feature
+                )));
+            }
+            _ => {}
+        }
+    }
     for (name, threshold) in [
         (
             "minimumSemanticSimilarity",
@@ -727,9 +797,7 @@ fn validate_case(case: &CorpusCase, repository_root: &Path) -> Result<()> {
     validate_ooxml_package_structure(&bytes, case.format)?;
     for feature in &case.features {
         if feature.evidence_token.is_empty()
-            || !bytes
-                .windows(feature.evidence_token.len())
-                .any(|window| window == feature.evidence_token.as_bytes())
+            || !evidence_token_present(&bytes, case.format, &feature.evidence_token)?
         {
             return Err(FidelityError::InvalidCorpus(format!(
                 "case '{}' lacks byte evidence '{}' for feature '{}'",
@@ -881,6 +949,12 @@ fn run_case(
         case.required_opaque_parts.clone(),
     ));
 
+    layers.push(capability_expectation_layer(
+        case,
+        exported,
+        &actual_diagnostics,
+    )?);
+
     layers.push(run_visual_layer(case, options, harness, &fixture, exported));
     layers.push(run_application_layer(
         case, options, harness, &fixture, exported,
@@ -969,6 +1043,118 @@ fn run_case(
         layers,
         passed,
     })
+}
+
+fn capability_expectation_layer(
+    case: &CorpusCase,
+    exported: &[u8],
+    diagnostics: &BTreeSet<&str>,
+) -> Result<LayerResult> {
+    if case.capability_expectations.is_empty() {
+        return Ok(skipped_layer(
+            LayerKind::CapabilityExpectationComparison,
+            "no package capability expectations are declared",
+            Vec::new(),
+        ));
+    }
+
+    let mut failures = Vec::new();
+    let mut evidence = Vec::new();
+    for expectation in &case.capability_expectations {
+        match expectation.status {
+            CapabilityExpectationStatus::Preserved => {
+                let missing = expectation
+                    .evidence_tokens
+                    .iter()
+                    .map(|token| {
+                        evidence_token_present(exported, case.format, token)
+                            .map(|present| (!present).then(|| token.clone()))
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>();
+                if missing.is_empty() {
+                    evidence.push(format!(
+                        "{}=preserved; tokens={}",
+                        expectation.feature,
+                        expectation.evidence_tokens.join("|")
+                    ));
+                } else {
+                    failures.push(format!(
+                        "{} missing round-trip tokens: {}",
+                        expectation.feature,
+                        missing.join(", ")
+                    ));
+                }
+            }
+            CapabilityExpectationStatus::Unsupported => {
+                let missing = expectation
+                    .required_diagnostic_codes
+                    .iter()
+                    .filter(|code| !diagnostics.contains(code.as_str()))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if missing.is_empty() {
+                    evidence.push(format!(
+                        "{}=unsupported; diagnostics={}",
+                        expectation.feature,
+                        expectation.required_diagnostic_codes.join("|")
+                    ));
+                } else {
+                    failures.push(format!(
+                        "{} missing unsupported diagnostics: {}",
+                        expectation.feature,
+                        missing.join(", ")
+                    ));
+                }
+            }
+            CapabilityExpectationStatus::NotMeasured => evidence.push(format!(
+                "{}=not-measured; limitation={}",
+                expectation.feature,
+                expectation.limitation.as_deref().unwrap_or_default()
+            )),
+        }
+    }
+
+    Ok(layer(
+        LayerKind::CapabilityExpectationComparison,
+        failures.is_empty(),
+        if failures.is_empty() {
+            "all declared package capability expectations matched".to_string()
+        } else {
+            failures.join("; ")
+        },
+        evidence,
+    ))
+}
+
+fn evidence_token_present(bytes: &[u8], format: FidelityFormat, token: &str) -> Result<bool> {
+    if format == FidelityFormat::Pdf {
+        return Ok(bytes
+            .windows(token.len())
+            .any(|window| window == token.as_bytes()));
+    }
+
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+        .map_err(|error| FidelityError::Package(format!("invalid OOXML ZIP package: {error}")))?;
+    for index in 0..archive.len() {
+        let mut part = archive.by_index(index).map_err(|error| {
+            FidelityError::Package(format!("failed to inspect ZIP entry {index}: {error}"))
+        })?;
+        if part.name().contains(token) {
+            return Ok(true);
+        }
+        let mut content = Vec::new();
+        part.read_to_end(&mut content)?;
+        if content
+            .windows(token.len())
+            .any(|window| window == token.as_bytes())
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn run_visual_layer(
@@ -1382,10 +1568,23 @@ mod tests {
 
     #[test]
     fn every_format_has_the_required_feature_contract() {
-        assert_eq!(REQUIRED_DOCX_FEATURES.len(), 14);
+        assert_eq!(CORPUS_INDEX_SCHEMA_VERSION, "1.1.0");
+        assert_eq!(FIDELITY_REPORT_SCHEMA_VERSION, "1.1.0");
+        assert_eq!(REQUIRED_DOCX_FEATURES.len(), 18);
         assert_eq!(REQUIRED_PPTX_FEATURES.len(), 6);
         assert_eq!(REQUIRED_XLSX_FEATURES.len(), 11);
         assert_eq!(REQUIRED_PDF_FEATURES.len(), 10);
+    }
+
+    #[test]
+    fn preserved_capability_rejects_empty_evidence_tokens() {
+        let repository_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let bytes = fs::read(repository_root.join("fidelity/corpora/index.json")).unwrap();
+        let mut index: CorpusIndex = serde_json::from_slice(&bytes).unwrap();
+        index.cases[0].capability_expectations[0].evidence_tokens = vec![String::new()];
+
+        let error = validate_case(&index.cases[0], &repository_root).unwrap_err();
+        assert!(error.to_string().contains("no round-trip evidence token"));
     }
 
     #[test]

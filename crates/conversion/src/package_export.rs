@@ -611,10 +611,23 @@ fn word_inlines(inlines: &[Inline], media: &HashMap<&AssetId, &MediaPart>) -> Re
                         ));
                     }
                 }
-                output.push_str(&format!(
+                let run = format!(
                     "<w:r><w:rPr>{properties}</w:rPr><w:t xml:space=\"preserve\">{}</w:t></w:r>",
                     xml_escape(&text.text)
-                ));
+                );
+                if let Some(instruction) = text
+                    .source
+                    .as_ref()
+                    .filter(|source| source.raw_source_format.as_deref() == Some("word-field"))
+                    .and_then(|source| source.raw_source.as_deref())
+                {
+                    output.push_str(&format!(
+                        "<w:fldSimple w:instr=\"{}\">{run}</w:fldSimple>",
+                        xml_escape(instruction)
+                    ));
+                } else {
+                    output.push_str(&run);
+                }
             }
             Inline::Formula(formula) => output.push_str(&formula_omml(formula)?),
             Inline::Image(image) => {
@@ -628,10 +641,60 @@ fn word_inlines(inlines: &[Inline], media: &HashMap<&AssetId, &MediaPart>) -> Re
             Inline::Superscript(content) | Inline::Subscript(content) => {
                 output.push_str(&word_inlines(content, media)?)
             }
+            Inline::Label { key } => output.push_str(&word_bookmark(key)),
+            Inline::Reference { key, .. } => output.push_str(&word_cross_reference(key, None)),
+            Inline::Anchor(anchor) => output.push_str(&word_bookmark(&anchor.id)),
+            Inline::CrossReference(reference) => output.push_str(&word_cross_reference(
+                &reference.target_id,
+                reference.display_text.as_deref(),
+            )),
             _ => {}
         }
     }
     Ok(output)
+}
+
+fn word_bookmark(name: &str) -> String {
+    let name = word_bookmark_name(name);
+    let id = bookmark_numeric_id(&name);
+    format!(
+        "<w:bookmarkStart w:id=\"{id}\" w:name=\"{}\"/><w:bookmarkEnd w:id=\"{id}\"/>",
+        xml_escape(&name)
+    )
+}
+
+fn word_cross_reference(target: &str, display_text: Option<&str>) -> String {
+    let target = word_bookmark_name(target);
+    let display = display_text.unwrap_or(&target);
+    format!(
+        "<w:fldSimple w:instr=\" REF {} \\h \"><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:fldSimple>",
+        xml_escape(&target),
+        xml_escape(display)
+    )
+}
+
+fn word_bookmark_name(value: &str) -> String {
+    let mut name = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '_' {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if name.is_empty() || name.starts_with(|character: char| character.is_ascii_digit()) {
+        name.insert_str(0, "ref_");
+    }
+    name.truncate(40);
+    name
+}
+
+fn bookmark_numeric_id(value: &str) -> u32 {
+    value.bytes().fold(2_166_136_261_u32, |hash, byte| {
+        hash.wrapping_mul(16_777_619) ^ u32::from(byte)
+    }) & 0x7fff_ffff
 }
 
 fn formula_omml(formula: &latexsnipper_ast::Formula) -> Result<String> {
@@ -1325,6 +1388,52 @@ mod tests {
             !document_xml.contains("</w:tbl><m:oMathPara>"),
             "m:oMathPara must not be emitted directly as a w:body child",
         );
+    }
+
+    #[test]
+    fn generated_docx_preserves_bookmark_seq_and_ref_fields() {
+        let mut document = Document::new();
+        let mut page = latexsnipper_ast::Page::new(800.0, 600.0, 1);
+        let mut sequence = latexsnipper_ast::TextRun::new("1");
+        sequence.source = Some(
+            latexsnipper_ast::SourceInfo::new()
+                .with_producer("test")
+                .with_raw_source("word-field", r" SEQ Equation \* ARABIC "),
+        );
+        page.blocks
+            .push(Block::Paragraph(latexsnipper_ast::ParagraphBlock {
+                inlines: vec![
+                    Inline::Anchor(latexsnipper_ast::AnchorInline {
+                        id: "eq_energy".to_string(),
+                        title: None,
+                        source: None,
+                    }),
+                    Inline::Text(sequence),
+                    Inline::CrossReference(latexsnipper_ast::CrossReferenceInline {
+                        target_id: "eq_energy".to_string(),
+                        kind: latexsnipper_ast::CrossReferenceKind::Equation,
+                        display_text: Some("1".to_string()),
+                    }),
+                ],
+                geometry: None,
+                source: None,
+                style: None,
+            }));
+        document.add_page(page);
+
+        let artifact = DocumentExportService::export(&document, ExportFormat::Docx).unwrap();
+        let document_xml = package_entry_text(artifact.as_bytes().unwrap(), "word/document.xml");
+        assert!(document_xml.contains("<w:bookmarkStart"));
+        assert!(document_xml.contains("w:name=\"eq_energy\""));
+        assert!(document_xml.contains("w:instr=\" SEQ Equation \\* ARABIC \""));
+        assert!(document_xml.contains("w:instr=\" REF eq_energy \\h \""));
+
+        let reopened = crate::read_docx_bytes(artifact.as_bytes().unwrap()).unwrap();
+        assert!(reopened.all_blocks().iter().any(|block| {
+            matches!(block, Block::Paragraph(paragraph) if paragraph.inlines.iter().any(|inline| {
+                matches!(inline, Inline::CrossReference(reference) if reference.target_id == "eq_energy")
+            }))
+        }));
     }
 
     #[test]

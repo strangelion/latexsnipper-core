@@ -212,7 +212,12 @@ jobs:
         run: |
           cargo run --locked -p latexsnipper-fidelity --bin generate-fidelity-capabilities -- \
             --output docs/generated/fidelity-capabilities.md
-          git diff --exit-code -- docs/generated/fidelity-capabilities.md
+          cargo run --locked -p latexsnipper-fidelity --bin generate-fidelity-report -- \
+            --index fidelity/corpora/index.json --repository-root . \
+            --output docs/generated/office-fidelity-evidence.md
+          git diff --exit-code -- \
+            docs/generated/fidelity-capabilities.md \
+            docs/generated/office-fidelity-evidence.md
       - name: Upload fidelity evidence
         if: always()
         uses: actions/upload-artifact@v7

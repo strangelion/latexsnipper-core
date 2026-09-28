@@ -30,3 +30,7 @@ path = "src/bin/generate_fidelity_fixtures.rs"
 [[bin]]
 name = "generate-fidelity-capabilities"
 path = "src/bin/generate_fidelity_capabilities.rs"
+
+[[bin]]
+name = "generate-fidelity-report"
+path = "src/bin/generate_fidelity_report.rs"

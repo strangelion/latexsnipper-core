@@ -9,6 +9,7 @@
 //! - Tables (delegates to word_ooxml_table_parser)
 //! - Lists (bullet and numbered)
 //! - Hyperlinks
+//! - Bookmarks and simple Word fields (`SEQ`/`REF`)
 
 use latexsnipper_ast::*;
 use latexsnipper_foundation::{Result, SnipperError};
@@ -18,6 +19,50 @@ use std::io::{Cursor, Read, Seek};
 use std::path::Path;
 
 use crate::parse_word_table_ooxml;
+
+#[derive(Debug)]
+struct SimpleWordField {
+    instruction: String,
+    display_text: String,
+}
+
+fn simple_field_instruction(event: &quick_xml::events::BytesStart<'_>) -> String {
+    event
+        .attributes()
+        .flatten()
+        .find(|attribute| {
+            attribute.key.as_ref() == b"w:instr" || attribute.key.as_ref() == b"instr"
+        })
+        .map(|attribute| String::from_utf8_lossy(&attribute.value).to_string())
+        .unwrap_or_default()
+}
+
+fn reference_target(instruction: &str) -> Option<&str> {
+    let mut tokens = instruction.split_whitespace();
+    let command = tokens.next()?;
+    command
+        .eq_ignore_ascii_case("REF")
+        .then(|| tokens.next())
+        .flatten()
+}
+
+fn push_simple_field(field: SimpleWordField, inlines: &mut Vec<Inline>) {
+    if let Some(target_id) = reference_target(&field.instruction) {
+        inlines.push(Inline::CrossReference(CrossReferenceInline {
+            target_id: target_id.to_string(),
+            kind: CrossReferenceKind::Bookmark,
+            display_text: (!field.display_text.is_empty()).then_some(field.display_text),
+        }));
+    } else if !field.display_text.is_empty() {
+        let mut text = TextRun::new(field.display_text);
+        text.source = Some(
+            SourceInfo::new()
+                .with_producer("docx")
+                .with_raw_source("word-field", field.instruction),
+        );
+        inlines.push(Inline::Text(text));
+    }
+}
 
 /// Parse a .docx file and produce a Document AST.
 pub fn read_docx(path: impl AsRef<Path>) -> Result<Document> {
@@ -272,6 +317,7 @@ fn parse_document_body<R: Read + Seek>(
     let mut in_hyperlink = false;
     let mut hyperlink_target = String::new();
     let mut hyperlink_inlines: Vec<Inline> = Vec::new();
+    let mut simple_field: Option<SimpleWordField> = None;
     #[allow(unused)]
     let mut drawing_id: Option<String> = None;
 
@@ -314,6 +360,12 @@ fn parse_document_body<R: Read + Seek>(
                                 rels.get(&id).cloned()
                             })
                             .unwrap_or_default();
+                    }
+                    b"w:fldSimple" | b"fldSimple" if in_paragraph => {
+                        simple_field = Some(SimpleWordField {
+                            instruction: simple_field_instruction(e),
+                            display_text: String::new(),
+                        });
                     }
                     b"w:footnoteReference" | b"footnoteReference" if in_paragraph => {
                         let note_id = e
@@ -487,7 +539,9 @@ fn parse_document_body<R: Read + Seek>(
                                 .with_italic(run_italic)
                                 .with_underline(run_underline),
                         );
-                        if in_hyperlink {
+                        if let Some(field) = simple_field.as_mut() {
+                            field.display_text.push_str(text.as_ref());
+                        } else if in_hyperlink {
                             hyperlink_inlines.push(run);
                         } else {
                             current_paragraph_inlines.push(run);
@@ -518,6 +572,11 @@ fn parse_document_body<R: Read + Seek>(
                         }
                         in_hyperlink = false;
                         hyperlink_target.clear();
+                    }
+                    b"w:fldSimple" | b"fldSimple" => {
+                        if let Some(field) = simple_field.take() {
+                            push_simple_field(field, &mut current_paragraph_inlines);
+                        }
                     }
                     b"w:drawing" | b"drawing" => {
                         if let Some(img_rel) = &drawing_id {
@@ -556,6 +615,9 @@ fn parse_document_body<R: Read + Seek>(
                         drawing_id = None;
                     }
                     b"w:p" | b"p" => {
+                        if let Some(field) = simple_field.take() {
+                            push_simple_field(field, &mut current_paragraph_inlines);
+                        }
                         in_paragraph = false;
                         if has_list_formatting && !current_paragraph_inlines.is_empty() {
                             let inlines = std::mem::take(&mut current_paragraph_inlines);
@@ -845,6 +907,65 @@ mod tests {
             }
         });
         assert!(has_anchor, "should contain an anchor inline");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_docx_simple_seq_and_ref_fields() {
+        let body = r#"<w:p>
+<w:bookmarkStart w:id="1" w:name="eq_energy"/>
+<w:fldSimple w:instr=" SEQ Equation \* ARABIC "><w:r><w:t>1</w:t></w:r></w:fldSimple>
+<w:bookmarkEnd w:id="1"/>
+</w:p>
+<w:p><w:fldSimple w:instr=" REF eq_energy \h "><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p>"#;
+        let path = create_docx_with_body(body, "fields");
+        let document = read_docx(&path).unwrap();
+
+        let inlines = document
+            .all_blocks()
+            .iter()
+            .filter_map(|block| match block {
+                Block::Paragraph(paragraph) => Some(paragraph.inlines.as_slice()),
+                _ => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+
+        assert!(inlines.iter().any(|inline| {
+            matches!(inline, Inline::Anchor(anchor) if anchor.id == "eq_energy")
+        }));
+        assert!(inlines.iter().any(|inline| {
+            matches!(
+                inline,
+                Inline::Text(text)
+                    if text.source.as_ref().is_some_and(|source| {
+                        source.raw_source_format.as_deref() == Some("word-field")
+                            && source.raw_source.as_deref().is_some_and(|raw| raw.contains("SEQ"))
+                    })
+            )
+        }));
+        assert!(inlines.iter().any(|inline| {
+            matches!(
+                inline,
+                Inline::CrossReference(reference)
+                    if reference.target_id == "eq_energy"
+                        && reference.display_text.as_deref() == Some("1")
+            )
+        }));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn simple_field_does_not_capture_the_next_paragraph() {
+        let body = r#"<w:p><w:fldSimple w:instr=" SEQ Equation "><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p>
+<w:p><w:r><w:t>After field</w:t></w:r></w:p>"#;
+        let path = create_docx_with_body(body, "malformed_field");
+        let document = read_docx(&path).unwrap();
+        let mut collector = TextCollector::new();
+        collector.visit_document(&document);
+        assert!(collector.text.contains('1'));
+        assert!(collector.text.contains("After field"));
         std::fs::remove_file(&path).ok();
     }
 

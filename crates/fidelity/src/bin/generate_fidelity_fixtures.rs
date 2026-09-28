@@ -66,6 +66,8 @@ const ONE_PIXEL_PNG: &[u8] = &[
     0xae, 0x42, 0x60, 0x82,
 ];
 
+const VECTOR_FORMULA_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><rect width="120" height="40" fill="white"/><path d="M8 20h32m12 0h24" stroke="#1f4b99" stroke-width="3"/><text x="82" y="25" font-size="18">x+1</text></svg>"##;
+
 // ---------------------------------------------------------------------------
 // Unified OOXML helpers
 // ---------------------------------------------------------------------------
@@ -179,6 +181,7 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ),
             ("xml", "application/xml"),
             ("png", "image/png"),
+            ("svg", "image/svg+xml"),
         ],
         &[
             (
@@ -264,6 +267,15 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "<m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath>",
         "</m:oMathPara>",
         "</w:p>",
+        // Equation number, bookmark, and cross-reference fields.
+        "<w:p>",
+        "<w:bookmarkStart w:id=\"1\" w:name=\"eq_energy\"/>",
+        "<w:r><w:t>Equation </w:t></w:r>",
+        "<w:fldSimple w:instr=\" SEQ Equation \\* ARABIC \"><w:r><w:t>1</w:t></w:r></w:fldSimple>",
+        "<w:bookmarkEnd w:id=\"1\"/>",
+        "</w:p>",
+        "<w:p><w:r><w:t>See equation </w:t></w:r>",
+        "<w:fldSimple w:instr=\" REF eq_energy \\h \"><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p>",
         // Image with full DrawingML structure
         "<w:p><w:r><w:drawing>",
         "<wp:inline>",
@@ -288,6 +300,19 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "</a:graphicData>",
         "</a:graphic>",
         "</wp:inline>",
+        "</w:drawing></w:r></w:p>",
+        // SVG image with explicit drawing bounds.
+        "<w:p><w:r><w:drawing>",
+        "<wp:inline>",
+        "<wp:extent cx=\"1143000\" cy=\"381000\"/>",
+        "<wp:docPr id=\"2\" name=\"Vector Formula SVG\"/>",
+        "<a:graphic>",
+        "<a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">",
+        "<pic:pic><pic:nvPicPr><pic:cNvPr id=\"2\" name=\"image2.svg\"/><pic:cNvPicPr/></pic:nvPicPr>",
+        "<pic:blipFill><a:blip r:embed=\"rIdSvg\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>",
+        "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"1143000\" cy=\"381000\"/></a:xfrm>",
+        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>",
+        "</a:graphicData></a:graphic></wp:inline>",
         "</w:drawing></w:r></w:p>",
         // Footnote reference (inside w:r), comment, track changes
         "<w:p>",
@@ -321,6 +346,12 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             relationship_type:
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
             target: "media/image1.png",
+        },
+        RelationshipSpec {
+            id: "rIdSvg",
+            relationship_type:
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+            target: "media/image2.svg",
         },
         RelationshipSpec {
             id: "rIdHeader",
@@ -365,6 +396,7 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             ("word/footnotes.xml", br#"<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:id="1"><w:p><w:r><w:t>Note</w:t></w:r></w:p></w:footnote></w:footnotes>"#),
             ("word/comments.xml", br#"<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment w:id="0"><w:p><w:r><w:t>Comment</w:t></w:r></w:p></w:comment></w:comments>"#),
             ("word/media/image1.png", ONE_PIXEL_PNG),
+            ("word/media/image2.svg", VECTOR_FORMULA_SVG),
             ("customXml/fidelity.xml", b"<fidelity opaque=\"true\">DOCX_OPAQUE_PART</fidelity>"),
         ],
     )
