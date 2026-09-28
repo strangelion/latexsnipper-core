@@ -735,56 +735,31 @@ pub fn generate_formula_full(
     plan: &FormulaCorpusPlan,
 ) -> Result<FormulaCorpus, FormulaCorpusError> {
     validate_formula_plan(plan)?;
-    let templates = pilot_templates();
     let mut records = Vec::with_capacity(plan.target_formula_count);
     let wrapper_offset = (plan.seed % FormulaWrapper::ALL.len() as u64) as usize;
     let complexity_offset = (plan.seed % FormulaComplexity::ALL.len() as u64) as usize;
 
     for quota in &plan.category_quotas {
-        let category_templates = templates
-            .iter()
-            .filter(|template| template.category == quota.category)
-            .collect::<Vec<_>>();
-        if category_templates.is_empty() {
-            return invalid(format!(
-                "no deterministic template exists for category {:?}",
-                quota.category
-            ));
-        }
         for category_index in 0..quota.count {
             let index = records.len();
-            let template = if quota.category == FormulaCategory::Malformed {
-                let template_index = usize::from(category_index >= quota.count / 2);
-                category_templates[template_index.min(category_templates.len() - 1)]
-            } else {
-                category_templates[category_index % category_templates.len()]
-            };
             let wrapper = FormulaWrapper::ALL[(index + wrapper_offset) % FormulaWrapper::ALL.len()];
             let context = full_context(plan.seed, index, plan.target_formula_count);
             let complexity =
                 FormulaComplexity::ALL[(index + complexity_offset) % FormulaComplexity::ALL.len()];
-            let body = if template.expected_outcome == ExpectedFormulaOutcome::Valid {
-                format!(
-                    r"{}\qquad c_{{{}}}={}",
-                    template.body,
-                    category_index,
-                    category_index + 1
-                )
-            } else {
-                format!(
-                    "{} % full deterministic variant {category_index}",
-                    template.body
-                )
-            };
+            let generated =
+                generate_full_body(quota.category, category_index, quota.count, plan.seed);
+            let body = generated.body;
             let wrapped = apply_wrapper(&body, wrapper);
-            let mut tags = template
-                .tags
-                .iter()
-                .map(|tag| (*tag).to_string())
-                .collect::<Vec<_>>();
-            tags.push("nightly-full".to_string());
-            tags.push(format!("variant-{category_index:04}"));
-            let valid = template.expected_outcome == ExpectedFormulaOutcome::Valid;
+            let mut tags = vec![
+                "nightly-full".to_string(),
+                "compositional-generator-v2".to_string(),
+                category_slug(quota.category).to_string(),
+                format!("grammar-family-{}", generated.family),
+            ];
+            tags.extend(generated.tags.into_iter().map(str::to_string));
+            tags.sort();
+            tags.dedup();
+            let valid = generated.expected_outcome == ExpectedFormulaOutcome::Valid;
             records.push(FormulaCorpusRecord {
                 id: format!(
                     "full-{index:05}-{}-{category_index:04}",
@@ -796,7 +771,7 @@ pub fn generate_formula_full(
                 wrapper,
                 context,
                 complexity,
-                expected_outcome: template.expected_outcome,
+                expected_outcome: generated.expected_outcome,
                 output_targets: if valid {
                     FormulaOutputTarget::ALL.to_vec()
                 } else {
@@ -853,6 +828,552 @@ fn category_slug(category: FormulaCategory) -> &'static str {
         FormulaCategory::Malformed => "malformed",
         FormulaCategory::OfficeCrossReference => "office-cross-reference",
     }
+}
+
+struct GeneratedFormulaBody {
+    body: String,
+    family: &'static str,
+    tags: Vec<&'static str>,
+    expected_outcome: ExpectedFormulaOutcome,
+}
+
+impl GeneratedFormulaBody {
+    fn valid(body: String, family: &'static str, tags: Vec<&'static str>) -> Self {
+        Self {
+            body,
+            family,
+            tags,
+            expected_outcome: ExpectedFormulaOutcome::Valid,
+        }
+    }
+}
+
+fn generate_full_body(
+    category: FormulaCategory,
+    index: usize,
+    category_count: usize,
+    seed: u64,
+) -> GeneratedFormulaBody {
+    let symbols = ["a", "b", "x", "y", "z", "u", "v", "w", "p", "q"];
+    let greek = ["alpha", "beta", "gamma", "delta", "theta", "lambda"];
+    let symbol = pick(&symbols, index, seed, 11);
+    let other = pick(&symbols, index, seed, 29);
+    let greek = pick(&greek, index, seed, 47);
+    let n = 2 + mixed_index(index, seed, 61, 17);
+    let m = 2 + mixed_index(index, seed, 73, 13);
+    let p = 2 + mixed_index(index, seed, 89, 5);
+
+    match category {
+        FormulaCategory::BasicStructure => match mixed_index(index, seed, 101, 8) {
+            0 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\frac{{{symbol}_{{{index}}}+{other}^{p}}}{{\sqrt[{m}]{{x_{{{index}}}+{n}}}}}"
+                ),
+                "fraction-root",
+                vec!["fraction", "root", "subscript", "superscript"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(r"\left(\sum_{{k=1}}^{{{m}}} k^{p}\right)^{{1/{p}}}={symbol}_{{{index}}}"),
+                "finite-sum-power",
+                vec!["sum", "power", "delimiters"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\binom{{{n}+{index}}}{{{m}}}=\frac{{({n}+{index})!}}{{{m}!({n}+{index}-{m})!}}"
+                ),
+                "binomial-factorial",
+                vec!["binomial", "factorial", "fraction"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\log_{{{m}}}\!\left({symbol}_{{{index}}}{other}^{p}\right)=\log_{{{m}}}{symbol}_{{{index}}}+{p}\log_{{{m}}}{other}"
+                ),
+                "logarithm-product",
+                vec!["logarithm", "product", "identity"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\left\lVert\vec{{v}}_{{{index}}}\right\rVert_2=\sqrt{{\sum_{{j=1}}^{{{m}}}v_{{{index},j}}^2}}"
+                ),
+                "vector-norm",
+                vec!["vector", "norm", "sum"],
+            ),
+            5 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\overline{{z_{{{index}}}}}={symbol}_{{{index}}}-{other}_{{{index}}}\,\mathrm{{i}}"
+                ),
+                "complex-conjugate",
+                vec!["accent", "complex", "upright-text"],
+            ),
+            6 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\frac{{d^{p}}}{{d{symbol}^{p}}}{symbol}^{{{n}}}=\frac{{{n}!}}{{({n}-{p})!}}{symbol}^{{{n}-{p}}}_{{{index}}}"
+                ),
+                "higher-derivative",
+                vec!["derivative", "factorial", "superscript"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(
+                    r"\left\lfloor\frac{{{n}{symbol}_{{{index}}}+{m}}}{{{p}}}\right\rfloor\le\left\lceil{other}_{{{index}}}\right\rceil"
+                ),
+                "floor-ceiling",
+                vec!["floor", "ceiling", "relation"],
+            ),
+        },
+        FormulaCategory::Matrix => match mixed_index(index, seed, 127, 7) {
+            0 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{bmatrix}}{symbol}_{{{index}}}&{n}\\{m}&{other}_{{{index}}}\end{{bmatrix}}"
+                ),
+                "bmatrix-2x2",
+                vec!["matrix", "bmatrix", "2x2"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{pmatrix}}1&{symbol}_{{{index}}}&{n}\\0&1&{other}_{{{index}}}\end{{pmatrix}}"
+                ),
+                "pmatrix-2x3",
+                vec!["matrix", "pmatrix", "rectangular"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{vmatrix}}{symbol}_{{{index}}}&{n}\\{m}&{other}_{{{index}}}\end{{vmatrix}}={symbol}_{{{index}}}{other}_{{{index}}}-{n}\cdot{m}"
+                ),
+                "determinant",
+                vec!["matrix", "determinant", "vmatrix"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{Bmatrix}}{symbol}_{{{index}}}\\{other}_{{{index}}}\\{n}\end{{Bmatrix}}"
+                ),
+                "column-vector",
+                vec!["matrix", "vector", "bmatrix-braces"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\left[\begin{{array}}{{cc|c}}1&{symbol}_{{{index}}}&{n}\\0&{other}_{{{index}}}&{m}\end{{array}}\right]"
+                ),
+                "augmented-array",
+                vec!["matrix", "array", "augmented"],
+            ),
+            5 => GeneratedFormulaBody::valid(
+                format!(r"A_{{{index}}}=\begin{{matrix}}{n}&0&0\\0&{m}&0\\0&0&{p}\end{{matrix}}"),
+                "diagonal-3x3",
+                vec!["matrix", "diagonal", "3x3"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{Vmatrix}}{symbol}_{{{index}}}&{other}_{{{index}}}\\-{other}_{{{index}}}&{symbol}_{{{index}}}\end{{Vmatrix}}"
+                ),
+                "double-determinant",
+                vec!["matrix", "determinant", "double-bars"],
+            ),
+        },
+        FormulaCategory::Multiline => match mixed_index(index, seed, 149, 6) {
+            0 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{align}}{symbol}_{{{index}}}+{n}&={m}\\{other}_{{{index}}}-{p}&={n}\end{{align}}"
+                ),
+                "align-system",
+                vec!["align", "multiline", "relations"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{aligned}}S_{{{index}}}&=\sum_{{k=1}}^{{{n}}}k\\&=\frac{{{n}({n}+1)}}{{2}}\end{{aligned}}"
+                ),
+                "aligned-derivation",
+                vec!["aligned", "derivation", "sum"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{gather}}{symbol}_{{{index}}}^2+{other}_{{{index}}}^2={n}\\{symbol}_{{{index}}}{other}_{{{index}}}={m}\end{{gather}}"
+                ),
+                "gather-identities",
+                vec!["gather", "multiline", "identity"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{align}}f_{{{index}}}(x)&={symbol}x^{p}+{n}\\f_{{{index}}}'(x)&={p}{symbol}x^{{{p}-1}}\\f_{{{index}}}''(x)&={p}({p}-1){symbol}x^{{{p}-2}}\end{{align}}"
+                ),
+                "align-derivatives",
+                vec!["align", "derivative", "three-row"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{aligned}}P_{{{index}}}&=({symbol}+{other})^{p}\\&=\sum_{{k=0}}^{{{p}}}\binom{{{p}}}{{k}}{symbol}^k{other}^{{{p}-k}}\end{{aligned}}"
+                ),
+                "aligned-binomial",
+                vec!["aligned", "binomial", "sum"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{gather}}\int_0^{{{n}}}{symbol}_{{{index}}}(x)\,dx={m}\\\lim_{{x\to0}}{other}_{{{index}}}(x)={p}\end{{gather}}"
+                ),
+                "gather-calculus",
+                vec!["gather", "integral", "limit"],
+            ),
+        },
+        FormulaCategory::Cases => match mixed_index(index, seed, 173, 6) {
+            0 => GeneratedFormulaBody::valid(
+                format!(r"f_{{{index}}}(x)=\begin{{cases}}x^{p},&x\ge0\\-{n}x,&x<0\end{{cases}}"),
+                "piecewise-sign",
+                vec!["cases", "piecewise", "inequality"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(
+                    r"|{symbol}_{{{index}}}|=\begin{{cases}}{symbol}_{{{index}}},&{symbol}_{{{index}}}\ge0\\-{symbol}_{{{index}}},&{symbol}_{{{index}}}<0\end{{cases}}"
+                ),
+                "absolute-value",
+                vec!["cases", "absolute-value", "relation"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\mathbf{{1}}_{{A_{{{index}}}}}(x)=\begin{{cases}}1,&x\in A_{{{index}}}\\0,&x\notin A_{{{index}}}\end{{cases}}"
+                ),
+                "indicator",
+                vec!["cases", "indicator", "set-membership"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(
+                    r"T_{{{index}}}(n)=\begin{{cases}}1,&n\le1\\{m}T_{{{index}}}(n/{m})+n,&n>1\end{{cases}}"
+                ),
+                "recurrence",
+                vec!["cases", "recurrence", "complexity"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"F_{{{index}}}(x)=\begin{{cases}}0,&x<{n}\\\frac{{x-{n}}}{{{m}}},&{n}\le x<{n}+{m}\\1,&x\ge {n}+{m}\end{{cases}}"
+                ),
+                "cdf-three-branch",
+                vec!["cases", "probability", "three-branch"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(
+                    r"g_{{{index}}}(x)=\begin{{cases}}\sin x,&0\le x\le\pi\\{symbol}x+{n},&x>\pi\end{{cases}}"
+                ),
+                "mixed-functions",
+                vec!["cases", "trigonometry", "piecewise"],
+            ),
+        },
+        FormulaCategory::NestedCalculus => match mixed_index(index, seed, 197, 8) {
+            0 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\int_0^\infty\!\left(\int_{{-\infty}}^\infty e^{{-{symbol}^2-{other}^2-{index}}}\,d{symbol}\right)d{other}"
+                ),
+                "nested-gaussian-integral",
+                vec!["integral", "nested", "infinite-limits"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\sum_{{j=1}}^{{{n}}}\sum_{{k=1}}^{{{m}}}\frac{{{symbol}_{{j,k,{index}}}}}{{(j+k)^{p}}}"
+                ),
+                "nested-sum",
+                vec!["sum", "nested", "fraction"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\prod_{{j=1}}^{{{n}}}\left(1+\frac{{{symbol}_{{j,{index}}}}}{{j^{p}}}\right)"
+                ),
+                "finite-product",
+                vec!["product", "fraction", "delimiters"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\frac{{\partial^{p}}}{{\partial {symbol}^{p}}}\left(\int_0^{{{n}}}e^{{-{symbol}{other}}}{other}_{{{index}}}\,d{other}\right)"
+                ),
+                "differentiate-integral",
+                vec!["partial-derivative", "integral", "nested"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\lim_{{{symbol}\to0}}\frac{{\sin({n}{symbol})-{n}{symbol}}}{{{symbol}^{p}}}=L_{{{index}}}"
+                ),
+                "trigonometric-limit",
+                vec!["limit", "trigonometry", "fraction"],
+            ),
+            5 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\int_{{{n}}}^{{{n}+{m}}}\!\int_0^{{{symbol}^{p}}}\frac{{d{other}\,d{symbol}}}{{1+{symbol}^2+{other}^2}}=I_{{{index}}}"
+                ),
+                "iterated-integral",
+                vec!["integral", "iterated", "fraction"],
+            ),
+            6 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\sum_{{r=0}}^{{{n}}}\binom{{{n}}}{{r}}\int_0^1 {symbol}^r(1-{symbol})^{{{n}-r}}\,d{symbol}=S_{{{index}}}"
+                ),
+                "sum-integral-binomial",
+                vec!["sum", "integral", "binomial"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(
+                    r"\left.\frac{{d}}{{d{symbol}}}\left(\frac{{\int_0^{symbol}{other}^{p}\,d{other}}}{{1+{symbol}^{n}}}\right)\right|_{{{symbol}={m}}}=D_{{{index}}}"
+                ),
+                "evaluated-derivative",
+                vec!["derivative", "integral", "evaluation-bar"],
+            ),
+        },
+        FormulaCategory::ProbabilityStatistics => match mixed_index(index, seed, 223, 8) {
+            0 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\Pr(A_{{{index}}}\mid B)=\frac{{\Pr(B\mid A_{{{index}}})\Pr(A_{{{index}}})}}{{\Pr(B)}}"
+                ),
+                "bayes",
+                vec!["probability", "bayes", "conditional"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(r"\mathbb{{E}}[X_{{{index}}}]=\sum_{{k=0}}^{{{n}}}k\Pr(X_{{{index}}}=k)"),
+                "discrete-expectation",
+                vec!["expectation", "sum", "discrete"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\operatorname{{Var}}(X_{{{index}}})=\mathbb{{E}}[X_{{{index}}}^2]-\mathbb{{E}}[X_{{{index}}}]^2"
+                ),
+                "variance-identity",
+                vec!["variance", "expectation", "identity"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(
+                    r"f_{{X_{{{index}}}}}(x)=\frac{{1}}{{\sigma_{{{index}}}\sqrt{{2\pi}}}}e^{{-\frac{{(x-\mu_{{{index}}})^2}}{{2\sigma_{{{index}}}^2}}}}"
+                ),
+                "normal-density",
+                vec!["distribution", "normal", "density"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\operatorname{{Cov}}(X_{{{index}}},Y)=\mathbb{{E}}[(X_{{{index}}}-\mu_X)(Y-\mu_Y)]"
+                ),
+                "covariance",
+                vec!["covariance", "expectation", "statistics"],
+            ),
+            5 => GeneratedFormulaBody::valid(
+                format!(r"\Pr(X_{{{index}}}=k)=\binom{{{n}}}{{k}}p^k(1-p)^{{{n}-k}}"),
+                "binomial-distribution",
+                vec!["distribution", "binomial", "probability"],
+            ),
+            6 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\frac{{\sqrt{{{n}}}(\overline{{X}}_{{{index}}}-\mu)}}{{\sigma}}\xrightarrow{{d}}\mathcal{{N}}(0,1)"
+                ),
+                "central-limit-theorem",
+                vec!["statistics", "limit", "distribution"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(r"H(X_{{{index}}})=-\sum_{{j=1}}^{{{m}}}p_j\log_2 p_j"),
+                "entropy",
+                vec!["entropy", "probability", "sum"],
+            ),
+        },
+        FormulaCategory::Chemistry => match mixed_index(index, seed, 251, 7) {
+            0 => GeneratedFormulaBody::valid(
+                format!(r"\ce{{2H2 + O2 -> 2H2O}}\quad \Delta H_{{{index}}}={n}"),
+                "combustion-hydrogen",
+                vec!["chemistry", "reaction", "enthalpy"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(r"\ce{{CH4 + 2O2 -> CO2 + 2H2O}}\quad K_{{{index}}}={m}"),
+                "combustion-methane",
+                vec!["chemistry", "reaction", "equilibrium"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(r"\ce{{N2 + 3H2 <=> 2NH3}}\quad Q_{{{index}}}={p}"),
+                "equilibrium-ammonia",
+                vec!["chemistry", "equilibrium", "reversible"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(r"\ce{{Ag+ + Cl- -> AgCl v}}\quad n_{{{index}}}={n}\,\mathrm{{mol}}"),
+                "precipitation",
+                vec!["chemistry", "ionic", "precipitation"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(r"\ce{{HCl + NaOH -> NaCl + H2O}}\quad \mathrm{{pH}}_{{{index}}}={m}"),
+                "acid-base",
+                vec!["chemistry", "acid-base", "reaction"],
+            ),
+            5 => GeneratedFormulaBody::valid(
+                format!(r"\ce{{2KClO3 ->[\Delta] 2KCl + 3O2}}\quad t_{{{index}}}={n}"),
+                "thermal-decomposition",
+                vec!["chemistry", "decomposition", "condition"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(r"\ce{{Zn -> Zn^2+ + 2e-}}\quad E_{{{index}}}^\circ={m}"),
+                "redox-half-reaction",
+                vec!["chemistry", "redox", "electron"],
+            ),
+        },
+        FormulaCategory::CustomStyles => match mixed_index(index, seed, 277, 8) {
+            0 => GeneratedFormulaBody::valid(
+                format!(r"\mathbf{{{symbol}_{{{index}}}}}+\mathit{{{other}^{p}}}=\mathrm{{const}}"),
+                "font-variants",
+                vec!["style", "font", "bold"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\mathcal{{F}}_{{{index}}}\{{{symbol}\}}(\omega)=\int_{{-\infty}}^\infty {symbol}(t)e^{{-\mathrm{{i}}\omega t}}dt"
+                ),
+                "calligraphic-transform",
+                vec!["style", "calligraphic", "integral"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\textcolor{{blue}}{{{symbol}_{{{index}}}^{p}}}+\textcolor{{red}}{{{other}^{n}}}"
+                ),
+                "nested-colors",
+                vec!["style", "color", "nested"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(r"\overset{{\star}}{{\longrightarrow}}_{{{symbol}_{{{index}}}}}^{m}"),
+                "overset-arrow",
+                vec!["custom-symbol", "overset", "arrow"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\underbrace{{{symbol}+\cdots+{symbol}}}_{{{n}\ \mathrm{{terms}}}}={n}{symbol}_{{{index}}}"
+                ),
+                "underbrace-annotation",
+                vec!["style", "underbrace", "annotation"],
+            ),
+            5 => GeneratedFormulaBody::valid(
+                format!(r"\boxed{{\widehat{{{symbol}_{{{index}}}}}=\frac{{{n}}}{{{m}}}}}"),
+                "boxed-accent",
+                vec!["style", "boxed", "accent"],
+            ),
+            6 => GeneratedFormulaBody::valid(
+                format!(r"\overline{{\underline{{{symbol}_{{{index}}}+{other}^{p}}}}}"),
+                "stacked-decoration",
+                vec!["style", "overline", "underline"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(r"\vec{{{symbol}}}_{{{index}}}\cdot\boldsymbol{{\{greek}}}=\mathsf{{{n}}}"),
+                "vector-bold-greek",
+                vec!["style", "vector", "greek"],
+            ),
+        },
+        FormulaCategory::Drawing => match mixed_index(index, seed, 307, 8) {
+            0 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{tikzpicture}}\draw[->] (0,0)--({n},{m}) node[right]{{v_{{{index}}}}};\end{{tikzpicture}}"
+                ),
+                "tikz-vector",
+                vec!["tikz", "vector", "safe-preview"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{tikzpicture}}\draw[rounded corners] (0,0) rectangle ({n},{m});\node at ({p},1) {{R_{{{index}}}}};\end{{tikzpicture}}"
+                ),
+                "tikz-node-rectangle",
+                vec!["tikz", "node", "shape"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{tikzpicture}}\draw (0,0) circle ({p});\draw ({p},0) arc (0:180:{p});\node {{C_{{{index}}}}};\end{{tikzpicture}}"
+                ),
+                "tikz-circle-arc",
+                vec!["tikz", "circle", "arc"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{tikzpicture}}\node (a) at (0,0) {{A_{{{index}}}}};\node (b) at ({n},{m}) {{B}};\draw[->] (a)--(b);\end{{tikzpicture}}"
+                ),
+                "tikz-node-edge",
+                vec!["tikz", "graph", "directed-edge"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{tikzpicture}}\draw (0,0) .. controls (1,{n}) and ({m},1) .. ({p},{m});\node at (1,1) {{B_{{{index}}}}};\end{{tikzpicture}}"
+                ),
+                "tikz-bezier",
+                vec!["tikz", "bezier", "curve"],
+            ),
+            5 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{tikzpicture}}\begin{{axis}}[domain=-{m}:{m},samples=25]\addplot {{x^{p}+{n}}};\node at (axis cs:0,{n}) {{P_{{{index}}}}};\end{{axis}}\end{{tikzpicture}}"
+                ),
+                "pgfplots-function",
+                vec!["pgfplots", "function", "axis"],
+            ),
+            6 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{tikzpicture}}\begin{{axis}}\addplot coordinates {{(0,{n}) (1,{m}) (2,{p}) (3,{index})}};\end{{axis}}\end{{tikzpicture}}"
+                ),
+                "pgfplots-coordinates",
+                vec!["pgfplots", "coordinates", "data-curve"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(
+                    r"\begin{{tikzpicture}}\begin{{axis}}[ybar]\addplot coordinates {{(A,{n}) (B,{m}) (C,{p})}};\node at (axis cs:B,{m}) {{D_{{{index}}}}};\end{{axis}}\end{{tikzpicture}}"
+                ),
+                "pgfplots-bars",
+                vec!["pgfplots", "bar-chart", "coordinates"],
+            ),
+        },
+        FormulaCategory::Malformed => {
+            if index < category_count / 2 {
+                GeneratedFormulaBody {
+                    body: format!(r"\frac{{{symbol}_{{{index}}}+{n}}}{{"),
+                    family: "recoverable-unclosed-group",
+                    tags: vec!["malformed", "recovery", "missing-brace"],
+                    expected_outcome: ExpectedFormulaOutcome::RecoverableError,
+                }
+            } else {
+                GeneratedFormulaBody {
+                    body: format!(r"\begin{{matrix}}{symbol}_{{{index}}}&{n}"),
+                    family: "reject-missing-environment-end",
+                    tags: vec!["malformed", "reject", "missing-end"],
+                    expected_outcome: ExpectedFormulaOutcome::Reject,
+                }
+            }
+        }
+        FormulaCategory::OfficeCrossReference => match mixed_index(index, seed, 331, 6) {
+            0 => GeneratedFormulaBody::valid(
+                format!(r"E_{{{index}}}={m}c^{p}"),
+                "numbered-equation",
+                vec!["office", "equation-number", "seq-ref"],
+            ),
+            1 => GeneratedFormulaBody::valid(
+                format!(r"\mathbf{{A}}_{{{index}}}\mathbf{{x}}=\mathbf{{b}}_{{{n}}}"),
+                "bookmark-matrix-equation",
+                vec!["office", "bookmark", "matrix"],
+            ),
+            2 => GeneratedFormulaBody::valid(
+                format!(
+                    r"f_{{{index}}}(x)=\begin{{cases}}{symbol}x+{n},&x\ge0\\{other}x-{m},&x<0\end{{cases}}"
+                ),
+                "numbered-cases",
+                vec!["office", "equation-number", "cases"],
+            ),
+            3 => GeneratedFormulaBody::valid(
+                format!(r"\int_0^{{{n}}}{symbol}_{{{index}}}(x)\,dx=I_{{{index}}}"),
+                "cross-referenced-integral",
+                vec!["office", "cross-reference", "integral"],
+            ),
+            4 => GeneratedFormulaBody::valid(
+                format!(
+                    r"\Pr(A_{{{index}}}\mid B_{{{m}}})=\frac{{\Pr(B_{{{m}}}\mid A_{{{index}}})\Pr(A_{{{index}}})}}{{\Pr(B_{{{m}}})}}"
+                ),
+                "cross-referenced-probability",
+                vec!["office", "cross-reference", "probability"],
+            ),
+            _ => GeneratedFormulaBody::valid(
+                format!(r"\sum_{{k=1}}^{{{n}}}{symbol}_{{k,{index}}}=S_{{{index}}}"),
+                "batch-numbered-sum",
+                vec!["office", "batch", "read-back"],
+            ),
+        },
+    }
+}
+
+fn mixed_index(index: usize, seed: u64, salt: u64, modulus: usize) -> usize {
+    let mixed = (index as u64)
+        .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        .wrapping_add(seed.rotate_left((salt % 63) as u32))
+        .wrapping_add(salt.wrapping_mul(0xbf58_476d_1ce4_e5b9));
+    (mixed % modulus as u64) as usize
+}
+
+fn pick<'a>(values: &'a [&'a str], index: usize, seed: u64, salt: u64) -> &'a str {
+    values[mixed_index(index, seed, salt, values.len())]
 }
 
 struct PilotTemplate {
@@ -1222,6 +1743,68 @@ mod tests {
         assert_eq!(first.records.len(), plan.target_formula_count);
         assert_eq!(first.tier, FormulaCorpusTier::Full);
         validate_formula_corpus(&plan, &first).expect("full corpus should validate");
+    }
+
+    #[test]
+    fn full_generation_is_compositional_and_not_a_numbered_template_set() {
+        let plan = checked_in_plan();
+        let corpus = generate_formula_full(&plan).expect("full generation should succeed");
+        let valid_records: Vec<_> = corpus
+            .records
+            .iter()
+            .filter(|record| record.expected_outcome == ExpectedFormulaOutcome::Valid)
+            .collect();
+        let unique_normalized_sources: BTreeSet<_> = valid_records
+            .iter()
+            .map(|record| {
+                record
+                    .normalized_source
+                    .as_deref()
+                    .expect("valid generated records must have normalized source")
+            })
+            .collect();
+
+        assert_eq!(valid_records.len(), 9_500);
+        assert_eq!(unique_normalized_sources.len(), valid_records.len());
+        assert!(corpus.records.iter().all(|record| {
+            record
+                .tags
+                .iter()
+                .any(|tag| tag == "compositional-generator-v2")
+        }));
+        assert!(corpus.records.iter().all(|record| {
+            !record
+                .normalized_source
+                .as_deref()
+                .unwrap_or_default()
+                .contains(r"\qquad c_")
+        }));
+
+        let mut families_by_category: BTreeMap<FormulaCategory, BTreeSet<&str>> = BTreeMap::new();
+        for record in &corpus.records {
+            let family = record
+                .tags
+                .iter()
+                .find_map(|tag| tag.strip_prefix("grammar-family-"))
+                .expect("every full record must declare its grammar family");
+            families_by_category
+                .entry(record.category)
+                .or_default()
+                .insert(family);
+        }
+        for category in FormulaCategory::ALL {
+            let minimum = if category == FormulaCategory::Malformed {
+                2
+            } else {
+                6
+            };
+            assert!(
+                families_by_category
+                    .get(&category)
+                    .is_some_and(|families| families.len() >= minimum),
+                "{category:?} should cover at least {minimum} grammar families"
+            );
+        }
     }
 
     #[test]

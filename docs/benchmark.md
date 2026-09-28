@@ -168,11 +168,14 @@ rates; total elapsed time; throughput; and P50/P95/P99 for each measured stage.
 Peak process memory remains explicitly unmeasured until a platform-specific
 external harness supplies a reliable value.
 
-The full tier is currently a synthetic contract-scale corpus derived from a
-small reviewed template set with deterministic variations. It verifies scale,
-quotas, diagnostics, pipeline stability, and evidence generation. It must not
-be presented as accuracy on 10,000 independent real-world formulas; publishing
-that claim requires broader grammar generation plus licensed external corpora.
+The full tier is a synthetic contract-scale corpus produced by the reviewed
+deterministic compositional generator. Every valid record has a distinct
+normalized source, every valid category covers at least six grammar families,
+and the drawing category includes both TikZ and PGFPlots families. It verifies
+scale, quotas, grammar-family coverage, diagnostics, pipeline stability, and
+evidence generation. It must not be presented as accuracy on 10,000
+independent real-world formulas; publishing that claim still requires a
+licensed external corpus with representative real-world distributions.
 
 Generate the PR semantic baseline and enforce the expected-outcome diagnostic
 gate after creating the PR corpus:
