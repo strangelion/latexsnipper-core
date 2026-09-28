@@ -20,7 +20,7 @@ runtime pointers or claim that they are restart-persistent.
 | Rust application API | yes | model artifacts and qualified provider evidence | implemented and tested |
 | CLI | only for the duration of one command | yes where configured | implemented; no daemon mode |
 | Android JNI / iOS C FFI | global engine object | no adapter-owned session state | legacy bridge; uses `StubRuntime` and does not own `RecognitionSession` |
-| Python / PyO3 | reference `ctypes` client owns one C session handle | process-local only | reference client implemented; PyO3 wheel not implemented |
+| Python / PyO3 | one `RecognitionSession` per Python `Session` object | process-local only | PyO3/maturin package implemented and smoke-tested |
 | Generic C ABI | one bounded opaque handle per `RecognitionSession` | process-local only | implemented in `latexsnipper-ffi` ABI v1 |
 | WASM | module/process lifetime, experimental recognition state | verified browser model cache | experimental |
 | Tauri / Office host | host-specific | host-specific | implemented outside Core or pending host adoption |
@@ -44,10 +44,10 @@ one documented free function. Closing a session removes the handle before
 clearing runtime caches exactly once. The public declaration is
 `crates/ffi/include/latexsnipper_session.h`.
 
-### 2. Python extension
+### 2. Python extension — implemented
 
-Add a separate `latexsnipper-python` crate using PyO3 and maturin. It should own
-one `RecognitionSession` per Python `Session` object and expose context-manager
+The separate `latexsnipper-python` crate uses PyO3 and maturin. It owns
+one `RecognitionSession` per Python `Session` object and exposes context-manager
 and explicit `close()` semantics. Recognition must release the GIL while Core
 runs, accept paths or Python buffer objects without an unnecessary image encode,
 and return the authoritative Document JSON plus requested derived formats.
@@ -55,6 +55,19 @@ and return the authoritative Document JSON plus requested derived formats.
 Python exceptions must map from stable `ApplicationErrorCode` values. A module
 global singleton is not acceptable because it prevents independent model roots,
 test isolation, and controlled shutdown.
+
+The implementation is in `crates/python`. Core work, including construction,
+warmup, recognition, conversion, status, reload, and close, runs with the GIL
+released. `recognize_bytes` accepts Python buffer-protocol objects and performs
+one ownership copy of the encoded bytes without a Python-side decode/re-encode.
+Results are Python dictionaries containing the authoritative `document`, Core
+metadata and diagnostics, and an `outputs` map for explicitly requested derived
+formats. `LaTeXSnipperError` exposes stable `code`, `detail`, and `retryable`
+attributes. The installed-extension smoke test covers independent model roots,
+warmup reuse, failure recovery, idempotent close, closed-session errors, and
+context-manager cleanup on Windows, Linux, and macOS CI runners. A cloneable
+Python `CancellationToken` maps to Core's request control without introducing
+an adapter-owned cancellation mechanism.
 
 ### 3. Long-running transport for non-native callers
 

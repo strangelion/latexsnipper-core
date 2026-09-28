@@ -3,6 +3,7 @@
 **/*.rs.bk
 __pycache__/
 *.pyc
+crates/python/python/latexsnipper_core/_native.*
 
 # IDE
 .vscode/

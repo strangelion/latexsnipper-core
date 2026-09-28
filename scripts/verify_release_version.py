@@ -72,6 +72,14 @@ def main() -> None:
             f"{npm_manifest['version']!r}, expected {version!r}"
         )
 
+    python_manifest_path = ROOT / "crates" / "python" / "pyproject.toml"
+    python_manifest = load_toml(python_manifest_path)
+    if python_manifest["project"]["version"] != version:
+        fail(
+            f"{python_manifest_path.relative_to(ROOT)} uses "
+            f"{python_manifest['project']['version']!r}, expected {version!r}"
+        )
+
     print(f"release version is consistent: {version}")
 
 

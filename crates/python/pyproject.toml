@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "latexsnipper-core"
+version = "3.2.1"
+description = "Persistent Python sessions for LaTeXSnipper Core"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "AGPL-3.0-only"
+authors = [{ name = "LaTeXSnipper contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+]
+
+[tool.maturin]
+auditwheel = "repair"
+exclude = ["python/**/__pycache__", "python/**/*.pyc"]
+features = ["pyo3/extension-module"]
+module-name = "latexsnipper_core._native"
+python-source = "python"
+strip = true

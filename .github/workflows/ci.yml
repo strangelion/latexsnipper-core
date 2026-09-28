@@ -40,6 +40,35 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo test --locked --workspace --all-features
 
+  python-adapter:
+    name: Python adapter (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: crates/python/pyproject.toml
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the declared Python build frontend
+        run: python -m pip install "maturin>=1.9,<2.0"
+      - name: Build a repaired native wheel
+        working-directory: crates/python
+        run: python -m maturin build --release --out dist
+      - name: Install only the built wheel
+        working-directory: crates/python
+        run: python -m pip install --force-reinstall --no-index --find-links dist latexsnipper-core
+      - name: Validate persistent session semantics
+        working-directory: crates/python
+        run: python tests/smoke.py
+
   coreml-contract:
     name: Core ML native contract
     runs-on: macos-latest

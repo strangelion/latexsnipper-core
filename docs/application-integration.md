@@ -191,22 +191,50 @@ CLI arguments
 Arguments and stdout/stderr behavior are unchanged. The legacy PDF branch is
 isolated because it currently depends on an external renderer.
 
-## Future adapters
+## Application adapters
 
 Adapters should be thin owners of one `RecognitionSession`:
 
-- a Python or PyO3 adapter maps Python objects to `RecognitionRequest` and
-  exposes `Document` or derived conversions;
+- the PyO3 adapter in `crates/python` maps Python paths and buffer objects to
+  `RecognitionRequest`, releases the GIL for Core work, and returns the
+  authoritative `Document` plus requested derived conversions;
 - a Tauri adapter stores a session in managed state and maps events to its UI;
 - the C ABI adapter in `latexsnipper-ffi` owns an opaque session handle and
   maps stable error codes;
 - a JSONL or HTTP adapter maps transport requests to the same API and keeps
   framing, authentication, and compatibility DTOs outside Core.
 
-None of those adapters requires a second engine lifecycle. Python, Tauri, and
-long-running transport adapters remain outside this module. Their persistence
+None of those adapters requires a second engine lifecycle. Their persistence
 boundary, delivery order, and acceptance gates are tracked in
 [`application-adapter-roadmap.md`](application-adapter-roadmap.md).
+
+## Python application sessions
+
+`crates/python` is a mixed Python/Rust package built with PyO3 and maturin. Each
+Python `Session` owns exactly one Core `RecognitionSession`; there is no module
+singleton, so applications and tests can keep independent model roots and
+shutdown boundaries.
+
+```python
+from latexsnipper_core import Session
+
+with Session("models", runtime_preference="auto") as session:
+    session.warmup("croppedFormula")
+    result = session.recognize_path(
+        "formula.png",
+        profile="croppedFormula",
+        formats=["latex", "mathml", "omml"],
+    )
+    authoritative_document = result["document"]
+    office_math = result["outputs"]["omml"]
+```
+
+`recognize_bytes` accepts the Python buffer protocol, including `memoryview`,
+and passes the encoded bytes to Core without an image re-encode. All Core work
+releases the GIL. `close()` is idempotent, context-manager exit closes the
+session, and later calls raise `LaTeXSnipperError` with the stable `code`,
+`detail`, and `retryable` fields. Build and installed-extension smoke commands
+are documented in `crates/python/README.md`.
 
 ## Opaque C application sessions
 
@@ -225,10 +253,10 @@ Closing a handle removes it from the registry before clearing runtime caches.
 Consequently, new calls, stale handles, and duplicate closes receive the stable
 `SESSION_NOT_FOUND` error instead of accessing released state. Encoded image
 recognition is capped at 100 MiB and a request timeout is capped at ten minutes.
-`crates/ffi/examples/python_session.py` is a zero-dependency reference client
+`crates/ffi/examples/python_session.py` remains a zero-dependency reference client
 that demonstrates persistent warmup state, independent model roots, failure
 recovery, context-manager cleanup, and the exact error-envelope mapping that a
-future PyO3 wheel must preserve.
+non-extension caller must preserve.
 
 ## Stable Office facade
 
