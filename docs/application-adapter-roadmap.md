@@ -22,6 +22,7 @@ runtime pointers or claim that they are restart-persistent.
 | Android JNI / iOS C FFI | global engine object | no adapter-owned session state | legacy bridge; uses `StubRuntime` and does not own `RecognitionSession` |
 | Python / PyO3 | one `RecognitionSession` per Python `Session` object | process-local only | PyO3/maturin package implemented and smoke-tested |
 | Generic C ABI | one bounded opaque handle per `RecognitionSession` | process-local only | implemented in `latexsnipper-ffi` ABI v1 |
+| JSONL worker | up to 32 independent `RecognitionSession` objects per supervised process | process-local only | protocol v1 implemented and release-packaged |
 | WASM | module/process lifetime, experimental recognition state | verified browser model cache | experimental |
 | Tauri / Office host | host-specific | host-specific | implemented outside Core or pending host adoption |
 
@@ -69,13 +70,22 @@ context-manager cleanup on Windows, Linux, and macOS CI runners. A cloneable
 Python `CancellationToken` maps to Core's request control without introducing
 an adapter-owned cancellation mechanism.
 
-### 3. Long-running transport for non-native callers
+### 3. Long-running transport for non-native callers — implemented
 
-After the C and Python contracts stabilize, an optional JSONL worker may own a
-bounded set of sessions for applications that cannot load a native extension.
-Authentication, framing, process supervision, and access control remain outside
-the engine. The worker must use the same `RecognitionIntegrationApi` rather than
-creating a second lifecycle.
+`crates/worker` provides protocol v1 over newline-delimited UTF-8 JSON. It owns
+a bounded set of sessions for applications that cannot load a native extension
+and calls the same `RecognitionIntegrationApi`; it does not create a second
+engine lifecycle. Each response echoes the caller's request ID and embeds the
+stable Core v3 envelope. The worker bounds live sessions, request-line size,
+input size, thread count, and request timeout, flushes every response, catches
+request-boundary panics, and closes sessions on explicit close, shutdown, EOF,
+or process exit.
+
+The protocol is intentionally a trusted, path-only, serial local transport.
+Authentication, OS sandboxing, path authorization, process supervision, hard
+cancellation, and parallelism remain supervisor responsibilities. Buffer
+callers use the C or Python adapters rather than base64-expanding images into
+JSON. See `crates/worker/README.md` for the complete action and limit table.
 
 ## Acceptance gates
 

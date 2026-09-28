@@ -57,6 +57,7 @@ This does **not** mean that every format, model, or plugin boundary has the same
 | WASI Component host | **Implemented and integrated** | WIT v1, manifest/digest verification, typed brokers, hard interruption, resource limits, verified activation, and invocation-time trust checks are tested. |
 | Signed remote WASI registry/install | **Implemented, disabled after install** | Ed25519 thresholds, expiry/rollback/freeze checks, bounded HTTPS/ZIP handling, provenance, update, revoke, rollback, and explicit enable are tested. Install never executes or enables code. |
 | Native dynamic-library ABI | **Available** | Frozen C ABI v1 for third-party hardware runtimes (NPU, DSP, FPGA). SHA-256 enrollment + explicit enable trust model. See [Custom Runtime Plugin ABI v1](docs/runtime-plugin-api.md). |
+| Local JSONL worker | **Available** | Protocol v1 owns bounded persistent Core sessions for supervised, trusted local callers; it is not a network service or security boundary. |
 
 The executable source of truth is the capability registry:
 
@@ -82,6 +83,8 @@ LaTeXSnipper Core is more than an image-to-LaTeX wrapper. It provides a shared d
 - **Binary-safe export** — text and binary artifacts use distinct representations with MIME type, SHA-256, byte length, assets, and diagnostics.
 - **Native and browser execution** — ONNX Runtime, Paddle Inference, ExecuTorch, TensorRT, and Core ML on desktop; Tract in WebAssembly.
 - **Operational tooling** — CLI, SDK, capability inspection, model management, plugin package management, diagnostics, batch reports, shell completions, and man pages.
+- **Persistent application adapters** — independent C handles, PyO3 sessions,
+  and a bounded local JSONL worker reuse model/runtime state across requests.
 - **Security-oriented parsing** — signature-first detection, bounded archive/XML processing, safe package paths, checksum verification, and structured failures.
 - **Drawing contracts and compilation** — source-preserving Drawing documents, Core-owned Office payload/readiness schemas, sanitized SVG, and fail-closed supervised TikZ/PGFPlots and Graphviz routes. See [Drawing domain and adapter policy](docs/drawing-domain.md).
 

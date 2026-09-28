@@ -201,8 +201,10 @@ Adapters should be thin owners of one `RecognitionSession`:
 - a Tauri adapter stores a session in managed state and maps events to its UI;
 - the C ABI adapter in `latexsnipper-ffi` owns an opaque session handle and
   maps stable error codes;
-- a JSONL or HTTP adapter maps transport requests to the same API and keeps
-  framing, authentication, and compatibility DTOs outside Core.
+- the `latexsnipper-worker` JSONL adapter owns a bounded session registry and
+  maps local process requests to the same API;
+- an HTTP adapter, if added by an application, keeps authentication and network
+  policy outside Core.
 
 None of those adapters requires a second engine lifecycle. Their persistence
 boundary, delivery order, and acceptance gates are tracked in
@@ -242,6 +244,28 @@ environment and runs the same persistent-session smoke test before the wheel is
 attached to the GitHub Release. Other supported Python versions can build from
 source with maturin; broader prebuilt-wheel coverage remains a release-policy
 decision rather than an ABI claim.
+
+## JSONL application worker
+
+`crates/worker` builds the `latexsnipper-worker` executable for applications
+that cannot load a native library or Python extension. Protocol v1 accepts one
+UTF-8 JSON object per line, echoes a string or numeric request ID, and wraps all
+results in the Core v3 envelope. It supports create, health, capabilities,
+warmup, path recognition, model reload, idempotent close, status, and graceful
+shutdown. Each successful path recognition returns the authoritative
+`Document` plus explicitly requested derived formats.
+
+One stream is deliberately serial. The registry has 32 live-session slots,
+request lines are capped at 1 MiB, recognized files at 100 MiB, timeouts at ten
+minutes, and every response is flushed before the next request. EOF, shutdown,
+and process exit close all sessions. A caught request-boundary panic also closes
+all sessions before returning a stable internal error.
+
+This is a trusted local transport. It does not authenticate callers, authorize
+paths, expose a network listener, or provide hard cancellation. The parent
+application owns OS sandboxing, allowed roots, child-process deadlines, and
+restart policy. See [`crates/worker/README.md`](../crates/worker/README.md) for
+the action schema and examples.
 
 ## Opaque C application sessions
 

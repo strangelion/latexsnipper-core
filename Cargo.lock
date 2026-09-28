@@ -2784,6 +2784,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "latexsnipper-worker"
+version = "3.2.1"
+dependencies = [
+ "latexsnipper-api-types",
+ "latexsnipper-ast",
+ "latexsnipper-conversion",
+ "latexsnipper-engine",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

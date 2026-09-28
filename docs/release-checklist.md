@@ -17,6 +17,9 @@
       TypeScript tests pass.
 - [ ] Linux x86-64, Windows x86-64, and macOS arm64 Python wheels build with
       shared-library repair, install cleanly, and pass the persistent-session smoke.
+- [ ] Linux x86-64, Windows x86-64, and macOS arm64 binary archives contain
+      both `snipper` and `latexsnipper-worker`, and the installed JSONL worker
+      passes status/shutdown protocol smoke.
 - [ ] PR CI and manually dispatched Scheduled hardening workflow pass.
 - [ ] Chrome and Firefox browser tests pass and diagnostics artifacts are inspected.
 - [x] Trusted plugin soft timeout/quarantine and isolated-process hard timeout pass.

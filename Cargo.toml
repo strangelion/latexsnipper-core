@@ -21,6 +21,7 @@ members = [
     "crates/plugin-wasi",
     "crates/ffi",
     "crates/python",
+    "crates/worker",
     "crates/wasm",
     "crates/cli",
     "crates/tests",
@@ -76,6 +77,7 @@ latexsnipper-plugin = { path = "crates/plugin", version = "3.2.1" }
 latexsnipper-plugin-wasi = { path = "crates/plugin-wasi", version = "3.2.1" }
 latexsnipper-tract = { path = "crates/tract", version = "3.2.1" }
 latexsnipper-ffi = { path = "crates/ffi", version = "3.2.1" }
+latexsnipper-worker = { path = "crates/worker", version = "3.2.1" }
 latexsnipper-wasm = { path = "crates/wasm", version = "3.2.1" }
 latexsnipper-cli = { path = "crates/cli", version = "3.2.1" }
 latexsnipper-tests = { path = "crates/tests", version = "3.2.1" }

@@ -55,6 +55,7 @@ Worker transport 为保持兼容性，仍独立使用 protocol v1。
 | WASI Component host | **已实现并完成运行时接入** | WIT v1、manifest/digest 校验、typed broker、硬中断、资源限制、已验证激活和调用时信任检查已有真实组件测试。 |
 | signed 远程 WASI registry/install | **已实现，安装后禁用** | 已测试 Ed25519 threshold、过期/rollback/freeze、受限 HTTPS/ZIP、provenance、update、revoke、rollback 与显式 enable；安装不会执行或启用代码。 |
 | native 动态库 ABI | **可用** | 冻结 C ABI v1，支持第三方硬件 Runtime（NPU、DSP、FPGA）。SHA-256 enrollment + 显式 enable 信任模型。详见 [Custom Runtime Plugin ABI v1](docs/runtime-plugin-api.md)。 |
+| 本地 JSONL worker | **可用** | protocol v1 为受监管的可信本机调用方持有有界持久 Core 会话；它不是网络服务或安全边界。 |
 
 可执行能力注册表是事实来源：
 
@@ -80,6 +81,7 @@ LaTeXSnipper Core 不只是一个“图片转 LaTeX”封装。它为桌面应�
 - **二进制安全导出** — 文本与二进制产物使用不同表示，并携带 MIME、SHA-256、字节长度、资产和诊断。
 - **原生与浏览器执行** — 桌面端支持 ONNX Runtime、Paddle Inference、ExecuTorch、TensorRT 与 Core ML；WebAssembly 中使用 Tract。
 - **完整操作工具** — CLI、SDK、能力查询、模型管理、插件包管理、诊断、批处理报告、shell 补全和 man page。
+- **持久应用适配器** — 独立 C handle、PyO3 session 与有界本地 JSONL worker 可跨请求复用模型和 Runtime 状态。
 - **安全导向解析** — 签名优先检测、有界 archive/XML 处理、安全包路径、checksum 校验和结构化失败。
 
 ---

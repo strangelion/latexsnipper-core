@@ -38,10 +38,10 @@ jobs:
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
 
   # ============================================================
-  # Job 1: Build CLI binaries
+  # Job 1: Build CLI and persistent JSONL worker binaries
   # ============================================================
   build-cli:
-    name: Build CLI (${{ matrix.target }})
+    name: Build CLI + worker (${{ matrix.target }})
     needs: release-guard
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -70,7 +70,7 @@ jobs:
           key: cli-${{ matrix.target }}
 
       - name: Build
-        run: cargo build --locked --release -p latexsnipper-cli --target ${{ matrix.target }}
+        run: cargo build --locked --release -p latexsnipper-cli -p latexsnipper-worker --target ${{ matrix.target }}
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
@@ -80,6 +80,7 @@ jobs:
 
           cp \
             "target/${{ matrix.target }}/release/snipper" \
+            "target/${{ matrix.target }}/release/latexsnipper-worker" \
             target/release-stage/
 
           cp LICENSE README.md target/release-stage/
@@ -101,11 +102,21 @@ jobs:
           python -c \
             'import json; json.load(open("target/release-install/capabilities.json", encoding="utf-8"))'
 
+          printf '%s\n' \
+            '{"version":1,"id":1,"action":"worker.status","params":{}}' \
+            '{"version":1,"id":2,"action":"worker.shutdown","params":{}}' \
+            | target/release-install/latexsnipper-worker \
+            > target/release-install/worker-smoke.jsonl
+
+          python -c \
+            'import json; rows=[json.loads(line) for line in open("target/release-install/worker-smoke.jsonl", encoding="utf-8")]; assert len(rows)==2 and all(row["ok"] for row in rows)'
+
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
           New-Item -ItemType Directory -Force target/release-stage, target/release-install | Out-Null
           Copy-Item target/${{ matrix.target }}/release/snipper.exe target/release-stage/
+          Copy-Item target/${{ matrix.target }}/release/latexsnipper-worker.exe target/release-stage/
           Copy-Item LICENSE, README.md target/release-stage/
           Compress-Archive -Path target/release-stage/* -DestinationPath ${{ matrix.artifact }}.zip
           Expand-Archive -Path ${{ matrix.artifact }}.zip -DestinationPath target/release-install
@@ -113,6 +124,16 @@ jobs:
           & target/release-install/snipper.exe capabilities --format json `
             | Set-Content -Encoding utf8 target/release-install/capabilities.json
           Get-Content -Raw target/release-install/capabilities.json | ConvertFrom-Json | Out-Null
+          @(
+            '{"version":1,"id":1,"action":"worker.status","params":{}}'
+            '{"version":1,"id":2,"action":"worker.shutdown","params":{}}'
+          ) | & target/release-install/latexsnipper-worker.exe `
+            | Set-Content -Encoding utf8 target/release-install/worker-smoke.jsonl
+          $workerResponses = @(Get-Content target/release-install/worker-smoke.jsonl `
+            | ForEach-Object { $_ | ConvertFrom-Json })
+          if ($workerResponses.Count -ne 2 -or @($workerResponses | Where-Object { -not $_.ok }).Count -ne 0) {
+            throw 'JSONL worker release smoke failed'
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -522,6 +543,8 @@ jobs:
             ### From Binary
 
             Download the archive for your platform and extract it.
+            Each archive contains both the `snipper` CLI and the supervised
+            local `latexsnipper-worker` JSONL process adapter.
 
             ### As Library
 
