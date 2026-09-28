@@ -37,3 +37,7 @@ path = "src/formula_predict.rs"
 [[bin]]
 name = "latexsnipper-table-benchmark"
 path = "src/table_main.rs"
+
+[[bin]]
+name = "latexsnipper-formula-corpus-benchmark"
+path = "src/formula_corpus_main.rs"

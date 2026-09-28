@@ -146,6 +146,28 @@ The plan freezes separate SHA-256 digests for pilot, pull-request, and full
 tiers. Generator or template changes therefore require an explicit corpus
 contract review instead of silently changing historical baselines.
 
+Run the full corpus once through the benchmark entry point to produce both the
+record-level evaluation evidence and a compact performance summary:
+
+```powershell
+$formulaCommit = (git rev-parse HEAD).Trim()
+$formulaGeneratedAt = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+cargo run --release --locked -p latexsnipper-benchmark `
+  --bin latexsnipper-formula-corpus-benchmark -- `
+  --plan evaluation/formula-corpus/plan.json `
+  --corpus target/evaluation/formula-full.json `
+  --source-commit $formulaCommit `
+  --generated-at-utc $formulaGeneratedAt `
+  --output target/evaluation/formula-full-benchmark.json `
+  --evaluation-output target/evaluation/formula-full-report.json `
+  --require-expected-outcomes
+```
+
+The compact report records expected-outcome, parse, conversion, and round-trip
+rates; total elapsed time; throughput; and P50/P95/P99 for each measured stage.
+Peak process memory remains explicitly unmeasured until a platform-specific
+external harness supplies a reliable value.
+
 The full tier is currently a synthetic contract-scale corpus derived from a
 small reviewed template set with deterministic variations. It verifies scale,
 quotas, diagnostics, pipeline stability, and evidence generation. It must not

@@ -45,13 +45,14 @@ jobs:
             validate-corpus \
             --plan evaluation/formula-corpus/plan.json \
             --corpus target/evaluation/formula-full.json
-          cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- \
-            evaluate \
+          cargo run --release --locked -p latexsnipper-benchmark \
+            --bin latexsnipper-formula-corpus-benchmark -- \
             --plan evaluation/formula-corpus/plan.json \
             --corpus target/evaluation/formula-full.json \
             --source-commit "$GITHUB_SHA" \
             --generated-at-utc "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-            --output target/evaluation/formula-full-report.json \
+            --output target/evaluation/formula-full-benchmark.json \
+            --evaluation-output target/evaluation/formula-full-report.json \
             --require-expected-outcomes
       - uses: actions/upload-artifact@v7
         with:
@@ -59,6 +60,7 @@ jobs:
           path: |
             target/evaluation/formula-full.json
             target/evaluation/formula-full-report.json
+            target/evaluation/formula-full-benchmark.json
           if-no-files-found: error
           retention-days: 90
 

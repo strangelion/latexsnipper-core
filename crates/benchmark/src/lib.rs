@@ -5,6 +5,7 @@
 //! incremental equivalence under a reproducible case contract.
 
 pub mod formula;
+pub mod formula_corpus;
 pub mod table;
 
 use std::collections::{BTreeMap, BTreeSet};
