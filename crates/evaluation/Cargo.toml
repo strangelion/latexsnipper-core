@@ -14,6 +14,9 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 latexsnipper-artifact.workspace = true
+latexsnipper-ast.workspace = true
+latexsnipper-conversion.workspace = true
+latexsnipper-syntax.workspace = true
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
@@ -25,3 +28,7 @@ path = "src/main.rs"
 [[bin]]
 name = "int8-contract"
 path = "src/bin/int8_contract.rs"
+
+[[bin]]
+name = "formula-corpus"
+path = "src/bin/formula_corpus.rs"

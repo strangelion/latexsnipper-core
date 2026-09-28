@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "formula-office-10k-v1",
+  "description": "Deterministic 10,000-record formula conversion and Office integration corpus plan.",
+  "targetFormulaCount": 10000,
+  "compoundDocumentCount": 500,
+  "seed": 20260928,
+  "source": {
+    "name": "LaTeXSnipper deterministic formula corpus generator",
+    "uri": "evaluation/formula-corpus/plan.json",
+    "revision": "v1"
+  },
+  "license": {
+    "spdx": "AGPL-3.0-or-later",
+    "attribution": "Repository-generated deterministic fixtures",
+    "redistribution": "allowed"
+  },
+  "categoryQuotas": [
+    { "category": "basic_structure", "count": 1400 },
+    { "category": "matrix", "count": 1100 },
+    { "category": "multiline", "count": 1000 },
+    { "category": "cases", "count": 800 },
+    { "category": "nested_calculus", "count": 1300 },
+    { "category": "probability_statistics", "count": 1100 },
+    { "category": "chemistry", "count": 700 },
+    { "category": "custom_styles", "count": 600 },
+    { "category": "drawing", "count": 1000 },
+    { "category": "malformed", "count": 500 },
+    { "category": "office_cross_reference", "count": 500 }
+  ],
+  "coverage": {
+    "wrapperMinimums": [
+      { "wrapper": "display_dollar", "minimumCount": 2000 },
+      { "wrapper": "inline_parentheses", "minimumCount": 2000 },
+      { "wrapper": "display_brackets", "minimumCount": 2000 },
+      { "wrapper": "bare", "minimumCount": 2000 }
+    ],
+    "contextMinimums": [
+      { "context": "formula_only", "minimumCount": 3000 },
+      { "context": "chinese_prose", "minimumCount": 700 },
+      { "context": "heading", "minimumCount": 300 },
+      { "context": "code_block", "minimumCount": 300 },
+      { "context": "list", "minimumCount": 300 },
+      { "context": "table", "minimumCount": 300 },
+      { "context": "mixed_markdown", "minimumCount": 1000 }
+    ],
+    "complexityMinimums": [
+      { "complexity": "l1", "minimumCount": 1000 },
+      { "complexity": "l2", "minimumCount": 2000 },
+      { "complexity": "l3", "minimumCount": 2000 },
+      { "complexity": "l4", "minimumCount": 1000 },
+      { "complexity": "l5", "minimumCount": 500 }
+    ],
+    "outcomeMinimums": [
+      { "outcome": "valid", "minimumCount": 9500 },
+      { "outcome": "recoverable_error", "minimumCount": 250 },
+      { "outcome": "reject", "minimumCount": 250 }
+    ],
+    "outputMinimums": [
+      { "target": "latex", "minimumCount": 9500 },
+      { "target": "mathml", "minimumCount": 8500 },
+      { "target": "omml", "minimumCount": 8500 },
+      { "target": "typst", "minimumCount": 7500 },
+      { "target": "svg", "minimumCount": 9500 },
+      { "target": "png", "minimumCount": 8000 },
+      { "target": "docx", "minimumCount": 1000 },
+      { "target": "pptx", "minimumCount": 1000 },
+      { "target": "xlsx", "minimumCount": 1000 }
+    ],
+    "insertionMinimums": [
+      { "mode": "native_formula", "minimumCount": 500 },
+      { "mode": "svg", "minimumCount": 500 },
+      { "mode": "png", "minimumCount": 500 },
+      { "mode": "ole", "minimumCount": 200 },
+      { "mode": "clipboard", "minimumCount": 200 },
+      { "mode": "batch", "minimumCount": 200 },
+      { "mode": "inline", "minimumCount": 500 },
+      { "mode": "display", "minimumCount": 500 }
+    ]
+  },
+  "pilotContentSha256": "09c0b129f5430585a6a4e30bf83a2703b09d84405aa65d5dcea17ccd48773e4b",
+  "pullRequestContentSha256": "c2acafe4b11f087b4397e40c8ebe3eff0d30df1c3d9e7efe632c9830244d416a",
+  "fullContentSha256": "5821afd9c610d3750436d4261f87c0112eb1e0acf0c1774d66ffc1d2155e9804"
+}

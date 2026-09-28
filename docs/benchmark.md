@@ -87,3 +87,91 @@ window; full-equivalence verification runs afterwards as a correctness oracle.
 ```powershell
 cargo run -p latexsnipper-benchmark -- --case benchmark/cases/incremental-formula-edit-scale-10000.json
 ```
+
+## Formula and Office corpus contract
+
+The formula/Office closeout corpus is frozen independently from the OCR image
+corpora. Its versioned plan records a 10,000-formula category allocation, 500
+compound Office document scenarios, a deterministic seed, cross-cutting wrapper
+and Markdown coverage, expected outcomes, output targets, and insertion modes.
+
+Validate the plan and generate the small deterministic pilot that freezes the
+schema and digest:
+
+```powershell
+cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  validate-plan --plan evaluation/formula-corpus/plan.json
+
+cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  generate-pilot `
+  --plan evaluation/formula-corpus/plan.json `
+  --output target/evaluation/formula-pilot.json
+
+cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  validate-corpus `
+  --plan evaluation/formula-corpus/plan.json `
+  --corpus target/evaluation/formula-pilot.json
+```
+
+The pilot proves schema, coverage, ordering, context materialization, and digest
+determinism. The pull-request corpus expands this to 360 deterministic records
+(300 valid and 60 malformed) while staying small enough for regular CI:
+
+```powershell
+cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  generate-pull-request `
+  --plan evaluation/formula-corpus/plan.json `
+  --output target/evaluation/formula-pr.json
+
+cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  validate-corpus `
+  --plan evaluation/formula-corpus/plan.json `
+  --corpus target/evaluation/formula-pr.json
+```
+
+Neither tier claims Microsoft Office application fidelity. Those measurements
+require the full corpus and installed-Office evidence layers defined in
+[closing-plan.md](closing-plan.md).
+
+Generate the digest-frozen 10,000-record corpus for nightly or release evidence:
+
+```powershell
+cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  generate-full `
+  --plan evaluation/formula-corpus/plan.json `
+  --output target/evaluation/formula-full.json
+```
+
+The plan freezes separate SHA-256 digests for pilot, pull-request, and full
+tiers. Generator or template changes therefore require an explicit corpus
+contract review instead of silently changing historical baselines.
+
+The full tier is currently a synthetic contract-scale corpus derived from a
+small reviewed template set with deterministic variations. It verifies scale,
+quotas, diagnostics, pipeline stability, and evidence generation. It must not
+be presented as accuracy on 10,000 independent real-world formulas; publishing
+that claim requires broader grammar generation plus licensed external corpora.
+
+Generate the PR semantic baseline and enforce the expected-outcome diagnostic
+gate after creating the PR corpus:
+
+```powershell
+$formulaCommit = (git rev-parse HEAD).Trim()
+$formulaGeneratedAt = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  evaluate `
+  --plan evaluation/formula-corpus/plan.json `
+  --corpus target/evaluation/formula-pr.json `
+  --source-commit $formulaCommit `
+  --generated-at-utc $formulaGeneratedAt `
+  --output target/evaluation/formula-pr-report.json `
+  --require-expected-outcomes
+```
+
+The report records parse outcomes, expected-outcome matches, semantic conversion
+and round-trip success, per-stage P50/P95/P99 latency, output sizes and hashes,
+and explicitly deferred SVG/PNG/Office targets. Structural validation distinguishes recoverable
+group or delimiter problems from fatal group, environment, and delimiter
+mismatches. CI requires every valid, recoverable, and rejected record to match
+its declared outcome; conversion and round-trip rates remain reported evidence
+until representative quality thresholds are frozen.

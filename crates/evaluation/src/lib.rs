@@ -1,6 +1,8 @@
 //! Reproducible OCR evaluation contracts and metrics.
 
 pub mod failure_corpus;
+pub mod formula_corpus;
+pub mod formula_evaluation;
 pub mod int8;
 pub mod metrics;
 pub mod schema;

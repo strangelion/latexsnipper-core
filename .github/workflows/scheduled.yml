@@ -25,6 +25,43 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  formula-office-full-corpus:
+    name: Formula and Office full corpus (10,000 records)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Generate, validate, and evaluate the digest-frozen corpus
+        shell: bash
+        run: |
+          mkdir -p target/evaluation
+          cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            generate-full \
+            --plan evaluation/formula-corpus/plan.json \
+            --output target/evaluation/formula-full.json
+          cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            validate-corpus \
+            --plan evaluation/formula-corpus/plan.json \
+            --corpus target/evaluation/formula-full.json
+          cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            evaluate \
+            --plan evaluation/formula-corpus/plan.json \
+            --corpus target/evaluation/formula-full.json \
+            --source-commit "$GITHUB_SHA" \
+            --generated-at-utc "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --output target/evaluation/formula-full-report.json \
+            --require-expected-outcomes
+      - uses: actions/upload-artifact@v7
+        with:
+          name: formula-office-full-corpus-${{ github.run_id }}
+          path: |
+            target/evaluation/formula-full.json
+            target/evaluation/formula-full-report.json
+          if-no-files-found: error
+          retention-days: 90
+
   formula-benchmark-contract:
     name: Formula benchmark contract (50 images)
     runs-on: ubuntu-latest

@@ -101,6 +101,56 @@ jobs:
           cargo run --locked -p latexsnipper-benchmark --
           --golden-case benchmark/golden/incremental/formula-edit-v1
 
+  formula-corpus-contract:
+    name: Formula corpus contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate the frozen 10,000-formula plan
+        run: >-
+          cargo run --locked -p latexsnipper-evaluation --bin formula-corpus --
+          validate-plan --plan evaluation/formula-corpus/plan.json
+      - name: Generate and validate deterministic pilot and PR corpora
+        shell: bash
+        run: |
+          cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            generate-pilot \
+            --plan evaluation/formula-corpus/plan.json \
+            --output target/evaluation/formula-pilot.json
+          cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            validate-corpus \
+            --plan evaluation/formula-corpus/plan.json \
+            --corpus target/evaluation/formula-pilot.json
+          cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            generate-pull-request \
+            --plan evaluation/formula-corpus/plan.json \
+            --output target/evaluation/formula-pr.json
+          cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            validate-corpus \
+            --plan evaluation/formula-corpus/plan.json \
+            --corpus target/evaluation/formula-pr.json
+          cargo run --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            evaluate \
+            --plan evaluation/formula-corpus/plan.json \
+            --corpus target/evaluation/formula-pr.json \
+            --source-commit "${GITHUB_SHA}" \
+            --generated-at-utc "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --output target/evaluation/formula-pr-report.json \
+            --require-expected-outcomes
+      - name: Upload formula corpus contract evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: formula-corpus-contract-${{ github.run_id }}
+          path: |
+            target/evaluation/formula-pilot.json
+            target/evaluation/formula-pr.json
+            target/evaluation/formula-pr-report.json
+          if-no-files-found: error
+          retention-days: 30
+
   ocr-evidence-contract:
     name: OCR evidence contract
     runs-on: ubuntu-latest

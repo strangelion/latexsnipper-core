@@ -226,16 +226,20 @@ README 中文和英文都应展示：
 
 - [ ] 建立 Core / Office / GUI 三栏问题台账；
 - [ ] 为每一项指定负责人、仓库、证据类型和阻塞级别；
-- [ ] 冻结 10,000 条语料 schema、seed 和类别配额；
-- [ ] 明确普通公式、绘图、化学、OCR 的独立指标。
+- [x] 冻结 10,000 条语料 schema、seed 和类别配额；
+- [x] 明确普通公式、绘图、化学、OCR 的独立指标。
 
 ### 阶段 B：Core 语料和 runner
 
-- [ ] 实现确定性语料生成器和 manifest；
-- [ ] 生成小规模 pilot，校准指标和门槛；
-- [ ] 接入 `crates/evaluation`、`crates/benchmark`；
-- [ ] 生成 JSON/CSV 报告和失败样例；
-- [ ] 覆盖定界符、Markdown、错误输入和复杂嵌套。
+- [x] 实现确定性语料生成器和 manifest；
+- [x] 生成小规模 pilot，冻结 schema、覆盖标签和摘要；
+- [x] 接入 `crates/evaluation` pilot runner，输出解析、转换、回转和耗时证据；
+- [ ] 接入 `crates/benchmark` full runner 和分位数统计；
+- [x] 接入 scheduled 10,000 条 full runner，并输出各阶段 P50/P95/P99；
+- [x] 生成 pilot / PR JSON 报告和预期结果分类证据；
+- [x] 冻结错误 LaTeX 的结构诊断，并在 PR 语料门禁预期结果分类；
+- [x] 覆盖定界符、Markdown、错误输入和复杂嵌套。
+- [ ] 将 full 合约语料从模板变体扩展为广覆盖语法生成和许可明确的外部语料，再发布准确率结论；
 
 ### 阶段 C：Office 包和转换
 
