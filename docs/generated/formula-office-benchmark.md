@@ -9,8 +9,8 @@
 | Plan | `formula-office-10k-v2` |
 | Tier | `Full` |
 | Corpus SHA-256 | `92c316ab0d26f0425d0ae55ef89412a9813e6027b3f21cfd5ce457b99722c378` |
-| Source commit | `c56d63587faad0e04d75003dabdda27e4f964df3` |
-| Generated at (UTC) | `2026-09-29T00:02:45Z` |
+| Source commit | `e2a20c8b51acfb9a80d00c861e9067d8e4b00bde` |
+| Generated at (UTC) | `2026-09-29T00:26:36Z` |
 | Environment | Local Windows x86_64 release validation; rustc 1.96.0 (ac68faa20 2026-05-25) |
 | Seed | `20260928` |
 | Formula records | `10000` |
@@ -30,12 +30,12 @@
 
 | Stage | P50 | P95 | P99 |
 |---|---:|---:|---:|
-| Parse | 2.000 us | 3.400 us | 5.000 us |
-| Conversion | 10.700 us | 38.300 us | 50.600 us |
-| Round trip | 10.300 us | 146.000 us | 184.900 us |
+| Parse | 2.300 us | 4.600 us | 7.200 us |
+| Conversion | 12.100 us | 44.500 us | 60.600 us |
+| Round trip | 11.600 us | 182.900 us | 248.700 us |
 
-- Total measured time: **1.986 s**
-- Throughput: **5035.26 records/s**
+- Total measured time: **2.280 s**
+- Throughput: **4386.17 records/s**
 - Peak process memory: **Not measured**
 
 ## Capability boundary
