@@ -160,13 +160,17 @@ cargo run --release --locked -p latexsnipper-benchmark `
   --generated-at-utc $formulaGeneratedAt `
   --output target/evaluation/formula-full-benchmark.json `
   --evaluation-output target/evaluation/formula-full-report.json `
+  --markdown-output target/evaluation/formula-office-benchmark.md `
+  --environment-label "windows-x86_64; $(rustc --version)" `
   --require-expected-outcomes
 ```
 
 The compact report records expected-outcome, parse, conversion, and round-trip
 rates; total elapsed time; throughput; and P50/P95/P99 for each measured stage.
-Peak process memory remains explicitly unmeasured until a platform-specific
-external harness supplies a reliable value.
+The Markdown report presents the same run with explicit `Verified`, `Deferred`,
+`Not measured`, and `Not claimed` labels so package or application gaps cannot
+be mistaken for a pass. Peak process memory remains explicitly unmeasured until
+a platform-specific external harness supplies a reliable value.
 
 The full tier is a synthetic contract-scale corpus produced by the reviewed
 deterministic compositional generator. Every valid record has a distinct

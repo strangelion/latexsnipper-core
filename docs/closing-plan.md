@@ -277,7 +277,8 @@ DOCX round-trip 后仍有确定性包 token；XLSX OLE 编辑能力明确为
 ### 阶段 F：发布与清理
 
 - [ ] PR smoke、nightly full、release candidate 全部通过；
-- [ ] 更新中英文 README 和生成报告；
+- [x] 更新中英文 README，并生成 Core 10,000 条语料的用户可读报告；
+- [ ] 将真实 Office harness、OCR 实测和外部许可语料结果合入最终生成报告；
 - [ ] 更新 release checklist、已知限制和迁移文档；
 - [ ] 重新确认 freeze manifest、版本和 lockfile；
 - [ ] 清理临时模型、Office 测试文档、截图缓存和失败重试目录；

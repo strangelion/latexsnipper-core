@@ -11,6 +11,7 @@ use latexsnipper_evaluation::formula_evaluation::{
     evaluate_formula_corpus, FormulaEvaluationError, FormulaEvaluationReport, FormulaLatencySummary,
 };
 use serde::{Deserialize, Serialize};
+use std::fmt::Write as _;
 
 pub const FORMULA_CORPUS_BENCHMARK_SCHEMA_VERSION: u32 = 1;
 
@@ -43,6 +44,176 @@ pub struct FormulaCorpusBenchmarkReport {
     pub source_commit: String,
     pub generated_at_utc: String,
     pub summary: FormulaCorpusBenchmarkSummary,
+}
+
+/// Render a stable, user-readable view of the benchmark evidence. The report
+/// deliberately labels package/application-only capabilities as deferred
+/// instead of promoting an unmeasured path to "supported".
+pub fn render_formula_corpus_benchmark_markdown(
+    plan: &FormulaCorpusPlan,
+    report: &FormulaCorpusBenchmarkReport,
+    environment_label: &str,
+) -> String {
+    let summary = &report.summary;
+    let mut output = String::new();
+    writeln!(output, "# Formula and Office corpus benchmark").unwrap();
+    writeln!(output).unwrap();
+    writeln!(
+        output,
+        "> Generated evidence. Contract pass rates are not model accuracy on independent real-world data."
+    )
+    .unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "## Evidence identity").unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "| Field | Value |").unwrap();
+    writeln!(output, "|---|---|").unwrap();
+    writeln!(output, "| Plan | `{}` |", markdown_cell(&report.plan_id)).unwrap();
+    writeln!(output, "| Tier | `{:?}` |", report.tier).unwrap();
+    writeln!(output, "| Corpus SHA-256 | `{}` |", report.corpus_sha256).unwrap();
+    writeln!(output, "| Source commit | `{}` |", report.source_commit).unwrap();
+    writeln!(
+        output,
+        "| Generated at (UTC) | `{}` |",
+        report.generated_at_utc
+    )
+    .unwrap();
+    writeln!(
+        output,
+        "| Environment | {} |",
+        markdown_cell(environment_label)
+    )
+    .unwrap();
+    writeln!(output, "| Seed | `{}` |", plan.seed).unwrap();
+    writeln!(output, "| Formula records | `{}` |", summary.record_count).unwrap();
+    writeln!(
+        output,
+        "| Planned compound documents | `{}` |",
+        plan.compound_document_count
+    )
+    .unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "## Contract results").unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "| Measurement | Result | Status |").unwrap();
+    writeln!(output, "|---|---:|---|").unwrap();
+    writeln!(
+        output,
+        "| Expected outcomes | {}/{} ({}) | **Verified** |",
+        summary.expected_outcome_match_count,
+        summary.record_count,
+        percentage(summary.expected_outcome_match_rate)
+    )
+    .unwrap();
+    writeln!(
+        output,
+        "| Parse success | {} | **Verified** |",
+        percentage(summary.parse_success_rate)
+    )
+    .unwrap();
+    writeln!(
+        output,
+        "| Attempted semantic conversions | {} | **Verified** |",
+        percentage(summary.conversion_success_rate)
+    )
+    .unwrap();
+    writeln!(
+        output,
+        "| Attempted semantic round trips | {} | **Verified** |",
+        percentage(summary.round_trip_success_rate)
+    )
+    .unwrap();
+    writeln!(
+        output,
+        "| Visual/Office targets | {} deferred observations | **Not measured here** |",
+        summary.deferred_target_count
+    )
+    .unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "## Performance").unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "| Stage | P50 | P95 | P99 |").unwrap();
+    writeln!(output, "|---|---:|---:|---:|").unwrap();
+    write_latency_row(&mut output, "Parse", &summary.parse_latency);
+    write_latency_row(&mut output, "Conversion", &summary.conversion_latency);
+    write_latency_row(&mut output, "Round trip", &summary.round_trip_latency);
+    writeln!(output).unwrap();
+    writeln!(
+        output,
+        "- Total measured time: **{}**",
+        duration(summary.total_elapsed_ns)
+    )
+    .unwrap();
+    match summary.records_per_second {
+        Some(rate) => writeln!(output, "- Throughput: **{rate:.2} records/s**").unwrap(),
+        None => writeln!(output, "- Throughput: **Not measured**").unwrap(),
+    }
+    match summary.peak_memory_bytes {
+        Some(bytes) => writeln!(output, "- Peak process memory: **{bytes} bytes**").unwrap(),
+        None => writeln!(output, "- Peak process memory: **Not measured**").unwrap(),
+    }
+    writeln!(output).unwrap();
+    writeln!(output, "## Capability boundary").unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "| Capability | Status | Evidence boundary |").unwrap();
+    writeln!(output, "|---|---|---|").unwrap();
+    writeln!(output, "| Formula parsing and declared error outcomes | **Verified** | Deterministic compositional corpus |").unwrap();
+    writeln!(output, "| LaTeX, MathML, OMML and Typst semantic conversion | **Verified** | Attempted Core conversions only |").unwrap();
+    writeln!(
+        output,
+        "| Semantic conversion back to LaTeX | **Verified** | Attempted Core round trips only |"
+    )
+    .unwrap();
+    writeln!(output, "| SVG, PNG and Office package visual fidelity | **Deferred** | Requires visual/package evidence layers |").unwrap();
+    writeln!(output, "| Word, Excel and PowerPoint application behavior | **Not measured** | Requires installed-Office automation |").unwrap();
+    writeln!(output, "| OLE activation, clipboard paste and field recalculation | **Not measured** | Requires the external Office harness |").unwrap();
+    writeln!(output, "| Real-world formula/model accuracy | **Not claimed** | Requires a licensed representative corpus |").unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "## Known limitations").unwrap();
+    writeln!(output).unwrap();
+    for limitation in &summary.limitations {
+        writeln!(output, "- {}", markdown_cell(limitation)).unwrap();
+    }
+    writeln!(output).unwrap();
+    writeln!(output, "## Reproduce").unwrap();
+    writeln!(output).unwrap();
+    writeln!(output, "See [`docs/benchmark.md`](../benchmark.md) for the digest-frozen generation and benchmark commands.").unwrap();
+    output
+}
+
+fn write_latency_row(output: &mut String, label: &str, latency: &FormulaLatencySummary) {
+    writeln!(
+        output,
+        "| {label} | {} | {} | {} |",
+        duration(latency.p50_ns),
+        duration(latency.p95_ns),
+        duration(latency.p99_ns)
+    )
+    .unwrap();
+}
+
+fn duration(nanoseconds: u64) -> String {
+    if nanoseconds >= 1_000_000_000 {
+        format!("{:.3} s", nanoseconds as f64 / 1_000_000_000.0)
+    } else if nanoseconds >= 1_000_000 {
+        format!("{:.3} ms", nanoseconds as f64 / 1_000_000.0)
+    } else if nanoseconds >= 1_000 {
+        format!("{:.3} us", nanoseconds as f64 / 1_000.0)
+    } else {
+        format!("{nanoseconds} ns")
+    }
+}
+
+fn percentage(rate: f64) -> String {
+    format!("{:.2}%", rate * 100.0)
+}
+
+fn markdown_cell(value: &str) -> String {
+    value
+        .replace('|', "\\|")
+        .replace(['\r', '\n'], " ")
+        .trim()
+        .to_string()
 }
 
 /// Evaluate the corpus once and return both the record-level evidence and a
@@ -148,5 +319,28 @@ mod tests {
             .limitations
             .iter()
             .any(|limitation| limitation.contains("not measured")));
+
+        let markdown = render_formula_corpus_benchmark_markdown(
+            &plan,
+            &benchmark,
+            "test-os-x86_64 | rustc test",
+        );
+        assert!(markdown.contains("# Formula and Office corpus benchmark"));
+        assert!(markdown.contains("test-os-x86_64 \\| rustc test"));
+        assert!(markdown.contains("**Verified**"));
+        assert!(markdown.contains("**Not measured**"));
+        assert!(markdown.contains("**Not claimed**"));
+        assert!(markdown.contains("Contract pass rates are not model accuracy"));
+        assert!(markdown.ends_with('\n'));
+    }
+
+    #[test]
+    fn markdown_helpers_format_stable_human_readable_values() {
+        assert_eq!(duration(999), "999 ns");
+        assert_eq!(duration(1_500), "1.500 us");
+        assert_eq!(duration(1_500_000), "1.500 ms");
+        assert_eq!(duration(1_500_000_000), "1.500 s");
+        assert_eq!(percentage(0.9375), "93.75%");
+        assert_eq!(markdown_cell("a|b\nc"), "a\\|b c");
     }
 }

@@ -53,6 +53,8 @@ jobs:
             --generated-at-utc "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
             --output target/evaluation/formula-full-benchmark.json \
             --evaluation-output target/evaluation/formula-full-report.json \
+            --markdown-output target/evaluation/formula-office-benchmark.md \
+            --environment-label "GitHub Actions ubuntu-x86_64; $(rustc --version)" \
             --require-expected-outcomes
       - uses: actions/upload-artifact@v7
         with:
@@ -61,6 +63,7 @@ jobs:
             target/evaluation/formula-full.json
             target/evaluation/formula-full-report.json
             target/evaluation/formula-full-benchmark.json
+            target/evaluation/formula-office-benchmark.md
           if-no-files-found: error
           retention-days: 90
 

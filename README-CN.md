@@ -57,6 +57,19 @@ Worker transport 为保持兼容性，仍独立使用 protocol v1。
 | native 动态库 ABI | **可用** | 冻结 C ABI v1，支持第三方硬件 Runtime（NPU、DSP、FPGA）。SHA-256 enrollment + 显式 enable 信任模型。详见 [Custom Runtime Plugin ABI v1](docs/runtime-plugin-api.md)。 |
 | 本地 JSONL worker | **可用** | protocol v1 为受监管的可信本机调用方持有有界持久 Core 会话；它不是网络服务或安全边界。 |
 
+### 验证证据
+
+摘要冻结的 full runner 会评估 **10,000 条确定性组合公式记录**，覆盖不同
+定界符、Markdown 上下文、矩阵、align/cases、化学式、TikZ/PGFPlots、
+错误输入与 Office 域语义。计划另为外部 Office harness 保留 500 个复合文档
+场景。参见[最近一次纳入仓库的基准快照](docs/generated/formula-office-benchmark.md)、
+[复现命令](docs/benchmark.md)与[收尾验证计划](docs/closing-plan.md)。
+
+报告严格区分 **已验证（Verified）**、**延后（Deferred）**、**未测量
+（Not measured）**和**不声明（Not claimed）**。合成契约语料通过率不等于
+独立真实数据上的 OCR/模型准确率，也不能替代 Word/Excel/PowerPoint、OLE、
+剪贴板、视觉保真与域重算证据。
+
 可执行能力注册表是事实来源：
 
 ```bash

@@ -59,6 +59,22 @@ This does **not** mean that every format, model, or plugin boundary has the same
 | Native dynamic-library ABI | **Available** | Frozen C ABI v1 for third-party hardware runtimes (NPU, DSP, FPGA). SHA-256 enrollment + explicit enable trust model. See [Custom Runtime Plugin ABI v1](docs/runtime-plugin-api.md). |
 | Local JSONL worker | **Available** | Protocol v1 owns bounded persistent Core sessions for supervised, trusted local callers; it is not a network service or security boundary. |
 
+### Verification evidence
+
+The digest-frozen full runner evaluates **10,000 deterministic compositional
+formula records** across delimiters, Markdown contexts, matrices, multiline and
+cases environments, chemistry, TikZ/PGFPlots, malformed input, and Office field
+semantics. The plan also reserves 500 compound-document cases for the external
+Office harness. See the [latest checked-in benchmark
+snapshot](docs/generated/formula-office-benchmark.md), the [reproduction
+commands](docs/benchmark.md), and the [closing validation
+plan](docs/closing-plan.md).
+
+The report distinguishes **Verified**, **Deferred**, **Not measured**, and
+**Not claimed**. The synthetic contract pass rate is not OCR/model accuracy on
+independent real-world data, and it does not replace Word/Excel/PowerPoint,
+OLE, clipboard, visual-fidelity, or field-recalculation evidence.
+
 The executable source of truth is the capability registry:
 
 ```bash
