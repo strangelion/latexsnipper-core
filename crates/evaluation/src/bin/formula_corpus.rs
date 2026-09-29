@@ -3,6 +3,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use latexsnipper_evaluation::formula_compound::{
+    generate_formula_compound_corpus, read_formula_compound_corpus,
+    validate_formula_compound_corpus,
+};
 use latexsnipper_evaluation::formula_corpus::{
     generate_formula_full, generate_formula_pilot, generate_formula_pull_request,
     read_formula_corpus, read_formula_plan, validate_formula_corpus, validate_formula_plan,
@@ -44,11 +48,27 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
+    GenerateCompound {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        corpus: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     ValidateCorpus {
         #[arg(long)]
         plan: PathBuf,
         #[arg(long)]
         corpus: PathBuf,
+    },
+    ValidateCompound {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        corpus: PathBuf,
+        #[arg(long)]
+        compound: PathBuf,
     },
     Evaluate {
         #[arg(long)]
@@ -139,6 +159,26 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 corpus.content_sha256
             );
         }
+        Command::GenerateCompound {
+            plan,
+            corpus,
+            output,
+        } => {
+            let plan = read_formula_plan(&plan)?;
+            let formula_corpus = read_formula_corpus(&corpus)?;
+            let compound = generate_formula_compound_corpus(&plan, &formula_corpus)?;
+            let json = serde_json::to_vec_pretty(&compound)?;
+            if let Some(parent) = output.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&output, json)?;
+            println!(
+                "generated {} deterministic compound documents at {} (contentSha256={})",
+                compound.documents.len(),
+                output.display(),
+                compound.content_sha256
+            );
+        }
         Command::ValidateCorpus { plan, corpus } => {
             let plan = read_formula_plan(&plan)?;
             let corpus = read_formula_corpus(&corpus)?;
@@ -148,6 +188,21 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 corpus.tier,
                 corpus.plan_id,
                 corpus.records.len()
+            );
+        }
+        Command::ValidateCompound {
+            plan,
+            corpus,
+            compound,
+        } => {
+            let plan = read_formula_plan(&plan)?;
+            let formula_corpus = read_formula_corpus(&corpus)?;
+            let compound = read_formula_compound_corpus(&compound)?;
+            validate_formula_compound_corpus(&plan, &formula_corpus, &compound)?;
+            println!(
+                "validated compound corpus '{}' with {} mixed Markdown documents",
+                compound.plan_id,
+                compound.documents.len()
             );
         }
         Command::Evaluate {

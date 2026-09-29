@@ -59,10 +59,11 @@ Worker transport 为保持兼容性，仍独立使用 protocol v1。
 
 ### 验证证据
 
-摘要冻结的 full runner 会评估 **10,000 条确定性组合公式记录**，覆盖不同
+摘要哈希冻结的 full runner 会评估 **10,000 条确定性组合公式记录**，覆盖不同
 定界符、Markdown 上下文、矩阵、align/cases、化学式、TikZ/PGFPlots、
-错误输入与 Office 域语义。计划另为外部 Office harness 保留 500 个复合文档
-场景。参见[最近一次纳入仓库的基准快照](docs/generated/formula-office-benchmark.md)、
+错误输入与 Office 域语义；同时派生 **500 个摘要冻结的 mixed-Markdown 复合
+文档**，确保每条公式只出现一次，并混合标题、正文、列表、引用、行内/行间
+公式与代码块干扰项。参见[最近一次纳入仓库的基准快照](docs/generated/formula-office-benchmark.md)、
 [复现命令](docs/benchmark.md)与[收尾验证计划](docs/closing-plan.md)。
 
 报告严格区分 **已验证（Verified）**、**延后（Deferred）**、**未测量

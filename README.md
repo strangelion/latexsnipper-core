@@ -64,8 +64,9 @@ This does **not** mean that every format, model, or plugin boundary has the same
 The digest-frozen full runner evaluates **10,000 deterministic compositional
 formula records** across delimiters, Markdown contexts, matrices, multiline and
 cases environments, chemistry, TikZ/PGFPlots, malformed input, and Office field
-semantics. The plan also reserves 500 compound-document cases for the external
-Office harness. See the [latest checked-in benchmark
+semantics. It also derives **500 digest-frozen mixed-Markdown documents** in
+which every formula record appears exactly once among headings, prose, lists,
+blockquotes, display/inline math, and fenced-code decoys. See the [latest checked-in benchmark
 snapshot](docs/generated/formula-office-benchmark.md), the [reproduction
 commands](docs/benchmark.md), and the [closing validation
 plan](docs/closing-plan.md).

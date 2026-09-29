@@ -45,6 +45,16 @@ jobs:
             validate-corpus \
             --plan evaluation/formula-corpus/plan.json \
             --corpus target/evaluation/formula-full.json
+          cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            generate-compound \
+            --plan evaluation/formula-corpus/plan.json \
+            --corpus target/evaluation/formula-full.json \
+            --output target/evaluation/formula-compound.json
+          cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- \
+            validate-compound \
+            --plan evaluation/formula-corpus/plan.json \
+            --corpus target/evaluation/formula-full.json \
+            --compound target/evaluation/formula-compound.json
           cargo run --release --locked -p latexsnipper-benchmark \
             --bin latexsnipper-formula-corpus-benchmark -- \
             --plan evaluation/formula-corpus/plan.json \
@@ -61,6 +71,7 @@ jobs:
           name: formula-office-full-corpus-${{ github.run_id }}
           path: |
             target/evaluation/formula-full.json
+            target/evaluation/formula-compound.json
             target/evaluation/formula-full-report.json
             target/evaluation/formula-full-benchmark.json
             target/evaluation/formula-office-benchmark.md

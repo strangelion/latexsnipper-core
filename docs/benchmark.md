@@ -140,10 +140,25 @@ cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- 
   generate-full `
   --plan evaluation/formula-corpus/plan.json `
   --output target/evaluation/formula-full.json
+
+cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  generate-compound `
+  --plan evaluation/formula-corpus/plan.json `
+  --corpus target/evaluation/formula-full.json `
+  --output target/evaluation/formula-compound.json
+
+cargo run --release --locked -p latexsnipper-evaluation --bin formula-corpus -- `
+  validate-compound `
+  --plan evaluation/formula-corpus/plan.json `
+  --corpus target/evaluation/formula-full.json `
+  --compound target/evaluation/formula-compound.json
 ```
 
 The plan freezes separate SHA-256 digests for pilot, pull-request, and full
-tiers. Generator or template changes therefore require an explicit corpus
+tiers, plus the 500-document mixed-Markdown derivative. Every full formula is
+referenced exactly once across the compound documents; parsed formula counts
+must match after headings, prose, lists, blockquotes, and fenced-code decoys are
+processed. Generator or grammar changes therefore require an explicit corpus
 contract review instead of silently changing historical baselines.
 
 Run the full corpus once through the benchmark entry point to produce both the

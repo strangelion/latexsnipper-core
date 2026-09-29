@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::schema::{CorpusLicense, CorpusSource};
 
-pub const FORMULA_CORPUS_PLAN_SCHEMA_VERSION: u32 = 1;
+pub const FORMULA_CORPUS_PLAN_SCHEMA_VERSION: u32 = 2;
 pub const FORMULA_CORPUS_SCHEMA_VERSION: u32 = 1;
 pub const FORMULA_PULL_REQUEST_RECORD_COUNT: usize = 360;
 
@@ -250,6 +250,7 @@ pub struct FormulaCorpusPlan {
     pub pilot_content_sha256: String,
     pub pull_request_content_sha256: String,
     pub full_content_sha256: String,
+    pub compound_content_sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -325,6 +326,7 @@ pub fn validate_formula_plan(plan: &FormulaCorpusPlan) -> Result<(), FormulaCorp
         "pullRequestContentSha256",
     )?;
     validate_sha256(&plan.full_content_sha256, "fullContentSha256")?;
+    validate_sha256(&plan.compound_content_sha256, "compoundContentSha256")?;
     if plan.target_formula_count == 0 {
         return invalid("targetFormulaCount must be greater than zero");
     }

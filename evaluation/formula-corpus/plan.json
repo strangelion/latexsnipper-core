@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "formula-office-10k-v2",
   "description": "Deterministic compositional 10,000-record formula conversion and Office integration corpus plan.",
   "targetFormulaCount": 10000,
@@ -80,5 +80,6 @@
   },
   "pilotContentSha256": "09c0b129f5430585a6a4e30bf83a2703b09d84405aa65d5dcea17ccd48773e4b",
   "pullRequestContentSha256": "c2acafe4b11f087b4397e40c8ebe3eff0d30df1c3d9e7efe632c9830244d416a",
-  "fullContentSha256": "92c316ab0d26f0425d0ae55ef89412a9813e6027b3f21cfd5ce457b99722c378"
+  "fullContentSha256": "92c316ab0d26f0425d0ae55ef89412a9813e6027b3f21cfd5ce457b99722c378",
+  "compoundContentSha256": "b8c818eb037bd0c5fa924a1c0db089917e04801f7c6c1420180d2a4a875c5529"
 }
