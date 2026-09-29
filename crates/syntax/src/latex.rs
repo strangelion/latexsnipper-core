@@ -293,7 +293,10 @@ fn control_sequence(input: &str, start: usize) -> Option<(&str, usize)> {
         }
         Some((&input[start + 1..end], end))
     } else {
-        let end = start + 2;
+        // A non-alphabetic control symbol spans exactly one character; advance
+        // by its UTF-8 width so multi-byte input cannot be sliced mid-character.
+        let width = input[start + 1..].chars().next()?.len_utf8();
+        let end = start + 1 + width;
         Some((&input[start + 1..end], end))
     }
 }
@@ -696,6 +699,22 @@ mod tests {
         assert!(formulas[1].display_mode);
         assert_eq!(formulas[0].as_latex(), "x + 1");
         assert_eq!(formulas[1].as_latex(), "y");
+    }
+
+    #[test]
+    fn control_symbols_can_be_multibyte_characters() {
+        // Regression: `\` followed by a multi-byte character used to slice
+        // inside that character and panic (fuzz artifact
+        // crash-e03db579357ffc95a71c4bb288f2acc49cbd6367).
+        for input in ["\u{5dd}", "\\\u{5dd}", "a\\\u{4e2d}b", "\\n\\\u{5dd}\n."] {
+            let _ = validate_latex_structure(input);
+            let _ = parse_latex_with_source_map(input).unwrap();
+        }
+
+        let input = "\\\u{5dd}";
+        let (command, next) = control_sequence(input, 0).expect("control sequence");
+        assert_eq!(command, "\u{5dd}");
+        assert_eq!(next, 1 + "\u{5dd}".len());
     }
 
     #[test]
