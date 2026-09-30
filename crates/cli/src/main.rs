@@ -251,19 +251,27 @@ enum Commands {
         latex: String,
     },
 
-    /// Render a LaTeX string back to LaTeX (roundtrip test)
+    /// Render or convert a single LaTeX formula
     #[command(
-        long_about = "Render a LaTeX string by parsing it to AST and back.\n\n\
-        Useful for testing roundtrip fidelity -- the output should be\n\
+        long_about = "Render a LaTeX string by parsing it to AST and back, or convert the\n\
+        formula directly to a semantic target such as MathML or OMML.\n\n\
+        Without --to this remains a LaTeX roundtrip test. The output should be\n\
         semantically equivalent to the input, though formatting may differ.\n\n\
         EXAMPLES:\n    \
         snipper render -l '\\frac{a}{b}'\n    \
-        snipper render -l 'x^2 + y^2 = r^2'"
+        snipper render -l 'x^2 + y^2 = r^2'\n    \
+        snipper render -l '\\frac{a}{b}' --to omml -o formula.xml"
     )]
     Render {
         /// LaTeX string to render
         #[arg(short = 'l', long)]
         latex: String,
+        /// Semantic output format (for example: latex, mathml, omml, or typst)
+        #[arg(long)]
+        to: Option<String>,
+        /// Output path; stdout when omitted
+        #[arg(short = 'o', long)]
+        output: Option<String>,
     },
 
     /// Show version, build info, and system details
@@ -561,6 +569,30 @@ enum PluginRegistryCommand {
 
 fn resolve_format(format: &str) -> String {
     format.to_ascii_lowercase()
+}
+
+fn render_formula(latex: &str, target: Option<&str>) -> Result<String, String> {
+    let Some(target) = target else {
+        let parser = LatexParser;
+        let renderer = LatexRenderer;
+        let document = parser
+            .parse(latex)
+            .map_err(|error| format!("parse failed: {error}"))?;
+        return renderer
+            .render(&document)
+            .map_err(|error| format!("LaTeX roundtrip failed: {error}"));
+    };
+
+    let resolved = resolve_format(target);
+    let Some(CliTarget::Semantic(format)) = resolve_cli_target(&resolved) else {
+        let hint = suggest_format(&resolved)
+            .map(|suggestion| format!(" Did you mean '{suggestion}'?"))
+            .unwrap_or_default();
+        return Err(format!(
+            "unsupported single-formula target '{target}'.{hint} Use a semantic format such as latex, mathml, omml, or typst."
+        ));
+    };
+    DocumentConverter::convert_latex_string(latex, format).map_err(|error| error.to_string())
 }
 
 fn suggest_format(input: &str) -> Option<&'static str> {
@@ -978,23 +1010,22 @@ fn main() {
             }
         }
 
-        Commands::Render { latex } => {
-            let parser = LatexParser;
-            let renderer = LatexRenderer;
-            match parser.parse(&latex) {
-                Ok(doc) => match renderer.render(&doc) {
-                    Ok(output) => println!("{}", output),
-                    Err(e) => {
-                        eprintln!("Render error: {}", e);
+        Commands::Render { latex, to, output } => match render_formula(&latex, to.as_deref()) {
+            Ok(rendered) => {
+                if let Some(path) = output {
+                    std::fs::write(&path, &rendered).unwrap_or_else(|error| {
+                        eprintln!("Failed to write {}: {}", path, error);
                         std::process::exit(1);
-                    }
-                },
-                Err(e) => {
-                    eprintln!("Parse error: {}", e);
-                    std::process::exit(1);
+                    });
+                } else {
+                    println!("{}", rendered);
                 }
             }
-        }
+            Err(error) => {
+                eprintln!("Render error: {}", error);
+                std::process::exit(1);
+            }
+        },
 
         Commands::Version => {
             println!("snipper {}", env!("CARGO_PKG_VERSION"));
@@ -3795,6 +3826,27 @@ mod tests {
         assert_eq!(resolve_format("markdown_inline"), "markdown_inline");
         assert_eq!(resolve_format("latex"), "latex");
         assert_eq!(suggest_format("equationlatex"), Some("latex_equation"));
+    }
+
+    #[test]
+    fn renders_a_single_formula_to_omml() {
+        let output = render_formula(r"\frac{a}{b}", Some("omml")).unwrap();
+        assert!(output.contains("<m:oMath"));
+        assert!(output.contains("<m:f>"));
+        assert!(output.contains("http://schemas.openxmlformats.org/officeDocument/2006/math"));
+    }
+
+    #[test]
+    fn preserves_the_default_latex_roundtrip() {
+        let output = render_formula(r"x^2", None).unwrap();
+        assert!(output.contains('x'));
+        assert!(output.contains('2'));
+    }
+
+    #[test]
+    fn rejects_visual_single_formula_targets() {
+        let error = render_formula("x", Some("png")).unwrap_err();
+        assert!(error.contains("unsupported single-formula target"));
     }
 
     #[test]
