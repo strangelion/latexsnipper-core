@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-pub const CORPUS_INDEX_SCHEMA_VERSION: &str = "1.1.0";
+pub const CORPUS_INDEX_SCHEMA_VERSION: &str = "1.2.0";
 pub const FIDELITY_REPORT_SCHEMA_VERSION: &str = "1.1.0";
 pub const REQUIRED_DOCX_FEATURES: &[&str] = &[
     "runs",
@@ -552,10 +552,16 @@ pub struct CapabilityExpectation {
     pub status: CapabilityExpectationStatus,
     #[serde(default)]
     pub evidence_tokens: Vec<String>,
+    #[serde(default = "default_minimum_occurrences")]
+    pub minimum_occurrences: usize,
     #[serde(default)]
     pub required_diagnostic_codes: Vec<String>,
     #[serde(default)]
     pub limitation: Option<String>,
+}
+
+const fn default_minimum_occurrences() -> usize {
+    1
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -731,6 +737,12 @@ fn validate_case(case: &CorpusCase, repository_root: &Path) -> Result<()> {
             )));
         }
         match expectation.status {
+            CapabilityExpectationStatus::Preserved if expectation.minimum_occurrences == 0 => {
+                return Err(FidelityError::InvalidCorpus(format!(
+                    "case {} preserved capability {} minimumOccurrences must be greater than zero",
+                    case.id, expectation.feature
+                )));
+            }
             CapabilityExpectationStatus::Preserved
                 if expectation.evidence_tokens.is_empty()
                     || expectation.evidence_tokens.iter().any(String::is_empty) =>
@@ -1063,28 +1075,35 @@ fn capability_expectation_layer(
     for expectation in &case.capability_expectations {
         match expectation.status {
             CapabilityExpectationStatus::Preserved => {
-                let missing = expectation
+                let shortfalls = expectation
                     .evidence_tokens
                     .iter()
                     .map(|token| {
-                        evidence_token_present(exported, case.format, token)
-                            .map(|present| (!present).then(|| token.clone()))
+                        evidence_token_occurrences(exported, case.format, token).map(|actual| {
+                            (actual < expectation.minimum_occurrences).then(|| {
+                                format!(
+                                    "{token} (expected >= {}, actual {actual})",
+                                    expectation.minimum_occurrences
+                                )
+                            })
+                        })
                     })
                     .collect::<Result<Vec<_>>>()?
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>();
-                if missing.is_empty() {
+                if shortfalls.is_empty() {
                     evidence.push(format!(
-                        "{}=preserved; tokens={}",
+                        "{}=preserved; minimum-occurrences={}; tokens={}",
                         expectation.feature,
+                        expectation.minimum_occurrences,
                         expectation.evidence_tokens.join("|")
                     ));
                 } else {
                     failures.push(format!(
-                        "{} missing round-trip tokens: {}",
+                        "{} round-trip token count shortfall: {}",
                         expectation.feature,
-                        missing.join(", ")
+                        shortfalls.join(", ")
                     ));
                 }
             }
@@ -1130,31 +1149,33 @@ fn capability_expectation_layer(
 }
 
 fn evidence_token_present(bytes: &[u8], format: FidelityFormat, token: &str) -> Result<bool> {
+    Ok(evidence_token_occurrences(bytes, format, token)? > 0)
+}
+
+fn evidence_token_occurrences(bytes: &[u8], format: FidelityFormat, token: &str) -> Result<usize> {
     if format == FidelityFormat::Pdf {
         return Ok(bytes
             .windows(token.len())
-            .any(|window| window == token.as_bytes()));
+            .filter(|window| *window == token.as_bytes())
+            .count());
     }
 
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
         .map_err(|error| FidelityError::Package(format!("invalid OOXML ZIP package: {error}")))?;
+    let mut occurrences = 0;
     for index in 0..archive.len() {
         let mut part = archive.by_index(index).map_err(|error| {
             FidelityError::Package(format!("failed to inspect ZIP entry {index}: {error}"))
         })?;
-        if part.name().contains(token) {
-            return Ok(true);
-        }
+        occurrences += part.name().match_indices(token).count();
         let mut content = Vec::new();
         part.read_to_end(&mut content)?;
-        if content
+        occurrences += content
             .windows(token.len())
-            .any(|window| window == token.as_bytes())
-        {
-            return Ok(true);
-        }
+            .filter(|window| *window == token.as_bytes())
+            .count();
     }
-    Ok(false)
+    Ok(occurrences)
 }
 
 fn run_visual_layer(
@@ -1568,7 +1589,7 @@ mod tests {
 
     #[test]
     fn every_format_has_the_required_feature_contract() {
-        assert_eq!(CORPUS_INDEX_SCHEMA_VERSION, "1.1.0");
+        assert_eq!(CORPUS_INDEX_SCHEMA_VERSION, "1.2.0");
         assert_eq!(FIDELITY_REPORT_SCHEMA_VERSION, "1.1.0");
         assert_eq!(REQUIRED_DOCX_FEATURES.len(), 18);
         assert_eq!(REQUIRED_PPTX_FEATURES.len(), 6);
@@ -1585,6 +1606,32 @@ mod tests {
 
         let error = validate_case(&index.cases[0], &repository_root).unwrap_err();
         assert!(error.to_string().contains("no round-trip evidence token"));
+    }
+
+    #[test]
+    fn preserved_capability_rejects_zero_minimum_occurrences() {
+        let repository_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let bytes = fs::read(repository_root.join("fidelity/corpora/index.json")).unwrap();
+        let mut index: CorpusIndex = serde_json::from_slice(&bytes).unwrap();
+        index.cases[0].capability_expectations[0].minimum_occurrences = 0;
+
+        let error = validate_case(&index.cases[0], &repository_root).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("minimumOccurrences must be greater than zero"));
+    }
+
+    #[test]
+    fn generated_docx_fixture_contains_counted_batch_evidence() {
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fidelity/fixtures/office-rich.docx");
+        let bytes = fs::read(path).unwrap();
+        for token in ["<m:oMath>", ".png\"/>", ".svg\"/>"] {
+            assert!(
+                evidence_token_occurrences(&bytes, FidelityFormat::Docx, token).unwrap() >= 4,
+                "missing counted batch evidence for {token}"
+            );
+        }
     }
 
     #[test]

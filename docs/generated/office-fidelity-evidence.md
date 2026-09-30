@@ -6,7 +6,7 @@ The measurements below execute Core import, same-format export, package validati
 
 | Case | Format pair | structuralValidity | semanticPreservation | layoutPreservation | visualFidelity | editability | roundTripFidelity |
 |---|---|---|---|---|---|---|---|
-| docx-office-rich-v1 | DOCX -> DOCX | verified (1.000) | partial (0.824) | partial (1.000) | not-measured | partial | partial (0.824) |
+| docx-office-rich-v1 | DOCX -> DOCX | verified (1.000) | partial (0.888) | partial (1.000) | not-measured | partial | partial (0.888) |
 | pptx-presentation-rich-v1 | PPTX -> PPTX | verified (1.000) | verified (1.000) | partial (1.000) | not-measured | partial | partial (1.000) |
 | xlsx-workbook-rich-v1 | XLSX -> XLSX | verified (1.000) | partial (0.750) | partial (1.000) | not-measured | partial | partial (0.750) |
 | pdf-rich-v1 | PDF -> PDF | verified (1.000) | partial (0.929) | partial (0.985) | not-measured | unsupported | unsupported |
@@ -17,12 +17,15 @@ The measurements below execute Core import, same-format export, package validati
 
 Status: `passed` — all declared package capability expectations matched
 
-- `native-omml=preserved; tokens=<m:oMath`
-- `png-image=preserved; tokens=word/media/image1.png`
-- `svg-image=preserved; tokens=word/media/image2.svg`
-- `bookmark=preserved; tokens=<w:bookmarkStart|w:name="eq_energy"`
-- `sequence-field=preserved; tokens=w:instr=" SEQ Equation \* ARABIC "`
-- `cross-reference-field=preserved; tokens=w:instr=" REF eq_energy \h "`
+- `native-omml=preserved; minimum-occurrences=1; tokens=<m:oMath`
+- `png-image=preserved; minimum-occurrences=1; tokens=word/media/image1.png`
+- `svg-image=preserved; minimum-occurrences=1; tokens=word/media/image2.svg`
+- `batch-native-omml=preserved; minimum-occurrences=4; tokens=<m:oMath>`
+- `batch-png-assets=preserved; minimum-occurrences=4; tokens=.png"/>`
+- `batch-svg-assets=preserved; minimum-occurrences=4; tokens=.svg"/>`
+- `bookmark=preserved; minimum-occurrences=1; tokens=<w:bookmarkStart|w:name="eq_energy"`
+- `sequence-field=preserved; minimum-occurrences=1; tokens=w:instr=" SEQ Equation \* ARABIC "`
+- `cross-reference-field=preserved; minimum-occurrences=1; tokens=w:instr=" REF eq_energy \h "`
 - `ole-editability=not-measured; limitation=the DOCX fixture does not install or activate an OLE server`
 - `clipboard-paste=not-measured; limitation=clipboard ownership and paste require an application harness`
 - `batch-insert=not-measured; limitation=batch insertion requires the Office adapter and application harness`
@@ -31,7 +34,7 @@ Status: `passed` — all declared package capability expectations matched
 
 Status: `passed` — all declared package capability expectations matched
 
-- `png-image=preserved; tokens=ppt/media/image1.png`
+- `png-image=preserved; minimum-occurrences=1; tokens=ppt/media/image1.png`
 - `clipboard-paste=not-measured; limitation=clipboard ownership and paste require an application harness`
 - `batch-insert=not-measured; limitation=batch insertion requires the Office adapter and application harness`
 

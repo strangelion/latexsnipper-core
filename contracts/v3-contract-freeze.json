@@ -21,7 +21,7 @@
     "crates/evaluation/src/failure_corpus.rs": "ab4e6012a2ae8c25786cdd616a4c711b996c73bd5a804940173e2d576ba4a80e",
     "crates/evaluation/src/int8.rs": "db9a4d1a6e6c60e7e5a3e431da8150b7d292fc1de719a4f9721d2923b4903d23",
     "crates/evaluation/src/schema.rs": "2dd3abc6ec391c5886035917f4cea1c16e8e95046293c8fa386568c1869d9e67",
-    "crates/fidelity/src/lib.rs": "01c8617ebf1ba90cda7f37be061e88246e06b597196ffec93b4ec29634095125",
+    "crates/fidelity/src/lib.rs": "e35b8bfbfa2756e67b7cc10ccda26c63ca7dedbc1d46daaa420fb63b415d8805",
     "crates/model/src/manifest_v3.rs": "7a7d2f15532978d732b633557ec1227713b633fdfe0b977aee5bc714236d9213",
     "crates/plugin/src/manifest_v3.rs": "4fb41389e3956a849dbe4d59c3c1d3e388f2fd0a5a8a80424c10338356f5ccbb",
     "crates/plugin/src/signed_registry.rs": "3ab061a24eeb038469170a8d7ec7ffbc9c9ddae5f4748cd70adf1dd62ea09464",

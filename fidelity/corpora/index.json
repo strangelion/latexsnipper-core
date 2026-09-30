@@ -1,11 +1,11 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "cases": [
     {
       "id": "docx-office-rich-v1",
       "format": "docx",
       "fixture": "fidelity/fixtures/office-rich.docx",
-      "sha256": "62c55c5b46a1a1201f5e6bc1b6d87045e5a33e28a0d610c09b9f40ba704002b0",
+      "sha256": "0086fc6ed16b05096d9bce44a4a6e14a56e1c03711e098e79131993dc86bab1c",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -52,6 +52,24 @@
           "feature": "svg-image",
           "status": "preserved",
           "evidenceTokens": ["word/media/image2.svg"]
+        },
+        {
+          "feature": "batch-native-omml",
+          "status": "preserved",
+          "evidenceTokens": ["<m:oMath>"],
+          "minimumOccurrences": 4
+        },
+        {
+          "feature": "batch-png-assets",
+          "status": "preserved",
+          "evidenceTokens": [".png\"/>"],
+          "minimumOccurrences": 4
+        },
+        {
+          "feature": "batch-svg-assets",
+          "status": "preserved",
+          "evidenceTokens": [".svg\"/>"],
+          "minimumOccurrences": 4
         },
         {
           "feature": "bookmark",

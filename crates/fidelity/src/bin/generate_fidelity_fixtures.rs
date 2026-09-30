@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -241,7 +242,7 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "</w:numbering>",
     );
 
-    let document = concat!(
+    let mut document = concat!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
         "<w:document ",
         "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" ",
@@ -314,6 +315,40 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>",
         "</a:graphicData></a:graphic></wp:inline>",
         "</w:drawing></w:r></w:p>",
+    )
+    .to_string();
+
+    for batch_index in 2..=4 {
+        write!(
+            document,
+            concat!(
+                "<w:p><m:oMathPara><m:oMath><m:r><m:t>batch_{batch_index}+1</m:t></m:r></m:oMath></m:oMathPara></w:p>",
+                "<w:p><w:r><w:drawing><wp:inline>",
+                "<wp:extent cx=\"9525\" cy=\"9525\"/>",
+                "<wp:docPr id=\"{png_id}\" name=\"Batch PNG {batch_index}\"/>",
+                "<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">",
+                "<pic:pic><pic:nvPicPr><pic:cNvPr id=\"{png_id}\" name=\"image1.png\"/><pic:cNvPicPr/></pic:nvPicPr>",
+                "<pic:blipFill><a:blip r:embed=\"rIdImage\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>",
+                "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"9525\" cy=\"9525\"/></a:xfrm>",
+                "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>",
+                "</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>",
+                "<w:p><w:r><w:drawing><wp:inline>",
+                "<wp:extent cx=\"1143000\" cy=\"381000\"/>",
+                "<wp:docPr id=\"{svg_id}\" name=\"Batch SVG {batch_index}\"/>",
+                "<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">",
+                "<pic:pic><pic:nvPicPr><pic:cNvPr id=\"{svg_id}\" name=\"image2.svg\"/><pic:cNvPicPr/></pic:nvPicPr>",
+                "<pic:blipFill><a:blip r:embed=\"rIdSvg\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>",
+                "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"1143000\" cy=\"381000\"/></a:xfrm>",
+                "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>",
+                "</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+            ),
+            batch_index = batch_index,
+            png_id = batch_index * 2 - 1,
+            svg_id = batch_index * 2,
+        )?;
+    }
+
+    document.push_str(concat!(
         // Footnote reference (inside w:r), comment, track changes
         "<w:p>",
         "<w:r><w:footnoteReference w:id=\"1\"/></w:r>",
@@ -326,7 +361,7 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "<w:footerReference r:id=\"rIdFooter\"/>",
         "<w:type w:val=\"nextPage\"/></w:sectPr>",
         "</w:body></w:document>",
-    );
+    ));
 
     let rels = relationships_xml(&[
         RelationshipSpec {

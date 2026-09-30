@@ -28,6 +28,12 @@ recreates them. Corpus validation rejects duplicate IDs, missing format coverage
 missing required feature evidence, checksum drift, absolute paths, drive-prefixed
 paths, backslashes, and parent traversal.
 
+Corpus index schema `1.2.0` also permits preserved package capabilities to set
+`minimumOccurrences`. This lets the harness prove that a round trip retained a
+declared number of OMML nodes or image assets instead of accepting a single
+representative token as batch evidence. Omitting the field remains equivalent
+to one required occurrence.
+
 The fixtures intentionally combine supported and unsupported constructs. The goal
 is to measure what survives and which diagnostics are emitted, not to imply full
 Microsoft Office or PDF-viewer fidelity.
