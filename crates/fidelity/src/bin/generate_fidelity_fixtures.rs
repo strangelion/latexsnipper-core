@@ -272,11 +272,11 @@ fn write_docx(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "<w:p>",
         "<w:bookmarkStart w:id=\"1\" w:name=\"eq_energy\"/>",
         "<w:r><w:t>Equation </w:t></w:r>",
-        "<w:fldSimple w:instr=\" SEQ Equation \\* ARABIC \"><w:r><w:t>1</w:t></w:r></w:fldSimple>",
+        "<w:fldSimple w:instr=\" SEQ Equation \\* ARABIC \" w:dirty=\"true\"><w:r><w:t>1</w:t></w:r></w:fldSimple>",
         "<w:bookmarkEnd w:id=\"1\"/>",
         "</w:p>",
         "<w:p><w:r><w:t>See equation </w:t></w:r>",
-        "<w:fldSimple w:instr=\" REF eq_energy \\h \"><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p>",
+        "<w:fldSimple w:instr=\" REF eq_energy \\h \" w:dirty=\"true\"><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p>",
         // Image with full DrawingML structure
         "<w:p><w:r><w:drawing>",
         "<wp:inline>",

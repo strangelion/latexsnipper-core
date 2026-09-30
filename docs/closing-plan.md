@@ -247,7 +247,7 @@ README 中文和英文都应展示：
 
 - [x] 扩展 `fidelity/corpora/index.json`，加入包级能力期望和 round-trip token；
 - [x] 增加 OMML、SVG、PNG 和多对象批量内容的可计数包级回转证据，并将 OLE 激活、剪贴板与真实批量插入明确保留给阶段 D；
-- [ ] 增加交叉引用和域更新 fixture；
+- [x] 增加交叉引用 fixture，并为安全的 SEQ / REF 域写入 w:dirty 更新请求；真实 Word 域重算仍保留给阶段 D；
 - [x] 生成 Office 六维包级能力报告；
 - [x] 明确包级不支持能力、未测量能力和降级诊断。
 

@@ -621,10 +621,7 @@ fn word_inlines(inlines: &[Inline], media: &HashMap<&AssetId, &MediaPart>) -> Re
                     .filter(|source| source.raw_source_format.as_deref() == Some("word-field"))
                     .and_then(|source| source.raw_source.as_deref())
                 {
-                    output.push_str(&format!(
-                        "<w:fldSimple w:instr=\"{}\">{run}</w:fldSimple>",
-                        xml_escape(instruction)
-                    ));
+                    output.push_str(&word_simple_field(instruction, &run));
                 } else {
                     output.push_str(&run);
                 }
@@ -666,11 +663,33 @@ fn word_bookmark(name: &str) -> String {
 fn word_cross_reference(target: &str, display_text: Option<&str>) -> String {
     let target = word_bookmark_name(target);
     let display = display_text.unwrap_or(&target);
-    format!(
-        "<w:fldSimple w:instr=\" REF {} \\h \"><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:fldSimple>",
-        xml_escape(&target),
+    let instruction = format!(" REF {target} \\h ");
+    let run = format!(
+        "<w:r><w:t xml:space=\"preserve\">{}</w:t></w:r>",
         xml_escape(display)
+    );
+    word_simple_field(&instruction, &run)
+}
+
+fn word_simple_field(instruction: &str, content: &str) -> String {
+    let dirty = if word_field_should_refresh(instruction) {
+        " w:dirty=\"true\""
+    } else {
+        ""
+    };
+    format!(
+        "<w:fldSimple w:instr=\"{}\"{dirty}>{content}</w:fldSimple>",
+        xml_escape(instruction)
     )
+}
+
+fn word_field_should_refresh(instruction: &str) -> bool {
+    instruction
+        .split_ascii_whitespace()
+        .next()
+        .is_some_and(|command| {
+            command.eq_ignore_ascii_case("SEQ") || command.eq_ignore_ascii_case("REF")
+        })
 }
 
 fn word_bookmark_name(value: &str) -> String {
@@ -1427,6 +1446,7 @@ mod tests {
         assert!(document_xml.contains("w:name=\"eq_energy\""));
         assert!(document_xml.contains("w:instr=\" SEQ Equation \\* ARABIC \""));
         assert!(document_xml.contains("w:instr=\" REF eq_energy \\h \""));
+        assert_eq!(document_xml.matches("w:dirty=\"true\"").count(), 2);
 
         let reopened = crate::read_docx_bytes(artifact.as_bytes().unwrap()).unwrap();
         assert!(reopened.all_blocks().iter().any(|block| {
@@ -1434,6 +1454,14 @@ mod tests {
                 matches!(inline, Inline::CrossReference(reference) if reference.target_id == "eq_energy")
             }))
         }));
+    }
+
+    #[test]
+    fn generated_docx_only_marks_safe_internal_fields_for_refresh() {
+        assert!(word_simple_field(" SEQ Equation ", "<w:r/>").contains("w:dirty=\"true\""));
+        assert!(word_simple_field(" ref eq_energy ", "<w:r/>").contains("w:dirty=\"true\""));
+        assert!(!word_simple_field(" DDEAUTO external ", "<w:r/>").contains("w:dirty"));
+        assert!(!word_simple_field(" INCLUDETEXT external ", "<w:r/>").contains("w:dirty"));
     }
 
     #[test]

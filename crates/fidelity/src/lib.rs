@@ -33,6 +33,7 @@ pub const REQUIRED_DOCX_FEATURES: &[&str] = &[
     "bookmarks",
     "fields",
     "cross-references",
+    "field-update-request",
 ];
 pub const REQUIRED_PPTX_FEATURES: &[&str] = &[
     "slides",
@@ -1591,7 +1592,7 @@ mod tests {
     fn every_format_has_the_required_feature_contract() {
         assert_eq!(CORPUS_INDEX_SCHEMA_VERSION, "1.2.0");
         assert_eq!(FIDELITY_REPORT_SCHEMA_VERSION, "1.1.0");
-        assert_eq!(REQUIRED_DOCX_FEATURES.len(), 18);
+        assert_eq!(REQUIRED_DOCX_FEATURES.len(), 19);
         assert_eq!(REQUIRED_PPTX_FEATURES.len(), 6);
         assert_eq!(REQUIRED_XLSX_FEATURES.len(), 11);
         assert_eq!(REQUIRED_PDF_FEATURES.len(), 10);

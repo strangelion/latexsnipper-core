@@ -5,7 +5,7 @@
       "id": "docx-office-rich-v1",
       "format": "docx",
       "fixture": "fidelity/fixtures/office-rich.docx",
-      "sha256": "0086fc6ed16b05096d9bce44a4a6e14a56e1c03711e098e79131993dc86bab1c",
+      "sha256": "58fc329394e54df2a0d2358f1585aba8b952dc8f8baa95c312f7312b7f2a1264",
       "license": "AGPL-3.0",
       "source": "repository-generated deterministic OOXML fixture",
       "features": [
@@ -26,7 +26,8 @@
         { "feature": "svg-images", "evidenceToken": "word/media/image2.svg" },
         { "feature": "bookmarks", "evidenceToken": "<w:bookmarkStart" },
         { "feature": "fields", "evidenceToken": "w:instr=\" SEQ Equation \\* ARABIC \"" },
-        { "feature": "cross-references", "evidenceToken": "w:instr=\" REF eq_energy \\h \"" }
+        { "feature": "cross-references", "evidenceToken": "w:instr=\" REF eq_energy \\h \"" },
+        { "feature": "field-update-request", "evidenceToken": "w:dirty=\"true\"" }
       ],
       "expectedText": ["Office Fidelity Heading", "List item"],
       "requiredDiagnosticCodes": [
@@ -85,6 +86,17 @@
           "feature": "cross-reference-field",
           "status": "preserved",
           "evidenceTokens": ["w:instr=\" REF eq_energy \\h \""]
+        },
+        {
+          "feature": "safe-field-update-request",
+          "status": "preserved",
+          "evidenceTokens": ["w:dirty=\"true\""],
+          "minimumOccurrences": 2
+        },
+        {
+          "feature": "field-recalculation",
+          "status": "not-measured",
+          "limitation": "Core marks safe SEQ and REF fields dirty, but only Microsoft Word can recalculate and display their final values"
         },
         {
           "feature": "ole-editability",

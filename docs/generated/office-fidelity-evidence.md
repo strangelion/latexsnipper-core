@@ -26,6 +26,8 @@ Status: `passed` — all declared package capability expectations matched
 - `bookmark=preserved; minimum-occurrences=1; tokens=<w:bookmarkStart|w:name="eq_energy"`
 - `sequence-field=preserved; minimum-occurrences=1; tokens=w:instr=" SEQ Equation \* ARABIC "`
 - `cross-reference-field=preserved; minimum-occurrences=1; tokens=w:instr=" REF eq_energy \h "`
+- `safe-field-update-request=preserved; minimum-occurrences=2; tokens=w:dirty="true"`
+- `field-recalculation=not-measured; limitation=Core marks safe SEQ and REF fields dirty, but only Microsoft Word can recalculate and display their final values`
 - `ole-editability=not-measured; limitation=the DOCX fixture does not install or activate an OLE server`
 - `clipboard-paste=not-measured; limitation=clipboard ownership and paste require an application harness`
 - `batch-insert=not-measured; limitation=batch insertion requires the Office adapter and application harness`

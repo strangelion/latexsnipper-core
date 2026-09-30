@@ -39,6 +39,8 @@ round-trip package parts and may require a minimum occurrence count for batch
 content. `unsupported` requires a stable diagnostic and is not
 reported as feature success. Clipboard, OLE activation, field recalculation,
 and batch insertion remain `not-measured` until an external Office harness runs.
+The DOCX fixture separately verifies that safe SEQ and REF fields carry a
+w:dirty refresh request without claiming that Word recalculated their values.
 
 All fixtures are deterministic repository-generated test data under AGPL-3.0.
 They contain no personal data or external assets.

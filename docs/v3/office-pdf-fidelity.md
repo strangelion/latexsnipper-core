@@ -34,6 +34,12 @@ declared number of OMML nodes or image assets instead of accepting a single
 representative token as batch evidence. Omitting the field remains equivalent
 to one required occurrence.
 
+DOCX export marks the internally generated SEQ and REF fields as dirty so Word
+can refresh them. The exporter intentionally does not mark arbitrary imported
+field instructions such as DDEAUTO or INCLUDETEXT for automatic refresh.
+Package evidence proves that the safe refresh request survives; only an
+application harness can prove that Word recalculated the displayed value.
+
 The fixtures intentionally combine supported and unsupported constructs. The goal
 is to measure what survives and which diagnostics are emitted, not to imply full
 Microsoft Office or PDF-viewer fidelity.
