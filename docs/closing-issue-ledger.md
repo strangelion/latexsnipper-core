@@ -38,10 +38,10 @@ Blocker:
 
 | ID | Item | Owner | Repository | Required evidence | Blocker | Status |
 |---|---|---|---|---|---|---|
-| O-01 | Package and install the x64 OLE server DLL | Office packaging maintainer | strangelion/LaTeXSnipper-Office | clean installer log, installed DLL hash, COM registration and activation result | P0 claim blocker | in progress |
-| O-02 | Word formula, image and OLE insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | document fixtures, screenshots, OOXML diff and editable readback result | P0 claim blocker | not started |
-| O-03 | Excel formula, image and supported object insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | workbook fixtures, screenshots, OOXML diff and readback result | P0 claim blocker | not started |
-| O-04 | PowerPoint formula, image and supported object insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | presentation fixtures, screenshots, OOXML diff and readback result | P0 claim blocker | not started |
+| O-01 | Package and install the x64 OLE server DLL | Office packaging maintainer | strangelion/LaTeXSnipper-Office | clean installer log, installed DLL hash, COM registration and activation result | P0 claim blocker | done |
+| O-02 | Word formula, image and OLE insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | document fixtures, screenshots, OOXML diff and editable readback result | P0 claim blocker | in progress |
+| O-03 | Excel formula, image and supported object insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | workbook fixtures, screenshots, OOXML diff and readback result | P0 claim blocker | in progress |
+| O-04 | PowerPoint formula, image and supported object insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | presentation fixtures, screenshots, OOXML diff and readback result | P0 claim blocker | in progress |
 | O-05 | Word recalculates dirty SEQ and REF fields | Office integration maintainer | strangelion/LaTeXSnipper-Office | Word automation or manual harness showing updated displayed values after reopen | P0 claim blocker | not started |
 | O-06 | Batch insertion and clipboard ownership | Office integration maintainer | strangelion/LaTeXSnipper-Office | repeatable application harness with counts, timing and failure artifacts | P1 | not started |
 | O-07 | Office command layout, sizing and typography | Office UX maintainer | strangelion/LaTeXSnipper-Office | wide and portrait screenshots plus interaction regression checklist | P2 | in progress |
@@ -62,6 +62,11 @@ Blocker:
 
 The release owner closes a row only when its required evidence is linked from a
 generated report, checked-in fixture, or dated application test record.
+
+The 2026-09-30 O-01 evidence and partial O-02/O-03/O-04 real-host results are
+recorded in `strangelion/LaTeXSnipper-Office` at
+`docs/office/real-host-acceptance.md`. O-02 through O-04 remain open until their
+checked-in OOXML difference summaries and remaining host matrices are complete.
 
 - Core package evidence does not close OLE activation, clipboard, Word field
   recalculation, or real batch-insertion rows.
