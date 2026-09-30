@@ -32,7 +32,7 @@ Blocker:
 | C-03 | Counted DOCX OMML, PNG and SVG multi-object round trip | Core fidelity maintainer | strangelion/latexsnipper-core | checksum-pinned fixture and package capability report | P1 | done |
 | C-04 | Word bookmark, SEQ, REF and safe field-refresh request | Core conversion maintainer | strangelion/latexsnipper-core | DOCX read-back tests and package tokens; Word recalculation excluded | P0 claim blocker | done |
 | C-05 | Accuracy claims on externally sourced, real-distribution formula data | Evaluation and release owners | strangelion/latexsnipper-core | licensed corpus provenance, model identity, accuracy report | P0 claim blocker | blocked |
-| C-06 | Optional Zig interop decision | Core performance maintainer | strangelion/latexsnipper-core | isolated ABI benchmark showing a repeatable benefit without contract drift | P3 | in progress |
+| C-06 | Optional Zig interop decision | Core performance maintainer | strangelion/latexsnipper-core | isolated ABI benchmark and explicit adoption decision | P3 | done |
 
 ## Office and OLE
 

@@ -30,22 +30,22 @@ Core 负责解析、统一 AST、转换、渲染、包结构验证和可重复 b
 - v3 freeze 清单已修复，当前主线和最近 CI/WASM/CodeQL 结果为绿色。
 - Core C 会话接口和 Python 示例已经存在，可作为批量测试入口。
 
-### 仍未闭环
+### 当前状态与剩余边界
 
-| 领域 | 未闭环内容 | 必须提供的证据 |
+| 领域 | 当前状态 | 剩余证据或边界 |
 | --- | --- | --- |
-| 10,000 条综合语料 | 尚无固定 manifest、seed、类别配额和公开报告 | 语料清单、生成器版本、SHA-256、JSON 报告 |
-| 定界符和 Markdown | `$$...$$`、`\\(...\\)`、`\\[...\\]` 与混合 Markdown 尚未统一统计 | 每种包装形式的解析、转换和 round-trip 分数 |
-| 错误容忍 | 故意错误 LaTeX 的恢复和诊断需要专项评估 | 错误分类、位置诊断、无 panic/死循环证明 |
+| 10,000 条综合语料 | 固定 manifest、seed、类别配额、摘要哈希和公开 Core 报告已完成 | 外部真实分布准确率声明仍需许可明确的独立语料 |
+| 定界符和 Markdown | display、inline、bracketed math 与 500 个混合 Markdown 文档已进入冻结语料和报告 | 真实 Office 文档排版仍由应用 harness 验证 |
+| 错误容忍 | 故意错误 LaTeX 已按预期结果分类并进入 PR 门禁 | 新解析器回归继续进入失败语料库 |
 | TikZ/PGFPlots | 需与普通公式分开衡量 | 生成、预览、SVG 安全化、Office 插入和尺寸证据 |
 | 化学公式 | 语法、解析器和导出支持范围需明确 | 支持/降级/拒绝矩阵及示例 |
-| Office 包 | 目前主要证明 OOXML 结构，不等于真实 Office 视觉一致 | DOCX/PPTX/XLSX 重新打开、保存、回读报告 |
+| Office 包 | Core 已有六维、可计数 package round-trip 证据，不等于真实 Office 视觉一致 | DOCX/PPTX/XLSX 在真实应用重新打开、保存和回读报告 |
 | Office GUI | Word/Excel/PowerPoint 的实际插入方式未形成完整矩阵 | 应用版本、截图/PDF、回读结果、失败原因 |
 | OLE | DLL 打包、安装、注册和回读仍需实际验证 | 安装日志、DLL 校验、OLE 插入/编辑/回读证据 |
-| 交叉引用 | 编号、书签、`SEQ`/`REF`、更新域尚未专项覆盖 | 保存前/后、重开后、更新域后的 OOXML 与截图 |
+| 交叉引用 | Core 已覆盖书签、SEQ、REF 和安全的 dirty 更新请求 | Word 重开并实际重算域值后的 OOXML 与截图 |
 | OCR 模型 | readiness 不等于准确率，长时间 `running` 需纳入测试 | 模型身份、完成率、CER/Token 距离、超时和资源数据 |
 | Office 应用 UI | 公式库、自定义符号、预览、源码着色、主题、颜色选择器、布局和托盘行为属于应用层 | 真机 WebView2/Tauri 回归录像或截图、控制台/日志 |
-| Zig 结合 | 尚无隔离 benchmark 和 ABI 对比 | 与 Rust baseline 的吞吐、内存、构建和兼容性报告 |
+| Zig 结合 | Windows x86_64 隔离 C ABI pilot 已完成，现有候选未达到 1.20x 门槛，当前决定不接入主构建 | 只有跨平台 profile 找到新热点后才重开；现有报告见 reports/zig-image-kernel-pilot-2026-09-27.md |
 
 ## 3. 10,000 条公式语料规格
 
@@ -287,12 +287,16 @@ DOCX round-trip 后仍有确定性包 token；XLSX OLE 编辑能力明确为
 
 ## 10. Zig 与渲染后端的后续评估
 
-Zig 不作为本轮收尾的硬依赖。收尾完成后再建立隔离的 Zig interop benchmark：
+Zig 不作为本轮收尾的硬依赖。Windows x86_64 隔离 pilot 已完成，
+HWC 到 CHW 归一化与透视变换候选均未达到 1.20x 收益门槛，因此当前
+明确保留 Rust 实现，不把 Zig 加入 Core 主构建。完整方法、数值和限制见
+[zig-image-kernel-pilot-2026-09-27.md](reports/zig-image-kernel-pilot-2026-09-27.md)。
+未来只有在跨平台 profile 发现新的原生热点后才重开试验，并继续满足：
 
 - 通过现有 C ABI 调用，不改变 Rust 公共契约；
-- 对比解析、AST 遍历、SVG 生成、批量转换的吞吐和峰值内存；
-- 比较静态链接、跨平台构建、WASM 兼容和调试成本；
-- 只有在真实数据证明收益并通过 ABI/安全审查后，才进入 Core 主线。
+- 对比目标热点的吞吐、P95/P99、峰值内存和二进制体积；
+- 覆盖 Windows、Linux、macOS 和 Android ARM64，并评估 WASM 兼容；
+- 只有中位延迟至少改善 20%、内存无实质回退且通过 ABI/安全审查后，才进入 Core 主线。
 
 MathLive/KaTeX 的替换也应先保留兼容 fallback，等 10,000 条渲染和 Office 预览数据通过后再移除依赖，避免把 UI 渲染重构和 Office 收尾混成一个不可回滚的大改动。
 
