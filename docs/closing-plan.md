@@ -255,10 +255,10 @@ README 中文和英文都应展示：
 DOCX round-trip 后仍有确定性包 token；XLSX OLE 编辑能力明确为
 `unsupported`。真实 Word 域更新、OLE 激活、剪贴板和批量插入仍属于
 阶段 D，不能由包测试代替。
-- [ ] Office 加载项功能排版和调整让用户可更舒适快捷使用。
 
 ### 阶段 D：真实 Office 和 OLE
 
+- [ ] Office 加载项功能排版和调整让用户可更舒适快捷使用。
 - [ ] 在固定 Windows/Office 环境安装并校验 OLE DLL；
 - [ ] Word/Excel/PowerPoint 逐项执行插入、保存、重开、回读；
 - [ ] 保存截图、PDF、OOXML diff、安装日志和版本信息；
