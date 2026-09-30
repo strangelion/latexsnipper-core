@@ -13,6 +13,8 @@ use latexsnipper_evaluation::formula_evaluation::{
 use serde::{Deserialize, Serialize};
 use std::fmt::Write as _;
 
+use crate::process_memory::peak_resident_set_bytes;
+
 pub const FORMULA_CORPUS_BENCHMARK_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -149,7 +151,12 @@ pub fn render_formula_corpus_benchmark_markdown(
         None => writeln!(output, "- Throughput: **Not measured**").unwrap(),
     }
     match summary.peak_memory_bytes {
-        Some(bytes) => writeln!(output, "- Peak process memory: **{bytes} bytes**").unwrap(),
+        Some(bytes) => writeln!(
+            output,
+            "- Peak process resident memory (lifetime high-water mark): **{bytes} bytes ({:.2} MiB)**",
+            bytes as f64 / (1024.0 * 1024.0)
+        )
+        .unwrap(),
         None => writeln!(output, "- Peak process memory: **Not measured**").unwrap(),
     }
     writeln!(output).unwrap();
@@ -231,6 +238,18 @@ pub fn run_formula_corpus_benchmark(
         generated_at_utc.clone(),
     )?;
     let summary = &evaluation.summary;
+    let peak_memory_bytes = peak_resident_set_bytes();
+    let mut limitations = vec![
+        "peak resident memory is the process lifetime high-water mark and includes startup, corpus loading, evaluation, and report construction".to_string(),
+        "the deterministic full tier is synthetic contract-scale evidence, not accuracy on 10,000 independent real-world formulas".to_string(),
+        "Microsoft Office application fidelity requires the external Office harness".to_string(),
+    ];
+    if peak_memory_bytes.is_none() {
+        limitations.insert(
+            0,
+            "peak process memory is unavailable on this runner platform".to_string(),
+        );
+    }
     let benchmark = FormulaCorpusBenchmarkReport {
         schema_version: FORMULA_CORPUS_BENCHMARK_SCHEMA_VERSION,
         plan_id: evaluation.plan_id.clone(),
@@ -262,12 +281,8 @@ pub fn run_formula_corpus_benchmark(
             parse_latency: summary.parse_latency.clone(),
             conversion_latency: summary.conversion_latency.clone(),
             round_trip_latency: summary.round_trip_latency.clone(),
-            peak_memory_bytes: None,
-            limitations: vec![
-                "peak process memory is not measured by the portable corpus runner".to_string(),
-                "the deterministic full tier is synthetic contract-scale evidence, not accuracy on 10,000 independent real-world formulas".to_string(),
-                "Microsoft Office application fidelity requires the external Office harness".to_string(),
-            ],
+            peak_memory_bytes,
+            limitations,
         },
     };
     Ok((benchmark, evaluation))
@@ -313,12 +328,16 @@ mod tests {
         assert!(benchmark.summary.parse_latency.p50_ns <= benchmark.summary.parse_latency.p95_ns);
         assert!(benchmark.summary.parse_latency.p95_ns <= benchmark.summary.parse_latency.p99_ns);
         assert!(benchmark.summary.records_per_second.is_some());
-        assert_eq!(benchmark.summary.peak_memory_bytes, None);
+        #[cfg(any(windows, unix))]
+        assert!(benchmark
+            .summary
+            .peak_memory_bytes
+            .is_some_and(|bytes| bytes > 0));
         assert!(benchmark
             .summary
             .limitations
             .iter()
-            .any(|limitation| limitation.contains("not measured")));
+            .any(|limitation| limitation.contains("lifetime high-water mark")));
 
         let markdown = render_formula_corpus_benchmark_markdown(
             &plan,
@@ -330,6 +349,8 @@ mod tests {
         assert!(markdown.contains("**Verified**"));
         assert!(markdown.contains("**Not measured**"));
         assert!(markdown.contains("**Not claimed**"));
+        #[cfg(any(windows, unix))]
+        assert!(markdown.contains("lifetime high-water mark"));
         assert!(markdown.contains("Contract pass rates are not model accuracy"));
         assert!(markdown.ends_with('\n'));
     }

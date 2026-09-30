@@ -26,6 +26,9 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [[bin]]
 name = "latexsnipper-benchmark"
 path = "src/main.rs"

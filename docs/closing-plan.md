@@ -234,7 +234,7 @@ README 中文和英文都应展示：
 - [x] 实现确定性语料生成器和 manifest；
 - [x] 生成小规模 pilot，冻结 schema、覆盖标签和摘要；
 - [x] 接入 `crates/evaluation` pilot runner，输出解析、转换、回转和耗时证据；
-- [x] 接入 `crates/benchmark` full runner 和分位数、吞吐统计；峰值内存仍明确为未测量；
+- [x] 接入 `crates/benchmark` full runner、分位数、吞吐和进程生命周期峰值常驻内存统计；
 - [x] 接入 scheduled 10,000 条 full runner，并输出各阶段 P50/P95/P99；
 - [x] 生成 pilot / PR JSON 报告和预期结果分类证据；
 - [x] 冻结错误 LaTeX 的结构诊断，并在 PR 语料门禁预期结果分类；

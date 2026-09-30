@@ -8,6 +8,8 @@ pub mod formula;
 pub mod formula_corpus;
 pub mod table;
 
+mod process_memory;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
