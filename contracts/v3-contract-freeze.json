@@ -16,7 +16,7 @@
     "contracts/schema/drawing-readiness-v1.schema.json": "80b2b0564a8f6cbb93120f0fffdd9de9400999e292f1c5f9b37b75810e6f54a4",
     "contracts/schema/editable-object-v1.schema.json": "c5360dd7cf59fb14871fcd2e25e8d1e1be3a13ca1b0688ebbb727902d47bf864",
     "crates/api-types/src/v3.rs": "c9ad460a6d7fd6d3de86145cd575ca9b3fb1d74fb5f2016113b4f26853f62ffb",
-    "crates/cli/src/main.rs": "cfd4d314c5dd976cfea0a0bf90af9e23f5883e0876572f34690046b395f0cd4c",
+    "crates/cli/src/main.rs": "d8ecd3b8dae8360006eb558f4a831b74fba1f66aaeb7957a3b2b34e73a381afa",
     "crates/conversion/src/capability_registry.rs": "8d3dc7a94a3c77ed6f8b2fb26d424a2eb434663b6bb984e9ddd0f66a43a18a24",
     "crates/evaluation/src/failure_corpus.rs": "ab4e6012a2ae8c25786cdd616a4c711b996c73bd5a804940173e2d576ba4a80e",
     "crates/evaluation/src/int8.rs": "db9a4d1a6e6c60e7e5a3e431da8150b7d292fc1de719a4f9721d2923b4903d23",
