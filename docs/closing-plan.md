@@ -224,8 +224,8 @@ README 中文和英文都应展示：
 
 ### 阶段 A：整理与冻结范围
 
-- [ ] 建立 Core / Office / GUI 三栏问题台账；
-- [ ] 为每一项指定负责人、仓库、证据类型和阻塞级别；
+- [x] 在 [closing-issue-ledger.md](closing-issue-ledger.md) 建立 Core / Office / GUI 三栏问题台账；
+- [x] 为每一项指定维护责任、仓库、证据类型和 P0-P3 阻塞级别；
 - [x] 冻结 10,000 条语料 schema、seed 和类别配额；
 - [x] 明确普通公式、绘图、化学、OCR 的独立指标。
 
