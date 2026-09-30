@@ -190,6 +190,12 @@ lifetime high-water resident set/working set and therefore includes startup,
 corpus loading, evaluation, and report construction rather than claiming to be
 an isolated parser allocation delta. Unsupported hosts retain `Not measured`.
 
+For the checked-in local evidence, execute the release command in three fresh
+processes, retain all three JSON reports, and publish the run with the median
+throughput. The Markdown environment label must state that selection method.
+This controls obvious single-run noise without presenting the selected report's
+latency samples or memory high-water mark as a statistical aggregate.
+
 The full tier is a synthetic contract-scale corpus produced by the reviewed
 deterministic compositional generator. Every valid record has a distinct
 normalized source, every valid category covers at least six grammar families,
