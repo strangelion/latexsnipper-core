@@ -66,11 +66,12 @@ generated report, checked-in fixture, or dated application test record.
 The 2026-09-30 O-01 evidence, completed O-05 Word field recalculation evidence,
 and partial O-02/O-03/O-04 real-host results are recorded in
 `strangelion/LaTeXSnipper-Office` at `docs/office/real-host-acceptance.md`.
-Office commit `0d0d34548bf8d0b9ab53b7a098b12dd604b04708` records 78/78 native
-OMML save/reopen checks plus chapter `STYLEREF`/reset `SEQ`, `REF` and `PAGEREF`
-displayed-value verification after reopen. O-02 through O-04 remain open until
-their checked-in OOXML difference summaries and remaining host matrices are
-complete.
+Office harness commit `4cf6d74d45396fbd5b7fc096294b138d7502b516` and evidence
+record `9eea8707d5c992f58c20b9b813e613d9f6703b98` cover a stale-value
+transition: after deleting the preceding numbered formula, target `SEQ` and
+`REF` remain at `2`, a document-wide field update changes both to `1`, and the
+values remain `1` after save/reopen. O-02 through O-04 remain open until their
+checked-in OOXML difference summaries and remaining host matrices are complete.
 
 - Core package evidence does not close OLE activation, clipboard, or real
   batch-insertion rows; O-05 is closed only by the linked real Word harness.

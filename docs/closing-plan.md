@@ -42,7 +42,7 @@ Core 负责解析、统一 AST、转换、渲染、包结构验证和可重复 b
 | Office 包 | Core 已有六维、可计数 package round-trip 证据，不等于真实 Office 视觉一致 | DOCX/PPTX/XLSX 在真实应用重新打开、保存和回读报告 |
 | Office GUI | Word/Excel/PowerPoint 的实际插入方式未形成完整矩阵 | 应用版本、截图/PDF、回读结果、失败原因 |
 | OLE | x64 DLL 打包、安装、注册和 Word/Excel/PowerPoint 回读已在 2026-09-30 真机验证 | x86 Office、不同 DPI/RDP 和剩余宿主操作矩阵 |
-| 交叉引用 | Core 已覆盖书签、SEQ、REF 和安全的 dirty 更新请求；固定 Word 环境已验证章节编号及 REF/PAGEREF 保存重开 | UI 点击、跳转、公式目录及 OOXML 差异摘要 |
+| 交叉引用 | Core 已覆盖书签、SEQ、REF 和安全的 dirty 更新请求；固定 Word 环境已验证前置编号变化后的 SEQ/REF 重算及保存重开 | UI 点击、跳转、公式目录及 OOXML 差异摘要 |
 | OCR 模型 | readiness 不等于准确率，长时间 `running` 需纳入测试 | 模型身份、完成率、CER/Token 距离、超时和资源数据 |
 | Office 应用 UI | 公式库、自定义符号、预览、源码着色、主题、颜色选择器、布局和托盘行为属于应用层 | 真机 WebView2/Tauri 回归录像或截图、控制台/日志 |
 | Zig 结合 | Windows x86_64 隔离 C ABI pilot 已完成，现有候选未达到 1.20x 门槛，当前决定不接入主构建 | 只有跨平台 profile 找到新热点后才重开；现有报告见 reports/zig-image-kernel-pilot-2026-09-27.md |
@@ -253,14 +253,15 @@ README 中文和英文都应展示：
 
 当前增量已经验证 OMML、SVG、PNG、书签、`SEQ` 和 `REF` 在 Core
 DOCX round-trip 后仍有确定性包 token；XLSX OLE 编辑能力明确为
-`unsupported`。真实 Word 域更新、OLE 激活、剪贴板和批量插入仍属于
-阶段 D，不能由包测试代替。
+`unsupported`。真实 Word 域更新和 OLE 激活现已由独立宿主证据覆盖；
+剪贴板和批量插入仍属于阶段 D，不能由包测试代替。
 
 ### 阶段 D：真实 Office 和 OLE
 
 - [ ] Office 加载项功能排版和调整让用户可更舒适快捷使用。
 - [x] 在固定 Windows/Office 环境安装并校验 OLE DLL；
 - [x] 在真实 Word 中验证 78/78 原生 OMML 保存重开、章节 `STYLEREF`/重置 `SEQ` 以及 `REF`/`PAGEREF` 显示值；
+- [x] 在真实 Word 中删除前置编号公式，验证陈旧 `SEQ`/`REF` 经文档级更新同步变化并在保存重开后保持；
 - [ ] Word/Excel/PowerPoint 逐项执行插入、保存、重开、回读；
 - [ ] 保存截图、PDF、OOXML diff、安装日志和版本信息；
 - [ ] 记录 GUI、OLE、字体和尺寸问题；
@@ -272,8 +273,11 @@ x64 MSI 安装、DLL 哈希、COM 注册与真实 OLE 激活；Word 的 24 个 O
 OLE 与 2 个图片对象，已通过保存、关闭、重开和源状态回读。Word 还验证了
 章节 `STYLEREF`/重置 `SEQ` 的 `1.1` 显示值，以及 `REF` 的 `(1)` 和
 `PAGEREF` 的页码。详细记录位于 Office 仓库
-`docs/office/real-host-acceptance.md`，对应提交
-`0d0d34548bf8d0b9ab53b7a098b12dd604b04708`。阶段 D 仍未整体完成，因为
+`docs/office/real-host-acceptance.md`。2026-10-01 的 O-05 专项进一步删除前置
+编号公式，使目标 `SEQ`/`REF` 在刷新前保持陈旧值 `2`，文档级更新后同步为
+`1`，保存重开后仍为 `1`；宿主实现提交为
+`4cf6d74d45396fbd5b7fc096294b138d7502b516`，证据记录提交为
+`9eea8707d5c992f58c20b9b813e613d9f6703b98`。阶段 D 仍未整体完成，因为
 OOXML 差异摘要、公式目录、UI 交叉引用流程、批量/剪贴板和更多宿主几何操作
 尚缺证据。
 
