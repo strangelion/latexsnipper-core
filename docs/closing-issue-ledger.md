@@ -43,7 +43,7 @@ Blocker:
 | O-03 | Excel formula, image and supported object insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | workbook fixtures, screenshots, OOXML diff and readback result | P0 claim blocker | in progress |
 | O-04 | PowerPoint formula, image and supported object insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | presentation fixtures, screenshots, OOXML diff and readback result | P0 claim blocker | in progress |
 | O-05 | Word recalculates dirty SEQ and REF fields | Office integration maintainer | strangelion/LaTeXSnipper-Office | Word automation or manual harness showing updated displayed values after reopen | P0 claim blocker | done |
-| O-06 | Batch insertion and clipboard ownership | Office integration maintainer | strangelion/LaTeXSnipper-Office | repeatable application harness with counts, timing and failure artifacts | P1 | not started |
+| O-06 | Batch insertion and clipboard ownership | Office integration maintainer | strangelion/LaTeXSnipper-Office | repeatable application harness with counts, timing and failure artifacts | P1 | in progress |
 | O-07 | Office command layout, sizing and typography | Office UX maintainer | strangelion/LaTeXSnipper-Office | wide and portrait screenshots plus interaction regression checklist | P2 | in progress |
 
 ## GUI and desktop runtime
@@ -75,6 +75,12 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
 
 - Core package evidence does not close OLE activation, clipboard, or real
   batch-insertion rows; O-05 is closed only by the linked real Word harness.
+- O-06 partial evidence (2026-10-02): real Word scanned 250 instances of one
+  Core-generated integral with four delimiter forms. 249 converted, one injected
+  invalid payload preserved its source; adjacent prose and counts survived reopen.
+  Clipboard sequence stayed unchanged. A 100-item chunk took 114.5 seconds, so
+  Office now uses 25-item chunks. This is not formula-diversity accuracy, pipe
+  timeout reconciliation, actual clipboard paste, or Excel/PowerPoint coverage.
 - A screenshot alone does not close an editability or round-trip row.
 - A successful application smoke does not replace deterministic Core contracts.
 - Current-release capability claims must omit or clearly label every open P0

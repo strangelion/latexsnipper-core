@@ -5,6 +5,10 @@ use crate::context::PipelineContext;
 
 /// A node in the pipeline graph.
 /// Each node processes context and may produce side effects.
+// async_trait adds #[must_use] to its boxed Future; Rust 1.99 flags that
+// generated attribute as redundant. Keep object-safe async dispatch and scope
+// the compatibility allowance to this trait rather than disabling the lint.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait PipelineNode: Send + Sync {
     /// Unique name for this node.
