@@ -82,6 +82,12 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   Office now uses 25-item chunks. This is not formula-diversity accuracy, pipe
   timeout reconciliation, actual clipboard paste, or Excel/PowerPoint coverage.
 - A screenshot alone does not close an editability or round-trip row.
+- O-06 regression (2026-10-03): Office Word/Excel/PowerPoint batch handlers now
+  return the original request/session IDs; previously empty IDs could leave the
+  desktop waiting after the document was already modified. Shared C# wire tests
+  and five Tokio waiter tests cover correlation, late completion, bounded final
+  timeout and disconnect cleanup. These are not real-host end-to-end acceptance;
+  the row remains in progress. See the dated Office real-host acceptance record.
 - A successful application smoke does not replace deterministic Core contracts.
 - Current-release capability claims must omit or clearly label every open P0
   row.
