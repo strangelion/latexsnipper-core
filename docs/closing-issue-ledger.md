@@ -89,6 +89,25 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   timeout and disconnect cleanup. These are not real-host end-to-end acceptance;
   the row remains in progress. See the dated Office real-host acceptance record.
 - A successful application smoke does not replace deterministic Core contracts.
+- O-06 story acceptance (2026-10-03): Office's real Word harness converted seven
+  body/header/footer/text-frame formulas, retained adjacent prose and persistent
+  IDs/source/OMML after reopen, rejected invalid locators and stale hashes, and
+  tested duplicate/Unicode/long source positions. A floating shape anchor had
+  shifted body offsets because Word positions differ from plain-text offsets;
+  story-local lookup and exact source/prefix checks now guard that case.
+  The 250-item body regression remains 249 converted, one injected invalid item
+  preserved, zero execution failures, unchanged clipboard and successful reopen;
+  328.093 seconds total, 18.136–48.795 seconds per 25-item chunk. Not a diversity
+  accuracy or speedup claim. Pipe, display layout and other-host rows remain open.
+- O-06 follow-up explicitly queued (2026-10-03): undelimited LaTeX selection
+  conversion, opt-in full-document candidates, preprocessed ID/revision/hash
+  indexing, unchanged-formula caching, batched manifest writes and field refresh,
+  and an optional saved-copy-only offline DOCX path. Profile and benchmark before
+  claiming speed improvements. See Office `docs/office/batch-update-plan.md`.
+- Office package verification run 37098619175 at bb268a6 passed on all three
+  platforms; the Windows unattended certificate step and install/reinstall/
+  upgrade/uninstall passed. This validates that commit's package gate, not the
+  newer story-fix source or release WebView2/real desktop pipe acceptance.
 - Current-release capability claims must omit or clearly label every open P0
   row.
 - The tag gate also requires the release checklist, frozen-contract verification,
