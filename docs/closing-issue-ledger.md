@@ -110,5 +110,20 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   newer story-fix source or release WebView2/real desktop pipe acceptance.
 - Current-release capability claims must omit or clearly label every open P0
   row.
+- O-06 raw-selection progress (2026-10-03): Office's real Word native harness
+  read fractions, scripts, matrices and multiline selections without mutation,
+  rejected prose/paths/incomplete syntax, retained rejected/stale duplicate
+  sources, converted three body/header/text-frame selections and retained
+  source/OMML after reopen (4.578 seconds). Desktop and Office.js preview/confirm
+  UI is being verified separately; this native harness does not close their
+  end-to-end pipe or Office.js-host gates. Core now exposes an opt-in strict
+  OMML guard so unknown commands/environments cannot silently disappear during
+  source replacement; 245 conversion unit tests and one doc-test pass without
+  default features. Legacy best-effort export remains compatible.
+- User follow-up (2026-10-03): add explicit source/target conversion choices,
+  including LaTeXSnipper OLE versus native OMML. VSTO is an add-in technology,
+  not a target format. MathType/MTEF and third-party OLE import/export need
+  separate capability detection and fixtures; do not advertise generic OLE
+  compatibility before proving it.
 - The tag gate also requires the release checklist, frozen-contract verification,
   clean tracked worktree, and green CI, WASM, CodeQL and scheduled hardening.

@@ -82,6 +82,169 @@ pub fn latex_to_omml(latex: &str) -> String {
     fix_omml(&omml)
 }
 
+/// Conservative opt-in validation for workflows that replace original source.
+/// The legacy converter remains best-effort; a successful XML serialization is
+/// not proof that an unknown macro/environment was faithfully converted.
+/// This guard rejects unsupported nodes and malformed structure, not all visual
+/// differences between TeX and Word (for example overset layout).
+pub fn validate_omml_latex(latex: &str) -> std::result::Result<(), String> {
+    if latex.trim().is_empty() || latex.len() > 65_536 {
+        return Err("OMML source is empty or exceeds the strict conversion limit".into());
+    }
+    if latex
+        .chars()
+        .filter(|c| matches!(c, '\\' | '^' | '_'))
+        .count()
+        > 512
+    {
+        return Err("OMML source exceeds the strict syntax complexity limit".into());
+    }
+    let diagnostics = latexsnipper_syntax::latex::validate_latex_structure(latex);
+    if let Some(diagnostic) = diagnostics.first() {
+        return Err(format!("{}: {}", diagnostic.code, diagnostic.message));
+    }
+    // Avoid deep recursive parsing of malicious or accidentally huge groups.
+    let mut depth: usize = 0;
+    let mut escaped = false;
+    for character in latex.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if character == '\\' {
+            escaped = true;
+            continue;
+        }
+        if character == '{' {
+            depth += 1;
+            if depth > 128 {
+                return Err("OMML source nesting limit exceeded".into());
+            }
+        }
+        if character == '}' {
+            depth = depth.saturating_sub(1);
+        }
+    }
+    validate_omml_node(&parse_latex(latex), 0)
+}
+
+fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(), String> {
+    use LatexNode::*;
+    if depth > 128 {
+        return Err("OMML syntax tree nesting limit exceeded".into());
+    }
+    let children: Vec<&LatexNode> = match node {
+        Text(_) | Operator(_) | Relation(_) | Greek(_) | Symbol(_) => Vec::new(),
+        Sequence(nodes)
+        | Group(nodes)
+        | Math { content: nodes, .. }
+        | Delimited { content: nodes, .. } => nodes.iter().collect(),
+        Command { name, args } => {
+            let minimum_args = match name.as_str() {
+                "binom" | "textcolor" | "color" => 2,
+                "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" | "underline"
+                | "tiny" | "scriptsize" | "footnotesize" | "small" | "normalsize" | "large"
+                | "Large" | "LARGE" | "huge" | "Huge" | "phantom" | "vphantom" | "hphantom"
+                | "boxed" | "tag" | "abs" | "norm" | "floor" | "ceil" => 1,
+                "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => 0,
+                _ => {
+                    return Err(format!(
+                        "Unsupported OMML command \\{name}; original source must be retained"
+                    ))
+                }
+            };
+            if args.len() < minimum_args {
+                return Err(format!("Incomplete OMML command \\{name}"));
+            }
+            args.iter().collect()
+        }
+        Superscript { base, exp } => vec![base, exp],
+        Subscript { base, sub } => vec![base, sub],
+        Fraction { num, den } => {
+            if num.is_empty() || den.is_empty() {
+                return Err("Incomplete OMML fraction".into());
+            }
+            vec![num, den]
+        }
+        SquareRoot { index, content } => {
+            if content.is_empty() {
+                return Err("Incomplete OMML square root".into());
+            }
+            index
+                .iter()
+                .map(Box::as_ref)
+                .chain(std::iter::once(content.as_ref()))
+                .collect()
+        }
+        FontModifier { content, .. } | Accent { content, .. } => vec![content],
+        OperatorName { args, .. } => args.iter().collect(),
+        Matrix { env, rows } => {
+            if env == "array" {
+                return Err("OMML array column specifications require separate validation".into());
+            }
+            rows.iter().flatten().collect()
+        }
+        Cases(rows) => rows.iter().flatten().collect(),
+        Overbrace { content, label } | Underbrace { content, label } => {
+            std::iter::once(content.as_ref())
+                .chain(label.iter().map(Box::as_ref))
+                .collect()
+        }
+        Overset { top, base } => vec![top, base],
+        Underset { bottom, base } => vec![bottom, base],
+        XArrow { above, below, .. } => above.iter().chain(below.iter()).map(Box::as_ref).collect(),
+        _ => {
+            return Err(
+                "Document-only LaTeX constructs are not supported as a single OMML formula".into(),
+            )
+        }
+    };
+    for child in children {
+        validate_omml_node(child, depth + 1)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod strict_selection_tests {
+    use super::validate_omml_latex;
+
+    #[test]
+    fn strict_guard_accepts_supported_math() {
+        for source in [
+            r"\frac{a}{b}",
+            r"x^2+y_1=0",
+            r"\int_0^1 x\,dx",
+            r"\sqrt{\frac{a}{b}}",
+            r"\begin{pmatrix}a&b\\c&d\end{pmatrix}",
+            r"\begin{aligned}x&=1\\y&=2\end{aligned}",
+            r"\begin{cases}x&x>0\\0&x\leq0\end{cases}",
+        ] {
+            assert!(validate_omml_latex(source).is_ok(), "{source}");
+        }
+    }
+
+    #[test]
+    fn strict_guard_rejects_silent_macro_loss_and_malformed_source() {
+        for source in [
+            r"\mysymbol+1",
+            r"\frac{a}{\mysymbol}",
+            r"\begin{tikzpicture}x\end{tikzpicture}",
+            r"\frac{a}{",
+            r"\frac",
+            r"\sqrt{}",
+            r"\begin{matrix}a&b",
+            r"\colorbox{red}{x}",
+        ] {
+            assert!(
+                validate_omml_latex(source).is_err(),
+                "must reject: {source}"
+            );
+        }
+        assert!(validate_omml_latex(&format!("{}x{}", "{".repeat(129), "}".repeat(129))).is_err());
+    }
+}
+
 /// Walk the AST and generate OMML XML.
 fn ast_to_omml(node: &LatexNode) -> String {
     if let Some(nary) = normalize_nary_head(node) {
