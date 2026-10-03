@@ -148,6 +148,19 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             if italic {
                 result = format!("\\mathit{{{}}}", result);
             }
+            let display = attrs
+                .split_whitespace()
+                .find_map(|part| part.strip_prefix("displaystyle="));
+            let level = attrs
+                .split_whitespace()
+                .find_map(|part| part.strip_prefix("scriptlevel="));
+            if level == Some("0") {
+                match display {
+                    Some("true") => result = format!("{{\\displaystyle {result}}}"),
+                    Some("false") => result = format!("{{\\textstyle {result}}}"),
+                    _ => {}
+                }
+            }
             result
         }
 

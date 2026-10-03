@@ -269,6 +269,15 @@ impl LatexParser {
                     den: Box::new(den),
                 })
             }
+            // Styled fractions retain their command and exactly two operands.
+            "dfrac" | "tfrac" => {
+                let num = self.parse_single();
+                let den = self.parse_single();
+                Some(LatexNode::Command {
+                    name: cmd,
+                    args: vec![num, den],
+                })
+            }
             // Square root
             "sqrt" => {
                 let mut index = None;

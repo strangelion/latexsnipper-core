@@ -11,6 +11,26 @@ fn convert_typst_expr(s: &str) -> String {
         return String::new();
     }
 
+    // Only unwrap a style call when its closing delimiter ends the expression.
+    for (prefix, style) in [("display(", "displaystyle"), ("inline(", "textstyle")] {
+        if let Some(tail) = s.strip_prefix(prefix) {
+            let mut depth = 1;
+            for (index, ch) in tail.char_indices() {
+                match ch {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                if depth == 0 {
+                    if index + 1 == tail.len() {
+                        return format!("{{\\{style} {}}}", convert_typst_expr(&tail[..index]));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     if let Some(inner) = s.strip_prefix("frac(") {
         if let Some((num, den)) = split_typst_call_args(inner) {
             return format!(

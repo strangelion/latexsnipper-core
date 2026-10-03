@@ -153,6 +153,14 @@ fn convert_inline_to_mathml(inline: &Inline, mode: &MathmlMode) -> String {
 
 fn latex_to_mathml(latex: &str) -> String {
     let latex = latex.trim();
+    let chars: Vec<char> = latex.chars().collect();
+    if chars.first() == Some(&'{') {
+        if let Some((inner, end)) = read_braced_group(&chars, 0) {
+            if end == chars.len() {
+                return format!("<mrow>{}</mrow>", latex_to_mathml(&inner));
+            }
+        }
+    }
 
     if let Some(rendered) = render_styled_sequence(latex) {
         return rendered;
@@ -792,6 +800,15 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
     let mut found_style = false;
 
     while pos < chars.len() {
+        // Operand groups are rendered recursively by their owning command.
+        // A declaration inside a group must not consume the outer expression.
+        if chars[pos] == '{' {
+            if let Some((_, end)) = read_braced_group(&chars, pos) {
+                plain.extend(chars[pos..end].iter());
+                pos = end;
+                continue;
+            }
+        }
         if chars[pos] != '\\' {
             plain.push(chars[pos]);
             pos += 1;
@@ -806,6 +823,32 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
         let command: String = chars[cmd_start..cmd_end].iter().collect();
 
         match command.as_str() {
+            "dfrac" | "tfrac" => {
+                let Some((num, after_num)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                let Some((den, after_den)) = read_braced_group(&chars, after_num) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                flush_mathml_plain(&mut output, &mut plain);
+                let fraction = format!(
+                    "<mfrac><mrow>{}</mrow><mrow>{}</mrow></mfrac>",
+                    latex_to_mathml(&num),
+                    latex_to_mathml(&den)
+                );
+                let style = if command == "dfrac" {
+                    "displaystyle"
+                } else {
+                    "textstyle"
+                };
+                output.push_str(&math_style_mathml(style, &fraction));
+                pos = after_den;
+                found_style = true;
+            }
             "textcolor" => {
                 let Some((color, after_color)) = read_braced_group(&chars, cmd_end) else {
                     plain.push(chars[pos]);

@@ -40,6 +40,15 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     `cfrac`、`substack`；哈希、预期结构和严格拒绝/源码保留测试齐备。
     记录仍为 minimized，未宣称修复，也未提升到 approved/promoted。
   - [ ] 补齐环境、样式丢失、跨格式 AST/导出及性能超限台账，逐项修复并验收。
+  - 2026-10-04：`dfrac` / `tfrac` 已保留两项 AST 操作数，MathML 导出和回读保留
+    display/text 样式，Typst 使用 `display(frac(...))` / `inline(frac(...))` 并回读。
+    依据：https://typst.app/docs/reference/math/sizes/ 。嵌套、相邻表达式、上标有回归测试。
+    OMML 最佳努力保留分数结构，强制尺寸样式未经 Word 实测，严格模式仍拒绝。
+    原 minimized fixture 是哈希固定的入库失败证据，保持原文，不代表当前实现状态；
+    当前结构回归见 `crates/conversion/tests/styled_fractions.rs`。
+    `cfrac` / `substack` 和完整跨格式保真仍待实现，不将本批记作 FMT-02/03 全部完成。
+    本批范围是花括号操作数；轻量 257 项、原生 297 项测试通过，Clippy、WASM
+    编译和冻结检查通过。未运行 Typst 排版或 Word 尺寸视觉验收。
 - [ ] FMT-03：优先覆盖分数/根式、上下标、定界符、矩阵、align/cases、嵌套积分、
   概率统计和化学输入；保留源区间，未知命令不能静默掉字或冒充可编辑目标。
 - [ ] FMT-04：对每条补全运行 LaTeX 与 MathML/OMML/Typst 的结构/语义往返、
