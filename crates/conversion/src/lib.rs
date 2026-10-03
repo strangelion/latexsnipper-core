@@ -55,7 +55,8 @@ pub use asset_helper::{
 pub use capability_registry::{
     export_format_aliases, export_format_is_binary, export_format_label, export_mime_type,
     semantic_aliases, semantic_mime_type, CapabilityRegistry, CapabilityTarget,
-    TargetFormatCapability, REGISTERED_EXPORT_FORMATS,
+    FormulaConversionCapability, FormulaConversionMode, FormulaInputFormat, TargetFormatCapability,
+    REGISTERED_EXPORT_FORMATS,
 };
 #[cfg(feature = "native")]
 pub use clipboard::ClipboardBundle;

@@ -357,7 +357,9 @@ MathLive/KaTeX 的替换也应先保留兼容 fallback，等 10,000 条渲染和
 用户要求主流公式格式归 Core 管理，并持续补齐缺失的 LaTeX 支持。
 FMT-01–07 的能力矩阵、失败样例台账、语法/AST/导出补全、UnicodeMath/AsciiMath
 pilot 和 MathType/MTEF 边界见 [formula-format-roadmap.md](formula-format-roadmap.md)。
-这些项目仍待实现，不以 Office 新增弹窗或已有导出枚举作为完成证据。
+这些项目整体尚未完成，不以 Office 新增弹窗或已有导出枚举作为完成证据。
+FMT-01 已完成首批 Rust 模式入口、共享能力方向投影和可测试的生成矩阵；
+C/Python/JS 接入及 FMT-02 失败语料台账继续待办。具体子项以该路线图为准。
 Office 本应用行内/行间 OMML/OLE 双向及保存重开专项已通过；编号引用、跨故事、
 真实桌面管道和实际 Office.js 宿主继续列在 O-06 门禁。
 

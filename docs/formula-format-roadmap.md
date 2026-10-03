@@ -29,6 +29,11 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
 
 - [ ] FMT-01：将输入方向与严格/最佳努力模式补进现有能力投影，输出可读支持矩阵；
   保持已有 API 兼容，并明确 WASM、C/Python 与原生运行时限制。
+  - [x] Rust 能力投影包含输入、目标、模式、重建路径和拒绝原因，复用现有导出注册表。
+  - [x] 新增 `DocumentConverter::convert_formula_string`；旧函数与既有序列化字段不变。
+  - [x] [生成矩阵](generated/formula-capabilities.md)含原生/WASM 方向及尚未实现输入；
+    表格漂移由转换 crate 测试阻止。5 种现有输入各测试 9 个语义输出，另测严格拒绝。
+  - [ ] C/Python/JS 的模式入口与能力投影尚未接入，不能从 Rust 可编译推断绑定可调用。
 - [ ] FMT-02：记录 Office/Core 失败样例，按缺失命令、环境、AST 节点、导出节点、
   样式损失、性能超限分类；每条都先有可复现的预期结构再实现，不只补渲染别名。
 - [ ] FMT-03：优先覆盖分数/根式、上下标、定界符、矩阵、align/cases、嵌套积分、
@@ -49,3 +54,12 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
 不是综合准确率）。编号/交叉引用迁移、跨故事、真实桌面管道和实际 Office.js
 宿主仍未验收。详见 Office 仓库 `docs/office/batch-update-plan.md` 与
 `docs/office/real-host-acceptance.md`；Core 不因此宣称第三方格式兼容已完成。
+
+## 本轮契约审查
+
+FMT-01 首批是 Rust 增量 API；没有修改旧的 `TargetFormatCapability` 字段、
+`OutputFormat` 枚举、旧转换接口、C ABI 或 v3/WASM envelope。
+严格模式目前仅调用现有 LaTeX→OMML 源校验，不代表任意源无损；其他严格路线
+拒绝执行。UnicodeMath、AsciiMath、MTEF 仅登记 unsupported，没有新增 parser。
+按上述差异复核后刷新 `v3-contract-freeze.json`，不删减合约文件或公共源码树门禁。
+生成矩阵及轻量/原生回归不替代全面语义准确率、Office 真机或浏览器 WASM 运行测试。

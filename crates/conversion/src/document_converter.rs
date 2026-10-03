@@ -11,9 +11,9 @@ use crate::converter::collect_converter_diagnostics;
 use crate::converter::Converter;
 use crate::export_format::ExportFormat;
 use crate::{
-    HtmlConverter, LatexConverter, LatexDisplayConverter, LatexEquationConverter,
-    MarkdownBlockConverter, MarkdownInlineConverter, MathmlConverter, OmmlConverter,
-    TypstConverter,
+    CapabilityRegistry, CapabilityTarget, FormulaConversionMode, FormulaInputFormat, HtmlConverter,
+    LatexConverter, LatexDisplayConverter, LatexEquationConverter, MarkdownBlockConverter,
+    MarkdownInlineConverter, MathmlConverter, OmmlConverter, TypstConverter,
 };
 
 /// Supported output formats.
@@ -93,6 +93,50 @@ pub struct DocumentConverter {
 }
 
 impl DocumentConverter {
+    /// Convert a declared formula string input using the shared capability gate.
+    /// Strict currently guards LaTeX to OMML source syntax; it is not a claim of
+    /// lossless layout or support for arbitrary macros. Legacy APIs are unchanged.
+    pub fn convert_formula_string(
+        content: &str,
+        input: FormulaInputFormat,
+        output: OutputFormat,
+        mode: FormulaConversionMode,
+    ) -> Result<String> {
+        if content.trim().is_empty() {
+            return Err(latexsnipper_foundation::SnipperError::Conversion(
+                "formula input is empty".to_string(),
+            ));
+        }
+        let target = if cfg!(target_arch = "wasm32") {
+            CapabilityTarget::Wasm32UnknownUnknown
+        } else {
+            CapabilityTarget::Native
+        };
+        let capability = CapabilityRegistry::formula_conversion(input, output, mode, target);
+        if !capability.available {
+            return Err(latexsnipper_foundation::SnipperError::Conversion(
+                capability
+                    .unavailable_reason
+                    .unwrap_or("conversion unavailable")
+                    .to_string(),
+            ));
+        }
+        if mode == FormulaConversionMode::Strict {
+            crate::omml::validate_omml_latex(content)
+                .map_err(latexsnipper_foundation::SnipperError::Conversion)?;
+        }
+        match input {
+            FormulaInputFormat::Latex => Self::convert_latex_string(content, output),
+            FormulaInputFormat::Mathml => Self::convert_mathml_string(content, output),
+            FormulaInputFormat::Omml => Self::convert_omml_string(content, output),
+            FormulaInputFormat::Typst => Self::convert_typst_string(content, output),
+            FormulaInputFormat::Markdown => Self::convert_markdown_string(content, output),
+            _ => Err(latexsnipper_foundation::SnipperError::Conversion(
+                "input parser is not implemented".to_string(),
+            )),
+        }
+    }
+
     pub fn new(format: OutputFormat) -> Self {
         Self { format }
     }

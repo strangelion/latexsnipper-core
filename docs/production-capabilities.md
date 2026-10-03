@@ -15,6 +15,24 @@ from that executable registry in CI; drift fails the build.
 
 ## Stability classes
 
+Formula string direction/mode support has a separate
+[generated projection](generated/formula-capabilities.md) of the **same conversion registry**.
+It covers the additive Rust `DocumentConverter::convert_formula_string` entry point.
+LaTeX, MathML, OMML, Typst and Markdown use existing parsers/exporters; reconstructed
+LaTeX does not recover the original author source. Strict mode currently guards only
+LaTeX to OMML source syntax, not complete semantic or visual fidelity. Other strict
+routes and UnicodeMath/AsciiMath/MTEF inputs fail explicitly. C/Python/JS mode-aware
+bindings remain pending; their existing endpoints and export metadata are unchanged.
+
+Regenerate/check the formula projection with:
+
+```bash
+cargo run --locked -p latexsnipper-conversion --no-default-features \
+  --bin generate_formula_capabilities -- --output docs/generated/formula-capabilities.md
+cargo run --locked -p latexsnipper-conversion --no-default-features \
+  --bin generate_formula_capabilities -- --check docs/generated/formula-capabilities.md
+```
+
 | Class | Contract |
 |---|---|
 | Stable | In-process implementation, public API/CLI path, semantic tests, and no known mandatory external service. |

@@ -46,7 +46,136 @@ pub struct TargetFormatCapability {
 
 pub struct CapabilityRegistry;
 
+/// Formula string inputs, separate from image recognition and host containers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FormulaInputFormat {
+    Latex,
+    Mathml,
+    Omml,
+    Typst,
+    Markdown,
+    UnicodeMath,
+    AsciiMath,
+    Mtef,
+}
+
+impl FormulaInputFormat {
+    pub const fn all() -> &'static [Self] {
+        &[
+            Self::Latex,
+            Self::Mathml,
+            Self::Omml,
+            Self::Typst,
+            Self::Markdown,
+            Self::UnicodeMath,
+            Self::AsciiMath,
+            Self::Mtef,
+        ]
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Latex => "latex",
+            Self::Mathml => "mathml",
+            Self::Omml => "omml",
+            Self::Typst => "typst",
+            Self::Markdown => "markdown",
+            Self::UnicodeMath => "unicode-math",
+            Self::AsciiMath => "ascii-math",
+            Self::Mtef => "mtef",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FormulaConversionMode {
+    Strict,
+    BestEffort,
+}
+
+/// Executable string conversion support, not a lossless fidelity claim.
+/// `available` describes the Rust entry point, not its exposure through bindings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormulaConversionCapability {
+    pub input: FormulaInputFormat,
+    pub output: &'static str,
+    pub mode: FormulaConversionMode,
+    pub target: CapabilityTarget,
+    pub available: bool,
+    pub path: &'static str,
+    pub limitations: &'static [&'static str],
+    pub unavailable_reason: Option<&'static str>,
+}
+
 impl CapabilityRegistry {
+    pub fn formula_conversion(
+        input: FormulaInputFormat,
+        output: OutputFormat,
+        mode: FormulaConversionMode,
+        target: CapabilityTarget,
+    ) -> FormulaConversionCapability {
+        let export = Self::for_target(target)
+            .into_iter()
+            .find(|entry| entry.format == output.name())
+            .expect("all semantic formats are registered");
+        let path = match input {
+            FormulaInputFormat::Latex => "source-first",
+            FormulaInputFormat::Mathml | FormulaInputFormat::Omml | FormulaInputFormat::Typst => {
+                "reconstructed-latex"
+            }
+            FormulaInputFormat::Markdown => "document-ast",
+            _ => "unsupported",
+        };
+        let unavailable_reason = if path == "unsupported" {
+            Some("input parser is not implemented; host OLE objects are not string inputs")
+        } else if mode == FormulaConversionMode::Strict
+            && !(input == FormulaInputFormat::Latex && output == OutputFormat::OMML)
+        {
+            Some("strict validation is currently implemented only for LaTeX to OMML")
+        } else {
+            export.unavailable_reason
+        };
+        FormulaConversionCapability {
+            input,
+            output: export.format,
+            mode,
+            target,
+            available: export.available && unavailable_reason.is_none(),
+            path,
+            limitations: match mode {
+                FormulaConversionMode::Strict => &[
+                    "source-validation-is-not-a-lossless-or-visual-parity-guarantee",
+                    "custom-macros-and-unsupported-environments-are-rejected",
+                ],
+                FormulaConversionMode::BestEffort => &[
+                    "accepted-input-may-lose-unsupported-syntax-or-style",
+                    "reconstructed-latex-is-not-the-original-author-source",
+                    "no-complete-round-trip-guarantee",
+                ],
+            },
+            unavailable_reason,
+        }
+    }
+
+    pub fn formula_conversions(target: CapabilityTarget) -> Vec<FormulaConversionCapability> {
+        FormulaInputFormat::all()
+            .iter()
+            .flat_map(|&input| {
+                OutputFormat::all().iter().flat_map(move |&output| {
+                    [
+                        FormulaConversionMode::Strict,
+                        FormulaConversionMode::BestEffort,
+                    ]
+                    .into_iter()
+                    .map(move |mode| Self::formula_conversion(input, output, mode, target))
+                })
+            })
+            .collect()
+    }
+
     pub fn for_target(target: CapabilityTarget) -> Vec<TargetFormatCapability> {
         let mut entries = OutputFormat::all()
             .iter()
