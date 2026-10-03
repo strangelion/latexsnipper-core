@@ -46,7 +46,7 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     OMML 最佳努力保留分数结构，强制尺寸样式未经 Word 实测，严格模式仍拒绝。
     原 minimized fixture 是哈希固定的入库失败证据，保持原文，不代表当前实现状态；
     当前结构回归见 `crates/conversion/tests/styled_fractions.rs`。
-    `cfrac` 和完整跨格式保真仍待实现，不将本批记作 FMT-02/03 全部完成。
+    连分数与堆叠结构继续分批验收，不将本批记作 FMT-02/03 全部完成。
     本批范围是花括号操作数；轻量 257 项、原生 297 项测试通过，Clippy、WASM
     编译和冻结检查通过。未运行 Typst 排版或 Word 尺寸视觉验收。
   - 2026-10-04：接续未提交的 `substack` 实现，以 Command 的各项操作数保留各行；
@@ -57,6 +57,18 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     轻量 264 项、原生 304 项转换测试通过，Clippy、WASM 编译和格式检查通过。
     MathML/OMML 回读重建、任意 Typst 文档/空行往返及真实 Word 行距尺寸未验收，
     严格 OMML 继续拒绝；原 minimized 入库证据不修改、不提升为 promoted。
+  - 2026-10-04：`cfrac` 首批保留两项操作数、嵌套连分数与可选对齐源参数，
+    第三项 Command 参数专门存放该可选参数（不是第三个数学操作数）。
+    MathML 映射 display 样式，合法 `[l]` / `[r]` 映射为 `mfrac` 的
+    `numalign`；依据 [MathML 3 分数属性](https://www.w3.org/TR/MathML3/chapter3.html#presm.mfrac)。
+    Typst 映射为 display 分数、OMML 最佳努力保留分子/分母结构，但两者不保留
+    可选对齐；未知对齐仅保留源，MathML 最佳努力使用默认对齐，严格 OMML 均拒绝。
+    5 项专项覆盖嵌套、可选参数的 AST 回读、外围上下标、中文/空白、无效参数及
+    XML 属性注入防护，另检查导出的 XML 良构；测试不代表 MathML schema/宿主视觉验收。
+    本批限定花括号操作数，不承诺任意省略括号语法；Typst/MathML 回读会重建为
+    display 分数而非保证 `cfrac` 原命令身份，可选对齐回读尚未支持。
+    轻量 269 项、原生 309 项转换测试、Clippy、WASM 编译和冻结检查通过。
+    连分数具体尺寸、间距及浏览器对 `numalign` 的支持未实测；FMT-02–04 仍为部分完成。
 - [ ] FMT-03：优先覆盖分数/根式、上下标、定界符、矩阵、align/cases、嵌套积分、
   概率统计和化学输入；保留源区间，未知命令不能静默掉字或冒充可编辑目标。
 - [ ] FMT-04：对每条补全运行 LaTeX 与 MathML/OMML/Typst 的结构/语义往返、
@@ -84,6 +96,6 @@ FMT-01 首批是 Rust 增量 API；没有修改旧的 `TargetFormatCapability` �
 拒绝执行。UnicodeMath、AsciiMath、MTEF 仅登记 unsupported，没有新增 parser。
 按上述差异复核后刷新 `v3-contract-freeze.json`，不删减合约文件或公共源码树门禁。
 生成矩阵及轻量/原生回归不替代全面语义准确率、Office 真机或浏览器 WASM 运行测试。
-`substack` 本批复用既有 Command 表达行，没有新增公共枚举或序列化字段，
+`substack` 与 `cfrac` 本批复用既有 Command 表达行/操作数，没有新增公共枚举或序列化字段，
 没有改变 C ABI 或 WASM envelope；复核新增解析/导出和私有辅助函数后，
 只刷新 conversion 公共源码树哈希，保持全部冻结门禁。

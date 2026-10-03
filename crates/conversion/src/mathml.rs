@@ -841,8 +841,35 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
                 pos = end;
                 found_style = true;
             }
-            "dfrac" | "tfrac" => {
-                let Some((num, after_num)) = read_braced_group(&chars, cmd_end) else {
+            "dfrac" | "tfrac" | "cfrac" => {
+                let mut operand_start = cmd_end;
+                let mut alignment = "";
+                if command == "cfrac" {
+                    while chars
+                        .get(operand_start)
+                        .is_some_and(|ch| ch.is_whitespace())
+                    {
+                        operand_start += 1;
+                    }
+                    if chars.get(operand_start) == Some(&'[') {
+                        let Some(end) = chars[operand_start + 1..].iter().position(|ch| *ch == ']')
+                        else {
+                            plain.push(chars[pos]);
+                            pos += 1;
+                            continue;
+                        };
+                        let option: String = chars[operand_start + 1..operand_start + 1 + end]
+                            .iter()
+                            .collect();
+                        alignment = match option.trim() {
+                            "l" => " numalign=\"left\"",
+                            "r" => " numalign=\"right\"",
+                            _ => "",
+                        };
+                        operand_start += end + 2;
+                    }
+                }
+                let Some((num, after_num)) = read_braced_group(&chars, operand_start) else {
                     plain.push(chars[pos]);
                     pos += 1;
                     continue;
@@ -854,11 +881,11 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
                 };
                 flush_mathml_plain(&mut output, &mut plain);
                 let fraction = format!(
-                    "<mfrac><mrow>{}</mrow><mrow>{}</mrow></mfrac>",
+                    "<mfrac{alignment}><mrow>{}</mrow><mrow>{}</mrow></mfrac>",
                     latex_to_mathml(&num),
                     latex_to_mathml(&den)
                 );
-                let style = if command == "dfrac" {
+                let style = if command == "dfrac" || command == "cfrac" {
                     "displaystyle"
                 } else {
                     "textstyle"

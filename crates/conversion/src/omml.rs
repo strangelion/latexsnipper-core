@@ -501,7 +501,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 }
                 // Best effort preserves fraction structure; strict source
                 // validation still rejects unverified forced size styles.
-                "dfrac" | "tfrac" if args.len() == 2 => {
+                "dfrac" | "tfrac" | "cfrac" if args.len() >= 2 => {
                     ast_to_omml(&LatexNode::Fraction {
                         num: Box::new(args[0].clone()),
                         den: Box::new(args[1].clone()),

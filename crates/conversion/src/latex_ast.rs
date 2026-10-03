@@ -233,6 +233,13 @@ impl std::fmt::Display for LatexNode {
                 let rows = args.iter().map(ToString::to_string).collect::<Vec<_>>();
                 write!(f, "\\substack{{{}}}", rows.join("\\\\"))
             }
+            LatexNode::Command { name, args } if name == "cfrac" && args.len() >= 2 => {
+                write!(f, "\\cfrac")?;
+                if let Some(alignment) = args.get(2) {
+                    write!(f, "[{alignment}]")?;
+                }
+                write!(f, "{{{}}}{{{}}}", args[0], args[1])
+            }
             LatexNode::Command { name, args } => {
                 write!(f, "\\{}", name)?;
                 for arg in args {

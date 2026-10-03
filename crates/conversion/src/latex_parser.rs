@@ -280,6 +280,41 @@ impl LatexParser {
                     .collect();
                 Some(LatexNode::Command { name: cmd, args })
             }
+            // Continued fractions retain operands and optional source alignment.
+            "cfrac" => {
+                while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
+                    self.pos += 1;
+                }
+                let alignment = if self.chars.get(self.pos) == Some(&'[') {
+                    let start = self.pos + 1;
+                    if let Some(offset) = self.chars[start..].iter().position(|ch| *ch == ']') {
+                        self.pos = start + offset + 1;
+                        Some(LatexNode::Text(
+                            self.chars[start..start + offset].iter().collect(),
+                        ))
+                    } else {
+                        // Keep malformed optional syntax as source siblings, not operands.
+                        return Some(LatexNode::Command {
+                            name: cmd,
+                            args: Vec::new(),
+                        });
+                    }
+                } else {
+                    None
+                };
+                while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
+                    self.pos += 1;
+                }
+                let num = self.parse_single();
+                while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
+                    self.pos += 1;
+                }
+                let den = self.parse_single();
+                // The optional third item retains source alignment; it is not a math operand.
+                let mut args = vec![num, den];
+                args.extend(alignment);
+                Some(LatexNode::Command { name: cmd, args })
+            }
             // Styled fractions retain their command and exactly two operands.
             "dfrac" | "tfrac" => {
                 let num = self.parse_single();

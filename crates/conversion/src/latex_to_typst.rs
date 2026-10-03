@@ -284,6 +284,10 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
             }
         }
         "substack" => format!("script(vec(delim: none, {}))", arg_str.join(", ")),
+        // Best effort maps size and operands, not AMS strut spacing or optional alignment.
+        "cfrac" if arg_str.len() >= 2 => {
+            format!("display(frac({}, {}))", arg_str[0], arg_str[1])
+        }
         "dfrac" | "tfrac" if arg_str.len() == 2 => {
             let style = if name == "dfrac" { "display" } else { "inline" };
             format!("{style}(frac({}, {}))", arg_str[0], arg_str[1])
