@@ -7,7 +7,9 @@ Compiled support is not complete syntax coverage, losslessness or visual parity.
 Strict currently validates the supported LaTeX source subset before OMML export.
 Best-effort may lose unsupported syntax/style; reconstructed LaTeX is not author source.
 
-C/Python/JS bindings do not yet expose this new mode-aware entry point; their existing APIs are unchanged.
+Python exposes `convert_formula` and `formula_conversion_capabilities`; C/JS mode-aware bindings remain pending.
+The new entry point bounds source/reconstructed LaTeX to 64 KiB, 64 lexical nesting levels and 512 structural tokens.
+These are conservative per-call budgets, not syntax validation; existing APIs are unchanged.
 OLE is a host container, not a Core string format. VSTO is not a format.
 Visual/package outputs still use the existing export registry and runtime requirements.
 

@@ -21,8 +21,11 @@ It covers the additive Rust `DocumentConverter::convert_formula_string` entry po
 LaTeX, MathML, OMML, Typst and Markdown use existing parsers/exporters; reconstructed
 LaTeX does not recover the original author source. Strict mode currently guards only
 LaTeX to OMML source syntax, not complete semantic or visual fidelity. Other strict
-routes and UnicodeMath/AsciiMath/MTEF inputs fail explicitly. C/Python/JS mode-aware
-bindings remain pending; their existing endpoints and export metadata are unchanged.
+routes and UnicodeMath/AsciiMath/MTEF inputs fail explicitly. Python exposes
+`convert_formula` and `formula_conversion_capabilities` without a recognition session;
+C/JS mode-aware bindings remain pending. New per-call conservative budgets bound source
+and reconstructed LaTeX to 64 KiB, 64 lexical nesting levels and 512 structural tokens;
+XML DTDs are rejected. Existing endpoints and export metadata are unchanged.
 
 Regenerate/check the formula projection with:
 

@@ -16,6 +16,64 @@ use crate::{
     MarkdownInlineConverter, MathmlConverter, OmmlConverter, TypstConverter,
 };
 
+// Conservative per-call budgets for the new string API, not syntax validation.
+fn guard_formula_input(content: &str, xml: bool) -> Result<()> {
+    use latexsnipper_foundation::SnipperError;
+    const MAX_BYTES: usize = 64 * 1024;
+    const MAX_DEPTH: usize = 64;
+    const MAX_STRUCTURAL_TOKENS: usize = 512;
+    let exceeded = || {
+        SnipperError::LimitExceeded(
+            "formula string exceeds 64 KiB, 64 nesting levels, or 512 structural tokens".into(),
+        )
+    };
+    if content.len() > MAX_BYTES {
+        return Err(exceeded());
+    }
+    let mut depth = 0usize;
+    let mut tokens = 0usize;
+    if xml {
+        let mut reader = quick_xml::Reader::from_str(content);
+        loop {
+            match reader.read_event() {
+                Ok(quick_xml::events::Event::Start(_)) => {
+                    depth += 1;
+                    tokens += 1;
+                }
+                Ok(quick_xml::events::Event::Empty(_)) => tokens += 1,
+                Ok(quick_xml::events::Event::End(_)) => depth = depth.saturating_sub(1),
+                Ok(quick_xml::events::Event::DocType(_)) => {
+                    return Err(SnipperError::Conversion(
+                        "formula XML DTD is not supported".into(),
+                    ));
+                }
+                Ok(quick_xml::events::Event::Eof) => break,
+                Err(error) => return Err(SnipperError::Conversion(error.to_string())),
+                _ => {}
+            }
+            if depth > MAX_DEPTH || tokens > MAX_STRUCTURAL_TOKENS {
+                return Err(exceeded());
+            }
+        }
+    } else {
+        for ch in content.chars() {
+            match ch {
+                '{' | '(' | '[' => {
+                    depth += 1;
+                    tokens += 1;
+                }
+                '}' | ')' | ']' => depth = depth.saturating_sub(1),
+                '\\' | '^' | '_' => tokens += 1,
+                _ => {}
+            }
+            if depth > MAX_DEPTH || tokens > MAX_STRUCTURAL_TOKENS {
+                return Err(exceeded());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Supported output formats.
 ///
 /// NOTE: These are semantic conversion formats, not file export formats.
@@ -96,6 +154,8 @@ impl DocumentConverter {
     /// Convert a declared formula string input using the shared capability gate.
     /// Strict currently guards LaTeX to OMML source syntax; it is not a claim of
     /// lossless layout or support for arbitrary macros. Legacy APIs are unchanged.
+    /// This entry point bounds source and reconstructed LaTeX to 64 KiB,
+    /// 64 lexical nesting levels and 512 structural tokens per call.
     pub fn convert_formula_string(
         content: &str,
         input: FormulaInputFormat,
@@ -121,15 +181,29 @@ impl DocumentConverter {
                     .to_string(),
             ));
         }
+        guard_formula_input(
+            content,
+            matches!(input, FormulaInputFormat::Mathml | FormulaInputFormat::Omml),
+        )?;
         if mode == FormulaConversionMode::Strict {
             crate::omml::validate_omml_latex(content)
                 .map_err(latexsnipper_foundation::SnipperError::Conversion)?;
         }
         match input {
             FormulaInputFormat::Latex => Self::convert_latex_string(content, output),
-            FormulaInputFormat::Mathml => Self::convert_mathml_string(content, output),
-            FormulaInputFormat::Omml => Self::convert_omml_string(content, output),
-            FormulaInputFormat::Typst => Self::convert_typst_string(content, output),
+            FormulaInputFormat::Mathml | FormulaInputFormat::Omml | FormulaInputFormat::Typst => {
+                let latex = match input {
+                    FormulaInputFormat::Mathml => {
+                        crate::mathml_parser::parse_mathml_to_latex(content)
+                            .map_err(latexsnipper_foundation::SnipperError::Conversion)?
+                    }
+                    FormulaInputFormat::Omml => crate::omml_parser::parse_omml_to_latex(content)
+                        .map_err(latexsnipper_foundation::SnipperError::Conversion)?,
+                    _ => crate::typst_parser::parse_typst_to_latex(content),
+                };
+                guard_formula_input(&latex, false)?;
+                Self::convert_latex_string(&latex, output)
+            }
             FormulaInputFormat::Markdown => Self::convert_markdown_string(content, output),
             _ => Err(latexsnipper_foundation::SnipperError::Conversion(
                 "input parser is not implemented".to_string(),

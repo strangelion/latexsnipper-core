@@ -34,7 +34,43 @@ Long-running calls accept a cloneable `CancellationToken`. Its `cancel()`
 method can be called from another Python thread while recognition runs; Core
 observes it at safe pipeline boundaries, and the owning session remains usable.
 
+## Formula strings without recognition models
+
+```python
+from latexsnipper_core import convert_formula, formula_conversion_capabilities
+
+routes = formula_conversion_capabilities()  # 144 native direction/mode rows
+omml = convert_formula(r"\frac{a}{b}", input_format="latex", output_format="omml")
+latex = convert_formula(
+    "frac(a, b)", input_format="typst", output_format="latex", mode="best-effort",
+)
+```
+
+The default is `strict`: currently only the supported LaTeX-to-OMML source subset
+is accepted. All other strict routes fail explicitly. Select `best-effort` to use
+the existing LaTeX, MathML, OMML, Typst or Markdown parsers and nine semantic
+outputs. Reconstruction is not the author's original source, and unsupported
+syntax or style may be lost. Consult each row's `available`, `limitations` and
+`unavailableReason`; UnicodeMath, AsciiMath and MTEF remain unsupported. OLE is a
+host object, not a string format; this does not implement MathType conversion.
+
+Each new conversion call bounds its source and reconstructed LaTeX to 64 KiB,
+64 lexical nesting levels and 512 structural tokens (XML elements, or opening
+delimiters/backslashes/scripts). These conservative budgets are not a grammar
+validator; XML DTDs are rejected. Exceeding them raises `INPUT_TOO_LARGE`.
+Unavailable routes raise `UNSUPPORTED_FORMAT`, unknown labels/modes raise
+`INVALID_ARGUMENT`, and source/conversion failures raise `CONVERSION_FAILED`.
+Conversion releases the GIL and does not require or alter a `Session`.
+
+The installed-wheel smoke test covers all 144 advertised routes (46 successful
+conversions, including the strict route), invalid arguments, failure isolation
+and resource limits, alongside the existing persistent-session tests. It does
+not measure visual fidelity or real Office host compatibility.
+
 Build and install an editable development extension from this directory with:
+
+Use an existing non-base Conda/virtual environment and verify the active Python
+first. Do not install development packages into a frozen Conda base environment.
 
 ```console
 python -m maturin develop --release

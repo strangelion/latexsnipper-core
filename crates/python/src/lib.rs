@@ -7,7 +7,10 @@ use std::time::Duration;
 
 use latexsnipper_api_types::RecognitionProfile;
 use latexsnipper_ast::InputFormat;
-use latexsnipper_conversion::OutputFormat;
+use latexsnipper_conversion::{
+    CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
+    FormulaInputFormat, OutputFormat,
+};
 use latexsnipper_engine::application::{ApplicationError, RecognitionOptions, RuntimePreference};
 use latexsnipper_engine::application::{
     CancellationToken as CoreCancellationToken, RecognitionControl,
@@ -195,6 +198,62 @@ fn parse_output_formats(
         }
     }
     Ok(parsed)
+}
+
+fn formula_arguments(
+    input: &str,
+    output: &str,
+    mode: &str,
+) -> Result<(FormulaInputFormat, OutputFormat, FormulaConversionMode), BindingError> {
+    let input_label = input.trim().to_ascii_lowercase().replace('_', "-");
+    let input = FormulaInputFormat::all()
+        .iter()
+        .copied()
+        .find(|format| format.name() == input_label)
+        .ok_or_else(|| BindingError::invalid(format!("unknown formula input format: {input}")))?;
+    let output = parse_output_formats(Some(vec![output.to_owned()]))?[0].1;
+    let mode = match mode.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+        "strict" => FormulaConversionMode::Strict,
+        "best-effort" => FormulaConversionMode::BestEffort,
+        _ => return Err(BindingError::invalid("mode must be strict or best-effort.")),
+    };
+    let capability =
+        CapabilityRegistry::formula_conversion(input, output, mode, CapabilityTarget::Native);
+    if !capability.available {
+        return Err(BindingError {
+            code: "UNSUPPORTED_FORMAT".into(),
+            message: "The formula conversion route is not supported.".into(),
+            detail: capability.unavailable_reason.map(str::to_owned),
+            retryable: false,
+        });
+    }
+    Ok((input, output, mode))
+}
+
+/// Convert formula strings without loading recognition models or creating a session.
+#[pyfunction]
+#[pyo3(signature = (content, *, input_format, output_format, mode="strict"))]
+fn convert_formula(
+    py: Python<'_>,
+    content: String,
+    input_format: &str,
+    output_format: &str,
+    mode: &str,
+) -> PyResult<String> {
+    let (input, output, mode) = formula_arguments(input_format, output_format, mode)
+        .map_err(|error| python_error(py, error))?;
+    py.detach(move || DocumentConverter::convert_formula_string(&content, input, output, mode))
+        .map_err(|error| python_error(py, BindingError::from(ApplicationError::from(error))))
+}
+
+/// Return native direction/mode support from the shared executable registry.
+#[pyfunction]
+fn formula_conversion_capabilities(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let json = serialize_json(&CapabilityRegistry::formula_conversions(
+        CapabilityTarget::Native,
+    ))
+    .map_err(|error| python_error(py, error))?;
+    json_to_python(py, json)
 }
 
 fn recognition_options(
@@ -557,6 +616,8 @@ impl Drop for Session {
 
 #[pymodule]
 fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(convert_formula, module)?)?;
+    module.add_function(wrap_pyfunction!(formula_conversion_capabilities, module)?)?;
     module.add_class::<Session>()?;
     module.add_class::<CancellationToken>()?;
     module.add("LaTeXSnipperError", py.get_type::<LaTeXSnipperError>())?;
@@ -567,6 +628,40 @@ fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formula_arguments_match_the_shared_registry() {
+        for &input in FormulaInputFormat::all() {
+            for &output in OutputFormat::all() {
+                for (label, mode) in [
+                    ("strict", FormulaConversionMode::Strict),
+                    ("best-effort", FormulaConversionMode::BestEffort),
+                ] {
+                    let route = CapabilityRegistry::formula_conversion(
+                        input,
+                        output,
+                        mode,
+                        CapabilityTarget::Native,
+                    );
+                    let parsed = formula_arguments(input.name(), output.name(), label);
+                    assert_eq!(parsed.is_ok(), route.available);
+                    if !route.available {
+                        assert_eq!(parsed.unwrap_err().code, "UNSUPPORTED_FORMAT");
+                    }
+                }
+            }
+        }
+        for (input, output, mode) in [
+            ("ole", "omml", "best-effort"),
+            ("latex", "pdf", "strict"),
+            ("latex", "omml", "lossless"),
+        ] {
+            assert_eq!(
+                formula_arguments(input, output, mode).unwrap_err().code,
+                "INVALID_ARGUMENT"
+            );
+        }
+    }
 
     #[test]
     fn profile_aliases_are_stable() {

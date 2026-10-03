@@ -151,3 +151,70 @@ fn serialized_capability_explains_reconstruction_and_strict_limits() {
         .iter()
         .any(|item| item == "no-complete-round-trip-guarantee"));
 }
+
+#[test]
+fn new_formula_entry_point_bounds_sources_and_reconstructed_latex() {
+    use latexsnipper_foundation::SnipperError;
+    let convert = |source: &str, input| {
+        DocumentConverter::convert_formula_string(
+            source,
+            input,
+            OutputFormat::MathML,
+            FormulaConversionMode::BestEffort,
+        )
+    };
+    let xml = format!(
+        "<math>{}x{}</math>",
+        "<mrow>".repeat(64),
+        "</mrow>".repeat(64)
+    );
+    let typst = format!("{}x{}", "sqrt(".repeat(65), ")".repeat(65));
+    let latex = format!("{}x{}", "{".repeat(65), "}".repeat(65));
+    for (source, input) in [
+        ("x".repeat(64 * 1024 + 1), FormulaInputFormat::Latex),
+        (latex.clone(), FormulaInputFormat::Latex),
+        (format!("${latex}$"), FormulaInputFormat::Markdown),
+        (r"\sqrt".repeat(513), FormulaInputFormat::Latex),
+        ("x_".repeat(513), FormulaInputFormat::Latex),
+        (xml.clone(), FormulaInputFormat::Mathml),
+        (xml, FormulaInputFormat::Omml),
+        (typst, FormulaInputFormat::Typst),
+    ] {
+        assert!(
+            matches!(convert(&source, input), Err(SnipperError::LimitExceeded(_))),
+            "{}",
+            input.name()
+        );
+    }
+    // Each square root adds a LaTeX command and group to the reconstructed source.
+    let source = format!(
+        "<math>{}<mi>x</mi>{}</math>",
+        "<msqrt>".repeat(62),
+        "</msqrt>".repeat(62)
+    );
+    // This source is at the XML depth boundary and remains a valid normal input.
+    assert!(convert(&source, FormulaInputFormat::Mathml).is_ok());
+    let source = format!(
+        "<math>{}<mi>x</mi>{}</math>",
+        "<mstyle fontweight=\"bold\" fontstyle=\"italic\">".repeat(40),
+        "</mstyle>".repeat(40)
+    );
+    // Combined styles expand one XML level into two nested LaTeX groups.
+    assert!(matches!(
+        convert(&source, FormulaInputFormat::Mathml),
+        Err(SnipperError::LimitExceeded(_))
+    ));
+    assert!(convert(
+        "<!DOCTYPE math><math><mi>x</mi></math>",
+        FormulaInputFormat::Mathml
+    )
+    .is_err());
+    assert!(DocumentConverter::convert_latex_string(
+        &"x".repeat(64 * 1024 + 1),
+        OutputFormat::Latex
+    )
+    .is_ok());
+    assert!(convert(r"\frac{a}{b}", FormulaInputFormat::Latex)
+        .unwrap()
+        .contains("mfrac"));
+}

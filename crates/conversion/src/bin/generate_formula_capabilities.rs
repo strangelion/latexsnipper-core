@@ -13,7 +13,9 @@ Scope: Rust `DocumentConverter::convert_formula_string`, semantic string outputs
 Compiled support is not complete syntax coverage, losslessness or visual parity.\n\
 Strict currently validates the supported LaTeX source subset before OMML export.\n\
 Best-effort may lose unsupported syntax/style; reconstructed LaTeX is not author source.\n\n\
-C/Python/JS bindings do not yet expose this new mode-aware entry point; their existing APIs are unchanged.\n\
+Python exposes `convert_formula` and `formula_conversion_capabilities`; C/JS mode-aware bindings remain pending.\n\
+The new entry point bounds source/reconstructed LaTeX to 64 KiB, 64 lexical nesting levels and 512 structural tokens.\n\
+These are conservative per-call budgets, not syntax validation; existing APIs are unchanged.\n\
 OLE is a host container, not a Core string format. VSTO is not a format.\n\
 Visual/package outputs still use the existing export registry and runtime requirements.\n\n\
 | Target | Input | Path | Best-effort outputs | Strict outputs |\n\

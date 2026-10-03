@@ -6,10 +6,71 @@ import base64
 import tempfile
 from pathlib import Path
 
-from latexsnipper_core import CancellationToken, LaTeXSnipperError, Session, __version__
+from latexsnipper_core import (
+    CancellationToken, LaTeXSnipperError, Session, __version__,
+    convert_formula, formula_conversion_capabilities,
+)
+
+
+def formula_smoke() -> None:
+    routes = formula_conversion_capabilities()
+    assert len(routes) == 144
+    assert len({(r["input"], r["output"], r["mode"]) for r in routes}) == 144
+    samples = {
+        "latex": r"\frac{a}{b}",
+        "mathml": "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
+        "omml": '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+                '<m:f><m:num><m:r><m:t>a</m:t></m:r></m:num>'
+                '<m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>',
+        "typst": "frac(a, b)",
+        "markdown": r"A fraction $\frac{a}{b}$",
+    }
+    executed = 0
+    for route in routes:
+        assert route["target"] == "native"
+        assert route["limitations"]
+        assert route["available"] == (route["unavailableReason"] is None)
+        arguments = dict(input_format=route["input"], output_format=route["output"], mode=route["mode"])
+        if route["available"]:
+            result = convert_formula(samples[route["input"]], **arguments)
+            assert isinstance(result, str) and result
+            executed += 1
+        else:
+            try:
+                convert_formula("x", **arguments)
+            except LaTeXSnipperError as error:
+                assert error.code == "UNSUPPORTED_FORMAT"
+                assert error.detail == route["unavailableReason"]
+                assert error.retryable is False
+            else:
+                raise AssertionError(f"unavailable route succeeded: {route}")
+    assert executed == 46
+    assert "<m:f>" in convert_formula(samples["latex"], input_format="latex", output_format="omml")
+    failures = [
+        ("x", {"input_format": "ole"}, "INVALID_ARGUMENT"),
+        ("x", {"output_format": "pdf"}, "INVALID_ARGUMENT"),
+        ("x", {"mode": "lossless"}, "INVALID_ARGUMENT"),
+        (" ", {}, "CONVERSION_FAILED"),
+        (r"\unknownmacro+x", {}, "CONVERSION_FAILED"),
+        ("x" * (64 * 1024 + 1), {}, "INPUT_TOO_LARGE"),
+        ("{" * 65 + "x" + "}" * 65, {"mode": "best-effort"}, "INPUT_TOO_LARGE"),
+        (r"\sqrt" * 513, {"mode": "best-effort"}, "INPUT_TOO_LARGE"),
+    ]
+    for source, override, code in failures:
+        arguments = {"input_format": "latex", "output_format": "omml", **override}
+        try:
+            convert_formula(source, **arguments)
+        except LaTeXSnipperError as error:
+            assert error.code == code, (code, error.code, error.detail)
+            assert error.retryable is False
+        else:
+            raise AssertionError(f"expected {code}")
+    # Conversion failures must not affect later calls or the recognition adapter.
+    assert "<m:f>" in convert_formula(samples["latex"], input_format=" LaTeX ", output_format="OMML")
 
 
 def main() -> None:
+    formula_smoke()
     with tempfile.TemporaryDirectory() as first_root, tempfile.TemporaryDirectory() as second_root:
         first = Session(Path(first_root))
         second = Session(Path(second_root), runtime_preference="cpu")

@@ -359,7 +359,9 @@ FMT-01–07 的能力矩阵、失败样例台账、语法/AST/导出补全、Uni
 pilot 和 MathType/MTEF 边界见 [formula-format-roadmap.md](formula-format-roadmap.md)。
 这些项目整体尚未完成，不以 Office 新增弹窗或已有导出枚举作为完成证据。
 FMT-01 已完成首批 Rust 模式入口、共享能力方向投影和可测试的生成矩阵；
-C/Python/JS 接入继续待办；FMT-02 已登记四条合成样式/堆叠语法缺口，
+Python 已接入模式转换/能力查询并完成 Windows Python 3.11 release wheel 安装后测试；
+144 条路线中 46 条可用、98 条明确拒绝，旧持久化 Session 测试继续通过。
+C/JS 接入继续待办；FMT-02 已登记四条合成样式/堆叠语法缺口，
 `dfrac` / `tfrac` 样式、`substack` 多行结构及 `cfrac` 连分数已补首批解析/导出回归，
 其他失败分类、对齐回读和完整跨格式保真继续待办。具体子项以该路线图为准。
 Office 本应用行内/行间 OMML/OLE 双向及保存重开专项已通过；编号引用、跨故事、

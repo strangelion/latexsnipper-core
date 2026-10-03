@@ -1,6 +1,6 @@
 # 公式格式能力与 LaTeX 补全后续计划
 
-更新：2026-10-03。执行计划，不是新增格式已实现的声明。
+更新：2026-10-04。执行计划，不是新增格式已实现的声明。
 
 ## 分层原则
 
@@ -33,7 +33,17 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
   - [x] 新增 `DocumentConverter::convert_formula_string`；旧函数与既有序列化字段不变。
   - [x] [生成矩阵](generated/formula-capabilities.md)含原生/WASM 方向及尚未实现输入；
     表格漂移由转换 crate 测试阻止。5 种现有输入各测试 9 个语义输出，另测严格拒绝。
-  - [ ] C/Python/JS 的模式入口与能力投影尚未接入，不能从 Rust 可编译推断绑定可调用。
+  - [x] Python 新增无模型的 `convert_formula` 和 `formula_conversion_capabilities`，
+    默认 strict，仅已支持的 LaTeX→OMML 子集可用；其他模式需显式 best-effort。
+    能力查询和执行复用相同注册表；旧 Session/识别入口不变，转换时释放 GIL。
+    Windows Python 3.11 release wheel 已构建、安装并执行 smoke：144 条路线中
+    46 条可用、98 条明确拒绝；错误标签、严格语法拒绝、超限与失败隔离通过。
+    Python 6 项 Rust 单测、轻量 270 项/原生 310 项转换测试、Clippy、WASM 编译及
+    冻结检查通过；其他平台由已有 wheel CI 验收。
+  - [ ] C/JS 的模式入口与能力投影尚未接入，不能从 Rust 可编译推断绑定可调用。
+  - 新入口对源及重建 LaTeX 增加单次 64 KiB、64 层词法嵌套、512 个结构 token
+    保守预算，并拒绝 XML DTD；超限明确失败，旧转换/批量接口不受此预算影响。
+    这是资源保护而非完整语法校验，也不代表真实 Office 的准确率或视觉验收。
 - [ ] FMT-02：记录 Office/Core 失败样例，按缺失命令、环境、AST 节点、导出节点、
   样式损失、性能超限分类；每条都先有可复现的预期结构再实现，不只补渲染别名。
   - [x] 首批合成最小样例登记到现有 failure-corpus 流程：`dfrac`、`tfrac`、
@@ -99,3 +109,6 @@ FMT-01 首批是 Rust 增量 API；没有修改旧的 `TargetFormatCapability` �
 `substack` 与 `cfrac` 本批复用既有 Command 表达行/操作数，没有新增公共枚举或序列化字段，
 没有改变 C ABI 或 WASM envelope；复核新增解析/导出和私有辅助函数后，
 只刷新 conversion 公共源码树哈希，保持全部冻结门禁。
+Python 本批新增模块函数和类型声明；新模式入口增加保守输入预算及 XML DTD 拒绝，
+旧转换/识别 API、C ABI、WASM envelope 和依赖锁文件未变。复核后仅刷新 conversion
+公共源码树哈希；未删减 28 个文件和 19 个源码树的冻结门禁。

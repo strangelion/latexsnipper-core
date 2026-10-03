@@ -3,6 +3,16 @@ from os import PathLike
 from types import TracebackType
 from typing import Any, Self
 
+def convert_formula(
+    content: str,
+    *,
+    input_format: str,
+    output_format: str,
+    mode: str = "strict",
+) -> str: ...
+
+def formula_conversion_capabilities() -> list[dict[str, Any]]: ...
+
 class LaTeXSnipperError(Exception):
     code: str
     detail: str | None
