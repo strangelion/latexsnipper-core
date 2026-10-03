@@ -823,6 +823,24 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
         let command: String = chars[cmd_start..cmd_end].iter().collect();
 
         match command.as_str() {
+            "substack" => {
+                let Some((inner, end)) = read_braced_group(&chars, cmd_end) else {
+                    plain.push(chars[pos]);
+                    pos += 1;
+                    continue;
+                };
+                let rows = split_stack_rows(&inner)
+                    .into_iter()
+                    .map(|row| format!("<mtr><mtd>{}</mtd></mtr>", latex_to_mathml(row)))
+                    .collect::<String>();
+                flush_mathml_plain(&mut output, &mut plain);
+                output.push_str(&math_style_mathml(
+                    "scriptstyle",
+                    &format!("<mtable columnalign=\"center\">{rows}</mtable>"),
+                ));
+                pos = end;
+                found_style = true;
+            }
             "dfrac" | "tfrac" => {
                 let Some((num, after_num)) = read_braced_group(&chars, cmd_end) else {
                     plain.push(chars[pos]);

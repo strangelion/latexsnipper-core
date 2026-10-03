@@ -12,7 +12,12 @@ fn convert_typst_expr(s: &str) -> String {
     }
 
     // Only unwrap a style call when its closing delimiter ends the expression.
-    for (prefix, style) in [("display(", "displaystyle"), ("inline(", "textstyle")] {
+    for (prefix, style) in [
+        ("display(", "displaystyle"),
+        ("inline(", "textstyle"),
+        ("script(", "scriptstyle"),
+        ("sscript(", "scriptscriptstyle"),
+    ] {
         if let Some(tail) = s.strip_prefix(prefix) {
             let mut depth = 1;
             for (index, ch) in tail.char_indices() {
@@ -23,7 +28,11 @@ fn convert_typst_expr(s: &str) -> String {
                 }
                 if depth == 0 {
                     if index + 1 == tail.len() {
-                        return format!("{{\\{style} {}}}", convert_typst_expr(&tail[..index]));
+                        let inner = convert_typst_expr(&tail[..index]);
+                        if style == "scriptstyle" && inner.starts_with("\\substack{") {
+                            return inner;
+                        }
+                        return format!("{{\\{style} {inner}}}");
                     }
                     break;
                 }
@@ -67,6 +76,18 @@ fn convert_typst_expr(s: &str) -> String {
                 convert_typst_expr(k)
             );
         }
+    }
+
+    if s.starts_with("vec(delim: none,") {
+        // Unsupported surrounding syntax must not become a fabricated stack row.
+        if let Some(rows) = whole_call_body(s, "vec(delim: none,") {
+            let rows = split_typst_args(rows)
+                .iter()
+                .map(|row| convert_typst_expr(row))
+                .collect::<Vec<_>>();
+            return format!("\\substack{{{}}}", rows.join("\\\\"));
+        }
+        return s.to_string();
     }
 
     if let Some(inner) = s.strip_prefix("vec(") {
@@ -441,6 +462,35 @@ fn convert_typst_expr(s: &str) -> String {
     }
 
     s.to_string()
+}
+
+fn whole_call_body<'a>(source: &'a str, prefix: &str) -> Option<&'a str> {
+    let tail = source.strip_prefix(prefix)?;
+    let (mut depth, mut quoted, mut escaped) = (1usize, false, false);
+    for (index, ch) in tail.char_indices() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                quoted = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => quoted = true,
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return (index + 1 == tail.len()).then_some(&tail[..index]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn split_typst_call_args(inner: &str) -> Option<(String, String)> {

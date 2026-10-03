@@ -229,6 +229,10 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Relation(rel) => write!(f, "\\{}", rel),
             LatexNode::Greek(g) => write!(f, "\\{}", g),
             LatexNode::Symbol(s) => write!(f, "{}", s),
+            LatexNode::Command { name, args } if name == "substack" => {
+                let rows = args.iter().map(ToString::to_string).collect::<Vec<_>>();
+                write!(f, "\\substack{{{}}}", rows.join("\\\\"))
+            }
             LatexNode::Command { name, args } => {
                 write!(f, "\\{}", name)?;
                 for arg in args {

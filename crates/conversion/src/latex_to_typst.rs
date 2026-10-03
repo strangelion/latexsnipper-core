@@ -283,6 +283,7 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
                 String::new()
             }
         }
+        "substack" => format!("script(vec(delim: none, {}))", arg_str.join(", ")),
         "dfrac" | "tfrac" if arg_str.len() == 2 => {
             let style = if name == "dfrac" { "display" } else { "inline" };
             format!("{style}(frac({}, {}))", arg_str[0], arg_str[1])

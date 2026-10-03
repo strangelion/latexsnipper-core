@@ -494,6 +494,11 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     let text = extract_text_from_args(args);
                     wrap_normal_mtext(&text)
                 }
+                "substack" => {
+                    let rows = args.iter().map(|row| format!("<m:e>{}</m:e>", ast_to_omml(row)))
+                        .collect::<String>();
+                    format!("<m:eqArr>{rows}</m:eqArr>")
+                }
                 // Best effort preserves fraction structure; strict source
                 // validation still rejects unverified forced size styles.
                 "dfrac" | "tfrac" if args.len() == 2 => {

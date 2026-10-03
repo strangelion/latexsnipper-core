@@ -1,5 +1,47 @@
 //! Shared LaTeX parsing utilities for all converters.
 
+/// Split stack rows without splitting grouped operands or nested environments.
+pub(crate) fn split_stack_rows(source: &str) -> Vec<&str> {
+    let bytes = source.as_bytes();
+    let mut rows = Vec::new();
+    let (mut pos, mut start, mut braces, mut environments) = (0, 0, 0usize, 0usize);
+    while pos < bytes.len() {
+        match bytes[pos] {
+            b'\\' if bytes.get(pos + 1) == Some(&b'\\') => {
+                if braces == 0 && environments == 0 {
+                    rows.push(source[start..pos].trim());
+                    start = pos + 2;
+                }
+                pos += 2;
+            }
+            b'\\' => {
+                pos += 1;
+                let command_start = pos;
+                while pos < bytes.len() && bytes[pos].is_ascii_alphabetic() {
+                    pos += 1;
+                }
+                match &source[command_start..pos] {
+                    "begin" => environments += 1,
+                    "end" => environments = environments.saturating_sub(1),
+                    "" if pos < bytes.len() => pos += 1,
+                    _ => {}
+                }
+            }
+            b'{' => {
+                braces += 1;
+                pos += 1;
+            }
+            b'}' => {
+                braces = braces.saturating_sub(1);
+                pos += 1;
+            }
+            _ => pos += 1,
+        }
+    }
+    rows.push(source[start..].trim());
+    rows
+}
+
 /// Parse LaTeX brace pairs: {content1}{content2} or content1}{content2}
 /// Correctly handles nested commands like \frac{\frac{a}{b}}{c}.
 pub fn split_brace_pair(s: &str) -> Option<(&str, &str)> {

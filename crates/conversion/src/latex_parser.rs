@@ -269,6 +269,17 @@ impl LatexParser {
                     den: Box::new(den),
                 })
             }
+            "substack" => {
+                while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
+                    self.pos += 1;
+                }
+                let content = self.parse_group_text();
+                let args = crate::latex_utils::split_stack_rows(&content)
+                    .into_iter()
+                    .map(parse_latex)
+                    .collect();
+                Some(LatexNode::Command { name: cmd, args })
+            }
             // Styled fractions retain their command and exactly two operands.
             "dfrac" | "tfrac" => {
                 let num = self.parse_single();
