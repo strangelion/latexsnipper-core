@@ -352,6 +352,15 @@ MathLive/KaTeX 的替换也应先保留兼容 fallback，等 10,000 条渲染和
 
 ## 11. 执行规则
 
+### 新增格式与 LaTeX 补全队列（2026-10-03）
+
+用户要求主流公式格式归 Core 管理，并持续补齐缺失的 LaTeX 支持。
+FMT-01–07 的能力矩阵、失败样例台账、语法/AST/导出补全、UnicodeMath/AsciiMath
+pilot 和 MathType/MTEF 边界见 [formula-format-roadmap.md](formula-format-roadmap.md)。
+这些项目仍待实现，不以 Office 新增弹窗或已有导出枚举作为完成证据。
+Office 本应用行内/行间 OMML/OLE 双向及保存重开专项已通过；编号引用、跨故事、
+真实桌面管道和实际 Office.js 宿主继续列在 O-06 门禁。
+
 - 没有报告、截图、日志或可复现命令的项目不得标记为完成；
 - `unsupported`、`not-measured` 和 `failed` 必须分开；
 - 所有性能结论必须带平台、版本、seed 和重复次数；
