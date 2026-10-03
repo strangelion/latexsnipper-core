@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "scope": "synthetic parser gaps; expected structures are implementation targets, not passed fidelity claims",
+  "cases": [
+    {
+      "id": "display-fraction",
+      "command": "dfrac",
+      "latex": "\\dfrac{a}{b}",
+      "status": "missing",
+      "expected": { "kind": "fraction", "numerator": "a", "denominator": "b", "retainedStyle": "display" }
+    },
+    {
+      "id": "text-fraction",
+      "command": "tfrac",
+      "latex": "\\tfrac{a}{b}",
+      "status": "missing",
+      "expected": { "kind": "fraction", "numerator": "a", "denominator": "b", "retainedStyle": "text" }
+    },
+    {
+      "id": "continued-fraction",
+      "command": "cfrac",
+      "latex": "\\cfrac{1}{1+\\cfrac{1}{x}}",
+      "status": "missing",
+      "expected": { "kind": "fraction", "fractionCount": 2, "retainedCommand": "cfrac" }
+    },
+    {
+      "id": "stacked-limits",
+      "command": "substack",
+      "latex": "\\sum_{\\substack{i=1\\\\j=2}}^{n} x_{ij}",
+      "status": "missing",
+      "expected": { "kind": "stacked-limit", "rowCount": 2, "rows": [ "i=1", "j=2" ], "parent": "sum-subscript" }
+    }
+  ]
+}
