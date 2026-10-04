@@ -56,7 +56,7 @@ Blocker:
 | G-04 | Source syntax colors, theme controls and light-blue default | Office UX maintainer | strangelion/LaTeXSnipper-Office | light, dark and custom-theme visual regression at supported scales | P2 | in progress |
 | G-05 | Portrait layout, symbol rail, canvas toolbar and popup positioning | Office UX maintainer | strangelion/LaTeXSnipper-Office | portrait and narrow-window screenshots without avoidable scrollbars or clipping | P2 | in progress |
 | G-06 | Tray and taskbar thumbnail left/right click behavior | Desktop runtime maintainer | strangelion/LaTeXSnipper-Office | packaged Tauri interaction checklist on Windows | P1 | in progress |
-| G-07 | Release WebView2 CSP, WASM and desktop startup | Desktop runtime maintainer | strangelion/LaTeXSnipper-Office | installed release smoke with console, CSP and runtime logs | P1 | not started |
+| G-07 | Release WebView2 CSP, WASM and desktop startup | Desktop runtime maintainer | strangelion/LaTeXSnipper-Office | installed release smoke with console, CSP and runtime logs | P1 | in progress |
 
 ## Release coordination
 
@@ -172,3 +172,13 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   completion and controlled continuation are now recorded separately in
   `docs/formula-assistance-roadmap.md`. This is a proposed evaluation only,
   not a model integration or approval to collect/upload user documents.
+- Office partial evidence (2026-10-04): an isolated local release WebView2
+  passed WASM/CSP and three drawing/custom-symbol checks; a real Tauri-to-Word
+  development add-in pipe converted four inline equations in 2.318 seconds and
+  survived save/reopen with adjacent prose. One earlier loaded cold run failed;
+  its cause and late-result risks remain open. Installed NativeOffice provenance
+  is older, so G-07 does not close. See Office real-host acceptance records.
+- New Office requests are recorded in its batch-update plan: connected-document
+  selection, enumeration of all open documents, more LaTeX insertion/conversion
+  targets and direct host commands. The connected-session picker/browser tests
+  are partial progress, not real multi-document or complete OLE/image acceptance.
