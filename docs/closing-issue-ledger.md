@@ -182,3 +182,18 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   selection, enumeration of all open documents, more LaTeX insertion/conversion
   targets and direct host commands. The connected-session picker/browser tests
   are partial progress, not real multi-document or complete OLE/image acceptance.
+- O-02/G-02 incremental proof (2026-10-04): Office outlined the bundled TeX
+  glyphs and resolved inherited SVG paint to explicit colors. A real Word
+  PGFPlots SVG image now shows axis digits, variables and borders, retains
+  drawing source after save/reopen, and has a passing dark-ink check. The old
+  no-label SVG fails the negative control. Requested 255.66 x 213.54 pt becomes
+  255.65 x 213.70 pt in Word. OLE for that SVG still rejects unsupported
+  clipPath during SVG-to-EMF generation; activation and payload transport alone
+  do not close the row. See the dated Office real-host record for artifact
+  hashes and remaining release/host boundaries.
+- Direct Office.js conversion progress (2026-10-04): raw Word selections may
+  export LaTeX/SVG/PNG copies inside the taskpane after preview. Strict source
+  validation is retained and tracked ranges are released on success/failure;
+  this does not replace the selection with an image/OLE object. Real Office.js
+  acceptance, all-open-document enumeration and the direct command matrix stay
+  open in the Office batch-update plan.
