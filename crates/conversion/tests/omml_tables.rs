@@ -90,3 +90,18 @@ fn adjacent_matrices_and_siblings_are_not_unwrapped_as_one_matrix() {
         );
     }
 }
+
+#[test]
+fn generated_cases_keep_their_left_only_fence_after_readback() {
+    for body in [
+        "1",
+        "1&x>0",
+        r"1&x>0\\0&x<0",
+        r"\begin{matrix}1&2\end{matrix}&3",
+    ] {
+        let source = format!("\\begin{{cases}}{body}\\end{{cases}}");
+        let xml = DocumentConverter::convert_latex_string(&source, OutputFormat::OMML).unwrap();
+        let rebuilt = parse_omml_to_latex(&xml).unwrap();
+        assert_eq!(rebuilt.replace(' ', ""), source, "{xml}");
+    }
+}

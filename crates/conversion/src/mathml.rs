@@ -162,6 +162,12 @@ fn latex_to_mathml(latex: &str) -> String {
         }
     }
 
+    if latex.contains("\\begin") {
+        if let Some(rendered) = render_matrix_node(&crate::latex_parser::parse_latex(latex)) {
+            return rendered;
+        }
+    }
+
     if let Some(rendered) = render_styled_sequence(latex) {
         return rendered;
     }
@@ -290,25 +296,7 @@ fn latex_to_mathml(latex: &str) -> String {
         return rendered;
     }
 
-    // Matrix environments
-    if let Some(inner) = extract_env(latex, "matrix") {
-        return matrix_to_mathml(inner, None);
-    }
-    if let Some(inner) = extract_env(latex, "pmatrix") {
-        return matrix_to_mathml(inner, Some(("(", ")")));
-    }
-    if let Some(inner) = extract_env(latex, "bmatrix") {
-        return matrix_to_mathml(inner, Some(("[", "]")));
-    }
-    if let Some(inner) = extract_env(latex, "vmatrix") {
-        return matrix_to_mathml(inner, Some(("|", "|")));
-    }
-    if let Some(inner) = extract_env(latex, "cases") {
-        return cases_to_mathml(inner);
-    }
-    if let Some(inner) = extract_env(latex, "aligned") {
-        return aligned_to_mathml(inner);
-    }
+    // Keep legacy array handling separate; column specifications remain best-effort.
     if let Some(inner) = extract_env(latex, "array") {
         return matrix_to_mathml(inner, None);
     }
@@ -1258,38 +1246,90 @@ fn matrix_to_mathml(content: &str, delimiters: Option<(&str, &str)>) -> String {
     }
 }
 
-fn cases_to_mathml(content: &str) -> String {
-    let rows = split_matrix_rows(content);
-    let mut rows_xml = Vec::new();
-    for row in &rows {
-        let cells: Vec<String> = row
-            .iter()
-            .map(|cell| format!("<mtd><mrow>{}</mrow></mtd>", latex_to_mathml(cell.trim())))
-            .collect();
-        rows_xml.push(format!("  <mtr>{}</mtr>", cells.join("")));
+fn render_matrix_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
+    use crate::latex_ast::LatexNode;
+    match node {
+        LatexNode::Matrix { env, rows } => {
+            let (open, close) = match env.as_str() {
+                "matrix" | "smallmatrix" | "aligned" | "align" | "gather" => ("", ""),
+                "pmatrix" => ("(", ")"),
+                "bmatrix" => ("[", "]"),
+                "Bmatrix" => ("{", "}"),
+                "vmatrix" => ("|", "|"),
+                "Vmatrix" => ("‖", "‖"),
+                _ => return None,
+            };
+            let table = ast_table_to_mathml(rows);
+            if open.is_empty() {
+                Some(table)
+            } else {
+                Some(format!(
+                    "<mrow><mo>{open}</mo>{table}<mo>{close}</mo></mrow>"
+                ))
+            }
+        }
+        LatexNode::Cases(rows) => Some(format!(
+            "<mrow><mo>{{</mo>{}</mrow>",
+            ast_table_to_mathml(rows)
+        )),
+        LatexNode::Fraction { num, den } => {
+            let numerator = render_matrix_node(num);
+            let denominator = render_matrix_node(den);
+            if numerator.is_none() && denominator.is_none() {
+                return None;
+            }
+            Some(format!(
+                "<mfrac><mrow>{}</mrow><mrow>{}</mrow></mfrac>",
+                numerator.unwrap_or_else(|| latex_to_mathml(&num.to_string())),
+                denominator.unwrap_or_else(|| latex_to_mathml(&den.to_string()))
+            ))
+        }
+        LatexNode::Sequence(nodes) | LatexNode::Group(nodes) => {
+            let rendered: Vec<_> = nodes.iter().map(render_matrix_node).collect();
+            if rendered.iter().all(Option::is_none) {
+                return None;
+            }
+            let inner: String = nodes
+                .iter()
+                .zip(rendered)
+                .map(|(node, rendered)| {
+                    rendered.unwrap_or_else(|| latex_to_mathml(&node.to_string()))
+                })
+                .collect();
+            Some(format!("<mrow>{inner}</mrow>"))
+        }
+        LatexNode::Superscript { base, exp } => render_matrix_node(base).map(|base| {
+            format!(
+                "<msup>{base}<mrow>{}</mrow></msup>",
+                latex_to_mathml(&exp.to_string())
+            )
+        }),
+        LatexNode::Subscript { base, sub } => render_matrix_node(base).map(|base| {
+            format!(
+                "<msub>{base}<mrow>{}</mrow></msub>",
+                latex_to_mathml(&sub.to_string())
+            )
+        }),
+        _ => None,
     }
-    format!(
-        "<mrow><mo>{{</mo><mtable>\n{}\n</mtable><mo>}}</mo></mrow>",
-        rows_xml.join("\n")
-    )
 }
 
-fn aligned_to_mathml(content: &str) -> String {
-    let rows = split_matrix_rows(content);
-    let mut rows_xml = Vec::new();
-    for row in &rows {
-        let cells: Vec<String> = row
-            .iter()
-            .map(|cell| {
-                format!(
-                    "    <mtd><mrow>{}</mrow></mtd>",
-                    latex_to_mathml(cell.trim())
-                )
-            })
-            .collect();
-        rows_xml.push(format!("  <mtr>\n{}\n  </mtr>", cells.join("\n")));
-    }
-    format!("<mtable>\n{}\n</mtable>", rows_xml.join("\n"))
+fn ast_table_to_mathml(rows: &[Vec<crate::latex_ast::LatexNode>]) -> String {
+    let rows: String = rows
+        .iter()
+        .map(|row| {
+            let cells: String = row
+                .iter()
+                .map(|cell| {
+                    let content = render_matrix_node(cell)
+                        .unwrap_or_else(|| latex_to_mathml(&cell.to_string()));
+                    format!("<mtd><mrow>{}</mrow></mtd>", content)
+                })
+                .collect();
+            format!("<mtr>{cells}</mtr>")
+        })
+        .collect();
+    format!("<mtable>{rows}</mtable>")
 }
 
 #[cfg(test)]

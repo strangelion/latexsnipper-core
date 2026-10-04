@@ -349,6 +349,9 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 .collect();
             let joined = content.join(" \\\\ ");
             if let Some(body) = whole_matrix_body(&joined) {
+                if beg == "{" && end.is_empty() {
+                    return format!("\\begin{{cases}} {body} \\end{{cases}}");
+                }
                 if let Some(env) = matrix_env_from_delimiters(&beg, &end) {
                     return format!("\\begin{{{env}}} {body} \\end{{{env}}}");
                 }

@@ -122,6 +122,15 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     不扩展外部实体/DTD。8 项专项复现后通过，原生 326 项回归、Clippy、WASM 编译通过。
     任意 LaTeX 文本特殊字符转义、XML 属性保真和 Office 文件导入读取器仍需单独验收；
     这不是对任意 MathML/OMML、真实 Office 或排版完全无损的声明。
+  - 2026-10-04：MathML 矩阵输出改为读取已解析 AST，保留前后表达式、相邻/嵌套
+    矩阵、上下标及矩阵分子；五类定界符位于同一 mrow，cases 不再添加右花括号。
+    Matrix/Cases 的 AST 源码序列化输出真实行列，不再用省略号替代操作数。
+    新增 7 项专项；array 列规格、矩阵位于根式/其他命令内部的组合与视觉保真另列待办。
+    同时修复前批 OMML 矩阵环境改动引发的 cases 回归：完整单侧定界矩阵回读为 cases，
+    新增单格、单行、多行和嵌套专项，不放宽原断言。远端失败 run 37169775399 的
+    12 项 conversion_roundtrip 本地全部通过；本批没有修改 CI 或锁文件。
+    Windows 全工作区 `cargo test --locked --workspace`、轻量 308 项转换回归、Clippy、
+    WASM 编译及 28 文件/19 源码树冻结检查通过；仅刷新 conversion 源码树哈希。
 - [ ] FMT-05：UnicodeMath/AsciiMath 有界 pilot；用公开、可复现样例验证优先级、
   矩阵、空白和分组规则，不用简单字符串替换冒充 parser。
 - [ ] FMT-06：MathType/MTEF 单独设计审查；未通过前继续显示 unsupported，

@@ -282,8 +282,8 @@ impl std::fmt::Display for LatexNode {
                 write!(f, "\\left{}{}\\right{}", left, s, right)
             }
             LatexNode::FontModifier { font, content } => write!(f, "\\{}{{{}}}", font, content),
-            LatexNode::Matrix { env, .. } => write!(f, "\\begin{{{}}}...\\end{{{}}}", env, env),
-            LatexNode::Cases(..) => write!(f, "\\begin{{cases}}...\\end{{cases}}"),
+            LatexNode::Matrix { env, rows } => write_matrix(f, env, rows),
+            LatexNode::Cases(rows) => write_matrix(f, "cases", rows),
             LatexNode::Accent { chr, content } => {
                 let name = match chr.as_str() {
                     "\u{0302}" => "hat",
@@ -422,4 +422,24 @@ impl std::fmt::Display for LatexNode {
             }
         }
     }
+}
+
+fn write_matrix(
+    f: &mut std::fmt::Formatter<'_>,
+    env: &str,
+    rows: &[Vec<LatexNode>],
+) -> std::fmt::Result {
+    write!(f, "\\begin{{{env}}}")?;
+    for (row_index, row) in rows.iter().enumerate() {
+        if row_index > 0 {
+            write!(f, "\\\\")?;
+        }
+        for (column_index, cell) in row.iter().enumerate() {
+            if column_index > 0 {
+                write!(f, "&")?;
+            }
+            write!(f, "{cell}")?;
+        }
+    }
+    write!(f, "\\end{{{env}}}")
 }
