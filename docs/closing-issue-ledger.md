@@ -206,3 +206,18 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   same-path reopen identity or Excel/PowerPoint/Visio enumeration gate. O-06 and
   the OLE/image matrix stay open. Core c538ba6 CI 37202683998, CodeQL 37202683951
   and WASM 37202683939 have been verified successful.
+- Office direct batch/media increment (2026-10-05): native Ribbon batch now
+  starts scanning directly, with source-session binding, confirmation, chunking
+  and no uncertain-commit retries. Office.js starts inside the taskpane rather
+  than opening a desktop workspace; v1 is Word standalone delimited paragraphs
+  only, inline OMML, bounded to 500 formulas/10000 paragraphs. Mixed prose,
+  display styling, real Office.js and the 10000-formula matrix remain open.
+- Native Word bare-selection SVG/PNG/OLE now creates and reads back real target
+  objects before removing source, gated by a new additive selection_media
+  capability. Actual Word duplicate-position, negative-input and save/reopen
+  checks pass for one integral in three routes (3.6033072s), not general accuracy
+  or installed-pipe acceptance. OLE is still larger (47.5x22pt versus requested
+  33.23x14.57pt); geometry/font gates explicitly remain open. See the dated
+  Office real-host record for evidence hashes. Core public format registries and
+  the Office Core pin are unchanged. Current Core a4444b2 CI 37205136387, WASM
+  37205136346 and CodeQL 37205136392 were verified successful before this update.

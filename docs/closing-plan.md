@@ -404,6 +404,15 @@ CodeQL `37179344272` 已全部成功；本地 `cargo test --locked --workspace` 
 Office 本应用行内/行间 OMML/OLE 双向及保存重开专项已通过；编号引用、跨故事、
 真实桌面管道和实际 Office.js 宿主继续列在 O-06 门禁。
 
+2026-10-05 O-06 增量：原生加载项的批量入口直接启动扫描及确认，Office.js
+也已在任务窗格内直接执行整段分隔符公式的行内 OMML 转换（每次最多 500 条）。
+生产浏览器按钮流程通过，Office API 为夹具，实际 Office.js 宿主、正文混排及
+display 样式继续待验收。原生 Word 裸选区 SVG/PNG/OLE 真实对象、指定重复位置、
+错误请求保留及保存重开专项通过；并非安装管道验收或 10000 条多样准确率。
+新发现 OLE 实际显示 47.5×22 pt，与请求约 33.23×14.57 pt 不一致，字号/边界门禁
+保持未完成，下一轮应优先定位 extent/自然尺寸。证据哈希及边界见 Office 的
+`docs/office/real-host-acceptance.md` 和 `batch-update-plan.md`，不升级 Core 公共格式能力。
+
 - 没有报告、截图、日志或可复现命令的项目不得标记为完成；
 - `unsupported`、`not-measured` 和 `failed` 必须分开；
 - 所有性能结论必须带平台、版本、seed 和重复次数；
