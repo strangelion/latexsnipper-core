@@ -99,6 +99,14 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     原 minimized 失败证据不改写、不提升为 promoted；当前验收见 `mathml_tables.rs`。
     轻量 278 项/原生 318 项转换回归、Clippy、WASM 编译和冻结检查通过。
     新发现 XML 实体独立事件和文本空格丢失列为下一批，不混入矩阵修复验收。
+  - 2026-10-04：OMML `m:m` 回读现在重建完整 `matrix` 环境，不再输出裸行列分隔符；
+    单个完整矩阵的定界符回读保持 `pmatrix` / `bmatrix` / `Bmatrix` / `vmatrix` /
+    `Vmatrix`，覆盖 1×1 和单列。7 项专项还检查嵌套 OMML、空单元格/空行、再导出
+    的行列数以及相邻矩阵/尾部不被错误展开；保留原有兼容行读取分支。
+    LaTeX 嵌套矩阵源在现有 AST 解析中仍被错误拆行，已复现并排入下一批；
+    本批嵌套测试是直接 OMML 输入，不宣称该 LaTeX 导出链路已修好。
+    结构保留不代表定界符尺寸/空行的 Word 排版验收，严格支持范围不扩大。
+    轻量 293 项/原生 333 项转换回归、Clippy、WASM 编译及冻结检查通过。
 - [ ] FMT-04：对每条补全运行 LaTeX 与 MathML/OMML/Typst 的结构/语义往返、
   严格拒绝及 best-effort 诊断；化学与 TikZ/PGFPlots 必须独立标识和测试。
   - 2026-10-04：修复 MathML→LaTeX、OMML→LaTeX/布局回读忽略独立 XML 引用事件

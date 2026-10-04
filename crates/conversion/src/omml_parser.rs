@@ -348,6 +348,15 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 .map(|(_, v)| v.clone())
                 .collect();
             let joined = content.join(" \\\\ ");
+            if let Some(body) = whole_matrix_body(&joined) {
+                if let Some(env) = matrix_env_from_delimiters(&beg, &end) {
+                    return format!("\\begin{{{env}}} {body} \\end{{{env}}}");
+                }
+            }
+            if joined.contains("\\begin{matrix}") {
+                // Retain nested or adjacent matrices instead of inferring a new outer table.
+                return format!("{beg}{joined}{end}");
+            }
             if beg == "{" && end.is_empty() && (joined.contains(" & ") || joined.contains("\\\\")) {
                 return format!("\\begin{{cases}} {} \\end{{cases}}", joined);
             }
@@ -420,7 +429,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 .filter(|(t, _)| t == "mr" || t == "mRow")
                 .map(|(_, v)| v.clone())
                 .collect();
-            if !rows.is_empty() {
+            let body = if !rows.is_empty() {
                 rows.join(" \\\\ ")
             } else {
                 children
@@ -429,7 +438,8 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     .map(|(_, v)| v.clone())
                     .collect::<Vec<_>>()
                     .join(" & ")
-            }
+            };
+            format!("\\begin{{matrix}} {body} \\end{{matrix}}")
         }
         "mr" | "mRow" => {
             let cells: Vec<String> = children
@@ -594,12 +604,34 @@ fn format_delimited_rows(beg: &str, end: &str, rows: &[String]) -> String {
     format!("{}{}{}", beg, rows.join(" \\\\ "), end)
 }
 
+fn whole_matrix_body(value: &str) -> Option<&str> {
+    let value = value.trim();
+    let begin = "\\begin{matrix}";
+    let end = "\\end{matrix}";
+    let content = value.strip_prefix(begin)?;
+    let mut depth = 1usize;
+    // Inspect only the canonical wrappers produced by this reader, including nested matrices.
+    for (offset, _) in content.match_indices('\\') {
+        let remaining = &content[offset..];
+        if remaining.starts_with(begin) {
+            depth += 1;
+        } else if remaining.starts_with(end) {
+            depth -= 1;
+            if depth == 0 {
+                return (offset + end.len() == content.len()).then(|| content[..offset].trim());
+            }
+        }
+    }
+    None
+}
+
 fn matrix_env_from_delimiters(beg: &str, end: &str) -> Option<&'static str> {
     match (beg, end) {
         ("(", ")") => Some("pmatrix"),
         ("[", "]") => Some("bmatrix"),
         ("{", "}") => Some("Bmatrix"),
         ("|", "|") => Some("vmatrix"),
+        ("‖", "‖") => Some("Vmatrix"),
         _ => None,
     }
 }
