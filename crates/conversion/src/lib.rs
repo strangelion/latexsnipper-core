@@ -1,3 +1,4 @@
+pub mod asciimath_pilot;
 pub mod asset_helper;
 pub mod asset_resolver;
 pub mod capability_registry;

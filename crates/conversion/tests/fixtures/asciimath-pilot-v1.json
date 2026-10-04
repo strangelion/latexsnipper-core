@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "provenance": {
+    "kind": "repository-authored-synthetic",
+    "grammarReference": "https://asciimath.org/#syntax",
+    "scope": "Finite grammar fixtures, not a third-party accuracy dataset or renderer output"
+  },
+  "accepted": [
+    { "source": "a+b/c+d", "canonical": "a + frac(b)(c) + d", "root": "sequence" },
+    { "source": "(p+q)/(r-s)", "canonical": "frac(p + q)(r - s)", "root": "fraction" },
+    { "source": "frac(1)(frac(2)(3))", "canonical": "frac(1)(frac(2)(3))", "root": "fraction" },
+    { "source": "root(5)(sqrt(z))", "canonical": "root(5)(sqrt(z))", "root": "root" },
+    { "source": "v_2^7", "canonical": "v_(2)^(7)", "root": "superscript" },
+    { "source": "[[2,4],[6,8]]", "canonical": "[[2,4],[6,8]]", "root": "matrix" },
+    { "source": "((u),(v),(w))", "canonical": "((u),(v),(w))", "root": "matrix" },
+    { "source": "[[[[u,v],[w,z]],1],[2,3]]", "canonical": "[[[[u,v],[w,z]],1],[2,3]]", "root": "matrix" },
+    { "source": "alpha times beta leq infty", "canonical": "alpha xx beta <= oo", "root": "sequence" },
+    { "source": "t in RR", "canonical": "t in RR", "root": "sequence" },
+    { "source": "{:p+q:}^4", "canonical": "{:p + q:}^(4)", "root": "superscript" },
+    { "source": "floor(4.7)", "canonical": "floor(4.7)", "root": "delimited" }
+  ],
+  "rejected": [
+    { "source": "[[a,b],[c]]", "errorKind": "RaggedMatrix" },
+    { "source": "a/b/c", "errorKind": "UnexpectedToken" },
+    { "source": "color(red)(x)", "errorKind": "UnsupportedSyntax" },
+    { "source": "[[a,|,b],[c,|,d]]", "errorKind": "UnsupportedSyntax" }
+  ]
+}

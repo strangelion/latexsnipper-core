@@ -45,8 +45,9 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
    写入、替换第三方对象和 MathType 排版兼容须单独设计/实测；只读里程碑通过也不能
    将完整导入/导出记为完成，不改变 FMT-06 的未完成状态。
 
-本节只明确实施顺序与验收边界；截至记录时，UnicodeMath/AsciiMath/MTEF parser
-仍未实现。学习用户偏好的可选选择器暂不列为本轮阻塞项，避免分散格式和宿主闭环工作。
+本节明确实施顺序与验收边界。AsciiMath 已开始独立实验 parser（见下方 FMT-05），
+UnicodeMath/MTEF parser 仍未实现；通用注册表/API/UI 尚未开放三者。学习用户偏好的
+可选选择器暂不列为本轮阻塞项，避免分散格式和宿主闭环工作。
 
 ## 排队顺序与验收条件
 
@@ -178,6 +179,16 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     原生 370 项、轻量 319 项转换回归、Clippy、failure-corpus 契约和冻结检查通过。
 - [ ] FMT-05：UnicodeMath/AsciiMath 有界 pilot；用公开、可复现样例验证优先级、
   矩阵、空白和分组规则，不用简单字符串替换冒充 parser。
+  - [x] AsciiMath 首批独立词法/递归语法及现有 AST 映射，附规范来源、有限接受/拒绝
+    范围和版本化合成 fixture。覆盖分数、根式、上下标、符号、分组、列向量与嵌套矩阵，
+    未知结构/损坏/超限明确失败；序列化重解析核对操作数、上标归属和矩阵行列。
+    12 项专项含 4,913 种三 token 组合通过，不是准确率、完整 grammar 或视觉验收。
+    实现和门禁见 [AsciiMath pilot](formats/asciimath-pilot.md)。
+    本地轻量 331 项/原生 382 项转换回归、两种配置 Clippy、WASM 编译、全工作区
+    默认测试及 28 文件/19 源码树冻结检查通过；原有真实环境忽略项未因此执行。
+  - [ ] UnicodeMath 独立 parser/AST/矩阵/往返，不复用 AsciiMath 拼写当作等价实现。
+  - [ ] 扩大真实语料和跨格式/外部渲染结构与损失验证，再开放输入/输出注册表、
+    Rust/C/Python/WASM-JS 和 Office UI；当前 OutputFormat 不变，`ascii-math` 仍不可用。
 - [ ] FMT-06：MathType/MTEF 单独设计审查；未通过前继续显示 unsupported，
   不修改第三方 OLE、不删除作者原件。
 - [ ] FMT-07：接入固定语料和错误语料，记录耗时、语义保留、损失及拒绝率，
@@ -196,7 +207,8 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
 FMT-01 首批是 Rust 增量 API；没有修改旧的 `TargetFormatCapability` 字段、
 `OutputFormat` 枚举、旧转换接口、C ABI 或 v3/WASM envelope。
 严格模式目前仅调用现有 LaTeX→OMML 源校验，不代表任意源无损；其他严格路线
-拒绝执行。UnicodeMath、AsciiMath、MTEF 仅登记 unsupported，没有新增 parser。
+拒绝执行。UnicodeMath、AsciiMath、MTEF 在通用入口仍登记 unsupported；AsciiMath
+另有显式 experimental Rust pilot，未通过剩余门禁前不升级为正式能力。
 按上述差异复核后刷新 `v3-contract-freeze.json`，不删减合约文件或公共源码树门禁。
 生成矩阵及轻量/原生回归不替代全面语义准确率、Office 真机或浏览器 WASM 运行测试。
 `substack` 与 `cfrac` 本批复用既有 Command 表达行/操作数，没有新增公共枚举或序列化字段，
@@ -212,3 +224,9 @@ v3 envelope 及字符串所有权不变。输入/模式枚举增加 Deserialize�
 WASM/JS 本批只增加模型无关的两个 v3 函数和 TS 模块助手，不修改既有 v3 envelope
 字段、Worker 协议、识别和旧文档转换接口；没有新依赖。复核后只刷新 conversion/wasm
 源码树哈希；能力矩阵漂移、全部冻结和既有 Worker 单测门禁保持。
+
+AsciiMath pilot 本批增量增加独立 experimental Rust 模块、两个函数与诊断类型，
+复用既有 LatexNode，没有修改公共 AST 节点、OutputFormat、C ABI、绑定 envelope、
+依赖或锁文件。注册表仍拒绝执行 AsciiMath，原因改为实验 parser 未开放通用入口；
+生成能力矩阵的路线/可用性不变。差分复核后只刷新 capability_registry 文件和
+conversion 源码树哈希，不删除或放宽冻结清单及格式支持门禁。

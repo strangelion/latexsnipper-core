@@ -142,3 +142,12 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   then implement separate bounded UnicodeMath and AsciiMath syntax/AST/round-trip
   pilots, and a versioned read-only MTEF milestone before any third-party write.
   See `docs/formula-format-roadmap.md`; all three still require their own gates.
+- FMT-05 partial implementation (2026-10-04): AsciiMath now has an independent
+  experimental Rust lexer/parser and supported AST serializer, versioned synthetic
+  fixtures and explicit size/token/depth limits. Twelve focused tests cover
+  fraction/script binding, nested matrices, rejection and canonical structural
+  round trips, including 4,913 deterministic three-token combinations. One
+  MathML/OMML bridge fixture checks structure only. UnicodeMath, expanded corpus,
+  typography/host parity and registered API/UI directions remain open; the
+  production capability registry still rejects AsciiMath rather than implying
+  support from the existence of an experimental parser.
