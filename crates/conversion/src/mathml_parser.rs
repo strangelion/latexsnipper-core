@@ -5,7 +5,7 @@ use quick_xml::Reader;
 pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
     let cleaned = strip_xml_declaration(xml);
     let mut reader = Reader::from_str(&cleaned);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut stack: Vec<(String, Vec<String>, String)> = Vec::new();
     let mut current_text = String::new();
@@ -30,8 +30,14 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                 current_text.clear();
             }
             Ok(Event::Text(e)) => {
-                let t = crate::xml_util::decode_and_unescape_text(&e).unwrap_or_default();
+                let t = e.decode().map_err(|error| error.to_string())?;
                 current_text.push_str(&t);
+            }
+            Ok(Event::GeneralRef(e)) => {
+                current_text.push_str(&crate::xml_util::decode_xml_reference(&e)?);
+            }
+            Ok(Event::CData(e)) => {
+                current_text.push_str(&e.decode().map_err(|error| error.to_string())?);
             }
             Ok(Event::Empty(e)) => {
                 let tag = local_tag(e.name().as_ref());
@@ -45,12 +51,17 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
             }
             Ok(Event::End(_)) => {
                 if let Some((tag, children, attrs)) = stack.pop() {
-                    let text = if current_text.is_empty() {
+                    let text = if !children.is_empty() {
                         collect_text(&children)
                     } else {
                         current_text.clone()
                     };
-                    let node = build_mathml_node(&tag, &text, &children, &attrs);
+                    let text = if matches!(tag.as_str(), "mtext" | "ms") {
+                        text.as_str()
+                    } else {
+                        text.trim()
+                    };
+                    let node = build_mathml_node(&tag, text, &children, &attrs);
                     current_text.clear();
                     if let Some((_, ref mut parent, _)) = stack.last_mut() {
                         parent.push(node);

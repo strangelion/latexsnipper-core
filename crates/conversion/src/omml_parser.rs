@@ -100,7 +100,7 @@ fn local(name: &[u8]) -> String {
 
 fn parse_inner(xml: &str) -> Result<String, String> {
     let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut stack: Vec<(String, Vec<(String, String)>)> = Vec::new();
     let mut text_buf = String::new();
@@ -113,8 +113,13 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                 text_buf.clear();
             }
             Ok(Event::Text(e)) => {
-                text_buf
-                    .push_str(&crate::xml_util::decode_and_unescape_text(&e).unwrap_or_default());
+                text_buf.push_str(&e.decode().map_err(|error| error.to_string())?);
+            }
+            Ok(Event::GeneralRef(e)) => {
+                text_buf.push_str(&crate::xml_util::decode_xml_reference(&e)?);
+            }
+            Ok(Event::CData(e)) => {
+                text_buf.push_str(&e.decode().map_err(|error| error.to_string())?);
             }
             Ok(Event::Empty(e)) => {
                 let tag = local(e.name().as_ref());
@@ -160,11 +165,9 @@ fn parse_inner(xml: &str) -> Result<String, String> {
             }
             Ok(Event::Eof) => break,
             Ok(Event::Comment(_))
-            | Ok(Event::CData(_))
             | Ok(Event::Decl(_))
             | Ok(Event::PI(_))
-            | Ok(Event::DocType(_))
-            | Ok(Event::GeneralRef(_)) => continue,
+            | Ok(Event::DocType(_)) => continue,
             Err(e) => return Err(format!("OMML parse error: {}", e)),
         }
         buf.clear();
@@ -748,7 +751,7 @@ pub fn parse_omml_to_layout(xml: &str) -> Result<latexsnipper_ast::FormulaLayout
 
 fn parse_omml_node_to_layout(xml: &str) -> Result<latexsnipper_ast::FormulaNode, String> {
     let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut stack: Vec<(String, Vec<latexsnipper_ast::FormulaNode>)> = Vec::new();
     let mut current_text = String::new();
@@ -761,8 +764,14 @@ fn parse_omml_node_to_layout(xml: &str) -> Result<latexsnipper_ast::FormulaNode,
                 current_text.clear();
             }
             Ok(Event::Text(e)) => {
-                let t = crate::xml_util::decode_and_unescape_text(&e).unwrap_or_default();
+                let t = e.decode().map_err(|error| error.to_string())?;
                 current_text.push_str(&t);
+            }
+            Ok(Event::GeneralRef(e)) => {
+                current_text.push_str(&crate::xml_util::decode_xml_reference(&e)?);
+            }
+            Ok(Event::CData(e)) => {
+                current_text.push_str(&e.decode().map_err(|error| error.to_string())?);
             }
             Ok(Event::Empty(_e)) => {
                 let text = String::new();
@@ -773,7 +782,12 @@ fn parse_omml_node_to_layout(xml: &str) -> Result<latexsnipper_ast::FormulaNode,
             }
             Ok(Event::End(_)) => {
                 if let Some((tag, children)) = stack.pop() {
-                    let node = build_omml_layout_node(&tag, &children, &current_text);
+                    let text = if tag == "t" {
+                        current_text.as_str()
+                    } else {
+                        current_text.trim()
+                    };
+                    let node = build_omml_layout_node(&tag, &children, text);
                     if let Some((_, ref mut parent)) = stack.last_mut() {
                         parent.push(node);
                     } else {
@@ -784,11 +798,9 @@ fn parse_omml_node_to_layout(xml: &str) -> Result<latexsnipper_ast::FormulaNode,
             }
             Ok(Event::Eof) => break,
             Ok(Event::Comment(_))
-            | Ok(Event::CData(_))
             | Ok(Event::Decl(_))
             | Ok(Event::PI(_))
-            | Ok(Event::DocType(_))
-            | Ok(Event::GeneralRef(_)) => continue,
+            | Ok(Event::DocType(_)) => continue,
             Err(e) => return Err(format!("XML parse error: {}", e)),
         }
     }

@@ -1,4 +1,22 @@
-use quick_xml::events::BytesText;
+use quick_xml::events::{BytesRef, BytesText};
+
+pub(crate) fn decode_xml_reference(event: &BytesRef<'_>) -> Result<String, String> {
+    if let Some(character) = event
+        .resolve_char_ref()
+        .map_err(|error| error.to_string())?
+    {
+        // Reject character references outside the XML 1.0 legal ranges.
+        if !matches!(character, '\u{9}' | '\u{a}' | '\u{d}' | '\u{20}'..='\u{d7ff}' | '\u{e000}'..='\u{fffd}' | '\u{10000}'..='\u{10ffff}')
+        {
+            return Err("Invalid XML character reference".to_string());
+        }
+        return Ok(character.to_string());
+    }
+    let name = event.decode().map_err(|error| error.to_string())?;
+    quick_xml::escape::resolve_predefined_entity(&name)
+        .map(str::to_string)
+        .ok_or_else(|| format!("Unsupported XML entity reference: {name}"))
+}
 
 pub(crate) fn decode_and_unescape_text(event: &BytesText<'_>) -> Option<String> {
     let decoded = event.decode().ok()?;

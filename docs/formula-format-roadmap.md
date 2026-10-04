@@ -101,6 +101,12 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     新发现 XML 实体独立事件和文本空格丢失列为下一批，不混入矩阵修复验收。
 - [ ] FMT-04：对每条补全运行 LaTeX 与 MathML/OMML/Typst 的结构/语义往返、
   严格拒绝及 best-effort 诊断；化学与 TikZ/PGFPlots 必须独立标识和测试。
+  - 2026-10-04：修复 MathML→LaTeX、OMML→LaTeX/布局回读忽略独立 XML 引用事件
+    的丢字问题；支持 5 个预定义实体、十进制/十六进制合法 XML 1.0 字符引用和字面 CDATA。
+    文本节点的空格保留，结构缩进不作为数学内容；未知实体和非法字符引用明确失败，
+    不扩展外部实体/DTD。8 项专项复现后通过，原生 326 项回归、Clippy、WASM 编译通过。
+    任意 LaTeX 文本特殊字符转义、XML 属性保真和 Office 文件导入读取器仍需单独验收；
+    这不是对任意 MathML/OMML、真实 Office 或排版完全无损的声明。
 - [ ] FMT-05：UnicodeMath/AsciiMath 有界 pilot；用公开、可复现样例验证优先级、
   矩阵、空白和分组规则，不用简单字符串替换冒充 parser。
 - [ ] FMT-06：MathType/MTEF 单独设计审查；未通过前继续显示 unsupported，
