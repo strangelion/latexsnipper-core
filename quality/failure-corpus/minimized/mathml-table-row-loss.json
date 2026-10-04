@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "scope": "Synthetic MathML readback failure observed at 4e8c50d; immutable intake evidence, not a current support declaration",
+  "cases": [
+    {
+      "id": "two-by-two",
+      "mathml": "<math><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd></mtr><mtr><mtd><mn>3</mn></mtd><mtd><mn>4</mn></mtd></mtr></mtable></math>",
+      "actualLatex": "\\begin{matrix}  \\end{matrix}",
+      "expectedLatex": "\\begin{matrix} 1 & 2 \\\\ 3 & 4 \\end{matrix}"
+    },
+    {
+      "id": "two-by-one",
+      "mathml": "<math><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mn>2</mn></mtd></mtr></mtable></math>",
+      "actualLatex": "\\begin{matrix} 1 & 2 \\end{matrix}",
+      "expectedLatex": "\\begin{matrix} 1 \\\\ 2 \\end{matrix}"
+    }
+  ]
+}

@@ -368,6 +368,8 @@ WASM release Node/Web ESM 包在 Node 中各实测 144 条路线，编译 TS 助
 真实浏览器视觉、WebView2 和全部 Office 矩阵不因此完成。FMT-02 已登记四条语法缺口，
 `dfrac` / `tfrac` 样式、`substack` 多行结构及 `cfrac` 连分数已补首批解析/导出回归，
 其他失败分类、对齐回读和完整跨格式保真继续待办。具体子项以该路线图为准。
+MathML 矩阵回读已补行列/嵌套/空行回归和哈希固定失败台账，去掉从单元格文本猜测
+行列的启发式；standalone `substack` 回读仅重建为矩阵，命令身份/字号与宿主视觉仍待办。
 Office 本应用行内/行间 OMML/OLE 双向及保存重开专项已通过；编号引用、跨故事、
 真实桌面管道和实际 Office.js 宿主继续列在 O-06 门禁。
 

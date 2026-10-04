@@ -90,6 +90,15 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     连分数具体尺寸、间距及浏览器对 `numalign` 的支持未实测；FMT-02–04 仍为部分完成。
 - [ ] FMT-03：优先覆盖分数/根式、上下标、定界符、矩阵、align/cases、嵌套积分、
   概率统计和化学输入；保留源区间，未知命令不能静默掉字或冒充可编辑目标。
+  - 2026-10-04：新增 MathML 表格行列丢失台账及哈希固定合成样例。
+    修复 `mtable` 回读跳过多列整行、将单列多行合并为一行的问题；按 XML 行边界
+    重建矩阵，不再从 LaTeX 文本中的 `&` 猜测单元格。7 项专项覆盖行列、空行/空单元格、
+    嵌套矩阵、命名空间、生成矩阵和 standalone `substack` 的行数回读。
+    `substack` 的 MathML 回读目前重建为 `matrix`，保留各行，不保留原命令身份/字号；
+    带括号矩阵、标签行的排版和真实 Word 视觉仍待验收，不能据此声称任意 MathML 无损。
+    原 minimized 失败证据不改写、不提升为 promoted；当前验收见 `mathml_tables.rs`。
+    轻量 278 项/原生 318 项转换回归、Clippy、WASM 编译和冻结检查通过。
+    新发现 XML 实体独立事件和文本空格丢失列为下一批，不混入矩阵修复验收。
 - [ ] FMT-04：对每条补全运行 LaTeX 与 MathML/OMML/Typst 的结构/语义往返、
   严格拒绝及 best-effort 诊断；化学与 TikZ/PGFPlots 必须独立标识和测试。
 - [ ] FMT-05：UnicodeMath/AsciiMath 有界 pilot；用公开、可复现样例验证优先级、

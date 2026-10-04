@@ -280,10 +280,7 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             }
         }
 
-        "mtable" => {
-            let rows = extract_matrix_rows(children);
-            matrix_to_latex(&rows, "")
-        }
+        "mtable" => matrix_to_latex(children),
         "mtr" => children.join(" & "),
         "mtd" => children.join(""),
 
@@ -535,38 +532,10 @@ fn map_over_accent(base: &str, accent: &str) -> String {
     }
 }
 
-fn extract_matrix_rows(children: &[String]) -> Vec<Vec<String>> {
-    let mut rows = Vec::new();
-    let mut current_row = Vec::new();
-    for child in children {
-        if child.starts_with("\\tr") || child.contains("&") {
-            if !current_row.is_empty() {
-                rows.push(current_row.clone());
-                current_row.clear();
-            }
-        } else if !child.is_empty() {
-            let cells: Vec<String> = child.split(" & ").map(|s| s.to_string()).collect();
-            if cells.len() > 1 {
-                rows.push(cells);
-            } else {
-                current_row.push(child.clone());
-            }
-        }
-    }
-    if !current_row.is_empty() {
-        rows.push(current_row);
-    }
-    rows
-}
-
-fn matrix_to_latex(rows: &[Vec<String>], env: &str) -> String {
-    let env_name = if env.is_empty() { "matrix" } else { env };
-    let body = rows
-        .iter()
-        .map(|row| row.join(" & "))
-        .collect::<Vec<_>>()
-        .join(" \\\\ ");
-    format!("\\begin{{{}}} {} \\end{{{}}}", env_name, body, env_name)
+fn matrix_to_latex(rows: &[String]) -> String {
+    // Each child is already one XML row; never infer cells from its LaTeX text.
+    let body = rows.join(" \\\\ ");
+    format!("\\begin{{matrix}} {body} \\end{{matrix}}")
 }
 
 #[cfg(test)]
