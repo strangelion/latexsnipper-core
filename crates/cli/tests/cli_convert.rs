@@ -1,21 +1,74 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use latexsnipper_image::color::PixelFormat;
 use latexsnipper_image::decode::encode_png;
 use latexsnipper_image::SnipperImage;
 
 fn workspace() -> std::path::PathBuf {
-    let path = std::env::temp_dir().join(format!(
-        "latexsnipper-cli-test-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    std::fs::create_dir_all(&path).unwrap();
-    path
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    exclusive_workspace(&std::env::temp_dir(), timestamp, &SEQUENCE)
+}
+
+fn exclusive_workspace(
+    root: &std::path::Path,
+    timestamp: u128,
+    sequence: &AtomicU64,
+) -> std::path::PathBuf {
+    for _ in 0..256 {
+        let nonce = sequence.fetch_add(1, Ordering::Relaxed);
+        let path = root.join(format!(
+            "latexsnipper-cli-test-{}-{timestamp}-{nonce}",
+            std::process::id(),
+        ));
+        match std::fs::create_dir(&path) {
+            Ok(()) => return path,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("Cannot create test workspace {}: {error}", path.display()),
+        }
+    }
+    panic!("Cannot reserve an exclusive test workspace after 256 attempts")
+}
+
+#[test]
+fn workspace_creation_is_exclusive_when_timestamps_repeat() {
+    let root = workspace();
+    let sequence = AtomicU64::new(0);
+    let existing = root.join(format!("latexsnipper-cli-test-{}-0-0", std::process::id()));
+    std::fs::create_dir(&existing).unwrap();
+    std::fs::write(existing.join("owned-by-another-test"), "preserve").unwrap();
+    let paths = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..32)
+            .map(|_| scope.spawn(|| exclusive_workspace(&root, 0, &sequence)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(
+        paths.iter().collect::<std::collections::HashSet<_>>().len(),
+        32
+    );
+    assert!(paths.iter().all(|path| path != &existing));
+    assert_eq!(
+        std::fs::read_to_string(existing.join("owned-by-another-test")).unwrap(),
+        "preserve"
+    );
+    for path in &paths {
+        std::fs::write(path.join("formula.tex"), "a+b").unwrap();
+    }
+    std::fs::remove_dir_all(&paths[0]).unwrap();
+    assert!(paths
+        .iter()
+        .skip(1)
+        .all(|path| path.join("formula.tex").is_file()));
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 fn snipper() -> Command {
