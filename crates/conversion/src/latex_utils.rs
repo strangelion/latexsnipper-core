@@ -2,17 +2,30 @@
 
 /// Split stack rows without splitting grouped operands or nested environments.
 pub(crate) fn split_stack_rows(source: &str) -> Vec<&str> {
+    split_math_top_level(source, true)
+}
+
+fn split_matrix_cells(source: &str) -> Vec<&str> {
+    split_math_top_level(source, false)
+}
+
+fn split_math_top_level(source: &str, split_rows: bool) -> Vec<&str> {
     let bytes = source.as_bytes();
     let mut rows = Vec::new();
     let (mut pos, mut start, mut braces, mut environments) = (0, 0, 0usize, 0usize);
     while pos < bytes.len() {
         match bytes[pos] {
             b'\\' if bytes.get(pos + 1) == Some(&b'\\') => {
-                if braces == 0 && environments == 0 {
+                if split_rows && braces == 0 && environments == 0 {
                     rows.push(source[start..pos].trim());
                     start = pos + 2;
                 }
                 pos += 2;
+            }
+            b'&' if !split_rows && braces == 0 && environments == 0 => {
+                rows.push(source[start..pos].trim());
+                start = pos + 1;
+                pos += 1;
             }
             b'\\' => {
                 pos += 1;
@@ -213,12 +226,15 @@ pub fn extract_env<'a>(latex: &'a str, env: &str) -> Option<&'a str> {
 
 /// Split matrix rows by \\ separator
 pub fn split_matrix_rows(content: &str) -> Vec<Vec<&str>> {
-    content
-        .split("\\\\")
-        .filter(|s| !s.trim().is_empty())
-        .map(|row| row.split('&').filter(|s| !s.trim().is_empty()).collect())
-        .filter(|row: &Vec<&str>| !row.is_empty())
-        .collect()
+    if content.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut rows = split_stack_rows(content);
+    // A final row terminator is not an additional blank row; interior blank rows are retained.
+    if rows.last().is_some_and(|row| row.is_empty()) {
+        rows.pop();
+    }
+    rows.into_iter().map(split_matrix_cells).collect()
 }
 
 /// Convert Typst to approximate LaTeX

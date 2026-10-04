@@ -843,30 +843,27 @@ impl LatexParser {
 
     fn parse_until_begin_end(&mut self, env_name: &str) -> String {
         let mut result = String::new();
-        let mut depth = 0i32;
-        let end_tag = format!("\\end{{{}}}", env_name);
+        let mut environments: Vec<String> = Vec::new();
 
         while self.pos < self.chars.len() {
-            let remaining: String = self.chars[self.pos..].iter().take(end_tag.len()).collect();
-            if remaining == end_tag {
-                self.pos += end_tag.len();
-                break;
+            if self.chars[self.pos] == '\\' && self.chars.get(self.pos + 1) == Some(&'\\') {
+                result.push_str("\\\\");
+                self.pos += 2;
+                continue;
             }
-            // Track nested \begin{}...\end{}
-            if self.pos + 5 < self.chars.len() {
-                let sub: String = self.chars[self.pos..].iter().take(6).collect();
-                if sub.starts_with("\\begin") {
-                    depth += 1;
-                } else if sub.starts_with("\\end{") {
-                    // Only decrement if it matches our environment
-                    let after_end: String = self.chars[self.pos + 5..]
-                        .iter()
-                        .take(env_name.len() + 1)
-                        .collect();
-                    if after_end.starts_with(env_name) && after_end.ends_with('}') && depth > 0 {
-                        depth -= 1;
-                    }
+            if let Some((begin, name, length)) = self.environment_tag_at() {
+                if !begin && environments.is_empty() && name == env_name {
+                    self.pos += length;
+                    break;
                 }
+                if begin {
+                    environments.push(name);
+                } else if environments.last() == Some(&name) {
+                    environments.pop();
+                }
+                result.extend(self.chars[self.pos..self.pos + length].iter());
+                self.pos += length;
+                continue;
             }
             result.push(self.chars[self.pos]);
             self.pos += 1;
@@ -875,32 +872,46 @@ impl LatexParser {
         result
     }
 
-    fn parse_matrix_content(content: &str) -> Vec<Vec<LatexNode>> {
-        let mut rows = Vec::new();
-        // A matrix row ends at the LaTeX `\\` control symbol. Splitting on
-        // every single backslash corrupts commands inside a cell (`\geq`
-        // became a separate "geq" row, for example).
-        for row_str in content.split("\\\\") {
-            let row_str = row_str.trim();
-            if row_str.is_empty() {
-                continue;
-            }
-            let cells: Vec<LatexNode> = row_str
-                .split('&')
-                .map(|cell| {
-                    let mut parser = LatexParser::new(cell.trim());
-                    parser.parse()
-                })
-                .collect();
-            if !cells.is_empty() {
-                rows.push(cells);
-            }
+    fn environment_tag_at(&self) -> Option<(bool, String, usize)> {
+        let remaining = &self.chars[self.pos..];
+        let (begin, command_len) = if remaining.starts_with(&['\\', 'b', 'e', 'g', 'i', 'n']) {
+            (true, 6)
+        } else if remaining.starts_with(&['\\', 'e', 'n', 'd']) {
+            (false, 4)
+        } else {
+            return None;
+        };
+        let mut pos = command_len;
+        while remaining
+            .get(pos)
+            .is_some_and(|character| character.is_whitespace())
+        {
+            pos += 1;
         }
-        rows
+        if remaining.get(pos) != Some(&'{') {
+            return None;
+        }
+        let start = pos + 1;
+        let end = start
+            + remaining[start..]
+                .iter()
+                .position(|character| *character == '}')?;
+        Some((begin, remaining[start..end].iter().collect(), end + 1))
+    }
+
+    fn parse_matrix_content(content: &str) -> Vec<Vec<LatexNode>> {
+        crate::latex_utils::split_matrix_rows(content)
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|cell| LatexParser::new(cell).parse())
+                    .collect()
+            })
+            .collect()
     }
 
     fn skip_whitespace(&mut self) {
-        while self.pos < self.chars.len() && self.chars[self.pos] == ' ' {
+        while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
             self.pos += 1;
         }
     }
