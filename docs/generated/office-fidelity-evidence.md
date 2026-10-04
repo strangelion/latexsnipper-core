@@ -6,7 +6,7 @@ The measurements below execute Core import, same-format export, package validati
 
 | Case | Format pair | structuralValidity | semanticPreservation | layoutPreservation | visualFidelity | editability | roundTripFidelity |
 |---|---|---|---|---|---|---|---|
-| docx-office-rich-v1 | DOCX -> DOCX | verified (1.000) | partial (0.888) | partial (1.000) | not-measured | partial | partial (0.888) |
+| docx-office-rich-v1 | DOCX -> DOCX | verified (1.000) | verified (1.000) | partial (1.000) | not-measured | partial | partial (1.000) |
 | pptx-presentation-rich-v1 | PPTX -> PPTX | verified (1.000) | verified (1.000) | partial (1.000) | not-measured | partial | partial (1.000) |
 | xlsx-workbook-rich-v1 | XLSX -> XLSX | verified (1.000) | partial (0.750) | partial (1.000) | not-measured | partial | partial (0.750) |
 | pdf-rich-v1 | PDF -> PDF | verified (1.000) | partial (0.929) | partial (0.985) | not-measured | unsupported | unsupported |
