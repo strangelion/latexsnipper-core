@@ -197,3 +197,12 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   this does not replace the selection with an image/OLE object. Real Office.js
   acceptance, all-open-document enumeration and the direct command matrix stay
   open in the Office batch-update plan.
+- Office Word document-target milestone (2026-10-04): the new native Word
+  capability enumerates all open documents without switching focus, distinguishes
+  duplicate titles by context path and explicitly activates the chosen target
+  before preview. Real owned Word documents passed selection binding, Save-As,
+  close and readonly rejection with source unchanged; browser refresh and protocol
+  tests also pass. This is adapter/UI proof, not a new installed add-in/Tauri pipe,
+  same-path reopen identity or Excel/PowerPoint/Visio enumeration gate. O-06 and
+  the OLE/image matrix stay open. Core c538ba6 CI 37202683998, CodeQL 37202683951
+  and WASM 37202683939 have been verified successful.
