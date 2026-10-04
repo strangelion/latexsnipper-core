@@ -27,7 +27,7 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
 
 ## 排队顺序与验收条件
 
-- [ ] FMT-01：将输入方向与严格/最佳努力模式补进现有能力投影，输出可读支持矩阵；
+- [x] FMT-01：将输入方向与严格/最佳努力模式补进现有能力投影，输出可读支持矩阵；
   保持已有 API 兼容，并明确 WASM、C/Python 与原生运行时限制。
   - [x] Rust 能力投影包含输入、目标、模式、重建路径和拒绝原因，复用现有导出注册表。
   - [x] 新增 `DocumentConverter::convert_formula_string`；旧函数与既有序列化字段不变。
@@ -44,7 +44,12 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     复用 v3 envelope、旧字符串释放方式及 strict 默认，未知 JSON 字段/枚举明确拒绝。
     Windows release 动态库 ctypes 实测 46 条转换、98 条拒绝，错误/空指针/UTF-8/
     长度边界及旧 Session 兼容通过；三平台 CI 已接入相同 smoke，尚未宣称远端全绿。
-  - [ ] JS 的模式入口与能力投影尚未接入，不能从 Rust 可编译推断绑定可调用。
+  - [x] WASM 已实现 `convert_formula_v3` / `formula_capabilities_v3` 和 JS 强类型
+    同步模块助手，复用原 v3 envelope；release Node 与初始化 Web ESM 包在 Node 中
+    各实测 144 条路线（46 条转换、98 条拒绝），默认 strict、错误/超限/DTD 拒绝通过。
+    实际编译后的 TS 助手、bundler 构建、42 项 JS 单测、WASM 全目标编译及 Clippy 通过。
+    浏览器单测已接入原 Chrome/Firefox CI，本地未做浏览器视觉/真实 WebView2 验收。
+    本批不扩展识别 Worker RPC，转换的隔离执行和硬取消由调用方负责。
   - 新入口对源及重建 LaTeX 增加单次 64 KiB、64 层词法嵌套、512 个结构 token
     保守预算，并拒绝 XML DTD；超限明确失败，旧转换/批量接口不受此预算影响。
     这是资源保护而非完整语法校验，也不代表真实 Office 的准确率或视觉验收。
@@ -120,3 +125,6 @@ C 本批仅增加两个无模型函数、头文件声明和请求 DTO，旧 Sess
 v3 envelope 及字符串所有权不变。输入/模式枚举增加 Deserialize，保持原 kebab-case
 拼写；Cargo.lock 仅增加已有 conversion crate 的 FFI 依赖边，不升级第三方包。
 复核后刷新 capability_registry 文件及 conversion/ffi 源码树哈希，保持全部门禁。
+WASM/JS 本批只增加模型无关的两个 v3 函数和 TS 模块助手，不修改既有 v3 envelope
+字段、Worker 协议、识别和旧文档转换接口；没有新依赖。复核后只刷新 conversion/wasm
+源码树哈希；能力矩阵漂移、全部冻结和既有 Worker 单测门禁保持。

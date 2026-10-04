@@ -4,7 +4,10 @@ use std::sync::Arc;
 use js_sys::{Function, Reflect, Uint8Array};
 use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3};
 use latexsnipper_ast::{DiagnosticLevel, Document, GeneratedContent};
-use latexsnipper_conversion::{DocumentConverter, OutputFormat};
+use latexsnipper_conversion::{
+    CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
+    FormulaInputFormat, OutputFormat,
+};
 use latexsnipper_engine::{EngineConfig, RecognizeMode, SnipperEngine};
 use latexsnipper_image::PixelFormat;
 use latexsnipper_runtime::{AccelerationMode, ModelHandle, RuntimeBackend, SharedModelResolver};
@@ -65,6 +68,92 @@ pub fn capabilities_v3() -> JsValue {
             Vec::new(),
         ))
     })
+}
+
+/// Query model-free formula direction/mode support for the WASM target.
+#[wasm_bindgen]
+pub fn formula_capabilities_v3() -> JsValue {
+    serialize_v3_to_js(&ApiEnvelopeV3::success(
+        CapabilityRegistry::formula_conversions(CapabilityTarget::Wasm32UnknownUnknown),
+        Vec::new(),
+    ))
+}
+
+/// Convert a formula string without changing recognition or loaded-model state.
+/// Omitted mode defaults to strict; source and reconstruction budgets apply.
+#[wasm_bindgen]
+pub fn convert_formula_v3(
+    content: &str,
+    input_format: &str,
+    target_format: &str,
+    mode: Option<String>,
+) -> JsValue {
+    let result = convert_formula_value(content, input_format, target_format, mode.as_deref());
+    let envelope = match result {
+        Ok(data) => ApiEnvelopeV3::success(data, Vec::new()),
+        Err(error) => ApiEnvelopeV3::failure(error, Vec::new()),
+    };
+    serialize_v3_to_js(&envelope)
+}
+
+fn convert_formula_value(
+    content: &str,
+    input_format: &str,
+    target_format: &str,
+    mode: Option<&str>,
+) -> Result<serde_json::Value, ApiErrorV3> {
+    let failure = |code: &str, message: &str, detail: Option<String>| ApiErrorV3 {
+        code: code.to_owned(),
+        message: message.to_owned(),
+        recoverable: false,
+        details: detail.map(|detail| serde_json::json!({ "detail": detail })),
+    };
+    let input: FormulaInputFormat = serde_json::from_value(serde_json::json!(input_format
+        .trim()
+        .to_ascii_lowercase()
+        .replace('_', "-")))
+    .map_err(|_| failure("INVALID_ARGUMENT", "Unknown formula input format.", None))?;
+    let output = output_format(&target_format.trim().replace('-', "_"))
+        .ok_or_else(|| failure("INVALID_ARGUMENT", "Unknown formula output format.", None))?;
+    let mode: FormulaConversionMode = serde_json::from_value(serde_json::json!(mode
+        .unwrap_or("strict")
+        .trim()
+        .to_ascii_lowercase()
+        .replace('_', "-")))
+    .map_err(|_| {
+        failure(
+            "INVALID_ARGUMENT",
+            "Mode must be strict or best-effort.",
+            None,
+        )
+    })?;
+    let capability = CapabilityRegistry::formula_conversion(
+        input,
+        output,
+        mode,
+        CapabilityTarget::Wasm32UnknownUnknown,
+    );
+    if !capability.available {
+        return Err(failure(
+            "UNSUPPORTED_FORMAT",
+            "The formula conversion route is not supported.",
+            capability.unavailable_reason.map(str::to_owned),
+        ));
+    }
+    let content = DocumentConverter::convert_formula_string(content, input, output, mode).map_err(
+        |error| {
+            let code = if matches!(
+                error,
+                latexsnipper_foundation::SnipperError::LimitExceeded(_)
+            ) {
+                "INPUT_TOO_LARGE"
+            } else {
+                "CONVERSION_FAILED"
+            };
+            failure(code, "Formula conversion failed.", Some(error.to_string()))
+        },
+    )?;
+    Ok(serde_json::json!({ "content": content, "capability": capability }))
 }
 
 #[wasm_bindgen]

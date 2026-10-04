@@ -24,8 +24,9 @@ LaTeX to OMML source syntax, not complete semantic or visual fidelity. Other str
 routes and UnicodeMath/AsciiMath/MTEF inputs fail explicitly. Python exposes
 `convert_formula` and `formula_conversion_capabilities` without a recognition session;
 C exposes model-free `latexsnipper_formula_convert` and `latexsnipper_formula_capabilities`
-with the existing v3 JSON envelope and string-free ownership; JS mode-aware bindings remain
-pending. New per-call conservative budgets bound source
+with the existing v3 JSON envelope and string-free ownership. WASM exposes
+`convert_formula_v3` / `formula_capabilities_v3`; JS adds typed synchronous direct-module
+helpers (not recognition-worker RPC methods). New per-call conservative budgets bound source
 and reconstructed LaTeX to 64 KiB, 64 lexical nesting levels and 512 structural tokens;
 XML DTDs are rejected. Existing endpoints and export metadata are unchanged.
 

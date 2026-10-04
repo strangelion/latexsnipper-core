@@ -14,7 +14,8 @@ Compiled support is not complete syntax coverage, losslessness or visual parity.
 Strict currently validates the supported LaTeX source subset before OMML export.\n\
 Best-effort may lose unsupported syntax/style; reconstructed LaTeX is not author source.\n\n\
 Python exposes `convert_formula` and `formula_conversion_capabilities`; C exposes model-free formula symbols.\n\
-JS mode-aware bindings remain pending. See `crates/ffi/include/latexsnipper_session.h` for the additive C ABI.\n\
+WASM exposes `convert_formula_v3` and `formula_capabilities_v3`; JS provides typed direct-module helpers.\n\
+See `crates/ffi/include/latexsnipper_session.h` for C and `crates/wasm/js/README.md` for synchronous JS/worker boundaries.\n\
 The new entry point bounds source/reconstructed LaTeX to 64 KiB, 64 lexical nesting levels and 512 structural tokens.\n\
 These are conservative per-call budgets, not syntax validation; existing APIs are unchanged.\n\
 OLE is a host container, not a Core string format. VSTO is not a format.\n\

@@ -86,7 +86,9 @@ jobs:
         run: npm pack --dry-run
       - name: Smoke-test ESM and Node imports
         working-directory: crates/wasm/js
-        run: npm run smoke:packages
+        run: |
+          npm run build
+          npm run smoke:packages
       - name: Upload browser package
         uses: actions/upload-artifact@v7
         with:

@@ -1,8 +1,8 @@
 use js_sys::{Reflect, JSON};
 use latexsnipper_wasm::{
     api_info_v3, begin_model_update_v2, capabilities_v2, capabilities_v3, clear_models_v2,
-    commit_model_update_v2, convert_v2, convert_v3, load_model_v2, recognize_v2,
-    rollback_model_update_v2, unload_model_v2,
+    commit_model_update_v2, convert_formula_v3, convert_v2, convert_v3, formula_capabilities_v3,
+    load_model_v2, recognize_v2, rollback_model_update_v2, unload_model_v2,
 };
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
@@ -19,6 +19,92 @@ fn error_code(value: &JsValue) -> String {
 
 fn json(value: &JsValue) -> String {
     JSON::stringify(value).unwrap().as_string().unwrap()
+}
+
+#[wasm_bindgen_test]
+fn formula_string_routes_and_errors_are_model_free_and_versioned() {
+    let capabilities = formula_capabilities_v3();
+    assert_eq!(
+        field(&field(&capabilities, "versions"), "apiEnvelopeVersion").as_f64(),
+        Some(3.0)
+    );
+    let routes: serde_json::Value =
+        serde_json::from_str(&json(&field(&capabilities, "data"))).unwrap();
+    let routes = routes.as_array().unwrap();
+    assert_eq!(routes.len(), 144);
+    let mut success = 0;
+    for route in routes {
+        let input = route["input"].as_str().unwrap();
+        let source = match input {
+            "mathml" => "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
+            "omml" => "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>",
+            "typst" => "frac(a, b)",
+            "markdown" => r"A fraction $\frac{a}{b}$",
+            _ => r"\frac{a}{b}",
+        };
+        let result = convert_formula_v3(
+            source,
+            input,
+            route["output"].as_str().unwrap(),
+            Some(route["mode"].as_str().unwrap().into()),
+        );
+        assert_eq!(
+            field(&result, "ok").as_bool().unwrap(),
+            route["available"] == true
+        );
+        if route["available"] == true {
+            success += 1;
+            let data: serde_json::Value =
+                serde_json::from_str(&json(&field(&result, "data"))).unwrap();
+            assert_eq!(data["capability"], *route);
+            assert!(!data["content"].as_str().unwrap().is_empty());
+        } else {
+            assert_eq!(error_code(&result), "UNSUPPORTED_FORMAT");
+        }
+    }
+    assert_eq!(success, 46);
+    assert!(field(
+        &convert_formula_v3(r"\frac{a}{b}", "latex", "omml", None),
+        "ok"
+    )
+    .as_bool()
+    .unwrap());
+    for (content, input, output, mode, code) in [
+        ("x".to_owned(), "ole", "omml", None, "INVALID_ARGUMENT"),
+        ("x".to_owned(), "latex", "pdf", None, "INVALID_ARGUMENT"),
+        (
+            "x".to_owned(),
+            "latex",
+            "omml",
+            Some("lossless"),
+            "INVALID_ARGUMENT",
+        ),
+        (
+            r"\unknownmacro+x".into(),
+            "latex",
+            "omml",
+            None,
+            "CONVERSION_FAILED",
+        ),
+        (
+            "x".repeat(64 * 1024 + 1),
+            "latex",
+            "omml",
+            None,
+            "INPUT_TOO_LARGE",
+        ),
+    ] {
+        assert_eq!(
+            error_code(&convert_formula_v3(
+                &content,
+                input,
+                output,
+                mode.map(str::to_owned)
+            )),
+            code
+        );
+    }
+    assert!(field(&capabilities_v3(), "ok").as_bool().unwrap());
 }
 
 fn bordered_table_pixels(width: usize, height: usize) -> Vec<u8> {
