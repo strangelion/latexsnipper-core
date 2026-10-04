@@ -1251,7 +1251,8 @@ fn render_matrix_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
     match node {
         LatexNode::Matrix { env, rows } => {
             let (open, close) = match env.as_str() {
-                "matrix" | "smallmatrix" | "aligned" | "align" | "gather" => ("", ""),
+                "matrix" | "smallmatrix" | "aligned" | "align" | "align*" | "gather"
+                | "gather*" => ("", ""),
                 "pmatrix" => ("(", ")"),
                 "bmatrix" => ("[", "]"),
                 "Bmatrix" => ("{", "}"),

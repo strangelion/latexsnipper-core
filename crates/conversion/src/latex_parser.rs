@@ -643,7 +643,7 @@ impl LatexParser {
                 let rows = Self::parse_matrix_content(&content);
                 Some(LatexNode::Cases(rows))
             }
-            "aligned" | "align" | "gather" => {
+            "aligned" | "align" | "align*" | "gather" | "gather*" => {
                 let rows = Self::parse_matrix_content(&content);
                 Some(LatexNode::Matrix {
                     env: env_name,

@@ -90,3 +90,42 @@ fn fraction_with_nested_matrix_keeps_every_numerator_operand() {
     }
     assert!(result.contains("<mi>z</mi>"));
 }
+
+#[test]
+fn root_with_a_matrix_does_not_consume_the_following_expression() {
+    for (index, tag) in [("", "msqrt"), ("[3]", "mroot")] {
+        let result = xml(&format!(
+            "\\sqrt{index}{{\\begin{{matrix}}1&2\\\\3&4\\end{{matrix}}}}+z"
+        ));
+        assert!(result.contains(&format!("<{tag}>")), "{result}");
+        assert_eq!(result.matches("<mtr>").count(), 2, "{result}");
+        assert_eq!(result.matches("<mtd>").count(), 4, "{result}");
+        assert!(result.contains("<mi>z</mi>"), "{result}");
+    }
+}
+
+#[test]
+fn matrix_in_a_script_preserves_the_script_base_and_tail() {
+    for (marker, tag) in [("^", "msup"), ("_", "msub")] {
+        let result = xml(&format!(
+            "x{marker}{{\\begin{{matrix}}1&2\\end{{matrix}}}}+y"
+        ));
+        assert!(result.contains(&format!("<{tag}>")), "{result}");
+        assert!(
+            result.contains("<mi>x</mi>") && result.contains("<mi>y</mi>"),
+            "{result}"
+        );
+        assert_eq!(result.matches("<mtd>").count(), 2, "{result}");
+    }
+}
+
+#[test]
+fn matrix_in_a_root_index_retains_radicand_and_tail() {
+    let result = xml(r"\sqrt[\begin{matrix}1&2\end{matrix}]{3}+z");
+    assert!(result.contains("<mroot>"), "{result}");
+    assert_eq!(result.matches("<mtd>").count(), 2, "{result}");
+    assert!(
+        result.contains("<mn>3</mn>") && result.contains("<mi>z</mi>"),
+        "{result}"
+    );
+}

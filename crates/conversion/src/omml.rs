@@ -182,6 +182,9 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
             if env == "array" {
                 return Err("OMML array column specifications require separate validation".into());
             }
+            if matches!(env.as_str(), "align*" | "gather*") {
+                return Err("OMML starred alignment layout requires separate validation; original source must be retained".into());
+            }
             rows.iter().flatten().collect()
         }
         Cases(rows) => rows.iter().flatten().collect(),

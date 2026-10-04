@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "scope": "Synthetic starred alignment parser failure observed at 380588f; immutable intake evidence, not a current fidelity declaration",
+  "cases": [
+    {
+      "id": "align-star",
+      "latex": "\\begin{align*}x&=1\\\\y&=2\\end{align*}",
+      "actualNodeKind": "command",
+      "expectedNodeKind": "matrix",
+      "expectedRows": 2,
+      "expectedColumns": 2
+    },
+    {
+      "id": "gather-star",
+      "latex": "\\begin{gather*}x=1\\\\y=2\\end{gather*}",
+      "actualNodeKind": "command",
+      "expectedNodeKind": "matrix",
+      "expectedRows": 2,
+      "expectedColumns": 1
+    }
+  ]
+}
