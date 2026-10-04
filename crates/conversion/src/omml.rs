@@ -1386,9 +1386,9 @@ mod tests {
                         }
                     }
                 }
-                Ok(Event::Text(event)) => {
-                    let text =
-                        crate::xml_util::decode_and_unescape_text(&event).unwrap_or_default();
+                Ok(event @ (Event::Text(_) | Event::GeneralRef(_) | Event::CData(_))) => {
+                    let text = crate::xml_util::decode_xml_content(&event)
+                        .expect("fixture text must decode");
                     for nary in &active {
                         if nary
                             .body_depth

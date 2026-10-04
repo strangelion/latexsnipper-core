@@ -1,8 +1,5 @@
-#[cfg(feature = "native")]
-use quick_xml::events::Event;
-use quick_xml::events::{BytesRef, BytesText};
+use quick_xml::events::{BytesRef, Event};
 
-#[cfg(feature = "native")]
 pub(crate) fn decode_xml_content(event: &Event<'_>) -> Result<String, String> {
     match event {
         Event::Text(text) => text
@@ -36,23 +33,21 @@ pub(crate) fn decode_xml_reference(event: &BytesRef<'_>) -> Result<String, Strin
         .ok_or_else(|| format!("Unsupported XML entity reference: {name}"))
 }
 
-pub(crate) fn decode_and_unescape_text(event: &BytesText<'_>) -> Option<String> {
-    let decoded = event.decode().ok()?;
-    quick_xml::escape::unescape(&decoded)
-        .ok()
-        .map(|text| text.into_owned())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn decodes_predefined_xml_entities() {
-        let event = BytesText::from_escaped("x &lt; y &amp;&amp; y &gt; 0");
-        assert_eq!(
-            decode_and_unescape_text(&event).as_deref(),
-            Some("x < y && y > 0")
-        );
+        let mut reader = quick_xml::Reader::from_str("x &lt; y &amp;&amp; y &gt; 0");
+        let mut text = String::new();
+        loop {
+            let event = reader.read_event().unwrap();
+            if matches!(event, Event::Eof) {
+                break;
+            }
+            text.push_str(&decode_xml_content(&event).unwrap());
+        }
+        assert_eq!(text, "x < y && y > 0");
     }
 }

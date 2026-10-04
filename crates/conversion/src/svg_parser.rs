@@ -24,7 +24,7 @@ pub struct SvgParseResult {
 
 pub fn parse_svg(svg: &str) -> SvgParseResult {
     let mut reader = Reader::from_str(svg);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
     let mut shapes = Vec::new();
     let mut diagnostics = Vec::new();
     let mut reported_unsupported = std::collections::HashSet::new();
@@ -65,7 +65,25 @@ pub fn parse_svg(svg: &str) -> SvgParseResult {
                         }
                     }
                     "text" => {
-                        let text_content = read_text_content(&mut reader, &mut buf);
+                        let text_content =
+                            match read_text_content(&mut reader, &mut buf, &mut diagnostics) {
+                                Ok(text) => text,
+                                Err(error) => {
+                                    diagnostics.push(
+                                        Diagnostic::new(
+                                            DiagnosticLevel::Warning,
+                                            W_UNSUPPORTED_FEATURE,
+                                            format!("SVG text could not be decoded: {error}"),
+                                        )
+                                        .with_formats(Some("SVG"), None)
+                                        .with_recoverable(true)
+                                        .with_remediation(
+                                            "Repair SVG text or retain the original source asset",
+                                        ),
+                                    );
+                                    continue;
+                                }
+                            };
                         if !text_content.is_empty() {
                             shapes.push(ShapeBlock {
                                 shape_type: ShapeType::Custom,
@@ -406,22 +424,39 @@ fn apply_transform(rect: Rect, transform: &Option<String>) -> Rect {
     rect
 }
 
-fn read_text_content(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> String {
+fn read_text_content(
+    reader: &mut Reader<&[u8]>,
+    buf: &mut Vec<u8>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Result<String, String> {
     let mut text = String::new();
+    let mut depth = 1usize;
     loop {
         match reader.read_event_into(buf) {
-            Ok(Event::Text(ref e)) => {
-                if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
-                    text.push_str(&t);
+            Ok(event @ (Event::Text(_) | Event::GeneralRef(_) | Event::CData(_))) => {
+                text.push_str(&crate::xml_util::decode_xml_content(&event)?);
+            }
+            Ok(Event::Start(event)) => {
+                if event.local_name().as_ref() != b"tspan" || event.attributes().next().is_some() {
+                    diagnostics.push(Diagnostic::new(
+                        DiagnosticLevel::Warning, W_UNSUPPORTED_FEATURE,
+                        "SVG nested text style/position was flattened; retain the original source for visual fidelity",
+                    ).with_formats(Some("SVG"), None).with_recoverable(true));
+                }
+                depth += 1;
+            }
+            Ok(Event::End(_)) => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(text);
                 }
             }
-            Ok(Event::End(_)) | Ok(Event::Empty(_)) => break,
-            Ok(Event::Eof) => break,
-            Err(_) => break,
+            Ok(Event::Eof) => return Err("Unclosed SVG text element".to_string()),
+            Err(error) => return Err(error.to_string()),
             _ => {}
         }
+        buf.clear();
     }
-    text.trim().to_string()
 }
 
 #[cfg(test)]

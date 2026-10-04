@@ -193,3 +193,35 @@ fn docx_self_closing_run_properties_respect_explicit_disabled_values() {
         }
     }
 }
+
+#[test]
+fn docx_table_with_properties_and_unicode_keeps_decoded_text() {
+    let bytes = package(&[("word/document.xml", format!("<w:document><w:body><w:tbl><w:tblPr/><w:tr><w:tc><w:p><w:r><w:t>中文{CONTENT}</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"))]);
+    let document = read_docx_bytes(&bytes).unwrap();
+    assert_eq!(text(&document), format!("中文{EXPECTED}"));
+    assert!(matches!(&document.pages[0].blocks[0], Block::Table(_)));
+}
+
+#[test]
+fn docx_table_text_does_not_accept_illegal_references() {
+    for content in ["&missing;", "&#0;"] {
+        let bytes = package(&[("word/document.xml", format!("<w:document><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>{content}</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"))]);
+        assert!(read_docx_bytes(&bytes).is_err());
+    }
+}
+
+#[test]
+fn adjacent_docx_tables_leave_unicode_paragraphs_and_cell_counts_intact() {
+    let table = "<w:tbl><w:tblPr><w:tblStyle w:val=\"Normal\"/></w:tblPr><w:tr><w:tc><w:p><w:r><w:t>中 &amp; 文</w:t></w:r></w:p></w:tc></w:tr></w:tbl>";
+    let bytes = package(&[("word/document.xml", format!("<w:document><w:body><w:p><w:r><w:t>前</w:t></w:r></w:p>{table}{table}<w:p><w:r><w:t>后</w:t></w:r></w:p></w:body></w:document>"))]);
+    let document = read_docx_bytes(&bytes).unwrap();
+    assert_eq!(text(&document), "前中 & 文中 & 文后");
+    assert_eq!(
+        document.pages[0]
+            .blocks
+            .iter()
+            .filter(|block| matches!(block, Block::Table(_)))
+            .count(),
+        2
+    );
+}

@@ -169,55 +169,49 @@ fn parse_rels(xml: &str) -> std::collections::HashMap<String, String> {
 
 /// Pre-process XML to extract `<w:tbl>` tables, parse them, and replace them
 /// with lightweight sentinel markers for the event-driven parser.
-fn extract_tables_from_xml(xml: &str) -> (Vec<TableBlock>, String) {
+fn extract_tables_from_xml(xml: &str) -> Result<(Vec<TableBlock>, String)> {
     let mut tables: Vec<TableBlock> = Vec::new();
     let mut out = String::with_capacity(xml.len());
-    let mut pos = 0;
-
+    let mut position = 0usize;
+    let mut table_start = 0usize;
+    let mut depth = 0usize;
+    let mut reader = Reader::from_str(xml);
     loop {
-        match xml[pos..].find("<w:tbl") {
-            Some(rel_start) => {
-                let abs_start = pos + rel_start;
-                // Copy text before this table
-                out.push_str(&xml[pos..abs_start]);
-
-                // Find matching </w:tbl> with depth counting (handles nested tables)
-                let mut depth = 1u32;
-                let mut scan = abs_start + 6; // past "<w:tbl"
-                while scan < xml.len() && depth > 0 {
-                    if xml[scan..].starts_with("</w:tbl>") {
-                        depth -= 1;
-                        scan += 8;
-                    } else if xml[scan..].starts_with("<w:tbl") {
-                        depth += 1;
-                        scan += 6;
-                    } else {
-                        scan += 1;
-                    }
-                }
-
+        let event_start = reader.buffer_position() as usize;
+        match reader
+            .read_event()
+            .map_err(|error| SnipperError::Export(format!("DOCX table XML: {error}")))?
+        {
+            Event::Start(event) if event.name().as_ref() == b"w:tbl" => {
                 if depth == 0 {
-                    let raw_tbl = &xml[abs_start..scan];
-                    if let Some(table) = parse_word_table_ooxml(raw_tbl) {
-                        let idx = tables.len();
-                        tables.push(table);
-                        out.push_str(&format!("<docx_tbl_marker id=\"{}\"/>", idx));
-                    }
-                    pos = scan;
-                } else {
-                    // No matching close — copy rest as-is
-                    out.push_str(&xml[pos..]);
-                    break;
+                    table_start = event_start;
+                }
+                depth += 1;
+            }
+            Event::End(event) if event.name().as_ref() == b"w:tbl" && depth > 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    let end = reader.buffer_position() as usize;
+                    let table =
+                        parse_word_table_ooxml(&xml[table_start..end]).ok_or_else(|| {
+                            SnipperError::Export("Cannot decode DOCX table".to_string())
+                        })?;
+                    out.push_str(&xml[position..table_start]);
+                    let index = tables.len();
+                    tables.push(table);
+                    out.push_str(&format!("<docx_tbl_marker id=\"{index}\"/>"));
+                    position = end;
                 }
             }
-            None => {
-                out.push_str(&xml[pos..]);
-                break;
-            }
+            Event::Eof => break,
+            _ => {}
         }
     }
-
-    (tables, out)
+    if depth != 0 {
+        return Err(SnipperError::Export("Unclosed DOCX table".to_string()));
+    }
+    out.push_str(&xml[position..]);
+    Ok((tables, out))
 }
 
 /// Extract native Word equations before the streaming body parser consumes
@@ -300,7 +294,7 @@ fn parse_document_body<R: Read + Seek>(
     rels: &std::collections::HashMap<String, String>,
 ) -> Result<(Vec<Block>, Vec<MediaAsset>, Vec<Diagnostic>)> {
     // Extract tables before event processing
-    let (table_blocks, without_tables) = extract_tables_from_xml(xml);
+    let (table_blocks, without_tables) = extract_tables_from_xml(xml)?;
     let (math_blocks, processed_xml) = extract_omml_from_xml(&without_tables);
 
     let mut blocks = Vec::new();

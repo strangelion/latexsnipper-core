@@ -4,6 +4,7 @@
 //! Supports horizontal merge (gridSpan/colspan) and vertical merge (vMerge/rowspan).
 
 use latexsnipper_ast::{Block, Inline, ParagraphBlock, TableBlock, TableCell, TableRow, TextRun};
+use quick_xml::{events::Event, Reader};
 use regex::Regex;
 
 /// Intermediate cell data before rowspan resolution.
@@ -25,7 +26,6 @@ pub fn parse_word_table_ooxml(xml: &str) -> Option<TableBlock> {
     let row_re = Regex::new(r"(?s)<w:tr[^>]*>(.+?)</w:tr>").unwrap();
     let cell_re = Regex::new(r"(?s)<w:tc[^>]*>(.+?)</w:tc>").unwrap();
     let gridspan_re = Regex::new(r#"w:gridSpan[^>]*w:val="(\d+)""#).unwrap();
-    let text_re = Regex::new(r"(?s)<w:t[^>]*>(.*?)</w:t>").unwrap();
     // Match vMerge: restart, continue, or bare tag
     let vmerge_restart_re = Regex::new(r#"w:vMerge[^>]*w:val="restart""#).unwrap();
     let vmerge_continue_re = Regex::new(r#"w:vMerge[^>]*w:val="continue""#).unwrap();
@@ -51,16 +51,11 @@ pub fn parse_word_table_ooxml(xml: &str) -> Option<TableBlock> {
             let vmerge_continue =
                 vmerge_continue_re.is_match(cell_content) || vmerge_bare_re.is_match(cell_content);
 
-            let mut text = String::new();
-            for text_cap in text_re.captures_iter(cell_content) {
-                if let Some(t) = text_cap.get(1) {
-                    text.push_str(t.as_str());
-                }
-            }
+            let text = read_cell_text(cell_content)?;
 
             current_row.push(RawCell {
                 colspan,
-                text: text.trim().to_string(),
+                text,
                 vmerge_restart,
                 vmerge_continue,
             });
@@ -167,6 +162,28 @@ pub fn parse_word_table_ooxml(xml: &str) -> Option<TableBlock> {
         geometry: None,
         source: None,
     })
+}
+
+fn read_cell_text(xml: &str) -> Option<String> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut text = String::new();
+    let mut in_text = false;
+    loop {
+        match reader.read_event().ok()? {
+            Event::Start(event) if event.local_name().as_ref() == b"t" => in_text = true,
+            Event::End(event) if event.local_name().as_ref() == b"t" => in_text = false,
+            event @ (Event::Text(_) | Event::GeneralRef(_) | Event::CData(_)) => {
+                let value = crate::xml_util::decode_xml_content(&event).ok()?;
+                if in_text {
+                    text.push_str(&value);
+                }
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    Some(text)
 }
 
 fn extract_between(text: &str, start: &str, end: &str) -> Option<String> {
