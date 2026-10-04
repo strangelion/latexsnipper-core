@@ -17,7 +17,7 @@
     "contracts/schema/editable-object-v1.schema.json": "c5360dd7cf59fb14871fcd2e25e8d1e1be3a13ca1b0688ebbb727902d47bf864",
     "crates/api-types/src/v3.rs": "c9ad460a6d7fd6d3de86145cd575ca9b3fb1d74fb5f2016113b4f26853f62ffb",
     "crates/cli/src/main.rs": "d8ecd3b8dae8360006eb558f4a831b74fba1f66aaeb7957a3b2b34e73a381afa",
-    "crates/conversion/src/capability_registry.rs": "71692aed4e30c59f54e923539ea7ae75527a474a48782f706207d20f6e77bda5",
+    "crates/conversion/src/capability_registry.rs": "e9279d2f023a3545369300f1d1b2841353c573cbf001043deae6ffa8577e12ec",
     "crates/evaluation/src/failure_corpus.rs": "ab4e6012a2ae8c25786cdd616a4c711b996c73bd5a804940173e2d576ba4a80e",
     "crates/evaluation/src/int8.rs": "db9a4d1a6e6c60e7e5a3e431da8150b7d292fc1de719a4f9721d2923b4903d23",
     "crates/evaluation/src/schema.rs": "2dd3abc6ec391c5886035917f4cea1c16e8e95046293c8fa386568c1869d9e67",
@@ -34,7 +34,7 @@
   "publicRustSourceTrees": {
     "crates/api-types/src": "af916d1842bb732912633a9e225fbd53c1a1a06d75dc4e38a79f78c53bba8e49",
     "crates/ast/src": "c0a1cfae031bb791d7229a8a645bbb234414ad05cfb8cafcae521bae20838587",
-    "crates/conversion/src": "bd4f75e458a4f5451e0c154291f13943b312742a5134634f5beb2a29161a4c2f",
+    "crates/conversion/src": "81633f973a51ac88f536c68ffef02f9b70667bf3c912caa702e8845edb17dba9",
     "crates/custom-symbols/src": "42654e79bcf161ad17eefad1c191af8c7bd730123dfd265441d0bc41c77cd55b",
     "crates/drawing/src": "05ff157df6e4d011d3008741e6117ce11a795e13e709015b19928194659821db",
     "crates/engine/src": "5cc56c913f2c5d3ff6401f6bc1ad914665a387b6fef60f8ff71ef0a0327c41c7",

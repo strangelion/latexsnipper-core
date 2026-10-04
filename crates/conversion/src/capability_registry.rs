@@ -133,6 +133,8 @@ impl CapabilityRegistry {
             Some("AsciiMath pilot parser is experimental and not exposed by the registered conversion API")
         } else if input == FormulaInputFormat::UnicodeMath {
             Some("UnicodeMath pilot parser is experimental and not exposed by the registered conversion API")
+        } else if input == FormulaInputFormat::Mtef {
+            Some("MTEF v5 has an experimental raw-byte read-only inspector, not a registered semantic converter or host OLE implementation")
         } else if path == "unsupported" {
             Some("input parser is not implemented; host OLE objects are not string inputs")
         } else if mode == FormulaConversionMode::Strict

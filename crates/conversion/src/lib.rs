@@ -25,6 +25,7 @@ pub mod markdown;
 pub mod markdown_parser;
 pub mod mathml;
 pub mod mathml_parser;
+pub mod mtef_readonly;
 #[cfg(feature = "native")]
 pub mod office_insert;
 pub mod omml;

@@ -160,3 +160,15 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   property grammar, external accuracy or Word visual parity claim is made; FMT-05
   and real OLE/image host closure stay open. Previous Core 37ce6d8 CI 37185881099,
   WASM 37185881098 and CodeQL 37185881097 have been verified successful.
+- FMT-06 partial milestone (2026-10-04): experimental raw MTEF v5 read-only
+  inspection retains the full source and decoded record spans/depth. Fifteen
+  focused synthetic tests cover framing, truncation, mutations, budgets and
+  registered-conversion rejection. Complete framing is not semantic validity,
+  mathematical accuracy or real MathType compatibility. No SDK, third-party
+  assets, OLE activation, AST converter, writer or API/UI exposure was added;
+  real sample provenance, licensing and host/container gates remain open.
+  See `docs/formats/mtef-readonly.md`; FMT-06 is not closed.
+- Optional follow-up (2026-10-04): personalized candidate ranking, formula
+  completion and controlled continuation are now recorded separately in
+  `docs/formula-assistance-roadmap.md`. This is a proposed evaluation only,
+  not a model integration or approval to collect/upload user documents.
