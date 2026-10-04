@@ -28,7 +28,7 @@ fn read_xlsx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
         .map_err(|e| SnipperError::Export(format!("Failed to read XLSX archive: {}", e)))?;
 
     // Read shared strings
-    let shared_strings = read_shared_strings(&mut archive);
+    let shared_strings = read_shared_strings(&mut archive)?;
     let styles_xml = read_entry(&mut archive, "xl/styles.xml").unwrap_or_default();
     let date_styles = parse_date_style_indices(&styles_xml);
 
@@ -80,7 +80,7 @@ fn read_xlsx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
             Err(_) => continue,
         };
 
-        let table = parse_sheet_table(&sheet_xml, &shared_strings, &date_styles);
+        let table = parse_sheet_table(&sheet_xml, &shared_strings, &date_styles)?;
 
         let mut blocks: Vec<Block> = Vec::new();
         blocks.push(Block::Table(table));
@@ -135,15 +135,24 @@ fn read_entry<R: Read + Seek>(archive: &mut zip::ZipArchive<R>, name: &str) -> R
     Ok(content)
 }
 
-fn read_shared_strings<R: Read + Seek>(archive: &mut zip::ZipArchive<R>) -> Vec<String> {
-    let xml = match read_entry(archive, "xl/sharedStrings.xml") {
-        Ok(x) => x,
-        Err(_) => return Vec::new(),
+fn read_shared_strings<R: Read + Seek>(archive: &mut zip::ZipArchive<R>) -> Result<Vec<String>> {
+    let mut entry = match archive.by_name("xl/sharedStrings.xml") {
+        Ok(entry) => entry,
+        Err(zip::result::ZipError::FileNotFound) => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(SnipperError::Export(format!(
+                "XLSX shared strings: {error}"
+            )))
+        }
     };
+    let mut xml = String::new();
+    entry
+        .read_to_string(&mut xml)
+        .map_err(|error| SnipperError::Export(format!("XLSX shared strings: {error}")))?;
 
     let mut strings = Vec::new();
     let mut reader = Reader::from_str(&xml);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut in_si = false;
     let mut in_t = false;
@@ -161,11 +170,12 @@ fn read_shared_strings<R: Read + Seek>(archive: &mut zip::ZipArchive<R>) -> Vec<
                     in_t = true;
                 }
             }
-            Ok(Event::Text(ref e)) => {
+            Ok(event @ (Event::Text(_) | Event::GeneralRef(_) | Event::CData(_))) => {
+                let text = crate::xml_util::decode_xml_content(&event).map_err(|error| {
+                    SnipperError::Export(format!("XLSX shared XML text: {error}"))
+                })?;
                 if in_t {
-                    if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
-                        current.push_str(&t);
-                    }
+                    current.push_str(&text);
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -179,12 +189,12 @@ fn read_shared_strings<R: Read + Seek>(archive: &mut zip::ZipArchive<R>) -> Vec<
                 }
             }
             Ok(Event::Eof) => break,
-            Err(_) => break,
+            Err(error) => return Err(SnipperError::Export(format!("XLSX shared XML: {error}"))),
             _ => {}
         }
         buf.clear();
     }
-    strings
+    Ok(strings)
 }
 
 fn parse_workbook_sheets(xml: &str, rels: &HashMap<String, String>) -> Vec<(String, String)> {
@@ -316,10 +326,10 @@ fn parse_sheet_table(
     xml: &str,
     shared_strings: &[String],
     date_styles: &std::collections::HashSet<usize>,
-) -> TableBlock {
+) -> Result<TableBlock> {
     let mut rows: Vec<TableRow> = Vec::new();
     let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut in_sheet_data = false;
     let mut in_row = false;
@@ -418,21 +428,18 @@ fn parse_sheet_table(
                     _ => {}
                 }
             }
-            Ok(Event::Text(ref e)) => {
+            Ok(event @ (Event::Text(_) | Event::GeneralRef(_) | Event::CData(_))) => {
+                let text = crate::xml_util::decode_xml_content(&event).map_err(|error| {
+                    SnipperError::Export(format!("XLSX sheet XML text: {error}"))
+                })?;
                 if in_v {
-                    if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
-                        current_cell_value.push_str(&t);
-                    }
+                    current_cell_value.push_str(&text);
                 }
                 if in_f {
-                    if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
-                        current_cell_formula.push_str(&t);
-                    }
+                    current_cell_formula.push_str(&text);
                 }
                 if in_is_t {
-                    if let Some(t) = crate::xml_util::decode_and_unescape_text(e) {
-                        current_is_text.push_str(&t);
-                    }
+                    current_is_text.push_str(&text);
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -501,7 +508,7 @@ fn parse_sheet_table(
                 }
             }
             Ok(Event::Eof) => break,
-            Err(_) => break,
+            Err(error) => return Err(SnipperError::Export(format!("XLSX sheet XML: {error}"))),
             _ => {}
         }
         buf.clear();
@@ -543,14 +550,14 @@ fn parse_sheet_table(
         }
     }
 
-    TableBlock {
+    Ok(TableBlock {
         rows,
         columns,
         caption: None,
         style: None,
         geometry: None,
         source: None,
-    }
+    })
 }
 
 fn parse_date_style_indices(xml: &str) -> std::collections::HashSet<usize> {
@@ -806,7 +813,7 @@ mod tests {
             <c r="E2" s="1"><v>2</v></c>
           </row>
         </sheetData></worksheet>"#;
-        let table = parse_sheet_table(sheet, &[], &date_styles);
+        let table = parse_sheet_table(sheet, &[], &date_styles).unwrap();
 
         assert_eq!(table.rows.len(), 2, "missing first row must remain sparse");
         assert!(table.rows[0].cells.is_empty());

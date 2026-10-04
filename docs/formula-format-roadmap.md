@@ -131,6 +131,12 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     12 项 conversion_roundtrip 本地全部通过；本批没有修改 CI 或锁文件。
     Windows 全工作区 `cargo test --locked --workspace`、轻量 308 项转换回归、Clippy、
     WASM 编译及 28 文件/19 源码树冻结检查通过；仅刷新 conversion 源码树哈希。
+  - 2026-10-04：DOCX 正文/超链接/简单域、PPTX 文本、XLSX 行内/共享字符串和
+    单元格公式接入同一 XML 文本/引用/CDATA 解码；保留文本节点空格，未知或非法引用
+    与 XML 标签错配明确失败，不返回看似完整的部分结果。DOCX 自闭合粗体/斜体/下划线
+    属性及显式关闭值一起补回归。8 项内存 ZIP 专项、原生 356 项转换回归和原生/轻量
+    Clippy 通过；表格独立导入、SVG 文本、属性值保真和真实宿主视觉继续待办。
+    上一批 e0520f5 的远端 CI、WASM、CodeQL 已确认全绿。
 - [ ] FMT-05：UnicodeMath/AsciiMath 有界 pilot；用公开、可复现样例验证优先级、
   矩阵、空白和分组规则，不用简单字符串替换冒充 parser。
 - [ ] FMT-06：MathType/MTEF 单独设计审查；未通过前继续显示 unsupported，

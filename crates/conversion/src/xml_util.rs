@@ -1,4 +1,22 @@
+#[cfg(feature = "native")]
+use quick_xml::events::Event;
 use quick_xml::events::{BytesRef, BytesText};
+
+#[cfg(feature = "native")]
+pub(crate) fn decode_xml_content(event: &Event<'_>) -> Result<String, String> {
+    match event {
+        Event::Text(text) => text
+            .decode()
+            .map(|text| text.into_owned())
+            .map_err(|error| error.to_string()),
+        Event::CData(text) => text
+            .decode()
+            .map(|text| text.into_owned())
+            .map_err(|error| error.to_string()),
+        Event::GeneralRef(reference) => decode_xml_reference(reference),
+        _ => Err("Expected XML text content".to_string()),
+    }
+}
 
 pub(crate) fn decode_xml_reference(event: &BytesRef<'_>) -> Result<String, String> {
     if let Some(character) = event

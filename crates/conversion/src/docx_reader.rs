@@ -26,6 +26,13 @@ struct SimpleWordField {
     display_text: String,
 }
 
+fn run_property_enabled(event: &quick_xml::events::BytesStart<'_>) -> bool {
+    !event.attributes().flatten().any(|attribute| {
+        (attribute.key.as_ref() == b"w:val" || attribute.key.as_ref() == b"val")
+            && matches!(attribute.value.as_ref(), b"0" | b"false" | b"off" | b"none")
+    })
+}
+
 fn simple_field_instruction(event: &quick_xml::events::BytesStart<'_>) -> String {
     event
         .attributes()
@@ -88,7 +95,7 @@ fn read_docx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
     let rels = parse_rels(&rels_xml);
 
     // Parse document body with diagnostics and assets
-    let (blocks, assets, docx_diags) = parse_document_body(&document_xml, &mut archive, &rels);
+    let (blocks, assets, docx_diags) = parse_document_body(&document_xml, &mut archive, &rels)?;
 
     Ok(Document {
         metadata: Metadata {
@@ -291,7 +298,7 @@ fn parse_document_body<R: Read + Seek>(
     xml: &str,
     archive: &mut zip::ZipArchive<R>,
     rels: &std::collections::HashMap<String, String>,
-) -> (Vec<Block>, Vec<MediaAsset>, Vec<Diagnostic>) {
+) -> Result<(Vec<Block>, Vec<MediaAsset>, Vec<Diagnostic>)> {
     // Extract tables before event processing
     let (table_blocks, without_tables) = extract_tables_from_xml(xml);
     let (math_blocks, processed_xml) = extract_omml_from_xml(&without_tables);
@@ -300,7 +307,7 @@ fn parse_document_body<R: Read + Seek>(
     let mut assets = Vec::new();
     let mut diagnostics = Vec::new();
     let mut reader = Reader::from_str(&processed_xml);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut in_body = false;
     let mut in_paragraph = false;
@@ -344,9 +351,9 @@ fn parse_document_body<R: Read + Seek>(
                         run_italic = false;
                         run_underline = false;
                     }
-                    b"w:b" | b"b" => run_bold = true,
-                    b"w:i" | b"i" => run_italic = true,
-                    b"w:u" | b"u" => run_underline = true,
+                    b"w:b" | b"b" if in_run => run_bold = run_property_enabled(e),
+                    b"w:i" | b"i" if in_run => run_italic = run_property_enabled(e),
+                    b"w:u" | b"u" if in_run => run_underline = run_property_enabled(e),
                     b"w:t" | b"t" if in_run => in_text = true,
                     b"w:hyperlink" | b"hyperlink" if in_paragraph => {
                         in_hyperlink = true;
@@ -455,6 +462,9 @@ fn parse_document_body<R: Read + Seek>(
             Ok(Event::Empty(ref e)) => {
                 let tag = e.name().as_ref().to_vec();
                 match tag.as_slice() {
+                    b"w:b" | b"b" if in_run => run_bold = run_property_enabled(e),
+                    b"w:i" | b"i" if in_run => run_italic = run_property_enabled(e),
+                    b"w:u" | b"u" if in_run => run_underline = run_property_enabled(e),
                     b"docx_tbl_marker" => {
                         if let Some(id_str) = e
                             .attributes()
@@ -530,28 +540,26 @@ fn parse_document_body<R: Read + Seek>(
                     _ => {}
                 }
             }
-            Ok(Event::Text(ref e)) => {
+            Ok(event @ (Event::Text(_) | Event::GeneralRef(_) | Event::CData(_))) => {
+                let text = crate::xml_util::decode_xml_content(&event)
+                    .map_err(|error| SnipperError::Export(format!("DOCX XML text: {error}")))?;
                 if in_text {
-                    if let Some(text) = crate::xml_util::decode_and_unescape_text(e) {
-                        let run = Inline::Text(
-                            TextRun::new(text.to_string())
-                                .with_bold(run_bold)
-                                .with_italic(run_italic)
-                                .with_underline(run_underline),
-                        );
-                        if let Some(field) = simple_field.as_mut() {
-                            field.display_text.push_str(text.as_ref());
-                        } else if in_hyperlink {
-                            hyperlink_inlines.push(run);
-                        } else {
-                            current_paragraph_inlines.push(run);
-                        }
+                    let run = Inline::Text(
+                        TextRun::new(text.clone())
+                            .with_bold(run_bold)
+                            .with_italic(run_italic)
+                            .with_underline(run_underline),
+                    );
+                    if let Some(field) = simple_field.as_mut() {
+                        field.display_text.push_str(text.as_ref());
+                    } else if in_hyperlink {
+                        hyperlink_inlines.push(run);
+                    } else {
+                        current_paragraph_inlines.push(run);
                     }
                 }
                 if in_pstyle {
-                    if let Some(text) = crate::xml_util::decode_and_unescape_text(e) {
-                        paragraph_style = text.to_string();
-                    }
+                    paragraph_style.push_str(&text);
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -666,7 +674,7 @@ fn parse_document_body<R: Read + Seek>(
                 }
             }
             Ok(Event::Eof) => break,
-            Err(_) => break,
+            Err(error) => return Err(SnipperError::Export(format!("DOCX XML: {error}"))),
             _ => {}
         }
         buf.clear();
@@ -675,7 +683,7 @@ fn parse_document_body<R: Read + Seek>(
     // Flush any remaining list items
     flush_list(&mut blocks, &mut pending_list_items);
 
-    (blocks, assets, diagnostics)
+    Ok((blocks, assets, diagnostics))
 }
 
 /// Flush accumulated list items as a ListBlock.

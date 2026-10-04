@@ -46,7 +46,7 @@ fn read_pptx_archive<R: Read + Seek>(reader: R) -> Result<Document> {
         let rels = parse_rels(&rels_xml);
 
         let (blocks, slide_assets) =
-            parse_slide_body(&slide_xml, &mut archive, &rels, &mut all_assets.len());
+            parse_slide_body(&slide_xml, &mut archive, &rels, &mut all_assets.len())?;
 
         all_assets.extend(slide_assets);
         pages.push(Page {
@@ -245,11 +245,11 @@ fn parse_slide_body<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     rels: &std::collections::HashMap<String, String>,
     next_asset_id: &mut usize,
-) -> (Vec<Block>, Vec<MediaAsset>) {
+) -> Result<(Vec<Block>, Vec<MediaAsset>)> {
     let mut blocks = Vec::new();
     let mut slide_assets = Vec::new();
     let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut in_text_body = false;
     let mut in_paragraph = false;
@@ -371,11 +371,11 @@ fn parse_slide_body<R: Read + Seek>(
                     _ => {}
                 }
             }
-            Ok(Event::Text(ref e)) => {
+            Ok(event @ (Event::Text(_) | Event::GeneralRef(_) | Event::CData(_))) => {
+                let text = crate::xml_util::decode_xml_content(&event)
+                    .map_err(|error| SnipperError::Export(format!("PPTX XML text: {error}")))?;
                 if in_t {
-                    if let Some(text) = crate::xml_util::decode_and_unescape_text(e) {
-                        current_text.push_str(&text);
-                    }
+                    current_text.push_str(&text);
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -386,7 +386,7 @@ fn parse_slide_body<R: Read + Seek>(
                     b"a:p" | b"p" if in_paragraph => {
                         in_paragraph = false;
                         if !current_text.trim().is_empty() {
-                            let text = current_text.trim().to_string();
+                            let text = current_text.clone();
                             let tr = TextRun::new(text)
                                 .with_bold(run_bold)
                                 .with_italic(run_italic);
@@ -453,7 +453,7 @@ fn parse_slide_body<R: Read + Seek>(
                 }
             }
             Ok(Event::Eof) => break,
-            Err(_) => break,
+            Err(error) => return Err(SnipperError::Export(format!("PPTX XML: {error}"))),
             _ => {}
         }
         buf.clear();
@@ -463,7 +463,7 @@ fn parse_slide_body<R: Read + Seek>(
         Block::Paragraph(p) => !p.inlines.is_empty(),
         _ => true,
     });
-    (blocks, slide_assets)
+    Ok((blocks, slide_assets))
 }
 
 /// Guess the image format from a PPTX media file path extension.
@@ -598,7 +598,8 @@ mod tests {
             <a:blip r:embed="rIdImage"/>
           </p:blipFill></p:pic></p:spTree></p:cSld>
         </p:sld>"#;
-        let (blocks, assets) = parse_slide_body(slide, &mut archive, &relationships, &mut 0usize);
+        let (blocks, assets) =
+            parse_slide_body(slide, &mut archive, &relationships, &mut 0usize).unwrap();
 
         assert_eq!(assets.len(), 1);
         assert!(blocks.iter().any(|block| matches!(
