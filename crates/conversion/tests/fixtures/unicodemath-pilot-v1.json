@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "provenance": "Repository-authored synthetic cases for the bounded UnicodeMath pilot; not external accuracy data.",
+  "reference": "https://www.unicode.org/notes/tn28/UTN28-PlainTextMath-v3.3.pdf",
+  "accepted": [
+    { "source": "abc/d", "canonical": "(a b c)/(d)", "root": "fraction" },
+    { "source": "a/b/c", "canonical": "((a)/(b))/(c)", "root": "fraction" },
+    { "source": "a/(b/c)", "canonical": "(a)/((b)/(c))", "root": "fraction" },
+    { "source": "ab^2", "canonical": "a 〖b〗^(2)", "root": "sequence" },
+    { "source": "a^bc", "canonical": "〖a〗^(b c)", "root": "superscript" },
+    { "source": "a_b_c", "canonical": "〖a〗_(〖b〗_(c))", "root": "subscript" },
+    { "source": "a^b_c", "canonical": "〖〖a〗_(c)〗^(b)", "root": "superscript" },
+    { "source": "a b/c", "canonical": "a (b)/(c)", "root": "sequence" },
+    { "source": "[a+b]/c", "canonical": "([a + b])/(c)", "root": "fraction" },
+    { "source": "√abc^2", "canonical": "√(a b 〖c〗^(2))", "root": "root" },
+    { "source": "√(n+1&x)", "canonical": "√(n + 1&x)", "root": "root" },
+    { "source": "∛x", "canonical": "√(3&x)", "root": "root" },
+    { "source": "■(a&b@c)", "canonical": "■(a&b@c&)", "root": "matrix" },
+    { "source": "⒨(x@y)", "canonical": "⒨(x@y)", "root": "matrix" },
+    { "source": "■(a&&b@c&d&e)", "canonical": "■(a&&b@c&d&e)", "root": "matrix" },
+    { "source": "α×β≤∞", "canonical": "α × β ≤ ∞", "root": "sequence" }
+  ],
+  "rejected": [
+    { "source": "∫_0^1 x", "kind": "UnsupportedSyntax" },
+    { "source": "sin x", "kind": "UnsupportedSyntax" },
+    { "source": "a⁄b", "kind": "UnsupportedSyntax" },
+    { "source": "x̂", "kind": "UnsupportedSyntax" },
+    { "source": "a/", "kind": "UnexpectedToken" },
+    { "source": "(a]", "kind": "UnexpectedToken" },
+    { "source": "a_b^c_d", "kind": "UnexpectedToken" },
+    { "source": "■(a&b", "kind": "UnexpectedToken" }
+  ]
+}

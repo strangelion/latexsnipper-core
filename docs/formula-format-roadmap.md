@@ -186,9 +186,17 @@ UnicodeMath/MTEF parser 仍未实现；通用注册表/API/UI 尚未开放三者
     实现和门禁见 [AsciiMath pilot](formats/asciimath-pilot.md)。
     本地轻量 331 项/原生 382 项转换回归、两种配置 Clippy、WASM 编译、全工作区
     默认测试及 28 文件/19 源码树冻结检查通过；原有真实环境忽略项未因此执行。
-  - [ ] UnicodeMath 独立 parser/AST/矩阵/往返，不复用 AsciiMath 拼写当作等价实现。
+  - [x] UnicodeMath 首批独立 parser/AST/矩阵/往返，不复用 AsciiMath 拼写。
+    连续操作数、左结合分式、右结合同类脚本/同基混合脚本、空格截断、根指数、
+    六类矩阵与短行补空都有版本化有限 fixture；未知/损坏/超限明确失败。
+    13 项专项含 600 种确定性组合及一条 MathML/OMML 矩阵结构桥接通过，
+    不是完整语法、准确率或 Word 视觉验收。详见 [UnicodeMath pilot](formats/unicodemath-pilot.md)。
+    轻量 344 项/原生 395 项转换回归、两种配置 Clippy、WASM 编译、全工作区默认测试
+    及 28 文件/19 源码树冻结检查通过；原有环境忽略项未执行。
+    两个 pilot 仅共享私有 AST 比较器，不共享词法/语法；既有 AsciiMath 专项保持通过。
   - [ ] 扩大真实语料和跨格式/外部渲染结构与损失验证，再开放输入/输出注册表、
-    Rust/C/Python/WASM-JS 和 Office UI；当前 OutputFormat 不变，`ascii-math` 仍不可用。
+    Rust/C/Python/WASM-JS 和 Office UI；当前 OutputFormat 不变，`ascii-math` / `unicode-math`
+    在通用注册入口仍不可用，不能由 pilot 勾选这一整项。
 - [ ] FMT-06：MathType/MTEF 单独设计审查；未通过前继续显示 unsupported，
   不修改第三方 OLE、不删除作者原件。
 - [ ] FMT-07：接入固定语料和错误语料，记录耗时、语义保留、损失及拒绝率，
@@ -207,8 +215,8 @@ UnicodeMath/MTEF parser 仍未实现；通用注册表/API/UI 尚未开放三者
 FMT-01 首批是 Rust 增量 API；没有修改旧的 `TargetFormatCapability` 字段、
 `OutputFormat` 枚举、旧转换接口、C ABI 或 v3/WASM envelope。
 严格模式目前仅调用现有 LaTeX→OMML 源校验，不代表任意源无损；其他严格路线
-拒绝执行。UnicodeMath、AsciiMath、MTEF 在通用入口仍登记 unsupported；AsciiMath
-另有显式 experimental Rust pilot，未通过剩余门禁前不升级为正式能力。
+拒绝执行。UnicodeMath、AsciiMath、MTEF 在通用入口仍登记 unsupported；前两项
+另有独立 experimental Rust pilot，未通过剩余门禁前不升级为正式能力。
 按上述差异复核后刷新 `v3-contract-freeze.json`，不删减合约文件或公共源码树门禁。
 生成矩阵及轻量/原生回归不替代全面语义准确率、Office 真机或浏览器 WASM 运行测试。
 `substack` 与 `cfrac` 本批复用既有 Command 表达行/操作数，没有新增公共枚举或序列化字段，
@@ -230,3 +238,8 @@ AsciiMath pilot 本批增量增加独立 experimental Rust 模块、两个函数
 依赖或锁文件。注册表仍拒绝执行 AsciiMath，原因改为实验 parser 未开放通用入口；
 生成能力矩阵的路线/可用性不变。差分复核后只刷新 capability_registry 文件和
 conversion 源码树哈希，不删除或放宽冻结清单及格式支持门禁。
+
+UnicodeMath 同样只增量增加 experimental Rust 模块、两个函数和诊断类型，
+复用既有 LatexNode 并将纯结构比较抽为私有模块；没有添加 OutputFormat、
+公开 AST 节点、依赖或绑定字段。注册表原因准确说明 UnicodeMath pilot 未开放，
+路由仍拒绝；差分复核后仅刷新注册表文件和 conversion 源码树哈希。

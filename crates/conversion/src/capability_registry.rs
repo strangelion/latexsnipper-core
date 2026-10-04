@@ -131,6 +131,8 @@ impl CapabilityRegistry {
         };
         let unavailable_reason = if input == FormulaInputFormat::AsciiMath {
             Some("AsciiMath pilot parser is experimental and not exposed by the registered conversion API")
+        } else if input == FormulaInputFormat::UnicodeMath {
+            Some("UnicodeMath pilot parser is experimental and not exposed by the registered conversion API")
         } else if path == "unsupported" {
             Some("input parser is not implemented; host OLE objects are not string inputs")
         } else if mode == FormulaConversionMode::Strict

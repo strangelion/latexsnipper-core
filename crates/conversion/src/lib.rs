@@ -35,6 +35,7 @@ pub mod package_export;
 pub mod pdf_native;
 #[cfg(feature = "native")]
 pub mod pdf_overlay;
+mod pilot_ast;
 pub mod planner;
 #[cfg(feature = "native")]
 pub mod pptx_reader;
@@ -43,6 +44,7 @@ pub mod table_export;
 pub mod table_parser;
 pub mod typst;
 pub mod typst_parser;
+pub mod unicodemath_pilot;
 pub mod word_ooxml_table_parser;
 pub mod word_ooxml_table_writer;
 #[cfg(feature = "native")]

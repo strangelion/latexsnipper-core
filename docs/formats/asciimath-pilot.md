@@ -80,7 +80,8 @@ One structure regression maps a parsed nested formula matrix through the existin
 LaTeX serializers to MathML/OMML and checks row/cell, fraction, root and script
 nodes. This does not validate every pilot token in every exporter or in Word.
 
-Still open: UnicodeMath's independent pilot; expanded valid/invalid real corpus;
+UnicodeMath now has a separate [bounded pilot](unicodemath-pilot.md), not this
+module's grammar. Still open: expanded valid/invalid real corpus;
 external renderer/host comparisons; typography, whitespace visual fidelity and
 source spans on AST nodes; selected-target loss reporting; registered input/output
 directions; Rust/C/Python/WASM-JS API and Office UI exposure with corresponding

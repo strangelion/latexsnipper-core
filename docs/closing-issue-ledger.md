@@ -147,7 +147,16 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   fixtures and explicit size/token/depth limits. Twelve focused tests cover
   fraction/script binding, nested matrices, rejection and canonical structural
   round trips, including 4,913 deterministic three-token combinations. One
-  MathML/OMML bridge fixture checks structure only. UnicodeMath, expanded corpus,
+  MathML/OMML bridge fixture checks structure only. Expanded corpus,
   typography/host parity and registered API/UI directions remain open; the
   production capability registry still rejects AsciiMath rather than implying
   support from the existence of an experimental parser.
+- FMT-05 next bounded milestone (2026-10-04): separate UnicodeMath lexer/parser,
+  supported AST serializer, 16 accepted/8 rejected versioned fixtures and 13
+  focused tests (including 600 deterministic combinations and one MathML/OMML
+  matrix bridge). Operand/script/space and padded-matrix rules are independent
+  of AsciiMath; only the private AST comparator is shared. Light/native conversion
+  regressions, Clippy and WASM compilation pass. No registered API/UI, full Unicode
+  property grammar, external accuracy or Word visual parity claim is made; FMT-05
+  and real OLE/image host closure stay open. Previous Core 37ce6d8 CI 37185881099,
+  WASM 37185881098 and CodeQL 37185881097 have been verified successful.
