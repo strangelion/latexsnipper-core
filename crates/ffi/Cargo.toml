@@ -9,6 +9,7 @@ publish = false
 latexsnipper-foundation.workspace = true
 latexsnipper-api-types.workspace = true
 latexsnipper-ast.workspace = true
+latexsnipper-conversion.workspace = true
 latexsnipper-engine = { workspace = true, features = ["native"] }
 latexsnipper-runtime.workspace = true
 latexsnipper-image.workspace = true

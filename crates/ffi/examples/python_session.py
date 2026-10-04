@@ -102,7 +102,7 @@ class Library:
             "utf-8"
         )
 
-    def _decode(self, pointer: int | None) -> dict[str, Any]:
+    def _decode(self, pointer: int | None) -> Any:
         if not pointer:
             raise MemoryError("Core could not allocate a JSON response")
         try:
@@ -130,6 +130,26 @@ class Library:
             )
         )
         return int(data["handle"])
+
+    def formula_capabilities(self) -> list[dict[str, Any]]:
+        # Resolve additive symbols lazily so old v1 libraries can still use sessions.
+        function = self._dll.latexsnipper_formula_capabilities
+        function.argtypes = []
+        function.restype = ctypes.c_void_p
+        return self._decode(function())
+
+    def convert_formula(
+        self, content: str, *, input_format: str, output_format: str, mode: str = "strict",
+    ) -> dict[str, Any]:
+        function = self._dll.latexsnipper_formula_convert
+        function.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+        function.restype = ctypes.c_void_p
+        request = self._encode({
+            "content": content, "inputFormat": input_format,
+            "outputFormat": output_format, "mode": mode,
+        })
+        buffer = ctypes.create_string_buffer(request)
+        return self._decode(function(ctypes.cast(buffer, ctypes.c_void_p), len(request)))
 
     def health(self, handle: int) -> dict[str, Any]:
         return self._decode(self._dll.latexsnipper_session_health(handle))

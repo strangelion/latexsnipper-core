@@ -289,6 +289,47 @@ that demonstrates persistent warmup state, independent model roots, failure
 recovery, context-manager cleanup, and the exact error-envelope mapping that a
 non-extension caller must preserve.
 
+### Model-free C formula conversion
+
+The additive `latexsnipper_formula_capabilities()` returns 144 native
+input/output/mode rows in the unchanged v3 envelope. The additive
+`latexsnipper_formula_convert(request_json, request_json_len)` accepts:
+
+```json
+{"content":"x","inputFormat":"latex","outputFormat":"omml","mode":"strict"}
+```
+
+`mode` defaults to `strict`; only the supported LaTeX-to-OMML source subset is
+currently available in that mode. Select `best-effort` explicitly for other
+available routes. Output labels are the canonical semantic names in the rows.
+Successful `data` contains `content` and the executed `capability` row, including
+its reconstruction path and limitations. Unknown JSON fields, input labels or
+modes fail with `INVALID_JSON`; unknown output labels fail with `INVALID_ARGUMENT`;
+known unavailable routes fail with `UNSUPPORTED_FORMAT`. Conversion and resource
+failures retain the existing application error codes.
+
+No recognition session or model directory is needed. The same source and
+reconstructed-LaTeX budgets as the Python API apply: 64 KiB, 64 lexical nesting
+levels, 512 structural tokens, and no XML DTDs. These budgets are not grammar
+validation or a fidelity guarantee. OLE is not a string format and MTEF remains
+unsupported. JSON requests remain capped at 1 MiB and all returned strings must
+be freed exactly once with `latexsnipper_string_free`.
+
+The session ABI remains v1: existing symbols/signatures and wire spellings are
+unchanged. Older v1 libraries can lack these additive symbols; feature-detect
+them before using formula methods. The reference ctypes client resolves them
+lazily so its existing recognition methods can still use an older library.
+
+```console
+cargo build --locked -p latexsnipper-ffi --release
+python crates/ffi/examples/formula_smoke.py --library-dir target/release
+```
+
+The smoke uses the built dynamic library, checks all 144 routes, errors, lengths,
+string ownership and persistent-session compatibility. The existing three-platform
+Python adapter CI job runs it after the wheel smoke. Host visual fidelity is not
+measured by these tests.
+
 ## Stable Office facade
 
 `RecognitionIntegrationApi` is the common host contract for readiness, warmup,

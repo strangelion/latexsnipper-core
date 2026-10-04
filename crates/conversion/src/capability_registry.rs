@@ -1,5 +1,5 @@
 use latexsnipper_ast::{ExportFormat, FidelityLevel};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::OutputFormat;
 
@@ -47,7 +47,7 @@ pub struct TargetFormatCapability {
 pub struct CapabilityRegistry;
 
 /// Formula string inputs, separate from image recognition and host containers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FormulaInputFormat {
     Latex,
@@ -88,7 +88,7 @@ impl FormulaInputFormat {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FormulaConversionMode {
     Strict,

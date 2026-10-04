@@ -13,6 +13,10 @@ use std::time::Duration;
 use latexsnipper_api_types::{
     ApiEnvelopeV3, ApiErrorV3, RecognitionProfile, API_ENVELOPE_VERSION_V3,
 };
+use latexsnipper_conversion::{
+    CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
+    FormulaInputFormat, OutputFormat,
+};
 use latexsnipper_engine::application::{ApplicationError, RecognitionOptions, RuntimePreference};
 use latexsnipper_engine::{
     DocumentParseMode, RecognitionIntegrationApi, RecognitionRequest, RecognitionSession,
@@ -180,6 +184,59 @@ struct SessionCreateRequest {
 
 const fn default_max_threads() -> usize {
     4
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FormulaConvertRequest {
+    content: String,
+    input_format: FormulaInputFormat,
+    output_format: String,
+    #[serde(default = "default_formula_mode")]
+    mode: FormulaConversionMode,
+}
+
+const fn default_formula_mode() -> FormulaConversionMode {
+    FormulaConversionMode::Strict
+}
+
+impl FormulaConvertRequest {
+    fn convert(self) -> Result<Value, AdapterError> {
+        let label = self
+            .output_format
+            .trim()
+            .to_ascii_lowercase()
+            .replace('-', "_");
+        let output = OutputFormat::all()
+            .iter()
+            .copied()
+            .find(|format| format.name() == label)
+            .ok_or_else(|| {
+                AdapterError::new("INVALID_ARGUMENT", "Unknown formula output format.", false)
+            })?;
+        let capability = CapabilityRegistry::formula_conversion(
+            self.input_format,
+            output,
+            self.mode,
+            CapabilityTarget::Native,
+        );
+        if !capability.available {
+            return Err(AdapterError::new(
+                "UNSUPPORTED_FORMAT",
+                "The formula conversion route is not supported.",
+                false,
+            )
+            .with_details(json!({ "detail": capability.unavailable_reason })));
+        }
+        let content = DocumentConverter::convert_formula_string(
+            &self.content,
+            self.input_format,
+            output,
+            self.mode,
+        )
+        .map_err(|error| AdapterError::from(ApplicationError::from(error)))?;
+        Ok(json!({ "content": content, "capability": capability }))
+    }
 }
 
 impl SessionCreateRequest {
@@ -355,6 +412,36 @@ pub extern "C" fn latexsnipper_session_abi_version() -> u32 {
     APPLICATION_SESSION_ABI_VERSION
 }
 
+/// Query native formula direction/mode support without creating a session.
+/// Release the returned v3 JSON envelope with [`latexsnipper_string_free`].
+#[no_mangle]
+pub extern "C" fn latexsnipper_formula_capabilities() -> *mut c_char {
+    ffi_response(|| {
+        Ok::<_, AdapterError>(CapabilityRegistry::formula_conversions(
+            CapabilityTarget::Native,
+        ))
+    })
+}
+
+/// Convert a declared formula string without loading recognition models.
+/// Mode defaults to strict; source/reconstruction budgets apply to this call.
+/// Release the returned v3 JSON envelope with [`latexsnipper_string_free`].
+///
+/// # Safety
+///
+/// `request_json` must reference `request_json_len` readable bytes for this call.
+#[no_mangle]
+pub unsafe extern "C" fn latexsnipper_formula_convert(
+    request_json: *const u8,
+    request_json_len: usize,
+) -> *mut c_char {
+    ffi_response(|| {
+        let request: FormulaConvertRequest =
+            unsafe { parse_request(request_json, request_json_len) }?;
+        request.convert()
+    })
+}
+
 /// Create a long-lived application session.
 ///
 /// `request_json` must contain at least `modelsDir`. The returned JSON string
@@ -501,11 +588,112 @@ mod tests {
 
     #[test]
     fn public_abi_signatures_keep_explicit_input_lengths() {
+        let _: unsafe extern "C" fn(*const u8, usize) -> *mut c_char = latexsnipper_formula_convert;
+        let _: extern "C" fn() -> *mut c_char = latexsnipper_formula_capabilities;
         let _: unsafe extern "C" fn(*const u8, usize) -> *mut c_char = latexsnipper_session_create;
         let _: unsafe extern "C" fn(u64, *const u8, usize) -> *mut c_char =
             latexsnipper_session_warmup;
         let _: unsafe extern "C" fn(u64, *const u8, usize, *const u8, usize) -> *mut c_char =
             latexsnipper_session_recognize_bytes;
+    }
+
+    #[test]
+    fn formula_routes_and_errors_preserve_v3_envelopes_and_ownership() {
+        let capabilities = unsafe { take_json(latexsnipper_formula_capabilities()) };
+        assert_eq!(capabilities["ok"], true);
+        let routes = capabilities["data"].as_array().unwrap();
+        assert_eq!(routes.len(), 144);
+        for route in routes {
+            let content = match route["input"].as_str().unwrap() {
+                "mathml" => "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
+                "omml" => "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>",
+                "typst" => "frac(a, b)",
+                "markdown" => r"A fraction $\frac{a}{b}$",
+                _ => r"\frac{a}{b}",
+            };
+            let request = json!({
+                "content": content, "inputFormat": route["input"],
+                "outputFormat": route["output"], "mode": route["mode"],
+            })
+            .to_string();
+            let result = unsafe {
+                take_json(latexsnipper_formula_convert(
+                    request.as_ptr(),
+                    request.len(),
+                ))
+            };
+            assert_eq!(result["ok"], route["available"]);
+            if route["available"] == true {
+                assert_eq!(result["data"]["capability"], *route);
+            } else {
+                assert_eq!(result["error"]["code"], "UNSUPPORTED_FORMAT");
+                assert_eq!(
+                    result["error"]["details"]["detail"],
+                    route["unavailableReason"]
+                );
+            }
+        }
+        let null = unsafe { take_json(latexsnipper_formula_convert(std::ptr::null(), 0)) };
+        assert_eq!(null["error"]["code"], "INVALID_ARGUMENT");
+        let oversized = unsafe {
+            take_json(latexsnipper_formula_convert(
+                b"x".as_ptr(),
+                MAX_REQUEST_JSON_BYTES + 1,
+            ))
+        };
+        assert_eq!(oversized["error"]["code"], "INVALID_ARGUMENT");
+        for (request, code) in [
+            (
+                json!({"content":"x", "inputFormat":"latex", "outputFormat":"omml"}),
+                "OK",
+            ),
+            (
+                json!({"content":r"\unknownmacro+x", "inputFormat":"latex", "outputFormat":"omml"}),
+                "CONVERSION_FAILED",
+            ),
+            (
+                json!({"content":"x", "inputFormat":"latex", "outputFormat":"omml", "mode":"lossless"}),
+                "INVALID_JSON",
+            ),
+            (
+                json!({"content":"x", "inputFormat":"ole", "outputFormat":"omml"}),
+                "INVALID_JSON",
+            ),
+            (
+                json!({"content":"x", "inputFormat":"latex", "outputFormat":"pdf"}),
+                "INVALID_ARGUMENT",
+            ),
+            (
+                json!({"content":"x", "inputFormat":"latex", "outputFormat":"omml", "typo":true}),
+                "INVALID_JSON",
+            ),
+            (
+                json!({"content":"x".repeat(64 * 1024 + 1), "inputFormat":"latex", "outputFormat":"omml"}),
+                "INPUT_TOO_LARGE",
+            ),
+        ] {
+            let request = request.to_string();
+            let result = unsafe {
+                take_json(latexsnipper_formula_convert(
+                    request.as_ptr(),
+                    request.len(),
+                ))
+            };
+            if code == "OK" {
+                assert_eq!(result["ok"], true);
+            } else {
+                assert_eq!(result["error"]["code"], code);
+            }
+        }
+        for request in [&b"\xff"[..], &b"{}garbage"[..]] {
+            let result = unsafe {
+                take_json(latexsnipper_formula_convert(
+                    request.as_ptr(),
+                    request.len(),
+                ))
+            };
+            assert_eq!(result["error"]["code"], "INVALID_JSON");
+        }
     }
 
     #[test]

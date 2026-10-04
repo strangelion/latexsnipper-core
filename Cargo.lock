@@ -2365,6 +2365,7 @@ dependencies = [
  "jni",
  "latexsnipper-api-types",
  "latexsnipper-ast",
+ "latexsnipper-conversion",
  "latexsnipper-engine",
  "latexsnipper-foundation",
  "latexsnipper-image",

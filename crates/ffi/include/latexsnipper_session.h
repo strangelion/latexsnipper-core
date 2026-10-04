@@ -21,6 +21,23 @@ extern "C" {
 
 LATEXSNIPPER_API uint32_t latexsnipper_session_abi_version(void);
 
+/* Additive model-free formula API. Both functions return the existing v3
+ * envelope and use latexsnipper_string_free; no session handle is required.
+ * Capabilities data is an array of native input/output/mode rows.
+ * Conversion request example (mode defaults to strict):
+ * {"content":"x","inputFormat":"latex","outputFormat":"omml"}
+ * Only LaTeX-to-OMML currently supports strict. Select "best-effort" explicitly
+ * for other available routes; UnicodeMath/AsciiMath/MTEF remain unsupported.
+ * Conversion data contains content and the executed capability row.
+ * JSON is capped at 1 MiB. Source and reconstructed LaTeX are capped at 64 KiB,
+ * 64 lexical nesting levels and 512 structural tokens; XML DTDs are rejected.
+ * Older v1 libraries may lack these symbols; feature-detect before using them.
+ */
+LATEXSNIPPER_API char *latexsnipper_formula_capabilities(void);
+LATEXSNIPPER_API char *latexsnipper_formula_convert(
+    const uint8_t *request_json,
+    size_t request_json_len);
+
 /* request_json example:
  * {"modelsDir":"models","runtimePreference":"auto","maxThreads":4}
  */

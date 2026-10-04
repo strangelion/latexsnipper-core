@@ -29,6 +29,33 @@ fn all_directions_and_modes_are_projected_for_both_targets() {
 }
 
 #[test]
+fn formula_request_enums_keep_the_projected_wire_spellings() {
+    for &input in FormulaInputFormat::all() {
+        let serialized = serde_json::to_string(&input).unwrap();
+        assert_eq!(
+            serde_json::from_str::<FormulaInputFormat>(&serialized).unwrap(),
+            input
+        );
+        assert_eq!(
+            serde_json::from_str::<String>(&serialized).unwrap(),
+            input.name()
+        );
+    }
+    for mode in [
+        FormulaConversionMode::Strict,
+        FormulaConversionMode::BestEffort,
+    ] {
+        let serialized = serde_json::to_string(&mode).unwrap();
+        assert_eq!(
+            serde_json::from_str::<FormulaConversionMode>(&serialized).unwrap(),
+            mode
+        );
+    }
+    assert!(serde_json::from_str::<FormulaInputFormat>("\"ole\"").is_err());
+    assert!(serde_json::from_str::<FormulaConversionMode>("\"lossless\"").is_err());
+}
+
+#[test]
 fn best_effort_routes_execute_existing_parsers_and_exporters() {
     let samples = [
         (FormulaInputFormat::Latex, r"\frac{a}{b}"),

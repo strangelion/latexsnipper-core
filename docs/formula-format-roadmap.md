@@ -40,7 +40,11 @@ VSTO 是加载项技术，不作为公式格式。应用自己的 OLE 不等于 
     46 条可用、98 条明确拒绝；错误标签、严格语法拒绝、超限与失败隔离通过。
     Python 6 项 Rust 单测、轻量 270 项/原生 310 项转换测试、Clippy、WASM 编译及
     冻结检查通过；其他平台由已有 wheel CI 验收。
-  - [ ] C/JS 的模式入口与能力投影尚未接入，不能从 Rust 可编译推断绑定可调用。
+  - [x] C 新增无模型 `latexsnipper_formula_convert` / `latexsnipper_formula_capabilities`；
+    复用 v3 envelope、旧字符串释放方式及 strict 默认，未知 JSON 字段/枚举明确拒绝。
+    Windows release 动态库 ctypes 实测 46 条转换、98 条拒绝，错误/空指针/UTF-8/
+    长度边界及旧 Session 兼容通过；三平台 CI 已接入相同 smoke，尚未宣称远端全绿。
+  - [ ] JS 的模式入口与能力投影尚未接入，不能从 Rust 可编译推断绑定可调用。
   - 新入口对源及重建 LaTeX 增加单次 64 KiB、64 层词法嵌套、512 个结构 token
     保守预算，并拒绝 XML DTD；超限明确失败，旧转换/批量接口不受此预算影响。
     这是资源保护而非完整语法校验，也不代表真实 Office 的准确率或视觉验收。
@@ -112,3 +116,7 @@ FMT-01 首批是 Rust 增量 API；没有修改旧的 `TargetFormatCapability` �
 Python 本批新增模块函数和类型声明；新模式入口增加保守输入预算及 XML DTD 拒绝，
 旧转换/识别 API、C ABI、WASM envelope 和依赖锁文件未变。复核后仅刷新 conversion
 公共源码树哈希；未删减 28 个文件和 19 个源码树的冻结门禁。
+C 本批仅增加两个无模型函数、头文件声明和请求 DTO，旧 Session ABI v1、符号签名、
+v3 envelope 及字符串所有权不变。输入/模式枚举增加 Deserialize，保持原 kebab-case
+拼写；Cargo.lock 仅增加已有 conversion crate 的 FFI 依赖边，不升级第三方包。
+复核后刷新 capability_registry 文件及 conversion/ffi 源码树哈希，保持全部门禁。

@@ -361,7 +361,9 @@ pilot 和 MathType/MTEF 边界见 [formula-format-roadmap.md](formula-format-roa
 FMT-01 已完成首批 Rust 模式入口、共享能力方向投影和可测试的生成矩阵；
 Python 已接入模式转换/能力查询并完成 Windows Python 3.11 release wheel 安装后测试；
 144 条路线中 46 条可用、98 条明确拒绝，旧持久化 Session 测试继续通过。
-C/JS 接入继续待办；FMT-02 已登记四条合成样式/堆叠语法缺口，
+C 已接入无模型模式转换/能力查询并完成 Windows release 动态库 ctypes 测试；
+46 条转换、98 条拒绝、错误/长度边界和旧 Session 兼容通过，三平台 CI 已纳入。
+JS 接入继续待办；FMT-02 已登记四条合成样式/堆叠语法缺口，
 `dfrac` / `tfrac` 样式、`substack` 多行结构及 `cfrac` 连分数已补首批解析/导出回归，
 其他失败分类、对齐回读和完整跨格式保真继续待办。具体子项以该路线图为准。
 Office 本应用行内/行间 OMML/OLE 双向及保存重开专项已通过；编号引用、跨故事、
