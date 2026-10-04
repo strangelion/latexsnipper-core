@@ -127,3 +127,18 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   compatibility before proving it.
 - The tag gate also requires the release checklist, frozen-contract verification,
   clean tracked worktree, and green CI, WASM, CodeQL and scheduled hardening.
+- O-06 stage profiling (2026-10-04): Office's real Word harness measured 25 and
+  250 repeated integral candidates. 24/249 converted, one intentionally invalid
+  payload preserved in each run, zero execution failures; full manifest IDs and
+  payloads matched after save/reopen and the clipboard sequence was unchanged.
+  Runs took 17.247/232.841 seconds; the 250-item candidate total was 220.019 seconds,
+  including 181.220 seconds of scratch materialization/copying. Nested stages
+  overlap and cannot be summed. Core conversion, pipe, field refresh, 1,000-item
+  and diverse 10,000-item matrices remain unmeasured. An earlier extra read-back
+  rejection is still unexplained; current successful reruns do not close that
+  intermittent risk. Evidence is recorded in Office's real-host acceptance file.
+  O-06 remains in progress; no speedup or diversity accuracy claim is made.
+- Format follow-up priority (2026-10-04): finish real OLE/image host closure first,
+  then implement separate bounded UnicodeMath and AsciiMath syntax/AST/round-trip
+  pilots, and a versioned read-only MTEF milestone before any third-party write.
+  See `docs/formula-format-roadmap.md`; all three still require their own gates.
