@@ -421,6 +421,17 @@ display 样式继续待验收。原生 Word 裸选区 SVG/PNG/OLE 真实对象�
 管道验收。x86 Office、多 DPI、PGFPlots clipPath、字体和 10000 条矩阵仍开放。
 Core 公共能力及 Office Core pin 不变；证据哈希保存在 Office 真实宿主记录。
 
+同日安装管道前置：Office `de2f09d` 的 NativeOffice MSI/双启动器重建，
+解包后 94 个载荷哈希、x86/x64 OLE 的 PE/版本/导出/依赖门禁通过；
+安装版 harness 增加完整哈希绑定、开发加载项隔离恢复及桌面批量确认 UI 模式，
+该新版 UI 管道本轮尚未实测。旧同版本 MSI 的卸载卡在遗留 Root 证书删除动作，
+新版安装尚未开始，回滚也未确认。已保存并验证旧完整缓存 MSI，必须先取消旧事务
+并确认恢复，不强杀系统安装服务或叠加安装；O-02/O-06 和升级门禁继续开放。
+Core `cd44e42` 的 CI/WASM/CodeQL 均已实查成功；本次不改 Core 公共能力及 Office pin。
+同轮 Office 新 release 的真实 WebView2 CSP/WASM、三种绘图、混合符号和库缩略图通过，
+控制台/请求错误为空，仍不代表安装版 Word 管道通过。终止测试程序/清理命令被执行策略
+拒绝；隔离 profile、新包证据与旧 MSI 回退包保留，未声称清理完成。
+
 - 没有报告、截图、日志或可复现命令的项目不得标记为完成；
 - `unsupported`、`not-measured` 和 `failed` 必须分开；
 - 所有性能结论必须带平台、版本、seed 和重复次数；

@@ -232,3 +232,20 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   testing. This is adapter proof, not an upgraded installation or Tauri pipe.
   x86 Office, multi-DPI, arbitrary fonts, PGFPlots clipPath and 10000 diverse
   formulas remain open. Core public targets and the Office Core pin are unchanged.
+- Installed-pipe preparation (2026-10-05): Office de2f09d NativeOffice MSI and
+  bootstrappers rebuilt; 94 extracted payload hashes and both OLE PE/version/
+  export/dependency gates passed. The installed-host harness now distinguishes
+  installed versus development ProgIDs, checks every installed payload hash,
+  explicitly isolates duplicate development registration, and optionally drives
+  the desktop batch button and confirmation UI. This UI mode is not yet live-tested.
+  Replacing the old same-version MSI stopped in its legacy Root-certificate delete
+  action. New installation has not started and rollback is not yet confirmed;
+  preserve the verified old MSI backup, cancel the old transaction, and confirm
+  recovery before any new host test. Historical O-01 package proof does not close
+  this upgrade gate. O-02/O-06 remain in progress. Core cd44e42 CI, WASM and CodeQL
+  were all verified successful; no Core code or public-format registry changes.
+- The same Office release passed isolated real WebView2 CSP/WASM, Graphviz/TikZ/
+  PGFPlots, mixed custom symbols and library thumbnails, with zero console or
+  request errors. This does not substitute for the pending installed Word pipe.
+  Local test-app cleanup was rejected by execution policy; its isolated profile,
+  package evidence and old MSI recovery backup are retained, not claimed cleaned.
