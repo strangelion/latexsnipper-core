@@ -305,3 +305,10 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   CSP/WASM, three drawing runtimes and mixed-symbol/library regressions pass
   without console or request errors. This supersedes
   the earlier source-only completion status, not the installer/real-host gates.
+- Closing transfer status: Office verification commit `07f597b` and Core ledger
+  commit `c46adb1` are retained locally after two failed pushes (connection reset/
+  timeout). Office feature `8f20f9f` was already pushed; its last readable CI state
+  was still running, not success. Owned test processes exited, but deleting the
+  dedicated WebView caches was rejected by execution policy; caches, evidence
+  and old MSI recovery backup remain. Retry synchronization later, without
+  repeating trust/installer mutations or claiming cleanup complete.
