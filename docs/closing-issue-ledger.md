@@ -1,314 +1,57 @@
-# Closing issue ledger
+# 收尾任务清单
 
-This ledger turns the closing plan into ownership and evidence gates. It is a
-release coordination document, not a statement that every listed capability is
-already supported. Update its status and evidence links before creating a
-release tag.
+更新：2026-10-05。只保留状态、责任范围与下一步；详细执行记录不在此重复。
 
-## Status and blocker vocabulary
-
-Status:
-
-- done: the named evidence exists and its automated gate passes;
-- in progress: implementation exists, but the named acceptance evidence is
-  incomplete;
-- blocked: progress requires an external asset, license, application, or user
-  decision;
-- not started: no qualifying evidence has been recorded.
-
-Blocker:
-
-- P0 claim blocker: the product must not claim this capability without evidence;
-- P1 release blocker: required for the planned release candidate;
-- P2 UX blocker: release may proceed only if the known limitation is disclosed;
-- P3 follow-up: useful work that is not part of the current release gate.
+“基础完成”只关闭该项列出的范围；“进行中”表示已有实现但整体仍未关闭；
+“待外部条件”表示需要授权、许可或真实资产。执行顺序见 [总计划](closing-plan.md)。
 
 ## Core
 
-| ID | Item | Owner | Repository | Required evidence | Blocker | Status |
-|---|---|---|---|---|---|---|
-| C-01 | Deterministic 10,000 formula and 500 mixed-document corpora | Core evaluation maintainer | strangelion/latexsnipper-core | frozen manifests, digests, pilot and full reports | P1 | done |
-| C-02 | Parser, conversion, round-trip, latency, throughput and peak-memory evidence | Core benchmark maintainer | strangelion/latexsnipper-core | locked tests and generated benchmark report | P1 | done |
-| C-03 | Counted DOCX OMML, PNG and SVG multi-object round trip | Core fidelity maintainer | strangelion/latexsnipper-core | checksum-pinned fixture and package capability report | P1 | done |
-| C-04 | Word bookmark, SEQ, REF and safe field-refresh request | Core conversion maintainer | strangelion/latexsnipper-core | DOCX read-back tests and package tokens; Word recalculation excluded | P0 claim blocker | done |
-| C-05 | Accuracy claims on externally sourced, real-distribution formula data | Evaluation and release owners | strangelion/latexsnipper-core | licensed corpus provenance, model identity, accuracy report | P0 claim blocker | blocked |
-| C-06 | Optional Zig interop decision | Core performance maintainer | strangelion/latexsnipper-core | isolated ABI benchmark and explicit adoption decision | P3 | done |
+| 编号 | 工作项 | 责任范围 | 状态 | 下一步 |
+| --- | --- | --- | --- | --- |
+| C-01 | 固定公式与混合文档语料 | Core 评估 | 基础完成 | 维护现有语料，不重复列为新任务 |
+| C-02 | 解析/转换/往返与性能报告 | Core 评估 | 基础完成 | 随新增能力更新公开报告 |
+| C-03 | Office 包级多对象回读 | Core fidelity | 基础完成 | 不能代替真实宿主能力 |
+| C-04 | 书签、SEQ、REF 与字段更新请求 | Core 转换 | 基础完成 | 配合 Office 完成 UI 和迁移 |
+| C-05 | 外部真实分布准确率 | 评估/发布 | 待外部条件 | 获得许可明确的独立数据，限定公开声明 |
+| C-06 | Zig 接入决策 | Core 性能 | 决策完成：暂不接入 | 有新热点与跨平台收益时再评估 |
 
-## Office and OLE
+格式扩展见 [FMT-01 至 FMT-07](formula-format-roadmap.md)；
+持久会话见 [适配器计划](application-adapter-roadmap.md)；
+个性化补全见 [辅助计划](formula-assistance-roadmap.md)。
 
-| ID | Item | Owner | Repository | Required evidence | Blocker | Status |
-|---|---|---|---|---|---|---|
-| O-01 | Package and install the x64 OLE server DLL | Office packaging maintainer | strangelion/LaTeXSnipper-Office | clean installer log, installed DLL hash, COM registration and activation result | P0 claim blocker | done |
-| O-02 | Word formula, image and OLE insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | document fixtures, screenshots, OOXML diff and editable readback result | P0 claim blocker | in progress |
-| O-03 | Excel formula, image and supported object insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | workbook fixtures, screenshots, OOXML diff and readback result | P0 claim blocker | in progress |
-| O-04 | PowerPoint formula, image and supported object insert-save-reopen-readback | Office integration maintainer | strangelion/LaTeXSnipper-Office | presentation fixtures, screenshots, OOXML diff and readback result | P0 claim blocker | in progress |
-| O-05 | Word recalculates dirty SEQ and REF fields | Office integration maintainer | strangelion/LaTeXSnipper-Office | Word automation or manual harness showing updated displayed values after reopen | P0 claim blocker | done |
-| O-06 | Batch insertion and clipboard ownership | Office integration maintainer | strangelion/LaTeXSnipper-Office | repeatable application harness with counts, timing and failure artifacts | P1 | in progress |
-| O-07 | Office command layout, sizing and typography | Office UX maintainer | strangelion/LaTeXSnipper-Office | wide and portrait screenshots plus interaction regression checklist | P2 | in progress |
+## Office 与 OLE
 
-## GUI and desktop runtime
+| 编号 | 工作项 | 责任范围 | 状态 | 下一步 |
+| --- | --- | --- | --- | --- |
+| O-01 | x64 OLE DLL 打包、安装与注册 | Office 打包 | 基础完成 | 统一新版本载荷；继续补 x86 与环境兼容 |
+| O-02 | Word 公式/图片/OLE 闭环 | Office 集成 | 进行中 | 安装版管道、编号迁移、跨故事与绘图尺寸 |
+| O-03 | Excel 支持对象闭环 | Office 集成 | 进行中 | 完善锚点、字体/尺寸、保存后恢复与宿主入口 |
+| O-04 | PowerPoint 支持对象闭环 | Office 集成 | 进行中 | 完善定位、缩放、字体/尺寸、保存后恢复与宿主入口 |
+| O-05 | Word SEQ/REF 重算 | Office 集成 | 基础完成 | 目录、跳转与格式迁移仍随 O-02 推进 |
+| O-06 | 批量转换与剪贴板 | Office 集成 | 进行中 | scratch/COM 优化、文档索引、取消恢复；见 Office 批量计划 |
+| O-07 | 加载项布局、字体与快捷操作 | Office UX | 进行中 | 按宿主补齐功能入口、样式加载与布局 |
 
-| ID | Item | Owner | Repository | Required evidence | Blocker | Status |
-|---|---|---|---|---|---|---|
-| G-01 | Math editor and mixed custom-symbol preview | Formula editor maintainer | strangelion/LaTeXSnipper-Office | visual fixtures for plain, stacked, subscript and superscript formulas | P1 | in progress |
-| G-02 | TikZ, PGFPlots, Graphviz and Mermaid safe preview | Drawing workspace maintainer | strangelion/LaTeXSnipper-Office | real WebView2 preview matrix, timeout diagnostics and output bounds checks | P1 | in progress |
-| G-03 | Formula library and custom-symbol discoverability | Formula library maintainer | strangelion/LaTeXSnipper-Office | persisted-library reload and searchable thumbnail regression | P1 | in progress |
-| G-04 | Source syntax colors, theme controls and light-blue default | Office UX maintainer | strangelion/LaTeXSnipper-Office | light, dark and custom-theme visual regression at supported scales | P2 | in progress |
-| G-05 | Portrait layout, symbol rail, canvas toolbar and popup positioning | Office UX maintainer | strangelion/LaTeXSnipper-Office | portrait and narrow-window screenshots without avoidable scrollbars or clipping | P2 | in progress |
-| G-06 | Tray and taskbar thumbnail left/right click behavior | Desktop runtime maintainer | strangelion/LaTeXSnipper-Office | packaged Tauri interaction checklist on Windows | P1 | in progress |
-| G-07 | Release WebView2 CSP, WASM and desktop startup | Desktop runtime maintainer | strangelion/LaTeXSnipper-Office | installed release smoke with console, CSP and runtime logs | P1 | in progress |
+加载项易用性沿用 O-07；O-01 只指 OLE 打包，避免两个计划混用编号。
 
-## Release coordination
+## 编辑器与桌面
 
-The release owner closes a row only when its required evidence is linked from a
-generated report, checked-in fixture, or dated application test record.
+| 编号 | 工作项 | 状态 | 下一步 |
+| --- | --- | --- | --- |
+| G-01 | 公式编辑与混合符号 | 进行中 | 完善结构补全、定义版本绑定、字体/样式预设 |
+| G-02 | TikZ/PGFPlots/Graphviz/Mermaid | 进行中 | 补剩余绘图范围、字体、裁切与插入边界 |
+| G-03 | 公式库与自定义符号可见性 | 进行中 | 安装版持久化与定义一致性闭环 |
+| G-04 | 着色、主题与自定义控件 | 进行中 | 保持浅蓝默认，完善多层结构与深浅主题一致性 |
+| G-05 | 布局、素材栏/工具栏与弹层 | 进行中 | 消除窄区域无意义滚动，完善空间与弹出方向 |
+| G-06 | 托盘及任务栏交互 | 进行中 | 完成安装版左右键和窗口生命周期 |
+| G-07 | release WebView2/CSP/WASM/启动 | 进行中 | standalone 基础已有，完成同源安装版闭环 |
 
-The 2026-09-30 O-01 evidence, completed O-05 Word field recalculation evidence,
-and partial O-02/O-03/O-04 real-host results are recorded in
-`strangelion/LaTeXSnipper-Office` at `docs/office/real-host-acceptance.md`.
-Office harness commit `4cf6d74d45396fbd5b7fc096294b138d7502b516` and evidence
-record `9eea8707d5c992f58c20b9b813e613d9f6703b98` cover a stale-value
-transition: after deleting the preceding numbered formula, target `SEQ` and
-`REF` remain at `2`, a document-wide field update changes both to `1`, and the
-values remain `1` after save/reopen. O-02 through O-04 remain open until their
-checked-in OOXML difference summaries and remaining host matrices are complete.
+## 横向收尾
 
-- Core package evidence does not close OLE activation, clipboard, or real
-  batch-insertion rows; O-05 is closed only by the linked real Word harness.
-- O-06 partial evidence (2026-10-02): real Word scanned 250 instances of one
-  Core-generated integral with four delimiter forms. 249 converted, one injected
-  invalid payload preserved its source; adjacent prose and counts survived reopen.
-  Clipboard sequence stayed unchanged. A 100-item chunk took 114.5 seconds, so
-  Office now uses 25-item chunks. This is not formula-diversity accuracy, pipe
-  timeout reconciliation, actual clipboard paste, or Excel/PowerPoint coverage.
-- A screenshot alone does not close an editability or round-trip row.
-- O-06 regression (2026-10-03): Office Word/Excel/PowerPoint batch handlers now
-  return the original request/session IDs; previously empty IDs could leave the
-  desktop waiting after the document was already modified. Shared C# wire tests
-  and five Tokio waiter tests cover correlation, late completion, bounded final
-  timeout and disconnect cleanup. These are not real-host end-to-end acceptance;
-  the row remains in progress. See the dated Office real-host acceptance record.
-- A successful application smoke does not replace deterministic Core contracts.
-- O-06 story acceptance (2026-10-03): Office's real Word harness converted seven
-  body/header/footer/text-frame formulas, retained adjacent prose and persistent
-  IDs/source/OMML after reopen, rejected invalid locators and stale hashes, and
-  tested duplicate/Unicode/long source positions. A floating shape anchor had
-  shifted body offsets because Word positions differ from plain-text offsets;
-  story-local lookup and exact source/prefix checks now guard that case.
-  The 250-item body regression remains 249 converted, one injected invalid item
-  preserved, zero execution failures, unchanged clipboard and successful reopen;
-  328.093 seconds total, 18.136–48.795 seconds per 25-item chunk. Not a diversity
-  accuracy or speedup claim. Pipe, display layout and other-host rows remain open.
-- O-06 follow-up explicitly queued (2026-10-03): undelimited LaTeX selection
-  conversion, opt-in full-document candidates, preprocessed ID/revision/hash
-  indexing, unchanged-formula caching, batched manifest writes and field refresh,
-  and an optional saved-copy-only offline DOCX path. Profile and benchmark before
-  claiming speed improvements. See Office `docs/office/batch-update-plan.md`.
-- Office package verification run 37098619175 at bb268a6 passed on all three
-  platforms; the Windows unattended certificate step and install/reinstall/
-  upgrade/uninstall passed. This validates that commit's package gate, not the
-  newer story-fix source or release WebView2/real desktop pipe acceptance.
-- Current-release capability claims must omit or clearly label every open P0
-  row.
-- O-06 raw-selection progress (2026-10-03): Office's real Word native harness
-  read fractions, scripts, matrices and multiline selections without mutation,
-  rejected prose/paths/incomplete syntax, retained rejected/stale duplicate
-  sources, converted three body/header/text-frame selections and retained
-  source/OMML after reopen (4.578 seconds). Desktop and Office.js preview/confirm
-  UI is being verified separately; this native harness does not close their
-  end-to-end pipe or Office.js-host gates. Core now exposes an opt-in strict
-  OMML guard so unknown commands/environments cannot silently disappear during
-  source replacement; 245 conversion unit tests and one doc-test pass without
-  default features. Legacy best-effort export remains compatible.
-- User follow-up (2026-10-03): add explicit source/target conversion choices,
-  including LaTeXSnipper OLE versus native OMML. VSTO is an add-in technology,
-  not a target format. MathType/MTEF and third-party OLE import/export need
-  separate capability detection and fixtures; do not advertise generic OLE
-  compatibility before proving it.
-- The tag gate also requires the release checklist, frozen-contract verification,
-  clean tracked worktree, and green CI, WASM, CodeQL and scheduled hardening.
-- O-06 stage profiling (2026-10-04): Office's real Word harness measured 25 and
-  250 repeated integral candidates. 24/249 converted, one intentionally invalid
-  payload preserved in each run, zero execution failures; full manifest IDs and
-  payloads matched after save/reopen and the clipboard sequence was unchanged.
-  Runs took 17.247/232.841 seconds; the 250-item candidate total was 220.019 seconds,
-  including 181.220 seconds of scratch materialization/copying. Nested stages
-  overlap and cannot be summed. Core conversion, pipe, field refresh, 1,000-item
-  and diverse 10,000-item matrices remain unmeasured. An earlier extra read-back
-  rejection is still unexplained; current successful reruns do not close that
-  intermittent risk. Evidence is recorded in Office's real-host acceptance file.
-  O-06 remains in progress; no speedup or diversity accuracy claim is made.
-- Format follow-up priority (2026-10-04): finish real OLE/image host closure first,
-  then implement separate bounded UnicodeMath and AsciiMath syntax/AST/round-trip
-  pilots, and a versioned read-only MTEF milestone before any third-party write.
-  See `docs/formula-format-roadmap.md`; all three still require their own gates.
-- FMT-05 partial implementation (2026-10-04): AsciiMath now has an independent
-  experimental Rust lexer/parser and supported AST serializer, versioned synthetic
-  fixtures and explicit size/token/depth limits. Twelve focused tests cover
-  fraction/script binding, nested matrices, rejection and canonical structural
-  round trips, including 4,913 deterministic three-token combinations. One
-  MathML/OMML bridge fixture checks structure only. Expanded corpus,
-  typography/host parity and registered API/UI directions remain open; the
-  production capability registry still rejects AsciiMath rather than implying
-  support from the existence of an experimental parser.
-- FMT-05 next bounded milestone (2026-10-04): separate UnicodeMath lexer/parser,
-  supported AST serializer, 16 accepted/8 rejected versioned fixtures and 13
-  focused tests (including 600 deterministic combinations and one MathML/OMML
-  matrix bridge). Operand/script/space and padded-matrix rules are independent
-  of AsciiMath; only the private AST comparator is shared. Light/native conversion
-  regressions, Clippy and WASM compilation pass. No registered API/UI, full Unicode
-  property grammar, external accuracy or Word visual parity claim is made; FMT-05
-  and real OLE/image host closure stay open. Previous Core 37ce6d8 CI 37185881099,
-  WASM 37185881098 and CodeQL 37185881097 have been verified successful.
-- FMT-06 partial milestone (2026-10-04): experimental raw MTEF v5 read-only
-  inspection retains the full source and decoded record spans/depth. Fifteen
-  focused synthetic tests cover framing, truncation, mutations, budgets and
-  registered-conversion rejection. Complete framing is not semantic validity,
-  mathematical accuracy or real MathType compatibility. No SDK, third-party
-  assets, OLE activation, AST converter, writer or API/UI exposure was added;
-  real sample provenance, licensing and host/container gates remain open.
-  See `docs/formats/mtef-readonly.md`; FMT-06 is not closed.
-- Optional follow-up (2026-10-04): personalized candidate ranking, formula
-  completion and controlled continuation are now recorded separately in
-  `docs/formula-assistance-roadmap.md`. This is a proposed evaluation only,
-  not a model integration or approval to collect/upload user documents.
-- Office partial evidence (2026-10-04): an isolated local release WebView2
-  passed WASM/CSP and three drawing/custom-symbol checks; a real Tauri-to-Word
-  development add-in pipe converted four inline equations in 2.318 seconds and
-  survived save/reopen with adjacent prose. One earlier loaded cold run failed;
-  its cause and late-result risks remain open. Installed NativeOffice provenance
-  is older, so G-07 does not close. See Office real-host acceptance records.
-- New Office requests are recorded in its batch-update plan: connected-document
-  selection, enumeration of all open documents, more LaTeX insertion/conversion
-  targets and direct host commands. The connected-session picker/browser tests
-  are partial progress, not real multi-document or complete OLE/image acceptance.
-- O-02/G-02 incremental proof (2026-10-04): Office outlined the bundled TeX
-  glyphs and resolved inherited SVG paint to explicit colors. A real Word
-  PGFPlots SVG image now shows axis digits, variables and borders, retains
-  drawing source after save/reopen, and has a passing dark-ink check. The old
-  no-label SVG fails the negative control. Requested 255.66 x 213.54 pt becomes
-  255.65 x 213.70 pt in Word. OLE for that SVG still rejects unsupported
-  clipPath during SVG-to-EMF generation; activation and payload transport alone
-  do not close the row. See the dated Office real-host record for artifact
-  hashes and remaining release/host boundaries.
-- Direct Office.js conversion progress (2026-10-04): raw Word selections may
-  export LaTeX/SVG/PNG copies inside the taskpane after preview. Strict source
-  validation is retained and tracked ranges are released on success/failure;
-  this does not replace the selection with an image/OLE object. Real Office.js
-  acceptance, all-open-document enumeration and the direct command matrix stay
-  open in the Office batch-update plan.
-- Office Word document-target milestone (2026-10-04): the new native Word
-  capability enumerates all open documents without switching focus, distinguishes
-  duplicate titles by context path and explicitly activates the chosen target
-  before preview. Real owned Word documents passed selection binding, Save-As,
-  close and readonly rejection with source unchanged; browser refresh and protocol
-  tests also pass. This is adapter/UI proof, not a new installed add-in/Tauri pipe,
-  same-path reopen identity or Excel/PowerPoint/Visio enumeration gate. O-06 and
-  the OLE/image matrix stay open. Core c538ba6 CI 37202683998, CodeQL 37202683951
-  and WASM 37202683939 have been verified successful.
-- Office direct batch/media increment (2026-10-05): native Ribbon batch now
-  starts scanning directly, with source-session binding, confirmation, chunking
-  and no uncertain-commit retries. Office.js starts inside the taskpane rather
-  than opening a desktop workspace; v1 is Word standalone delimited paragraphs
-  only, inline OMML, bounded to 500 formulas/10000 paragraphs. Mixed prose,
-  display styling, real Office.js and the 10000-formula matrix remain open.
-- Native Word bare-selection SVG/PNG/OLE now creates and reads back real target
-  objects before removing source, gated by a new additive selection_media
-  capability. Actual Word duplicate-position, negative-input and save/reopen
-  checks pass for one integral in three routes (3.6033072s), not general accuracy
-  or installed-pipe acceptance. OLE is still larger (47.5x22pt versus requested
-  33.23x14.57pt); geometry/font gates explicitly remain open. See the dated
-  Office real-host record for evidence hashes. Core public format registries and
-  the Office Core pin are unchanged. Current Core a4444b2 CI 37205136387, WASM
-  37205136346 and CodeQL 37205136392 were verified successful before this update.
-- Office OLE geometry follow-up (2026-10-05): fixed vector objects no longer
-  advertise resize recomposition; Word explicitly assigns the initialized frame,
-  and physical renders avoid duplicate legacy font scaling. The integral's real
-  Word rectangle is now 36x17pt against its padded natural 36.23x16.89pt frame.
-  All 24 inline/display/numbered cases pass insertion and save/reopen, including
-  drawing/symbol and wide/tall content. A bounded half-point rounding envelope
-  handles small Word rectangles without relaxing absolute dimension guards.
-  The actual test DLL hash was verified; the installed DLL was restored after
-  testing. This is adapter proof, not an upgraded installation or Tauri pipe.
-  x86 Office, multi-DPI, arbitrary fonts, PGFPlots clipPath and 10000 diverse
-  formulas remain open. Core public targets and the Office Core pin are unchanged.
-- Installed-pipe preparation (2026-10-05): Office de2f09d NativeOffice MSI and
-  bootstrappers rebuilt; 94 extracted payload hashes and both OLE PE/version/
-  export/dependency gates passed. The installed-host harness now distinguishes
-  installed versus development ProgIDs, checks every installed payload hash,
-  explicitly isolates duplicate development registration, and optionally drives
-  the desktop batch button and confirmation UI. This UI mode is not yet live-tested.
-  Replacing the old same-version MSI stopped in its legacy Root-certificate delete
-  action. New installation has not started and rollback is not yet confirmed;
-  preserve the verified old MSI backup, cancel the old transaction, and confirm
-  recovery before any new host test. Historical O-01 package proof does not close
-  this upgrade gate. O-02/O-06 remain in progress. Core cd44e42 CI, WASM and CodeQL
-  were all verified successful; no Core code or public-format registry changes.
-- The same Office release passed isolated real WebView2 CSP/WASM, Graphviz/TikZ/
-  PGFPlots, mixed custom symbols and library thumbnails, with zero console or
-  request errors. This does not substitute for the pending installed Word pipe.
-  Local test-app cleanup was rejected by execution policy; its isolated profile,
-  package evidence and old MSI recovery backup are retained, not claimed cleaned.
-- Installation status update (2026-10-05): after user interaction, the old MSI
-  removal and new MSI installation both returned 0. All 94 installed payload
-  hashes and four manifests match the verified de2f09d package; both installed
-  OLE hashes match and x64 COM registration points to the installed DLL. This is
-  uninstall/reinstall proof, not same-version MajorUpgrade or COM activation.
-  The installed Word UI harness was attempted but failed at VSTO loading with a
-  logged SecurityException: old removal deleted CurrentUser Root trust for the
-  self-signed development certificate. Publisher trust alone did not suffice.
-  Root restoration or interactive add-in trust requires user confirmation; do
-  not automatically broaden machine trust. Development LoadBehavior is restored,
-  the owned Word process exited, and the old MSI backup is retained. No batch
-  conversion or reopen success is claimed. O-02/O-06 stay open. Office ac28cc5
-  CI 37250793260 and Core d2a5a6e CI 37250799812, WASM 37250799921 and CodeQL
-  37250799929 have been verified successful. No Core code or pin changes.
-- Office UI/performance pilot (2026-10-05): conversion dialogs are centered with
-  visible actions and cancel on outside blank clicks/Escape; 20 wide/390px browser
-  handoffs pass without stacking or reviving late previews. Post-scan foreground
-  requests are implemented but not verified in a new release/real Word session.
-  A plan-local bounded exact-input cache preserves individual locations/hashes;
-  blocking-thread planning and error/budget regressions pass. Five Windows release
-  measurements of 1000 items repeating four simple formulas show 1000 to 4
-  conversions and 4.218 to 0.659 ms median planning time, excluding Word/COM.
-  This is not diverse-corpus accuracy or end-to-end throughput evidence.
-- The Office editor now has an opt-in local frequency/recency ranking baseline,
-  with explicit acceptance/immediate-undo feedback, persistence, reset and corrupt
-  storage fallback; no user formula/document text is persisted or uploaded.
-  Four unit tests and browser lifecycle checks pass. It is not a named jev model,
-  AST-aware completion, proven personalization quality or controlled continuation.
-  See `docs/formula-assistance-roadmap.md`. New Office source is not packaged yet;
-  installation trust and O-06/GUI gates stay open. Office implementation commit:
-  `9909ad6`. Core code and pin are unchanged. Previous Core bf1b825 CI 37265662365,
-  WASM 37265662343 and CodeQL 37265662351, and Office 8088bd1 CI 37265656917,
-  were verified successful; they do not certify these new commits.
-- Office `8f20f9f` adds themed inline Tab/Escape suggestions and bounded contextual
-  command/environment/script candidates, with valid saved-symbol add/remove refresh.
-  Expanded public-catalog opt-in feedback stores at most 128 IDs, never private
-  symbol names or formula context. All 432 frontend tests and real Chromium
-  completion/selector/source-color regressions pass. AST slots, definition-version
-  binding, real IME, project isolation and ranking-quality gates remain open.
-- Office `500cf5a` desktop-only release fixes the missing unminimize permission.
-  Actual WebView2 window-command authorization, ten centered wide/narrow readonly
-  export previews, backdrop/Escape cancellation and a three-pass/one-fail readonly
-  plan pass. CSP/WASM/drawing/mixed-symbol checks also pass. This is not actual
-  Word post-scan foreground handoff or a rebuilt coherent installer. The new
-  completion source is not in that binary. Installed VSTO trust and pipe/reopen
-  gates remain open; no certificate trust mutation. Latest verified Office CI
-  37269910922 (`500cf5a`), Core CI 37268920389/WASM 37268919959/CodeQL 37268919969
-  (`1519a0d`) succeeded. Core code and Office pin are unchanged.
-- Follow-up: the exact Office `8f20f9f` desktop-only binary was rebuilt (SHA-256
-  16F73720DC7AF54CF0DC39905DE4D09EF343BEFB10A41C2A66F06F902FA5BF0A).
-  Diagnostics bind the source; inline/context completion, themed menus, symbol
-  refresh and public-catalog feedback pass in actual isolated WebView2. Ten
-  conversion export previews and readonly-plan checks also pass. Same-source
-  CSP/WASM, three drawing runtimes and mixed-symbol/library regressions pass
-  without console or request errors. This supersedes
-  the earlier source-only completion status, not the installer/real-host gates.
-- Closing transfer status: Office verification commit `07f597b` and Core ledger
-  commit `c46adb1` are retained locally after two failed pushes (connection reset/
-  timeout). Office feature `8f20f9f` was already pushed; its last readable CI state
-  was still running, not success. Owned test processes exited, but deleting the
-  dedicated WebView caches was rejected by execution policy; caches, evidence
-  and old MSI recovery backup remain. Retry synchronization later, without
-  repeating trust/installer mutations or claiming cleanup complete.
+- 安装信任：当前 VSTO 加载被开发证书根信任阻挡；恢复信任需用户明确确认。
+- 同源发布：统一桌面、NativeOffice、OLE 与安装载荷；保留有效回退包。
+- OCR：明确模型选择、预热、provider 和任务终态，解决无限 running；不由就绪状态推断准确率。
+- 公开说明：真实宿主、OCR 与包级报告分开，README 不宣称未支持或未确认的能力。
+
+详细资料：[Core 报告](generated/formula-office-benchmark.md)，以及 Office 仓库
+`docs/office/real-host-acceptance.md`、`docs/acceptance-checklist.md`。
