@@ -263,3 +263,22 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   conversion or reopen success is claimed. O-02/O-06 stay open. Office ac28cc5
   CI 37250793260 and Core d2a5a6e CI 37250799812, WASM 37250799921 and CodeQL
   37250799929 have been verified successful. No Core code or pin changes.
+- Office UI/performance pilot (2026-10-05): conversion dialogs are centered with
+  visible actions and cancel on outside blank clicks/Escape; 20 wide/390px browser
+  handoffs pass without stacking or reviving late previews. Post-scan foreground
+  requests are implemented but not verified in a new release/real Word session.
+  A plan-local bounded exact-input cache preserves individual locations/hashes;
+  blocking-thread planning and error/budget regressions pass. Five Windows release
+  measurements of 1000 items repeating four simple formulas show 1000 to 4
+  conversions and 4.218 to 0.659 ms median planning time, excluding Word/COM.
+  This is not diverse-corpus accuracy or end-to-end throughput evidence.
+- The Office editor now has an opt-in local frequency/recency ranking baseline,
+  with explicit acceptance/immediate-undo feedback, persistence, reset and corrupt
+  storage fallback; no user formula/document text is persisted or uploaded.
+  Four unit tests and browser lifecycle checks pass. It is not a named jev model,
+  AST-aware completion, proven personalization quality or controlled continuation.
+  See `docs/formula-assistance-roadmap.md`. New Office source is not packaged yet;
+  installation trust and O-06/GUI gates stay open. Office implementation commit:
+  `9909ad6`. Core code and pin are unchanged. Previous Core bf1b825 CI 37265662365,
+  WASM 37265662343 and CodeQL 37265662351, and Office 8088bd1 CI 37265656917,
+  were verified successful; they do not certify these new commits.
