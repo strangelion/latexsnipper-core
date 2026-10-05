@@ -432,6 +432,16 @@ Core `cd44e42` 的 CI/WASM/CodeQL 均已实查成功；本次不改 Core 公共�
 控制台/请求错误为空，仍不代表安装版 Word 管道通过。终止测试程序/清理命令被执行策略
 拒绝；隔离 profile、新包证据与旧 MSI 回退包保留，未声称清理完成。
 
+同日安装状态更新：用户处理旧证书提示后，旧 MSI 卸载和新 MSI 安装均返回 0。
+实际安装的 94 个载荷、四宿主 manifest 和 provenance/hash 通过；x64/x86 OLE
+哈希与包一致，x64 COM 注册指向安装 DLL。这是卸载/重装，不是同版本自动升级验收。
+安装版 Word UI 管道已尝试，但 VSTO 加载因证书信任不足失败，未进入批量转换。
+旧卸载移除了开发证书 CurrentUser Root 信任；事件日志明确 SecurityException，
+需用户批准恢复信任或交互式确认加载项，不自动写根存储。开发加载项状态已恢复，
+Word 测试进程退出，回退 MSI 保留。O-02/O-06 及完整升级门禁继续开放。
+Office `ac28cc5` CI、Core `d2a5a6e` CI/WASM/CodeQL 均已实查成功。
+本轮仅同步计划证据，不改 Core 公共能力或 Office pin。
+
 - 没有报告、截图、日志或可复现命令的项目不得标记为完成；
 - `unsupported`、`not-measured` 和 `failed` 必须分开；
 - 所有性能结论必须带平台、版本、seed 和重复次数；

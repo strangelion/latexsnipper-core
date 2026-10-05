@@ -249,3 +249,17 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   request errors. This does not substitute for the pending installed Word pipe.
   Local test-app cleanup was rejected by execution policy; its isolated profile,
   package evidence and old MSI recovery backup are retained, not claimed cleaned.
+- Installation status update (2026-10-05): after user interaction, the old MSI
+  removal and new MSI installation both returned 0. All 94 installed payload
+  hashes and four manifests match the verified de2f09d package; both installed
+  OLE hashes match and x64 COM registration points to the installed DLL. This is
+  uninstall/reinstall proof, not same-version MajorUpgrade or COM activation.
+  The installed Word UI harness was attempted but failed at VSTO loading with a
+  logged SecurityException: old removal deleted CurrentUser Root trust for the
+  self-signed development certificate. Publisher trust alone did not suffice.
+  Root restoration or interactive add-in trust requires user confirmation; do
+  not automatically broaden machine trust. Development LoadBehavior is restored,
+  the owned Word process exited, and the old MSI backup is retained. No batch
+  conversion or reopen success is claimed. O-02/O-06 stay open. Office ac28cc5
+  CI 37250793260 and Core d2a5a6e CI 37250799812, WASM 37250799921 and CodeQL
+  37250799929 have been verified successful. No Core code or pin changes.
