@@ -454,6 +454,17 @@ Office `ac28cc5` CI、Core `d2a5a6e` CI/WASM/CodeQL 均已实查成功。
 Office 新源码未打包安装，宿主信任及 O-06 门禁保持未完成。
 Office 实现提交为 `9909ad6`；本轮仅同步 Core 文档。
 
+同日后续：Office `8f20f9f` 已扩展超过 80 项公共命令/环境/上下标候选，按有界
+光标上下文提供积分/偏导模板、环境闭合和已用命令提升，纳入有效保存符号并同步增删。
+淡字候选 Tab 接受/Esc 隐藏/Ctrl+Space 唤出、一次撤销和主题菜单通过 Chromium；
+全部 432 项前端测试通过。偏好统计仅公共索引（最多 128），不保存私有符号或公式
+上下文；仍不是 AST 槽位/模型质量验收，具体后续见 `formula-assistance-roadmap.md`。
+Office `500cf5a` desktop-only release 的窗口恢复授权、10 次导出语义预览和只读
+后端计划通过真实 WebView2。后续已重建准确源码 `8f20f9f` 的 desktop-only exe，
+实际 WebView2 的淡字/动态补全、主题菜单、符号刷新/公共反馈和转换预览均重跑通过，
+诊断源码绑定匹配；不证明真实 Word 前台 handoff 或完整安装包一致性。
+Core 公共功能/pin 不变，宿主信任和 pipe/reopen 门禁保持开放。
+
 - 没有报告、截图、日志或可复现命令的项目不得标记为完成；
 - `unsupported`、`not-measured` 和 `failed` 必须分开；
 - 所有性能结论必须带平台、版本、seed 和重复次数；

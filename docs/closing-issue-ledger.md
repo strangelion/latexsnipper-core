@@ -282,3 +282,26 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   `9909ad6`. Core code and pin are unchanged. Previous Core bf1b825 CI 37265662365,
   WASM 37265662343 and CodeQL 37265662351, and Office 8088bd1 CI 37265656917,
   were verified successful; they do not certify these new commits.
+- Office `8f20f9f` adds themed inline Tab/Escape suggestions and bounded contextual
+  command/environment/script candidates, with valid saved-symbol add/remove refresh.
+  Expanded public-catalog opt-in feedback stores at most 128 IDs, never private
+  symbol names or formula context. All 432 frontend tests and real Chromium
+  completion/selector/source-color regressions pass. AST slots, definition-version
+  binding, real IME, project isolation and ranking-quality gates remain open.
+- Office `500cf5a` desktop-only release fixes the missing unminimize permission.
+  Actual WebView2 window-command authorization, ten centered wide/narrow readonly
+  export previews, backdrop/Escape cancellation and a three-pass/one-fail readonly
+  plan pass. CSP/WASM/drawing/mixed-symbol checks also pass. This is not actual
+  Word post-scan foreground handoff or a rebuilt coherent installer. The new
+  completion source is not in that binary. Installed VSTO trust and pipe/reopen
+  gates remain open; no certificate trust mutation. Latest verified Office CI
+  37269910922 (`500cf5a`), Core CI 37268920389/WASM 37268919959/CodeQL 37268919969
+  (`1519a0d`) succeeded. Core code and Office pin are unchanged.
+- Follow-up: the exact Office `8f20f9f` desktop-only binary was rebuilt (SHA-256
+  16F73720DC7AF54CF0DC39905DE4D09EF343BEFB10A41C2A66F06F902FA5BF0A).
+  Diagnostics bind the source; inline/context completion, themed menus, symbol
+  refresh and public-catalog feedback pass in actual isolated WebView2. Ten
+  conversion export previews and readonly-plan checks also pass. Same-source
+  CSP/WASM, three drawing runtimes and mixed-symbol/library regressions pass
+  without console or request errors. This supersedes
+  the earlier source-only completion status, not the installer/real-host gates.
