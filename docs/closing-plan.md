@@ -413,6 +413,14 @@ display 样式继续待验收。原生 Word 裸选区 SVG/PNG/OLE 真实对象�
 保持未完成，下一轮应优先定位 extent/自然尺寸。证据哈希及边界见 Office 的
 `docs/office/real-host-acceptance.md` 和 `batch-update-plan.md`，不升级 Core 公共格式能力。
 
+同日后续：Office 已修复固定矢量 OLE resize recompose 标记与重复字号倍率，
+本机 Word 单积分实际框降为 36×17 pt（自然框含安全边距 36.23×16.89 pt）。
+24 项行内/行间/编号、超宽/超高、绘图/自定义符号插入与保存重开通过，
+三格式选区转换及重开几何通过；小尺寸只增加半点取整包络，绝对尺寸保护不放宽。
+测试临时替换本应用 x64 DLL 并核对实际加载哈希，结束恢复原 DLL；不是已安装新版本
+管道验收。x86 Office、多 DPI、PGFPlots clipPath、字体和 10000 条矩阵仍开放。
+Core 公共能力及 Office Core pin 不变；证据哈希保存在 Office 真实宿主记录。
+
 - 没有报告、截图、日志或可复现命令的项目不得标记为完成；
 - `unsupported`、`not-measured` 和 `failed` 必须分开；
 - 所有性能结论必须带平台、版本、seed 和重复次数；

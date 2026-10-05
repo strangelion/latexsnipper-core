@@ -221,3 +221,14 @@ checked-in OOXML difference summaries and remaining host matrices are complete.
   Office real-host record for evidence hashes. Core public format registries and
   the Office Core pin are unchanged. Current Core a4444b2 CI 37205136387, WASM
   37205136346 and CodeQL 37205136392 were verified successful before this update.
+- Office OLE geometry follow-up (2026-10-05): fixed vector objects no longer
+  advertise resize recomposition; Word explicitly assigns the initialized frame,
+  and physical renders avoid duplicate legacy font scaling. The integral's real
+  Word rectangle is now 36x17pt against its padded natural 36.23x16.89pt frame.
+  All 24 inline/display/numbered cases pass insertion and save/reopen, including
+  drawing/symbol and wide/tall content. A bounded half-point rounding envelope
+  handles small Word rectangles without relaxing absolute dimension guards.
+  The actual test DLL hash was verified; the installed DLL was restored after
+  testing. This is adapter proof, not an upgraded installation or Tauri pipe.
+  x86 Office, multi-DPI, arbitrary fonts, PGFPlots clipPath and 10000 diverse
+  formulas remain open. Core public targets and the Office Core pin are unchanged.
