@@ -16,7 +16,7 @@
 | C-05 | 外部真实分布准确率 | 评估/发布 | 待外部条件 | 获得许可明确的独立数据，限定公开声明 |
 | C-06 | Zig 接入决策 | Core 性能 | 决策完成：暂不接入 | 有新热点与跨平台收益时再评估 |
 
-格式扩展见 [FMT-01 至 FMT-07](formula-format-roadmap.md)；
+格式扩展见 [FMT-01 至 FMT-08](formula-format-roadmap.md)；
 持久会话见 [适配器计划](application-adapter-roadmap.md)；
 个性化补全见 [辅助计划](formula-assistance-roadmap.md)。
 
