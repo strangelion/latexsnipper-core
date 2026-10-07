@@ -1095,30 +1095,71 @@ mod tests {
 
     #[test]
     fn soft_timeout_quarantines_and_bounds_background_workers() {
+        struct GatedPlugin {
+            manifest: PluginManifest,
+            release: Mutex<std::sync::mpsc::Receiver<()>>,
+            completed: Arc<AtomicBool>,
+        }
+
+        impl Plugin for GatedPlugin {
+            fn name(&self) -> &str {
+                "slow"
+            }
+
+            fn version(&self) -> &str {
+                "1.0.0"
+            }
+
+            fn manifest(&self) -> PluginManifest {
+                self.manifest.clone()
+            }
+
+            fn handle(&self, request: &PluginRequest) -> Result<PluginResponse> {
+                // The sender also releases this worker if an assertion panics.
+                let _ = self.release.lock().unwrap().recv();
+                self.completed.store(true, Ordering::Release);
+                Ok(PluginResponse::new(request.document.clone()))
+            }
+
+            fn document_patch_with_context(
+                &self,
+                _view: DocumentView<'_>,
+                _context: &PluginExecutionContext,
+            ) -> Result<Option<DocumentPatch>> {
+                Ok(None)
+            }
+
+            fn handle_with_context(
+                &self,
+                request: &PluginRequest,
+                _context: &PluginExecutionContext,
+            ) -> Result<PluginResponse> {
+                // Intentionally non-cooperative, even if OS scheduling is late.
+                self.handle(request)
+            }
+        }
+
         let mut manifest = PluginManifest::built_in("slow", "1.0.0");
         manifest.permissions.timeout_millis = Some(10);
         let completed = Arc::new(AtomicBool::new(false));
-        let completed_by_worker = Arc::clone(&completed);
+        let (release, receiver) = std::sync::mpsc::channel();
         let mut registry = PluginRegistry::new();
         registry
-            .register(Box::new(
-                TransformPlugin::new("slow", "1.0.0", move |_| {
-                    std::thread::sleep(std::time::Duration::from_millis(80));
-                    completed_by_worker.store(true, Ordering::Release);
-                    Ok(())
-                })
-                .with_manifest(manifest),
-            ))
+            .register(Box::new(GatedPlugin {
+                manifest,
+                release: Mutex::new(receiver),
+                completed: Arc::clone(&completed),
+            }))
             .unwrap();
 
-        let started = std::time::Instant::now();
         let result = registry
             .handle_all_with_policy(
                 &PluginRequest::new("transform", Document::new()),
                 PluginFailurePolicy::Continue,
             )
             .unwrap();
-        assert!(started.elapsed() < std::time::Duration::from_millis(200));
+        // A response before release proves the caller did not wait for the worker.
+        assert!(!completed.load(Ordering::Acquire));
         assert_eq!(result.diagnostics[0].code, "PLUGIN_SOFT_TIMEOUT");
         assert!(result.diagnostics[0].soft_timeout);
         assert!(result.diagnostics[0].execution_may_still_be_running);
@@ -1141,20 +1182,25 @@ mod tests {
             1
         );
 
+        release.send(()).unwrap();
         let wait_started = Instant::now();
-        while !completed.load(Ordering::Acquire) && wait_started.elapsed() < Duration::from_secs(1)
-        {
-            std::thread::yield_now();
-        }
-        assert!(completed.load(Ordering::Acquire));
         while registry
             .execution_status("slow")
             .unwrap()
             .outstanding_executions
             != 0
+            && wait_started.elapsed() < Duration::from_secs(5)
         {
-            std::thread::yield_now();
+            std::thread::sleep(Duration::from_millis(1));
         }
+        assert!(completed.load(Ordering::Acquire));
+        assert_eq!(
+            registry
+                .execution_status("slow")
+                .unwrap()
+                .outstanding_executions,
+            0
+        );
         registry.reset_quarantine("slow").unwrap();
         assert!(!registry.execution_status("slow").unwrap().quarantined);
     }
@@ -1183,6 +1229,15 @@ mod tests {
                 Ok(PluginResponse::new(request.document.clone()))
             }
 
+            fn document_patch_with_context(
+                &self,
+                _view: DocumentView<'_>,
+                _context: &PluginExecutionContext,
+            ) -> Result<Option<DocumentPatch>> {
+                // Let the cooperative body observe cancellation, including a late start.
+                Ok(None)
+            }
+
             fn handle_with_context(
                 &self,
                 request: &PluginRequest,
@@ -1199,7 +1254,8 @@ mod tests {
         }
 
         let mut manifest = PluginManifest::built_in("cooperative", "1.0.0");
-        manifest.permissions.timeout_millis = Some(10);
+        // The successful retry checks reset semantics, not a 10ms scheduling budget.
+        manifest.permissions.timeout_millis = Some(1_000);
         let invocations = Arc::new(AtomicUsize::new(0));
         let mut registry = PluginRegistry::new();
         registry
@@ -1220,10 +1276,17 @@ mod tests {
             .unwrap()
             .outstanding_executions
             != 0
-            && started.elapsed() < Duration::from_secs(1)
+            && started.elapsed() < Duration::from_secs(5)
         {
-            std::thread::yield_now();
+            std::thread::sleep(Duration::from_millis(1));
         }
+        assert_eq!(
+            registry
+                .execution_status("cooperative")
+                .unwrap()
+                .outstanding_executions,
+            0
+        );
         registry.reset_quarantine("cooperative").unwrap();
         let second = registry
             .handle_all_with_policy(&request, PluginFailurePolicy::Stop)
