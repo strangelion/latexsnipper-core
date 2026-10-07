@@ -38,6 +38,29 @@ container spans include children and their END, while an incomplete record span
 contains only its consumed prefix. `consumed` is not a safe resynchronization or
 editing offset. Completed prefix records can coexist with incomplete ancestors.
 
+## Batch inspection and similar record layouts
+
+`mtef_batch::inspect_mtef_v5_batch` adds an experimental in-memory batch interface.
+Identical raw bytes share one inspection; each occurrence retains its own original
+source slice. Hash-map collisions still require full byte equality. The session
+ends with the call/result lifetime; no global cache, object ID reuse or disk
+persistence is added. A 10,000-occurrence authored duplicate fixture produces one
+inspection, not 10,000 copies of the decoded records.
+
+Known complete streams receive a versioned record-layout key. It includes record
+types/depths, template selector/variation/options, matrix dimensions and NULL-line
+options, while excluding character values. Fractions with different operands can
+therefore be grouped without sharing their decoded operand values. This key is a
+similarity hint for planning, never semantic equivalence or permission to reuse a
+converted formula. Stopped, future/opaque and empty streams have no layout key.
+Font/encoding references and template semantics still require the gates below.
+
+Batch budgets are 10,000 occurrences, 16 MiB aggregate input including duplicates,
+and 65,536 inspected records. Large documents must be processed in bounded chunks.
+The single-stream limits continue to apply. These are raw-byte inspection tests,
+not a 10,000-formula Word or MathType conversion benchmark. Registered `mtef`
+conversion remains disabled.
+
 ## Framing covered
 
 - Raw v5 header, product/platform metadata, inline bit and application key.
