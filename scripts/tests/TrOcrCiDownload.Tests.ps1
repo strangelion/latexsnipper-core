@@ -48,6 +48,25 @@ try {
     catch { $failed = $_.Exception.Message -match 'transfer interrupted' }
     Require $failed 'Interrupted downloads must remain errors.'
     Require (-not (Test-Path -LiteralPath "$output.partial")) 'Interrupted transfer leaked partial bytes.'
+
+    # Reproduce Linux discovery returning multiple application paths. Do not
+    # inject Transfer: this must exercise the production executable resolver.
+    $fakeCurlPath = Join-Path $PSScriptRoot 'fixtures/FakeTrOcrCurl.ps1'
+    function Get-Command {
+        param($Name, $CommandType, $ErrorAction)
+        if ($Name -ne 'curl' -or $CommandType -ne 'Application') {
+            throw 'Unexpected command discovery in curl regression test.'
+        }
+        [pscustomobject]@{ Source = $fakeCurlPath }
+        [pscustomobject]@{ Source = 'nonexistent-second-curl-application' }
+    }
+    try {
+        $output = Join-Path $taskDirectory 'multiple-curl-paths.zip'
+        $result = & $scriptPath @settings -OutputPath $output
+        Require ($result.Source -eq $settings.PrimaryUrl) 'Default curl transfer did not select one application.'
+        Require ((Get-FileHash -LiteralPath $output).Hash.ToLowerInvariant() -eq $checksum) 'Default transfer bytes were not verified.'
+    }
+    finally { Remove-Item Function:Get-Command }
     Write-Host 'TrOCR CI download fallback and checksum tests passed.'
 }
 finally {

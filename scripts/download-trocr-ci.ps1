@@ -19,7 +19,9 @@ foreach ($url in @($PrimaryUrl, $ApiUrl)) {
 }
 
 if (-not $Transfer) {
-    $curlApplication = (Get-Command curl -CommandType Application -ErrorAction Stop).Source
+    # Linux can resolve both /usr/bin/curl and /bin/curl. Invoke one executable,
+    # not the stringified array of paths returned by Get-Command.
+    $curlApplication = (Get-Command curl -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $Transfer = {
         param($Url, $Destination, $Timeout)
         # Both routes resolve the same public release asset. No auth forwarding
