@@ -56,10 +56,58 @@ converted formula. Stopped, future/opaque and empty streams have no layout key.
 Font/encoding references and template semantics still require the gates below.
 
 Batch budgets are 10,000 occurrences, 16 MiB aggregate input including duplicates,
-and 65,536 inspected records. Large documents must be processed in bounded chunks.
+65,536 inspected records and 65,536 stored diagnostic issues. Large documents
+must be processed in bounded chunks. Excess diagnostics return `BatchLimit::Issues`
+instead of silently dropping issues; duplicate occurrences share issue storage.
 The single-stream limits continue to apply. These are raw-byte inspection tests,
 not a 10,000-formula Word or MathType conversion benchmark. Registered `mtef`
 conversion remains disabled.
+
+## Finite reference and slot diagnostics
+
+Updated: 2026-10-09.
+
+`mtef_diagnostics::diagnose_mtef_v5` adds a separate experimental report. It
+retains the unchanged framing inspection and byte slice, then checks prior
+encoding/font/color definitions and equation-preference font indices. Custom
+encoding indices begin at five; unused zero preference entries and omitted
+built-in style defaults are not mistaken for missing definitions. Later
+definitions do not retroactively resolve earlier references.
+
+Direct LINE slots (including NULL slots) are counted for matrices and selector
+10/11 root/fraction templates. Nested lines do not inflate the parent slot count;
+non-LINE structural children receive a finite-profile diagnostic. This does not
+validate every allowed template variation or mathematical operand identity.
+Other template selectors are reported unsupported, not assigned guessed slots.
+
+CHAR records retain all raw MTCode/font positions. Every MTCode is explicitly
+reported unmapped; encoded-only records have no resolved character identity.
+Negative explicit typefaces remain unsupported pending a reviewed reference
+map; no font is loaded and no code is cast to Unicode. Future/empty streams and
+incomplete framing remain explicit. Incomplete framing has no partial reference
+verdict. Issues identify record index, source offset, field and optional value.
+Work/storage is bounded by the existing record and aggregate array budgets.
+
+`BatchInspection::issues(index)` shares this pass for byte-identical sources,
+without parsing them twice. Similar layout keys do not share differing MTCode
+diagnostics. The existing `get` result, framing semantics and registry remain
+unchanged. An empty issue list or a layout key is never a conversion-ready or
+semantic-validity verdict. No AST, host extraction or registered MTEF import is
+enabled by this addition.
+
+The additional ten authored tests cover definition ordering, built-in/custom
+encodings, unused preferences, colors, unresolved character identity, direct vs
+nested slots, NULL slots, matrix counts, future/unknown records, all truncated
+prefixes of an authored stream, deterministic mutations and oversized input.
+Existing batch tests also verify diagnostic sharing only for identical bytes.
+These are synthetic diagnostic checks, not real MathType accuracy evidence.
+
+Public experimental Rust changes include the new module/types/function,
+`BatchInspection::issues`, `MAX_BATCH_ISSUES` and `BatchLimit::Issues`. Rust callers
+exhaustively matching this experimental limit enum must handle the new variant.
+Existing framing and conversion wire enums are unchanged. The conversion tree
+snapshot is deliberately reviewed/refreshed with
+the full frozen contract-file and source-tree inventory preserved.
 
 ## Framing covered
 
@@ -124,8 +172,9 @@ Remaining FMT-06 gates:
 
 - [ ] Acquire permitted real v5/legacy/container samples with reproducible
   provenance; validate against independently exported structure, not this reader.
-- [ ] Add reference/slot/MTCode diagnostics and a separately reviewed finite AST
-  mapping with loss reports; retain unsupported records and all original bytes.
+- [ ] Extend the finite reference/slot diagnostics above into a separately
+  reviewed MTCode/reference map and finite AST conversion with loss reports;
+  retain unsupported records and all original bytes.
 - [ ] Review raw extraction and safe host read-back without activating or writing
   third-party OLE; prove source/asset preservation on copies and save/reopen.
 - [ ] Evaluate SDK/interface/asset licensing independently before any vendor

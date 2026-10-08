@@ -1,6 +1,8 @@
 use latexsnipper_conversion::mtef_batch::{
-    inspect_mtef_v5_batch, BatchLimit, MAX_BATCH_INPUT_BYTES, MAX_BATCH_ITEMS, MAX_BATCH_RECORDS,
+    inspect_mtef_v5_batch, BatchLimit, MAX_BATCH_INPUT_BYTES, MAX_BATCH_ISSUES, MAX_BATCH_ITEMS,
+    MAX_BATCH_RECORDS,
 };
+use latexsnipper_conversion::mtef_diagnostics::diagnose_mtef_v5;
 use latexsnipper_conversion::mtef_readonly::{inspect_mtef_v5, MAX_RECORDS};
 
 fn authored(name: &str) -> Vec<u8> {
@@ -40,8 +42,41 @@ fn duplicates_share_reports_but_keep_each_original_source_pointer() {
         batch.get(1).unwrap().inspection
     ));
     assert_eq!(*batch.get(0).unwrap().inspection, inspect_mtef_v5(&first));
+    assert_eq!(batch.issues(0).unwrap(), diagnose_mtef_v5(&first).issues);
+    assert!(std::ptr::eq(
+        batch.issues(0).unwrap(),
+        batch.issues(1).unwrap()
+    ));
+    assert!(batch.issues(3).is_none());
     assert!(batch.get(3).is_none());
     assert!(!batch.is_empty());
+}
+
+#[test]
+fn diagnostic_storage_has_an_aggregate_budget_separate_from_records() {
+    let mut sources = Vec::new();
+    for variant in 0..9 {
+        let mut source = vec![5, 1, 0, 7, variant, b'p', b'i', b'l', b'o', b't', 0, 0];
+        for _ in 0..32 {
+            source.extend([18, 0, 0, 0, 255]);
+            for _ in 0..255 {
+                source.extend([1, 0]);
+            }
+        }
+        source.extend([1, 1, 0]);
+        sources.push(source);
+    }
+    let inputs: Vec<_> = sources.iter().map(Vec::as_slice).collect();
+    let accepted = inspect_mtef_v5_batch(&inputs[..8]).unwrap();
+    assert_eq!(accepted.issues(0).unwrap().len(), 32 * 255);
+    assert!(8 * accepted.issues(0).unwrap().len() <= MAX_BATCH_ISSUES);
+    assert!(matches!(
+        inspect_mtef_v5_batch(&inputs),
+        Err(BatchLimit::Issues)
+    ));
+    // Duplicated occurrences do not consume additional stored diagnostic slots.
+    let duplicates = vec![inputs[0]; 100];
+    assert_eq!(inspect_mtef_v5_batch(&duplicates).unwrap().inspections(), 1);
 }
 
 #[test]
@@ -70,6 +105,7 @@ fn similar_fraction_operands_group_without_reusing_their_decoded_values() {
         batch.get(0).unwrap().inspection.records,
         batch.get(1).unwrap().inspection.records
     );
+    assert_ne!(batch.issues(0), batch.issues(1));
 }
 
 #[test]

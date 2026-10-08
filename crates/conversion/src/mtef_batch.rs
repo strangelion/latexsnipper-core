@@ -7,11 +7,13 @@ use std::fmt;
 
 use sha2::{Digest, Sha256};
 
+use crate::mtef_diagnostics::{diagnose_inspection, Issue};
 use crate::mtef_readonly::{inspect_mtef_v5, FieldValue, Inspection};
 
 pub const MAX_BATCH_ITEMS: usize = 10_000;
 pub const MAX_BATCH_INPUT_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_BATCH_RECORDS: usize = 65_536;
+pub const MAX_BATCH_ISSUES: usize = 65_536;
 pub const STRUCTURE_KEY_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,6 +21,7 @@ pub enum BatchLimit {
     Items,
     InputBytes,
     Records,
+    Issues,
 }
 
 impl fmt::Display for BatchLimit {
@@ -32,6 +35,7 @@ impl std::error::Error for BatchLimit {}
 #[derive(Debug)]
 struct UniqueInspection<'a> {
     inspection: Inspection<'a>,
+    issues: Vec<Issue>,
     structure_key: Option<String>,
 }
 
@@ -50,6 +54,7 @@ pub struct BatchInspection<'a> {
     inspection_indices: Vec<usize>,
     unique: Vec<UniqueInspection<'a>>,
     inspected_records: usize,
+    diagnosed_issues: usize,
 }
 
 impl<'a> BatchInspection<'a> {
@@ -71,6 +76,13 @@ impl<'a> BatchInspection<'a> {
 
     pub fn inspected_records(&self) -> usize {
         self.inspected_records
+    }
+
+    /// Finite reference/slot issues are shared only for byte-identical sources.
+    /// A shape key or an empty issue list never approves semantic conversion.
+    pub fn issues(&self, index: usize) -> Option<&[Issue]> {
+        let unique = *self.inspection_indices.get(index)?;
+        Some(&self.unique[unique].issues)
     }
 
     pub fn get(&self, index: usize) -> Option<BatchEntry<'_, 'a>> {
@@ -105,6 +117,7 @@ pub fn inspect_mtef_v5_batch<'a>(sources: &[&'a [u8]]) -> Result<BatchInspection
         inspection_indices: Vec::with_capacity(sources.len()),
         unique: Vec::new(),
         inspected_records: 0,
+        diagnosed_issues: 0,
     };
     for source in sources {
         if let Some(index) = indices.get(source) {
@@ -118,9 +131,16 @@ pub fn inspect_mtef_v5_batch<'a>(sources: &[&'a [u8]]) -> Result<BatchInspection
             .filter(|records| *records <= MAX_BATCH_RECORDS)
             .ok_or(BatchLimit::Records)?;
         let structure_key = structure_key(&inspection);
+        let issues = diagnose_inspection(&inspection);
+        batch.diagnosed_issues = batch
+            .diagnosed_issues
+            .checked_add(issues.len())
+            .filter(|count| *count <= MAX_BATCH_ISSUES)
+            .ok_or(BatchLimit::Issues)?;
         let index = batch.unique.len();
         batch.unique.push(UniqueInspection {
             inspection,
+            issues,
             structure_key,
         });
         indices.insert(source, index);
