@@ -76,6 +76,11 @@ The report distinguishes **Verified**, **Deferred**, **Not measured**, and
 independent real-world data, and it does not replace Word/Excel/PowerPoint,
 OLE, clipboard, visual-fidelity, or field-recalculation evidence.
 
+An opt-in Rust-only [MTEF semantic batch benchmark](docs/formats/mtef-semantic-batch-benchmark.md)
+compares 10,000 authored occurrences with and without exact-byte reuse. It
+includes the no-reuse overhead, and is not Office/MathType speed or accuracy.
+Production MTEF import remains unregistered.
+
 The executable source of truth is the capability registry:
 
 ```bash

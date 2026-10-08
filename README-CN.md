@@ -71,6 +71,10 @@ Worker transport 为保持兼容性，仍独立使用 protocol v1。
 独立真实数据上的 OCR/模型准确率，也不能替代 Word/Excel/PowerPoint、OLE、
 剪贴板、视觉保真与域重算证据。
 
+独立 Rust 实验接口的 [MTEF 语义批次基准](docs/formats/mtef-semantic-batch-benchmark.md)
+比较 10,000 条作者生成输入的精确字节复用，并包含无重复时的额外开销。
+这不是 Office/MathType 转换速度或准确率；正式 MTEF 导入仍未注册。
+
 可执行能力注册表是事实来源：
 
 ```bash

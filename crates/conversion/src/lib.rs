@@ -30,6 +30,7 @@ pub mod mtef_batch;
 pub mod mtef_diagnostics;
 pub mod mtef_readonly;
 pub mod mtef_semantic;
+pub mod mtef_semantic_batch;
 #[cfg(feature = "native")]
 pub mod office_insert;
 pub mod omml;

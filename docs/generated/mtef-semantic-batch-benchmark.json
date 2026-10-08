@@ -1,0 +1,145 @@
+{
+  "architecture": "x86_64",
+  "build": "release",
+  "cases": [
+    {
+      "ast_work": 3,
+      "batch_median_ms": 0.2621,
+      "batch_trials_ms": [
+        0.24600000000000002,
+        0.2505,
+        0.2621,
+        0.2667,
+        0.2712
+      ],
+      "direct_median_ms": 23.735,
+      "direct_trials_ms": [
+        23.0808,
+        23.3944,
+        23.735,
+        30.191,
+        32.0465
+      ],
+      "input_bytes": 390000,
+      "inspected_records": 12,
+      "median_speedup": 90.55703929797787,
+      "name": "one-fraction-repeated",
+      "occurrences": 10000,
+      "output_and_loss_agreement": true,
+      "reused_reads": 9999,
+      "stored_losses": 2,
+      "stored_output_bytes": 11,
+      "structured_array_items": 0,
+      "unique_reads": 1
+    },
+    {
+      "ast_work": 14,
+      "batch_median_ms": 0.2601,
+      "batch_trials_ms": [
+        0.2501,
+        0.2517,
+        0.2601,
+        0.2619,
+        0.2688
+      ],
+      "direct_median_ms": 23.9035,
+      "direct_trials_ms": [
+        23.450599999999998,
+        23.7007,
+        23.9035,
+        24.143,
+        24.7409
+      ],
+      "input_bytes": 386000,
+      "inspected_records": 58,
+      "median_speedup": 91.90119184928874,
+      "name": "five-mixed-structures",
+      "occurrences": 10000,
+      "output_and_loss_agreement": true,
+      "reused_reads": 9995,
+      "stored_losses": 13,
+      "stored_output_bytes": 67,
+      "structured_array_items": 0,
+      "unique_reads": 5
+    },
+    {
+      "ast_work": 3890,
+      "batch_median_ms": 2.213,
+      "batch_trials_ms": [
+        2.1877,
+        2.1906,
+        2.213,
+        2.2277,
+        2.4596
+      ],
+      "direct_median_ms": 14.2397,
+      "direct_trials_ms": [
+        14.1212,
+        14.1357,
+        14.2397,
+        14.660400000000001,
+        14.8239
+      ],
+      "input_bytes": 325600,
+      "inspected_records": 8890,
+      "median_speedup": 6.434568459105287,
+      "name": "1250-distinct-numbers-repeated",
+      "occurrences": 10000,
+      "output_and_loss_agreement": true,
+      "reused_reads": 8750,
+      "stored_losses": 2500,
+      "stored_output_bytes": 3890,
+      "structured_array_items": 0,
+      "unique_reads": 1250
+    },
+    {
+      "ast_work": 10000,
+      "batch_median_ms": 11.7156,
+      "batch_trials_ms": [
+        11.4915,
+        11.5741,
+        11.7156,
+        11.717500000000001,
+        12.3003
+      ],
+      "direct_median_ms": 9.9038,
+      "direct_trials_ms": [
+        9.8405,
+        9.8916,
+        9.9038,
+        9.9184,
+        10.2162
+      ],
+      "input_bytes": 258890,
+      "inspected_records": 50000,
+      "median_speedup": 0.8453514971491004,
+      "name": "10000-distinct-headers-no-reuse",
+      "occurrences": 10000,
+      "output_and_loss_agreement": true,
+      "reused_reads": 0,
+      "stored_losses": 20000,
+      "stored_output_bytes": 10000,
+      "structured_array_items": 0,
+      "unique_reads": 10000
+    }
+  ],
+  "measured_trials": 5,
+  "os": "windows",
+  "profile_version": 1,
+  "schema_version": 1,
+  "scope": "Authored raw v5 bytes; in-memory framing, AST and canonical LaTeX only; no Office, container IO, visual accuracy or third-party samples",
+  "warmup_trials": 1,
+  "measured_date": "2026-10-09",
+  "environment": {
+    "cpu": "13th Gen Intel Core i5-13500H",
+    "physical_cores": 12,
+    "logical_processors": 16,
+    "rustc": "1.96.0 (ac68faa20 2026-05-25)"
+  },
+  "source_sha256_utf8_lf": {
+    "crates/conversion/examples/mtef_semantic_batch_benchmark.rs": "9ac4544c117a057894bf613d1c8c0bd09c421497e40e99fe1f1b91b4668cfbce",
+    "crates/conversion/src/mtef_semantic.rs": "5aa329126f7cb95ddb5f96e52196b8c1bb9919c5f64789d3a970d5486d198cc8",
+    "crates/conversion/src/mtef_semantic_batch.rs": "4d335bb368dd4c39bbe1a2bbf5309dae12575209aa1c841180c0cf8e02905954",
+    "tests/fixtures/mtef-semantic-v1.json": "ff965e30ecce567bc3f0f9a5d6fec532cac3087a116bcc4017d7954f6ea3a5a4"
+  }
+}

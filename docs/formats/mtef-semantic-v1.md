@@ -41,6 +41,22 @@ Budgets retain the raw inspector limits, plus 8,192 AST construction steps,
 64 AST levels, 1,024 matrix cells and 64 KiB canonical output. Bounds apply
 before returning any AST. Unsupported input has no guessed partial result.
 
+## Bounded semantic batch reuse
+
+`mtef_semantic_batch::read_mtef_v5_batch(inputs)` reads each byte-identical
+stream once and shares its inspection/AST/LaTeX/losses. Each entry retains its
+own source pointer; the shared report's input pointer is not a host object ID.
+Different headers, operands or raw bytes are never merged by shape or normalized
+output. Source failures remain per-entry; global budget failures return no
+partial batch, allowing the caller to retain originals and split chunks.
+
+Per call: at most 10,000 occurrences, 16 MiB input including duplicates, 65,536
+unique-report records, 65,536 structured array entries, 32,768 AST construction
+steps (including nodes merged away or dropped on errors), 65,536 losses and
+256 KiB canonical output. Individual reader limits still apply. There is no
+global/disk cache or AST clone per duplicate. See the [in-memory benchmark](mtef-semantic-batch-benchmark.md),
+including a no-reuse control; it is not an Office or MathType performance claim.
+
 ## Validation and remaining work
 
 The versioned fixture is repository-authored synthetic data, not MathType/SDK
@@ -53,7 +69,7 @@ Office object readback or all-producer compatibility evidence.
 The new module is a reviewed additive experimental Rust interface. Existing
 framing, input/output wire enums, registry and native/WASM production `mtef`
 gates remain unchanged; the conversion-tree freeze is refreshed deliberately.
-Next: semantic batch reuse, permitted real samples, explicit font/reference
+Next: permitted real samples, explicit font/reference
 mapping, additional glyph/templates and bounded container/host extraction.
 Only after independent acceptance should this enter the formal registry/UI.
 

@@ -64,6 +64,12 @@ pub struct SemanticRead<'a> {
 /// Read repository-reviewed finite glyph/template structures. Unavailable
 /// presentation is reported, not reconstructed from font names or pixels.
 pub fn read_mtef_v5(source: &[u8]) -> SemanticRead<'_> {
+    read_mtef_v5_counted(source).0
+}
+
+// Construction work includes nodes later merged or dropped on a source error.
+// Batch callers must budget that work, not just count the surviving AST.
+pub(crate) fn read_mtef_v5_counted(source: &[u8]) -> (SemanticRead<'_>, usize) {
     let inspection = inspect_mtef_v5(source);
     let mut reader = Reader {
         inspection: &inspection,
@@ -72,6 +78,7 @@ pub fn read_mtef_v5(source: &[u8]) -> SemanticRead<'_> {
         nodes: 0,
     };
     let result = reader.read();
+    let work = reader.nodes;
     let losses = reader.losses;
     let (ast, latex, error) = match result {
         Ok(node) => {
@@ -92,13 +99,16 @@ pub fn read_mtef_v5(source: &[u8]) -> SemanticRead<'_> {
         }
         Err(error) => (None, None, Some(error)),
     };
-    SemanticRead {
-        inspection,
-        ast,
-        latex,
-        losses,
-        error,
-    }
+    (
+        SemanticRead {
+            inspection,
+            ast,
+            latex,
+            losses,
+            error,
+        },
+        work,
+    )
 }
 
 type ReadResult<T> = Result<T, ReadError>;
