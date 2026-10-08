@@ -1,7 +1,9 @@
 # MTEF v5 experimental read-only inspection
 
-Status: first bounded Rust byte-inspection milestone, 2026-10-04. This is not
-MathType import/export, an AST converter, a renderer, a writer or an OLE server.
+Status: bounded Rust byte-inspection milestone, 2026-10-04, followed by finite
+diagnostics and a separate [experimental semantic profile](mtef-semantic-v1.md).
+The framing interface is not an AST converter; neither path is MathType visual
+import/export, a renderer, a MTEF writer or an OLE server.
 Production `mtef` input remains unavailable in the conversion registry/API/UI.
 
 ## Reference and asset boundary
@@ -92,8 +94,9 @@ Work/storage is bounded by the existing record and aggregate array budgets.
 without parsing them twice. Similar layout keys do not share differing MTCode
 diagnostics. The existing `get` result, framing semantics and registry remain
 unchanged. An empty issue list or a layout key is never a conversion-ready or
-semantic-validity verdict. No AST, host extraction or registered MTEF import is
-enabled by this addition.
+semantic-validity verdict. The diagnostic pass does not enable AST conversion,
+host extraction or registered MTEF import. The separate finite semantic profile
+has its own explicit interface and unsupported/error/loss rules.
 
 The additional ten authored tests cover definition ordering, built-in/custom
 encodings, unused preferences, colors, unresolved character identity, direct vs
@@ -148,9 +151,9 @@ matrix cell counts, header product/version consistency, MTCode-to-Unicode/font
 mapping and mathematical meaning are not validated. MTCode is retained as a raw
 16-bit code, not blindly cast to Unicode or LaTeX.
 
-No OLE/WMF/document/clipboard extraction, third-party object activation or
-overwrite, v0-v4 parsing, recovery rewrite, AST/LaTeX/MathML/OMML conversion,
-generation, application automation, registered binding or UI exposure is added.
+The framing interface does not add OLE/WMF/document/clipboard extraction,
+third-party activation/overwrite, v0-v4 parsing, recovery rewrite, AST conversion,
+generation, application automation, registered binding or UI exposure.
 Future records retain unknown semantics even when their lengths are safe.
 
 ## Acceptance evidence and next gates
@@ -172,9 +175,9 @@ Remaining FMT-06 gates:
 
 - [ ] Acquire permitted real v5/legacy/container samples with reproducible
   provenance; validate against independently exported structure, not this reader.
-- [ ] Extend the finite reference/slot diagnostics above into a separately
-  reviewed MTCode/reference map and finite AST conversion with loss reports;
-  retain unsupported records and all original bytes.
+- [ ] Expand the separate finite AST/MTCode profile and semantic batch reuse;
+  validate explicit font references and additional templates on permitted real
+  samples, retaining unsupported records and all original bytes.
 - [ ] Review raw extraction and safe host read-back without activating or writing
   third-party OLE; prove source/asset preservation on copies and save/reopen.
 - [ ] Evaluate SDK/interface/asset licensing independently before any vendor

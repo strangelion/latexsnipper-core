@@ -5,7 +5,7 @@
 ## 当前基础
 
 DOCX reader 已可读取原生 OMML 并保留原片段；重建的 LaTeX 不等于原源码。
-MTEF v5 raw 检查已有精确去重、结构分组及有限引用/槽位诊断，尚无语义转换。
+MTEF v5 已有精确去重/结构诊断及独立 [有限 AST/LaTeX 读取](mtef-semantic-v1.md)，尚未正式注册或接宿主。
 第三方 OLE 容器与通用宿主入口仍未接通；Core 已有有限 [PNG 文本提取](png-formula-source.md)
 和 [SVG metadata 提取](svg-formula-source.md)，均已接 native 导入器的资产候选元数据。
 Core 已有声明式文本字段/独立数学 XML 的 [有限探测接口](formula-source-probe.md)，
@@ -19,7 +19,7 @@ Word 已在自动化前检查对象关联 CFB 的本应用类标识；其他宿�
 | P0 | 读取边界 | Word 本应用类标识门禁已有；同步 Excel/PowerPoint 等宿主，第三方对象仍不访问 Object 或执行激活 |
 | P1 | 明确源码元数据 | Core 声明式 LaTeX/MathML/OMML 探测已有；继续接入对象来源/范围、载体适配和有限转换损失信息 |
 | P1 | 图片基础支持 | PNG 文本及有限 SVG metadata 已接 native 资产候选元数据；继续 XMP/生产软件 profile 与宿主接入，普通替代文字只作提示，纯像素图片转入可选 OCR |
-| P1 | MTEF 与容器 | 有限引用/槽位诊断已接精确去重批次；补 MTCode/字体的有限 AST 映射，Office 提取有边界的嵌入流，未知记录/旧版保留原始数据 |
+| P1 | MTEF 与容器 | 有限诊断已接去重批次，独立有限 AST 读取已有；补语义复用、显式字体及更多模板，Office 提取有边界的嵌入流，未知/旧版保留原始数据 |
 | P1 | 加载项入口 | Word 单 PNG 候选、本应用 SVG 源绑定及行内同格式更新已有，安装版待验收；补显示/编号、跨格式图片更新和第三方 SVG、通用读取、XMP、其他宿主 |
 | P2 | 快速再读取 | 文档修订、对象/关系与源哈希绑定索引；精确内容决定复用，结构相似只供分组 |
 

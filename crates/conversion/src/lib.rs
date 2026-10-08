@@ -29,6 +29,7 @@ pub mod mathml_parser;
 pub mod mtef_batch;
 pub mod mtef_diagnostics;
 pub mod mtef_readonly;
+pub mod mtef_semantic;
 #[cfg(feature = "native")]
 pub mod office_insert;
 pub mod omml;

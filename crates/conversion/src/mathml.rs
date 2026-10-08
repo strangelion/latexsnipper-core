@@ -153,6 +153,9 @@ fn convert_inline_to_mathml(inline: &Inline, mode: &MathmlMode) -> String {
 
 fn latex_to_mathml(latex: &str) -> String {
     let latex = latex.trim();
+    if let Some(rendered) = render_finite_symbol_expression(latex) {
+        return rendered;
+    }
     let chars: Vec<char> = latex.chars().collect();
     if chars.first() == Some(&'{') {
         if let Some((inner, end)) = read_braced_group(&chars, 0) {
@@ -1162,9 +1165,17 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
         "\\alpha" | "alpha" => Some("<mi>\u{03B1}</mi>"),
         "\\beta" | "beta" => Some("<mi>\u{03B2}</mi>"),
         "\\gamma" | "gamma" => Some("<mi>\u{03B3}</mi>"),
+        "\\Gamma" => Some("<mi>\u{0393}</mi>"),
         "\\delta" | "delta" => Some("<mi>\u{03B4}</mi>"),
+        "\\Delta" => Some("<mi>\u{0394}</mi>"),
         "\\theta" | "theta" => Some("<mi>\u{03B8}</mi>"),
+        "\\Theta" => Some("<mi>\u{0398}</mi>"),
         "\\lambda" | "lambda" => Some("<mi>\u{03BB}</mi>"),
+        "\\Lambda" => Some("<mi>\u{039B}</mi>"),
+        "\\mu" => Some("<mi>\u{03BC}</mi>"),
+        "\\rho" => Some("<mi>\u{03C1}</mi>"),
+        "\\varphi" => Some("<mi>\u{03C6}</mi>"),
+        "\\Omega" => Some("<mi>\u{03A9}</mi>"),
         "\\sigma" | "sigma" => Some("<mi>\u{03C3}</mi>"),
         "\\omega" | "omega" => Some("<mi>\u{03C9}</mi>"),
         "\\pi" | "pi" => Some("<mi>\u{03C0}</mi>"),
@@ -1222,6 +1233,161 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
         "\\!" => Some("<mspace width=\"negativethinmathspace\"/>"),
         _ => None,
     }
+}
+
+// Finite AST handling for mixed glyph commands avoids treating an entire
+// expression as one identifier. Unsupported nodes retain the legacy path.
+fn render_finite_symbol_expression(latex: &str) -> Option<String> {
+    if latex.len() > 65_536
+        || !latex.contains('\\')
+        || latex.bytes().filter(|byte| *byte == b'\\').count() > 512
+        || latex
+            .bytes()
+            .filter(|byte| matches!(byte, b'^' | b'_'))
+            .count()
+            > 512
+    {
+        return None;
+    }
+    let mut depth = 0usize;
+    for ch in latex.chars() {
+        if matches!(ch, '{' | '(' | '[') {
+            depth += 1;
+            if depth > 64 {
+                return None;
+            }
+        } else if matches!(ch, '}' | ')' | ']') {
+            depth = depth.saturating_sub(1);
+        }
+    }
+    let ast = crate::latex_parser::parse_latex(latex);
+    let mut found_symbol = false;
+    let xml = render_symbol_ast(&ast, &mut found_symbol, 0)?;
+    found_symbol.then_some(xml)
+}
+
+fn render_symbol_ast(
+    node: &crate::latex_ast::LatexNode,
+    found: &mut bool,
+    depth: usize,
+) -> Option<String> {
+    if depth > 64 {
+        return None;
+    }
+    use crate::latex_ast::LatexNode;
+    let row = |node: &LatexNode, found: &mut bool| {
+        render_symbol_ast(node, found, depth + 1).map(|xml| format!("<mrow>{xml}</mrow>"))
+    };
+    match node {
+        LatexNode::Text(text) => {
+            let text = text.trim();
+            if text.contains('\\') {
+                return None;
+            }
+            if text.is_empty() {
+                return Some(String::new());
+            }
+            // Preserve existing punctuation, decimal and function-call token
+            // behavior. No backslash means this cannot re-enter the AST path.
+            Some(latex_to_mathml(text))
+        }
+        // Large operators retain the existing limit-placement path.
+        LatexNode::Operator(_) => None,
+        LatexNode::Greek(name) | LatexNode::Relation(name) => {
+            let command = format!("\\{name}");
+            let xml = map_symbol_mathml(&command)?;
+            *found = true;
+            Some(xml.into())
+        }
+        LatexNode::Symbol(name) => {
+            if let Some(xml) = map_symbol_mathml(&format!("\\{name}")) {
+                *found = true;
+                Some(xml.into())
+            } else if name.len() == 1 && "+-=<>/|(),.;:![]".contains(name.as_str()) {
+                Some(format!("<mo>{}</mo>", xml_escape(name)))
+            } else {
+                None
+            }
+        }
+        LatexNode::Command { name, args } if args.is_empty() => {
+            let command = format!("\\{name}");
+            let xml = map_symbol_mathml(&command)?;
+            *found = true;
+            Some(xml.into())
+        }
+        LatexNode::Sequence(nodes) | LatexNode::Group(nodes) => {
+            let parts: Option<Vec<_>> = nodes
+                .iter()
+                .map(|node| render_symbol_ast(node, found, depth + 1))
+                .collect();
+            Some(format!("<mrow>{}</mrow>", parts?.concat()))
+        }
+        LatexNode::Fraction { num, den } => Some(format!(
+            "<mfrac>{}{}</mfrac>",
+            row(num, found)?,
+            row(den, found)?
+        )),
+        LatexNode::SquareRoot { index, content } => {
+            let content = row(content, found)?;
+            Some(if let Some(index) = index {
+                format!("<mroot>{content}{}</mroot>", row(index, found)?)
+            } else {
+                format!("<msqrt>{content}</msqrt>")
+            })
+        }
+        LatexNode::Superscript { base, exp } => Some(format!(
+            "<msup>{}{}</msup>",
+            row(base, found)?,
+            row(exp, found)?
+        )),
+        LatexNode::Subscript { base, sub } => Some(format!(
+            "<msub>{}{}</msub>",
+            row(base, found)?,
+            row(sub, found)?
+        )),
+        LatexNode::Matrix { env, rows } => {
+            let (open, close) = match env.as_str() {
+                "matrix" | "smallmatrix" | "aligned" | "align" | "align*" | "gather"
+                | "gather*" => ("", ""),
+                "pmatrix" => ("(", ")"),
+                "bmatrix" => ("[", "]"),
+                "Bmatrix" => ("{", "}"),
+                "vmatrix" => ("|", "|"),
+                "Vmatrix" => ("‖", "‖"),
+                _ => return None,
+            };
+            let table = render_symbol_table(rows, found, depth + 1)?;
+            Some(if open.is_empty() {
+                table
+            } else {
+                format!("<mrow><mo>{open}</mo>{table}<mo>{close}</mo></mrow>")
+            })
+        }
+        LatexNode::Cases(rows) => Some(format!(
+            "<mrow><mo>{{</mo>{}</mrow>",
+            render_symbol_table(rows, found, depth + 1)?
+        )),
+        _ => None,
+    }
+}
+
+fn render_symbol_table(
+    rows: &[Vec<crate::latex_ast::LatexNode>],
+    found: &mut bool,
+    depth: usize,
+) -> Option<String> {
+    let mut xml = String::from("<mtable>");
+    for cells in rows {
+        xml.push_str("<mtr>");
+        for cell in cells {
+            xml.push_str("<mtd><mrow>");
+            xml.push_str(&render_symbol_ast(cell, found, depth + 1)?);
+            xml.push_str("</mrow></mtd>");
+        }
+        xml.push_str("</mtr>");
+    }
+    xml.push_str("</mtable>");
+    Some(xml)
 }
 
 fn matrix_to_mathml(content: &str, delimiters: Option<(&str, &str)>) -> String {

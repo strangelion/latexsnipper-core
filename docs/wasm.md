@@ -39,6 +39,11 @@ Handwriting 流水线要求 formula-rec encoder/decoder、tokenizer、preprocess
 当前 production model 边界：
 
 - MIT-licensed TrOCR encoder/decoder/tokenizer 已通过真实 Tract session 和一次真实 decoder step；PR CI 从固定的 `models-v2.0.0/latexsnipper-formula-rec.zip` 下载并校验 SHA-256 `fdcc414b9073c73325614faafc6473ddd7e91a80305cdc55f7267195de152a21`。这证明 runtime compatibility，不等于 handwriting accuracy 门禁。
+
+CI 下载使用已验证缓存、Release 地址及同一资产的 GitHub API 备用路径；两条路径
+都必须通过相同的 SHA-256，完整校验后才从临时文件提升为缓存。HTTP 500、错误
+哈希和中断不会被当作生产模型测试成功。备用路径不放宽推理或准确率门禁。
+
 - Table Transformer combined model 能由 Tract 编译，但在 256/384 输入下超过 120 秒浏览器 hard-timeout，因此不作为默认 production browser profile。
 - 当前 SLANet/PPStructure mobile ONNX 导出包含 Tract 尚不支持的 `Loop`，不会被虚假报告为 ready。
 

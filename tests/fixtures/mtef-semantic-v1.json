@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "profileVersion": 1,
+  "provenance": "Repository-authored synthetic raw MTEF v5, not exported by MathType or copied from SDK sample bytes.",
+  "header_hex": "05 01 00 07 00 70 69 6c 6f 74 00 00",
+  "accepted": [
+    { "name": "variable", "body_hex": "0a 01 00 02 00 83 78 00 00 00", "latex": "x", "root": "text" },
+    { "name": "fraction", "body_hex": "0a 01 00 03 00 0b 00 00 01 00 02 00 83 61 00 00 01 00 02 00 83 62 00 00 00 00 00", "latex": "\\frac{a}{b}", "root": "fraction" },
+    { "name": "square-root", "body_hex": "0a 01 00 03 00 0a 00 00 01 00 02 00 83 78 00 00 0b 01 01 00 00 00", "latex": "\\sqrt{x}", "root": "root" },
+    { "name": "matrix", "body_hex": "0a 01 00 05 00 04 02 01 02 02 00 00 01 00 02 00 88 31 00 00 01 00 02 00 88 32 00 00 01 00 02 00 88 33 00 00 01 00 02 00 88 34 00 00 00 00 00", "latex": "\\begin{matrix}1 & 2 \\\\ 3 & 4\\end{matrix}", "root": "matrix" },
+    { "name": "superscript", "body_hex": "0a 01 00 02 00 83 78 00 03 00 1c 00 00 0b 01 01 01 00 02 00 88 32 00 00 00 00 00", "latex": "{x}^{2}", "root": "superscript" }
+  ]
+}
