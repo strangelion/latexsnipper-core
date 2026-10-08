@@ -818,7 +818,79 @@ fn image_document(bytes: &[u8], format: InputFormat) -> Document {
         alt_text: Some("Imported source image".to_string()),
         metadata: Default::default(),
     });
+    if format == InputFormat::ImagePng {
+        attach_png_formula_sources(bytes, &mut document);
+    }
     document
+}
+
+fn attach_png_formula_sources(bytes: &[u8], document: &mut Document) {
+    use crate::formula_source_probe::SourceFormat;
+    use sha2::{Digest, Sha256};
+
+    let name = |format| match format {
+        SourceFormat::Latex => "latex",
+        SourceFormat::Mathml => "mathml",
+        SourceFormat::Omml => "omml",
+    };
+    match crate::png_formula_source::inspect_png_formula_sources(bytes) {
+        Ok(report) if !report.sources.is_empty() => {
+            let conflicts: Vec<_> = report
+                .conflicting_formats
+                .iter()
+                .copied()
+                .map(name)
+                .collect();
+            let sources: Vec<_> = report.sources.iter().map(|source| {
+                let annotations: Vec<_> = source.latex_annotations.iter().map(|annotation| serde_json::json!({
+                    "source": annotation.source,
+                    "xmlByteRange": [annotation.xml_span.start, annotation.xml_span.end],
+                })).collect();
+                serde_json::json!({
+                    "keyword": source.keyword,
+                    "source": source.source,
+                    "format": name(source.format),
+                    "chunkByteRange": [source.chunk_span.start, source.chunk_span.end],
+                    "chunkType": std::str::from_utf8(&source.chunk_type).expect("validated ASCII PNG chunk"),
+                    "compressed": source.compressed,
+                    "language": source.language,
+                    "translatedKeyword": source.translated_keyword,
+                    "latexAnnotations": annotations,
+                })
+            }).collect();
+            document.assets[0].metadata.insert(
+                "formula_source_candidates_v1".into(),
+                serde_json::json!({
+                    "schemaVersion": 1,
+                    "carrier": "png",
+                    "sourceKind": "declared-metadata",
+                    "carrierSha256": format!("{:x}", Sha256::digest(bytes)),
+                    "sources": sources,
+                    "conflictingFormats": conflicts,
+                    "ignoredTextChunks": report.ignored_text_chunks,
+                }),
+            );
+            if !report.conflicting_formats.is_empty() {
+                document.diagnostics.push(Diagnostic::new(DiagnosticLevel::Warning,
+                    "W_PNG_FORMULA_SOURCE_CONFLICT", "PNG contains different formula source spellings; no candidate was selected.")
+                    .with_formats(Some("PNG"), Some("AST")).with_recoverable(true));
+            }
+        }
+        Ok(_) => {}
+        Err(error) => {
+            document.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticLevel::Warning,
+                    "W_PNG_FORMULA_SOURCE_REJECTED",
+                    format!(
+                        "Formula metadata was not imported; the source image was retained: {error}"
+                    ),
+                )
+                .with_formats(Some("PNG"), Some("AST"))
+                .with_recoverable(true),
+            );
+        }
+    }
 }
 
 fn is_office(format: InputFormat) -> bool {

@@ -25,7 +25,9 @@ establish mathematical equivalence, full schema validity or conversion support.
 
 The caller must first establish exact object/carrier association and provenance,
 retain input on rejection, and preserve macros/font/style context separately.
-No binary substring search, PNG/XMP/SVG metadata extraction, ZIP/CFB stream
+The separate [PNG adapter](png-formula-source.md) now supplies bounded explicit
+text fields. This module itself performs no binary substring search,
+PNG/XMP/SVG metadata extraction, ZIP/CFB stream
 extraction, OLE activation, OCR, network/file access, rendering or API/UI binding
 is performed. Header class inspection in Office does not implement MTEF import.
 

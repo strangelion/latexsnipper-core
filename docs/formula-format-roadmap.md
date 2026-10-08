@@ -1,6 +1,6 @@
 # 公式格式与 LaTeX 补全计划
 
-更新：2026-10-07。仅记录能力边界与剩余工作。
+更新：2026-10-08。仅记录能力边界与剩余工作。
 
 ## 分层
 
@@ -19,7 +19,7 @@ VSTO 不是公式格式；本应用 OLE 不等于 MathType 对象。
 | FMT-05 | UnicodeMath/AsciiMath 各有独立有限 experimental parser | 扩大语法与损失范围，接入正式输入/输出注册表、各绑定与 Office UI |
 | FMT-06 | raw MTEF v5 检查、批次精确去重及记录结构相似分组已有 | 优先补引用/槽位/MTCode 的有限语义映射与容器只读提取，再接入 Office 文档索引及读取接口；真实/旧版样例需明确来源 |
 | FMT-07 | 随新增能力持续收尾 | 同步生成矩阵、公共契约冻结、说明文档和 Office pin；不放宽已有门禁 |
-| FMT-08 | Word 身份门禁与 Core 声明式源码探测基础已有，载体/UI 未接通 | 同步其他宿主门禁，补 PNG/SVG 元数据与受限 CFB/MTEF 提取，再接加载项读取入口；见 [读取计划](formats/foreign-formula-read-plan.md) |
+| FMT-08 | Word 身份门禁、Core 声明式源码探测与有限 PNG 文本提取已有，UI 未接通 | 同步其他宿主门禁，补 SVG/XMP 与受限 CFB/MTEF 提取，接入绑定和加载项读取入口；见 [读取计划](formats/foreign-formula-read-plan.md) |
 
 ## 执行顺序
 

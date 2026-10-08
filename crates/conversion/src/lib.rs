@@ -40,6 +40,7 @@ pub mod pdf_native;
 pub mod pdf_overlay;
 mod pilot_ast;
 pub mod planner;
+pub mod png_formula_source;
 #[cfg(feature = "native")]
 pub mod pptx_reader;
 pub mod svg_parser;
