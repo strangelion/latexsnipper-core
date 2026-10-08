@@ -43,6 +43,7 @@ pub mod planner;
 pub mod png_formula_source;
 #[cfg(feature = "native")]
 pub mod pptx_reader;
+pub mod svg_formula_source;
 pub mod svg_parser;
 pub mod table_export;
 pub mod table_parser;

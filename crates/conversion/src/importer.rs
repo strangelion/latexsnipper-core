@@ -125,6 +125,7 @@ impl DocumentImporter {
                         serde_json::Value::String("opaque-source".to_string()),
                     )]),
                 });
+                attach_svg_formula_sources(svg, &mut document);
                 document
             }
             InputFormat::JsonAst => serde_json::from_slice(bytes).map_err(|e| {
@@ -890,6 +891,66 @@ fn attach_png_formula_sources(bytes: &[u8], document: &mut Document) {
                 .with_recoverable(true),
             );
         }
+    }
+}
+
+fn attach_svg_formula_sources(svg: &str, document: &mut Document) {
+    use crate::formula_source_probe::SourceFormat;
+    use sha2::{Digest, Sha256};
+    let name = |format| match format {
+        SourceFormat::Latex => "latex",
+        SourceFormat::Mathml => "mathml",
+        SourceFormat::Omml => "omml",
+    };
+    match crate::svg_formula_source::inspect_svg_formula_sources(svg) {
+        Ok(report) if !report.sources.is_empty() => {
+            let sources: Vec<_> = report.sources.iter().map(|source| {
+                let annotations: Vec<_> = source.latex_annotations.iter().map(|annotation| serde_json::json!({
+                    "source": annotation.source,
+                    "xmlByteRange": [annotation.xml_span.start, annotation.xml_span.end],
+                })).collect();
+                serde_json::json!({
+                    "source": source.source,
+                    "format": name(source.format),
+                    "xmlByteRange": [source.xml_span.start, source.xml_span.end],
+                    "namespaceMaterialized": source.namespace_materialized,
+                    "latexAnnotations": annotations,
+                })
+            }).collect();
+            let conflicts: Vec<_> = report
+                .conflicting_formats
+                .iter()
+                .copied()
+                .map(name)
+                .collect();
+            document.assets[0].metadata.insert(
+                "formula_source_candidates_v1".into(),
+                serde_json::json!({
+                    "schemaVersion": 1,
+                    "carrier": "svg",
+                    "sourceKind": "declared-metadata",
+                    "carrierSha256": format!("{:x}", Sha256::digest(svg.as_bytes())),
+                    "sources": sources,
+                    "conflictingFormats": conflicts,
+                    "ignoredMetadataItems": report.ignored_metadata_items,
+                }),
+            );
+            if !report.conflicting_formats.is_empty() {
+                document.diagnostics.push(Diagnostic::new(DiagnosticLevel::Warning,
+                    "W_SVG_FORMULA_SOURCE_CONFLICT", "SVG contains different formula source spellings; no candidate was selected.")
+                    .with_formats(Some("SVG"), Some("AST")).with_recoverable(true));
+            }
+        }
+        Ok(_) => {}
+        Err(error) => document.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticLevel::Warning,
+                "W_SVG_FORMULA_SOURCE_REJECTED",
+                format!("Formula metadata was not imported; the source SVG was retained: {error}"),
+            )
+            .with_formats(Some("SVG"), Some("AST"))
+            .with_recoverable(true),
+        ),
     }
 }
 

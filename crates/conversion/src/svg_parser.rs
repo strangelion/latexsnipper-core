@@ -34,6 +34,23 @@ pub fn parse_svg(svg: &str) -> SvgParseResult {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
+                // Metadata describes the carrier; its descendants are not drawing primitives.
+                if e.local_name().as_ref() == b"metadata" {
+                    if let Err(error) = reader.read_to_end_into(e.name(), &mut Vec::new()) {
+                        diagnostics.push(
+                            Diagnostic::new(
+                                DiagnosticLevel::Warning,
+                                W_UNSUPPORTED_FEATURE,
+                                format!("Invalid SVG metadata: {error}"),
+                            )
+                            .with_formats(Some("SVG"), None)
+                            .with_recoverable(true),
+                        );
+                        break;
+                    }
+                    buf.clear();
+                    continue;
+                }
                 let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 let attrs = collect_attrs(e);
 
@@ -102,6 +119,10 @@ pub fn parse_svg(svg: &str) -> SvgParseResult {
                 }
             }
             Ok(Event::Empty(ref e)) => {
+                if e.local_name().as_ref() == b"metadata" {
+                    buf.clear();
+                    continue;
+                }
                 let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 let attrs = collect_attrs(e);
 

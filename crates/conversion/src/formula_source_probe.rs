@@ -113,7 +113,7 @@ fn source_budget(source: &str) -> Result<(), ProbeError> {
     Ok(())
 }
 
-fn xml_character(ch: char) -> bool {
+pub(crate) fn xml_character(ch: char) -> bool {
     matches!(ch, '\u{9}' | '\u{a}' | '\u{d}' | '\u{20}'..='\u{d7ff}' | '\u{e000}'..='\u{fffd}' | '\u{10000}'..='\u{10ffff}')
 }
 
@@ -134,17 +134,21 @@ fn namespace_matches(namespace: &ResolveResult<'_>, expected: &[u8]) -> bool {
     matches!(namespace, ResolveResult::Bound(value) if value.as_ref() == expected)
 }
 
-fn annotation_encoding(
+pub(crate) fn annotation_encoding(
     element: &BytesStart<'_>,
     reader: &NsReader<&[u8]>,
 ) -> Result<Option<String>, ProbeError> {
     let mut encoding = None;
+    let mut expanded_names = std::collections::HashSet::new();
     for attr in element.attributes() {
         let attr = attr.map_err(|_| ProbeError::InvalidXml)?;
-        if matches!(
-            reader.resolver().resolve_attribute(attr.key).0,
-            ResolveResult::Unknown(_)
-        ) {
+        let (namespace, local) = reader.resolver().resolve_attribute(attr.key);
+        let namespace = match namespace {
+            ResolveResult::Unknown(_) => return Err(ProbeError::InvalidXml),
+            ResolveResult::Bound(ns) => ns.into_inner(),
+            ResolveResult::Unbound => b"",
+        };
+        if !expanded_names.insert((namespace, local.into_inner())) {
             return Err(ProbeError::InvalidXml);
         }
         let value = attr

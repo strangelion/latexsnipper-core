@@ -6,7 +6,8 @@
 
 DOCX reader 已可读取原生 OMML 并保留原片段；重建的 LaTeX 不等于原源码。
 MTEF v5 raw 检查已有批次精确去重及记录结构相似分组，尚无语义转换。
-第三方 OLE 容器与通用宿主入口仍未接通；Core 已有有限 [PNG 文本源码提取](png-formula-source.md)。
+第三方 OLE 容器与通用宿主入口仍未接通；Core 已有有限 [PNG 文本提取](png-formula-source.md)
+和 [SVG metadata 提取](svg-formula-source.md)，均已接 native 导入器的资产候选元数据。
 Core 已有声明式文本字段/独立数学 XML 的 [有限探测接口](formula-source-probe.md)，
 保留原文及 MathML TeX 注释，不猜测描述文本或自动选择冲突来源。
 Word 已在自动化前检查对象关联 CFB 的本应用类标识；其他宿主门禁尚未同步。
@@ -17,7 +18,7 @@ Word 已在自动化前检查对象关联 CFB 的本应用类标识；其他宿�
 | --- | --- | --- |
 | P0 | 读取边界 | Word 本应用类标识门禁已有；同步 Excel/PowerPoint 等宿主，第三方对象仍不访问 Object 或执行激活 |
 | P1 | 明确源码元数据 | Core 声明式 LaTeX/MathML/OMML 探测已有；继续接入对象来源/范围、载体适配和有限转换损失信息 |
-| P1 | 图片基础支持 | PNG 文本字段提取已接 native 导入器资产候选元数据；继续 SVG/XMP 适配与宿主接入，普通替代文字只作提示，纯像素图片转入可选 OCR |
+| P1 | 图片基础支持 | PNG 文本及有限 SVG metadata 已接 native 资产候选元数据；继续 XMP/生产软件 profile 与宿主接入，普通替代文字只作提示，纯像素图片转入可选 OCR |
 | P1 | MTEF 与容器 | Office 提取有边界的嵌入流；Core 按版本诊断、去重并逐步映射有限 AST，未知记录/旧版保留原始数据 |
 | P1 | 加载项入口 | Word 单张行内 PNG 的只读候选窗口已实现，安装版端到端待验收；继续通用选区/文档清单、SVG/XMP 和其他宿主入口，区分声明源码/重建/OCR |
 | P2 | 快速再读取 | 文档修订、对象/关系与源哈希绑定索引；精确内容决定复用，结构相似只供分组 |
