@@ -11,8 +11,10 @@ report it unavailable, not claim that normalized Word XML is the original SVG.
 This observation does not establish behavior for every Word version/producer.
 Office now retains app-managed SVG/source payloads in its document manifest
 and hash-binds them to the actual Word SVG carrier on selection/ID readback.
-This is not a generic third-party metadata viewer. In-place managed SVG image
-updates remain blocked before mutation while the Word SDT boundary is repaired.
+This is not a generic third-party metadata viewer. Inline same-format SVG updates
+now stage candidate/backup graphics in a separate hidden Word document, replace
+the picture inside its existing control and verify source/rollback. Display,
+numbered and cross-format image updates remain gated; installed workflow is pending.
 
 `inspect_svg_formula_sources(svg)` accepts a bounded, namespaced standalone SVG
 XML document. It inspects only direct children of top-level SVG `metadata`:
