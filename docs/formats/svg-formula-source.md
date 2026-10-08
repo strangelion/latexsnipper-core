@@ -3,6 +3,12 @@
 Experimental Rust module `svg_formula_source`, 2026-10-08. Native imports attach
 source candidates to the original SVG asset. Dedicated bindings and the Word
 SVG selection viewer are pending; PNG's Word entry is separate.
+An authored fixture in x64 Word 16.0.18526 lost its formula metadata during
+`AddPicture`, in saved DOCX bytes and after reopening. Word's SVG extension and
+PNG fallback have separate relationships; Office now rejects the fallback in
+its PNG source reader. Host wiring must retain an original source asset or
+report it unavailable, not claim that normalized Word XML is the original SVG.
+This observation does not establish behavior for every Word version/producer.
 
 `inspect_svg_formula_sources(svg)` accepts a bounded, namespaced standalone SVG
 XML document. It inspects only direct children of top-level SVG `metadata`:
