@@ -609,7 +609,7 @@ fn has_content(node: &LatexNode) -> bool {
 // Only called with the bounded, internally built finite AST. In particular,
 // input cannot inject arbitrary command names or unescaped TeX control syntax.
 fn write_latex(node: &LatexNode, output: &mut String) -> Result<(), ()> {
-    let bracket = |node: &LatexNode, output: &mut String| {
+    let bracket = |node: &LatexNode, output: &mut String| -> Result<(), ()> {
         output.push('{');
         write_latex(node, output)?;
         output.push('}');
