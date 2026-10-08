@@ -30,6 +30,9 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Test verified model download fallback
+        shell: pwsh
+        run: ./scripts/tests/TrOcrCiDownload.Tests.ps1
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check isolated WASM engine
@@ -156,6 +159,7 @@ jobs:
       MODEL_ARCHIVE: target/test-models/latexsnipper-formula-rec.zip
       MODEL_SHA256: fdcc414b9073c73325614faafc6473ddd7e91a80305cdc55f7267195de152a21
       MODEL_URL: https://github.com/strangelion/latexsnipper-core/releases/download/models-v2.0.0/latexsnipper-formula-rec.zip
+      MODEL_API_URL: https://api.github.com/repos/strangelion/latexsnipper-core/releases/assets/469722107
       LATEXSNIPPER_REQUIRE_REAL_MODELS: '1'
     steps:
       - uses: actions/checkout@v6
@@ -166,15 +170,15 @@ jobs:
         with:
           path: target/test-models
           key: trocr-deit-${{ env.MODEL_SHA256 }}
-      - name: Download, verify, and extract TrOCR
+      - name: Download and verify TrOCR with same-asset API fallback
+        shell: pwsh
+        run: |
+          ./scripts/download-trocr-ci.ps1 -OutputPath $env:MODEL_ARCHIVE `
+            -ExpectedSha256 $env:MODEL_SHA256 -PrimaryUrl $env:MODEL_URL -ApiUrl $env:MODEL_API_URL
+      - name: Extract verified TrOCR
         shell: bash
         run: |
           mkdir -p "$(dirname "$MODEL_ARCHIVE")" models/formula-rec
-          if [ ! -f "$MODEL_ARCHIVE" ]; then
-            curl --fail --location --retry 3 --max-redirs 5 \
-              --output "$MODEL_ARCHIVE.part" "$MODEL_URL"
-            mv "$MODEL_ARCHIVE.part" "$MODEL_ARCHIVE"
-          fi
           echo "$MODEL_SHA256  $MODEL_ARCHIVE" | sha256sum --check --strict
           unzip_exit=0
           unzip -q -o "$MODEL_ARCHIVE" -d models/formula-rec || unzip_exit=$?
