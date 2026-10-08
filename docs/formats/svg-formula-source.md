@@ -9,6 +9,10 @@ PNG fallback have separate relationships; Office now rejects the fallback in
 its PNG source reader. Host wiring must retain an original source asset or
 report it unavailable, not claim that normalized Word XML is the original SVG.
 This observation does not establish behavior for every Word version/producer.
+Office now retains app-managed SVG/source payloads in its document manifest
+and hash-binds them to the actual Word SVG carrier on selection/ID readback.
+This is not a generic third-party metadata viewer. In-place managed SVG image
+updates remain blocked before mutation while the Word SDT boundary is repaired.
 
 `inspect_svg_formula_sources(svg)` accepts a bounded, namespaced standalone SVG
 XML document. It inspects only direct children of top-level SVG `metadata`:
