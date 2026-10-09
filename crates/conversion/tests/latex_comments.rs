@@ -83,6 +83,11 @@ fn escaped_symbols_survive_ast_reprojection_and_text_comments() {
         assert!(output.contains("a%b"), "{target:?}: {output}");
         assert!(!output.contains(r"\%"), "{output}");
     }
+    for command in ["text", "textbf", "textit", "textrm", "textsf", "texttt"] {
+        let output = latex_to_omml(&format!("\\{command}{{a\\%b\\&c<d>}}"));
+        assert!(output.contains("<m:t>a%b&amp;c&lt;d&gt;</m:t>"), "{output}");
+        assert!(!output.contains("&amp;amp;"), "{output}");
+    }
 }
 
 #[test]

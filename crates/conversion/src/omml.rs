@@ -542,7 +542,8 @@ fn ast_to_omml(node: &LatexNode) -> String {
                 "%" | "&" | "#" | "_" | "$" | "{" | "}" | "backslash" | "textasciicircum" | "textasciitilde" => wrap_normal_mtext(crate::latex_utils::literal_command_symbol(name).expect("matched literal command")),
                 _ if name.starts_with("begin{") => wrap_normal_mtext(&args.first().map(ToString::to_string).unwrap_or_default()),
                 "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" => {
-                    let text = extract_text_from_args(args);
+                    // Text arguments are source, not already escaped XML fragments.
+                    let text: String = args.iter().map(ToString::to_string).collect();
                     wrap_normal_mtext(&crate::latex_utils::decode_text_symbols(&text))
                 }
                 "substack" => {
