@@ -1,7 +1,7 @@
 {
   "contractRelease": "3.0.0",
   "files": {
-    "contracts/agent/core-conversion-contract.v1.yaml": "08e0a8f87d51ac76d3c84f035c7dadb3f25876c0d84fa2414813a5ef096ac15c",
+    "contracts/agent/core-conversion-contract.v1.yaml": "88e32c9a8ce9aebc7068e902296d6a262dc17ff9f8fed7bcd7c28b982575b518",
     "contracts/agent/core-mixed-contract.v1.yaml": "ed21fac733c14c1450709574d09d1af39d69b623178992630bb19e817b173844",
     "contracts/agent/core-model-transport-contract.v1.yaml": "0ff4fdec673cde60f387d1b5f63caee9d7139199e6b262a25e3d7412d719291c",
     "contracts/agent/core-provider-contract.v1.yaml": "98b888cf32cbd4efb41065eae9259e9402eb779e30b3b41f339243c03cdd7a30",
@@ -33,8 +33,8 @@
   "hashAlgorithm": "sha256-normalized-lf",
   "publicRustSourceTrees": {
     "crates/api-types/src": "af916d1842bb732912633a9e225fbd53c1a1a06d75dc4e38a79f78c53bba8e49",
-    "crates/ast/src": "9e2fd753eae1cbdc3f19794133bae86963990da689988767a35cbe10eb3da6ef",
-    "crates/conversion/src": "4cc0aeee76aacdc1c29bfd0e5e421da1250bd19f5f3abbc76ed507bbcb0a8171",
+    "crates/ast/src": "a382b150a253f7c60d5332656a5d4906e4f8048e45a7cf5a75b09f3bede7d2f8",
+    "crates/conversion/src": "0306d0152e106604e0b5696f74e6be396811111007236873dc280afc13474abe",
     "crates/custom-symbols/src": "42654e79bcf161ad17eefad1c191af8c7bd730123dfd265441d0bc41c77cd55b",
     "crates/drawing/src": "05ff157df6e4d011d3008741e6117ce11a795e13e709015b19928194659821db",
     "crates/engine/src": "5cc56c913f2c5d3ff6401f6bc1ad914665a387b6fef60f8ff71ef0a0327c41c7",
@@ -42,13 +42,13 @@
     "crates/ffi/src": "810e56a6284558b5d5700730e8b303ff606b9f69aee2b6ffc21400e97098344a",
     "crates/foundation/src": "afbbf9d5e3e47b3e7080eb6d02a182c0063f92005acb22358a03974f4f382fbe",
     "crates/image/src": "835962b9ddc6628bff25899b93c57ee29a743c2e222028c6fd0431e70a8d570d",
-    "crates/inference/src": "2de2fec88b194d0984a1ca892e8447aafaf60cbf03bbf3ab8b926dcd18c3acb2",
+    "crates/inference/src": "1d285d5104d12216356caf4daccb294582cb59d8acee889c5b69355c8dcbfa3e",
     "crates/model/src": "5c3d4c094f12d4b679b84b8bb6c2cedf6535aa7ab9667277a0232ad647084df4",
     "crates/pipeline/src": "51d5137301c3addade097ef3c61752d1d664cd73b813e35e5e48e069cbe8d451",
     "crates/plugin-wasi/src": "7c5bb16b853f03d4bb4bb5d14f0a21fff4cdd41cb9afdf34a59ae8c168f08061",
     "crates/plugin/src": "eaa2d23e1c074a6995b1faad45f2cedba979965a26ba260eeef61210f020cbbb",
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
-    "crates/syntax/src": "70715180c5e3d7cf137da013da580cbacc35e198273de3c587ba768538c7f5cb",
+    "crates/syntax/src": "f1c8405d6ffc3bf4896ce4559cdb1c353aa5a2a096f95ebe14c9bd7d42d14dac",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
     "crates/wasm/src": "8d3db4e8fce38a667186101c04f0df814d2d733a70bad6ec0b8bde6bb27bfa51"
   },

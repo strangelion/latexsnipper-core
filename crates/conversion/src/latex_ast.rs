@@ -174,30 +174,9 @@ impl std::fmt::Display for LatexNode {
         match self {
             LatexNode::Text(s) => write!(f, "{}", s),
             LatexNode::Sequence(nodes) => {
-                let mut result = String::new();
-                for (i, n) in nodes.iter().enumerate() {
-                    if i > 0 {
-                        // Only add space if not adjacent to a previous symbol/operator
-                        // that would make the spacing wrong (e.g. E=mc^2 should not become E = m c ^ 2)
-                        let prev_str = format!("{}", n);
-                        let prev_text = format!("{}", nodes[i - 1]);
-                        // Don't add space:
-                        // - before superscript/subscript
-                        // - between single chars that form a contiguous token
-                        // - between a symbol and its following operator token
-                        let skip = prev_str.starts_with('^')
-                            || prev_str.starts_with('_')
-                            || prev_str == ")"
-                            || prev_str == "]"
-                            || prev_str == ","
-                            || prev_text.len() == 1 && prev_str.len() == 1;
-                        if !skip {
-                            result.push(' ');
-                        }
-                    }
-                    write!(f, "{}", n)?;
-                }
-                Ok(())
+                f.write_str(&latexsnipper_ast::formula_layout::join_latex_fragments(
+                    nodes.iter().map(ToString::to_string),
+                ))
             }
             LatexNode::Group(nodes) => {
                 write!(f, "{{")?;
@@ -234,6 +213,13 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Relation(rel) => write!(f, "\\{}", rel),
             LatexNode::Greek(g) => write!(f, "\\{}", g),
             LatexNode::Symbol(s) => write!(f, "{}", s),
+            LatexNode::Command { name, args } if name.starts_with("begin{") => {
+                if let Some(source) = args.first() {
+                    write!(f, "{source}")
+                } else {
+                    Ok(())
+                }
+            }
             LatexNode::Command { name, args } if name == "substack" => {
                 let rows = args.iter().map(ToString::to_string).collect::<Vec<_>>();
                 write!(f, "\\substack{{{}}}", rows.join("\\\\"))

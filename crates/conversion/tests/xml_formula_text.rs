@@ -5,14 +5,14 @@ fn mathml_preserves_predefined_references_and_text_spaces() {
     let xml = "<math><mtext> a &amp; &lt; &gt; &quot; &apos; b </mtext></math>";
     assert_eq!(
         parse_mathml_to_latex(xml).unwrap(),
-        "\\text{ a & < > \" ' b }"
+        "\\text{ a \\& < > \" ' b }"
     );
 }
 
 #[test]
 fn omml_preserves_predefined_references_and_text_spaces() {
     let xml = "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:r><m:t xml:space=\"preserve\"> a &amp; &lt; &gt; &quot; &apos; b </m:t></m:r></m:oMath>";
-    assert_eq!(parse_omml_to_latex(xml).unwrap(), " a & < > \" ' b ");
+    assert_eq!(parse_omml_to_latex(xml).unwrap(), " a \\& < > \" ' b ");
 }
 
 #[test]
@@ -33,11 +33,11 @@ fn cdata_is_literal_text_and_is_not_entity_decoded() {
     let text = "<![CDATA[ a &amp; < b ]]>";
     assert_eq!(
         parse_mathml_to_latex(&format!("<math><mtext>{text}</mtext></math>")).unwrap(),
-        "\\text{ a &amp; < b }"
+        "\\text{ a \\&amp; < b }"
     );
     assert_eq!(
         parse_omml_to_latex(&format!("<oMath><r><t>{text}</t></r></oMath>")).unwrap(),
-        " a &amp; < b "
+        " a \\&amp; < b "
     );
 }
 
@@ -64,7 +64,7 @@ fn omml_layout_readback_preserves_text_but_not_container_indentation() {
     let latexsnipper_ast::FormulaNode::Symbol(symbol) = layout.root else {
         panic!("Expected one text symbol")
     };
-    assert_eq!(symbol.latex, " a & 中 ");
+    assert_eq!(symbol.latex, " a \\& 中 ");
     for text in ["&unknown;", "&#0;"] {
         assert!(
             latexsnipper_conversion::omml_parser::parse_omml_to_layout(&format!(
@@ -88,6 +88,6 @@ fn indentation_is_not_formula_text_but_cell_text_spaces_survive() {
     let xml = "<math>\n <mtable>\n <mtr>\n <mtd><mtext>a &amp; b</mtext></mtd>\n <mtd><mn>2</mn></mtd>\n </mtr>\n </mtable>\n</math>";
     assert_eq!(
         parse_mathml_to_latex(xml).unwrap(),
-        r"\begin{matrix} \text{a & b} & 2 \end{matrix}"
+        r"\begin{matrix} \text{a \& b} & 2 \end{matrix}"
     );
 }

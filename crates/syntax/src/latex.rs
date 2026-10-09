@@ -99,9 +99,7 @@ pub fn validate_latex_structure(input: &str) -> Vec<Diagnostic> {
     while index < bytes.len() {
         match bytes[index] {
             b'%' => {
-                index = input[index..]
-                    .find('\n')
-                    .map_or(bytes.len(), |offset| index + offset + 1);
+                index = comment_end(input, index);
             }
             b'\\' => {
                 if let Some((command, next_index)) = control_sequence(input, index) {
@@ -112,7 +110,7 @@ pub fn validate_latex_structure(input: &str) -> Vec<Diagnostic> {
                                     environments.push((name.to_string(), index));
                                 } else {
                                     match environments.last() {
-                                        Some((active, _)) if active == name => {
+                                        Some((active, _)) if active == &name => {
                                             environments.pop();
                                         }
                                         Some((active, _)) => diagnostics.push(
@@ -301,15 +299,57 @@ fn control_sequence(input: &str, start: usize) -> Option<(&str, usize)> {
     }
 }
 
-fn environment_name(input: &str, command_end: usize) -> Option<(&str, usize)> {
+fn comment_end(input: &str, start: usize) -> usize {
     let bytes = input.as_bytes();
-    if bytes.get(command_end) != Some(&b'{') {
+    let mut end = start;
+    while end < bytes.len() && !matches!(bytes[end], b'\r' | b'\n') {
+        end += 1;
+    }
+    if bytes.get(end) == Some(&b'\r') {
+        end += 1;
+    }
+    if bytes.get(end) == Some(&b'\n') {
+        end += 1;
+    }
+    end
+}
+
+fn environment_name(input: &str, command_end: usize) -> Option<(String, usize)> {
+    let bytes = input.as_bytes();
+    let mut pos = command_end;
+    loop {
+        match bytes.get(pos) {
+            Some(b'%') => pos = comment_end(input, pos),
+            Some(byte) if byte.is_ascii_whitespace() => pos += 1,
+            _ => break,
+        }
+    }
+    if bytes.get(pos) != Some(&b'{') {
         return None;
     }
-    let name_start = command_end + 1;
-    let relative_end = input[name_start..].find('}')?;
-    let name_end = name_start + relative_end;
-    Some((&input[name_start..name_end], name_end + 1))
+    pos += 1;
+    let mut name = String::new();
+    while pos < bytes.len() {
+        match bytes[pos] {
+            b'%' => {
+                pos = comment_end(input, pos);
+                while bytes
+                    .get(pos)
+                    .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+                {
+                    pos += 1;
+                }
+            }
+            b'}' => return Some((name, pos + 1)),
+            b'\\' | b'{' => return None,
+            _ => {
+                let ch = input[pos..].chars().next()?;
+                name.push(ch);
+                pos += ch.len_utf8();
+            }
+        }
+    }
+    None
 }
 
 fn close_math_delimiter(
@@ -493,6 +533,7 @@ fn find_next_formula(input: &str, cursor: usize) -> Option<DelimitedFormula<'_>>
     let mut index = cursor;
     while index < bytes.len() {
         match bytes[index] {
+            b'%' => index = comment_end(input, index),
             b'\\' if bytes.get(index + 1) == Some(&b'(') => {
                 return Some(DelimitedFormula {
                     start: index,
@@ -509,7 +550,7 @@ fn find_next_formula(input: &str, cursor: usize) -> Option<DelimitedFormula<'_>>
                     display_mode: true,
                 });
             }
-            b'\\' => index = (index + 2).min(bytes.len()),
+            b'\\' => index = control_sequence(input, index).map_or(bytes.len(), |(_, end)| end),
             b'$' => {
                 let display_mode = bytes.get(index + 1) == Some(&b'$');
                 let delimiter = if display_mode { "$$" } else { "$" };
@@ -530,6 +571,10 @@ fn find_formula_end(input: &str, formula: &DelimitedFormula<'_>) -> Option<usize
     let bytes = input.as_bytes();
     let mut index = formula.start + formula.open.len();
     while index + formula.close.len() <= bytes.len() {
+        if bytes[index] == b'%' {
+            index = comment_end(input, index);
+            continue;
+        }
         if bytes[index..].starts_with(formula.close.as_bytes()) {
             if formula.close == "$"
                 && (bytes.get(index + 1) == Some(&b'$')
@@ -540,8 +585,8 @@ fn find_formula_end(input: &str, formula: &DelimitedFormula<'_>) -> Option<usize
             }
             return Some(index);
         }
-        if bytes[index] == b'\\' && !formula.close.starts_with('\\') {
-            index = (index + 2).min(bytes.len());
+        if bytes[index] == b'\\' {
+            index = control_sequence(input, index).map_or(bytes.len(), |(_, end)| end);
         } else {
             index += 1;
         }

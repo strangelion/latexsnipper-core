@@ -235,6 +235,30 @@ impl FormulaLayout {
     }
 }
 
+/// Join canonical fragments without merging a terminal TeX control word with letters.
+pub fn join_latex_fragments(fragments: impl IntoIterator<Item = String>) -> String {
+    let mut result = String::new();
+    let mut control_word = false;
+    for fragment in fragments {
+        if fragment.is_empty() {
+            continue;
+        }
+        if control_word
+            && fragment
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphabetic)
+        {
+            result.push(' ');
+        }
+        result.push_str(&fragment);
+        let suffix = fragment.trim_end_matches(|ch: char| ch.is_ascii_alphabetic());
+        control_word = suffix.len() != fragment.len()
+            && suffix.bytes().rev().take_while(|ch| *ch == b'\\').count() % 2 == 1;
+    }
+    result
+}
+
 fn canonical_latex(node: &FormulaNode) -> String {
     match node {
         FormulaNode::Symbol(symbol) => symbol.latex.clone(),
@@ -246,12 +270,12 @@ fn canonical_latex(node: &FormulaNode) -> String {
                 .collect();
             format!("\\{}{}", command.name, args)
         }
-        FormulaNode::Group(nodes) => nodes.iter().map(canonical_latex).collect(),
+        FormulaNode::Group(nodes) => join_latex_fragments(nodes.iter().map(canonical_latex)),
         FormulaNode::Environment(environment) => {
             let rows: Vec<String> = environment
                 .content
                 .iter()
-                .map(|row| row.iter().map(canonical_latex).collect::<String>())
+                .map(|row| join_latex_fragments(row.iter().map(canonical_latex)))
                 .collect();
             format!(
                 "\\begin{{{}}}{}{}\\end{{{}}}",
@@ -487,6 +511,26 @@ mod tests {
         };
 
         assert_eq!(layout.canonical_latex(), "\\sqrt[3]{x+1}");
+    }
+
+    #[test]
+    fn canonical_fragment_join_only_separates_live_control_words() {
+        for (parts, expected) in [
+            (vec![r"\alpha", "", "x"], r"\alpha x"),
+            (vec![r"\alpha", "+", "x"], r"\alpha+x"),
+            (vec![r"\%", "x"], r"\%x"),
+            (vec![r"\\alpha", "x"], r"\\alphax"),
+            (vec!["a", "b", "c"], "abc"),
+        ] {
+            assert_eq!(
+                join_latex_fragments(parts.into_iter().map(str::to_string)),
+                expected
+            );
+        }
+        assert_eq!(
+            join_latex_fragments(std::iter::repeat_n("a".to_string(), 10_000)).len(),
+            10_000
+        );
     }
 
     #[test]

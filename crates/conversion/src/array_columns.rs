@@ -91,7 +91,7 @@ fn skip_space(chars: &[char], pos: &mut usize) {
         if chars[*pos].is_whitespace() {
             *pos += 1;
         } else if chars[*pos] == '%' {
-            while *pos < chars.len() && chars[*pos] != '\n' {
+            while *pos < chars.len() && !matches!(chars[*pos], '\n' | '\r') {
                 *pos += 1;
             }
         } else {
@@ -115,7 +115,7 @@ fn group(chars: &[char], pos: &mut usize) -> Result<String, String> {
                 continue;
             }
             '%' => {
-                while *pos < chars.len() && chars[*pos] != '\n' {
+                while *pos < chars.len() && !matches!(chars[*pos], '\n' | '\r') {
                     *pos += 1;
                 }
                 continue;

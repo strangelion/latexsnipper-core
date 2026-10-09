@@ -56,6 +56,7 @@ impl FormulaParser {
             let ch = self.input[self.pos];
 
             match ch {
+                '%' => self.skip_comment(),
                 '{' => {
                     self.pos += 1;
                     let group = self.parse_group()?;
@@ -111,6 +112,7 @@ impl FormulaParser {
     }
 
     fn parse_group(&mut self) -> Result<FormulaNode> {
+        self.skip_whitespace();
         // Consume opening brace if present.
         // Callers: parse_expression/@'{' and parse_atom/@'{' already consume '{',
         // but parse_command calls parse_group directly (for \frac, \sqrt, etc.)
@@ -187,6 +189,12 @@ impl FormulaParser {
             "begin" => {
                 let env_name = self.parse_group()?;
                 let env_name_str = extract_text(&env_name);
+                if matches!(
+                    env_name_str.as_str(),
+                    "verbatim" | "verbatim*" | "lstlisting" | "minted"
+                ) {
+                    return Err(SnipperError::Inference("Literal code environments cannot be treated as mathematical layout; retain raw source".into()));
+                }
                 let column_spec = if env_name_str == "array" {
                     Some(self.parse_array_column_spec()?)
                 } else {
@@ -574,6 +582,7 @@ impl FormulaParser {
                 break;
             }
             match ch {
+                '%' => self.skip_comment(),
                 '{' => {
                     self.pos += 1;
                     if let Ok(group) = self.parse_group() {
@@ -606,6 +615,7 @@ impl FormulaParser {
     /// Parse a command with optional braces and subscript/superscript.
     /// Returns (optional_arg, required_arg).
     fn parse_command_with_braces(&mut self) -> Result<(Option<FormulaNode>, FormulaNode)> {
+        self.skip_whitespace();
         // Check for optional argument [...]
         let opt = if self.pos < self.input.len() && self.input[self.pos] == '[' {
             self.pos += 1;
@@ -718,9 +728,7 @@ impl FormulaParser {
                     continue;
                 }
                 '%' => {
-                    while self.pos < self.input.len() && self.input[self.pos] != '\n' {
-                        self.pos += 1;
-                    }
+                    self.skip_comment();
                     continue;
                 }
                 '{' => depth += 1,
@@ -762,7 +770,32 @@ impl FormulaParser {
     }
 
     fn skip_whitespace(&mut self) {
-        while self.pos < self.input.len() && self.input[self.pos].is_whitespace() {
+        while self.pos < self.input.len() {
+            if self.input[self.pos].is_whitespace() {
+                self.pos += 1;
+            } else if self.input[self.pos] == '%' {
+                self.skip_comment();
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn skip_comment(&mut self) {
+        while self.pos < self.input.len() && !matches!(self.input[self.pos], '\n' | '\r') {
+            self.pos += 1;
+        }
+        if self.input.get(self.pos) == Some(&'\r') {
+            self.pos += 1;
+        }
+        if self.input.get(self.pos) == Some(&'\n') {
+            self.pos += 1;
+        }
+        while self
+            .input
+            .get(self.pos)
+            .is_some_and(|ch| matches!(ch, ' ' | '\t'))
+        {
             self.pos += 1;
         }
     }
@@ -954,12 +987,32 @@ mod tests {
     #[test]
     fn test_named_delimiters_do_not_consume_following_atom() {
         let layout = parse_formula_latex("\\lvert x\\rvert").unwrap();
-        assert_eq!(layout.canonical_latex(), "\\lvertx\\rvert");
+        assert_eq!(layout.canonical_latex(), "\\lvert x\\rvert");
     }
 
     #[test]
     fn test_control_symbol_spacing_is_preserved() {
         let layout = parse_formula_latex("a\\,b").unwrap();
         assert_eq!(layout.canonical_latex(), "a\\,b");
+    }
+
+    #[test]
+    fn comments_do_not_add_symbols_or_change_groups_scripts_and_rows() {
+        for ending in ["\n", "\r\n", "\r"] {
+            for (source, expected, count) in [
+                (format!("\\frac% FAKE {{}}{ending}{{a% FAKE }}{ending}+b}}{{c}}"), r"\frac{a+b}{c}", 4),
+                (format!("x^% FAKE }}{ending}2"), r"x^{2}", 2),
+                (format!("\\sqrt[% FAKE ]{ending}3]{{x}}"), r"\sqrt[3]{x}", 2),
+                (format!("\\alpha% FAKE \\beta{ending}x"), r"\alpha x", 2),
+                (format!("\\begin{{matrix}}a&b% FAKE & \\\\ \\end{{matrix}}{ending}\\\\c&d\\end{{matrix}}"), r"\begin{matrix}a&b\\c&d\end{matrix}", 4),
+            ] {
+                let layout = parse_formula_latex(&source).unwrap();
+                assert_eq!(layout.canonical_latex(), expected, "{source:?}");
+                assert_eq!(layout.symbol_count, count, "{source:?}");
+            }
+        }
+        let layout = parse_formula_latex(r"50\%x").unwrap();
+        assert_eq!(layout.canonical_latex(), r"50\%x");
+        assert!(parse_formula_latex("\\begin{verbatim}a%literal\n\\end{verbatim}").is_err());
     }
 }

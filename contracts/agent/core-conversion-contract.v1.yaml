@@ -3,6 +3,15 @@
   "name": "Conversion and Office output contract",
   "rules": [
     {
+      "id": "CORE-LATEX-COMMENT-SOURCE-001",
+      "description": "Default-catcode comments cannot create formula boundaries, cells or operands; literal XML symbols and opaque unsupported environments remain preserved.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["syntax", "conversion"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-conversion", "--no-default-features", "--test", "latex_comments"]},
+      "failureMessage": "LaTeX comments, source spans, literal glyphs or strict replacement boundaries regressed."
+    },
+    {
       "id": "CORE-ARRAY-COLUMN-LAYOUT-001",
       "description": "Array column source, common alignment, bounded repetitions and strict rejection stay independent of mathematical cells.",
       "severity": "blocking",

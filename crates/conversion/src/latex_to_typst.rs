@@ -322,10 +322,21 @@ fn convert_delimiter(s: &str) -> &str {
 /// Convert LaTeX command to Typst.
 fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String {
     match name {
+        _ if name.starts_with("begin{") => format!(
+            "#raw({}, lang: \"latex\")",
+            serde_json::to_string(&args.first().map(ToString::to_string).unwrap_or_default())
+                .unwrap_or_default()
+        ),
+        "%" | "&" | "#" | "_" | "$" | "{" | "}" | "backslash" | "textasciicircum"
+        | "textasciitilde" => serde_json::to_string(
+            crate::latex_utils::literal_command_symbol(name).expect("matched literal command"),
+        )
+        .unwrap_or_default(),
         // Text commands
         "text" | "textbf" | "textit" => {
             if let Some(arg) = args.first() {
-                serde_json::to_string(&arg.to_string()).unwrap_or_default()
+                serde_json::to_string(&crate::latex_utils::decode_text_symbols(&arg.to_string()))
+                    .unwrap_or_default()
             } else {
                 String::new()
             }

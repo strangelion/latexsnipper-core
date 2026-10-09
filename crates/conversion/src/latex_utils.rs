@@ -1,5 +1,112 @@
 //! Shared LaTeX parsing utilities for all converters.
 
+/// Remove default-catcode comments while retaining escaped control symbols.
+pub(crate) fn without_comments(source: &str) -> std::borrow::Cow<'_, str> {
+    if !source.contains('%') {
+        return std::borrow::Cow::Borrowed(source);
+    }
+    let mut result = String::new();
+    let mut chars = source.chars().peekable();
+    let mut control_word = false;
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            result.push(ch);
+            if let Some(next) = chars.next() {
+                result.push(next);
+                control_word = next.is_ascii_alphabetic();
+            }
+        } else if ch == '%' {
+            while chars.peek().is_some_and(|ch| !matches!(ch, '\n' | '\r')) {
+                chars.next();
+            }
+            if chars.next() == Some('\r') && chars.peek() == Some(&'\n') {
+                chars.next();
+            }
+            while chars.peek().is_some_and(|ch| matches!(ch, ' ' | '\t')) {
+                chars.next();
+            }
+            // A comment ends a control word even when it removes the line ending.
+            if control_word && chars.peek().is_some_and(char::is_ascii_alphabetic) {
+                result.push(' ');
+            }
+            control_word = false;
+        } else {
+            result.push(ch);
+            control_word &= ch.is_ascii_alphabetic();
+        }
+    }
+    std::borrow::Cow::Owned(result)
+}
+
+pub(crate) fn decode_text_symbols(source: &str) -> String {
+    let mut result = String::new();
+    let mut chars = source.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' && chars.peek().is_some_and(|ch| "%&#_${}".contains(*ch)) {
+            result.push(chars.next().expect("peeked control symbol"));
+        } else if ch == '\\' {
+            let mut decoded = false;
+            for (command, symbol) in [
+                ("backslash{}", '\\'),
+                ("textasciicircum{}", '^'),
+                ("textasciitilde{}", '~'),
+            ] {
+                if chars.clone().take(command.len()).eq(command.chars()) {
+                    for _ in 0..command.len() {
+                        chars.next();
+                    }
+                    result.push(symbol);
+                    decoded = true;
+                    break;
+                }
+            }
+            if !decoded {
+                result.push(ch);
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
+/// Protect visible XML characters from becoming TeX comments, groups or separators.
+pub(crate) fn escape_text_symbols(source: &str) -> String {
+    let mut result = String::new();
+    for ch in source.chars() {
+        if let Some(command) = match ch {
+            '\\' => Some("\\backslash{}"),
+            '^' => Some("\\textasciicircum{}"),
+            '~' => Some("\\textasciitilde{}"),
+            _ => None,
+        } {
+            result.push_str(command);
+            continue;
+        }
+        if "%&#_${}".contains(ch) {
+            result.push('\\');
+        }
+        result.push(ch);
+    }
+    result
+}
+
+pub(crate) fn literal_command_symbol(command: &str) -> Option<&'static str> {
+    match command {
+        "%" => Some("%"),
+        "&" => Some("&"),
+        "#" => Some("#"),
+        "_" => Some("_"),
+        "$" => Some("$"),
+        "{" => Some("{"),
+        "}" => Some("}"),
+        "backslash" => Some("\\"),
+        "textasciicircum" => Some("^"),
+        "textasciitilde" => Some("~"),
+        _ => None,
+    }
+}
+
 /// Split stack rows without splitting grouped operands or nested environments.
 pub(crate) fn split_stack_rows(source: &str) -> Vec<&str> {
     split_math_top_level(source, true)
@@ -15,6 +122,11 @@ fn split_math_top_level(source: &str, split_rows: bool) -> Vec<&str> {
     let (mut pos, mut start, mut braces, mut environments) = (0, 0, 0usize, 0usize);
     while pos < bytes.len() {
         match bytes[pos] {
+            b'%' => {
+                while pos < bytes.len() && !matches!(bytes[pos], b'\r' | b'\n') {
+                    pos += 1;
+                }
+            }
             b'\\' if bytes.get(pos + 1) == Some(&b'\\') => {
                 if split_rows && braces == 0 && environments == 0 {
                     rows.push(source[start..pos].trim());

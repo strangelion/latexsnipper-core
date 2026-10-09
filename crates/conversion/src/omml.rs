@@ -91,7 +91,8 @@ pub fn validate_omml_latex(latex: &str) -> std::result::Result<(), String> {
     if latex.trim().is_empty() || latex.len() > 65_536 {
         return Err("OMML source is empty or exceeds the strict conversion limit".into());
     }
-    if latex
+    let lexical_source = crate::latex_utils::without_comments(latex);
+    if lexical_source
         .chars()
         .filter(|c| matches!(c, '\\' | '^' | '_'))
         .count()
@@ -106,7 +107,7 @@ pub fn validate_omml_latex(latex: &str) -> std::result::Result<(), String> {
     // Avoid deep recursive parsing of malicious or accidentally huge groups.
     let mut depth: usize = 0;
     let mut escaped = false;
-    for character in latex.chars() {
+    for character in lexical_source.chars() {
         if escaped {
             escaped = false;
             continue;
@@ -125,7 +126,11 @@ pub fn validate_omml_latex(latex: &str) -> std::result::Result<(), String> {
             depth = depth.saturating_sub(1);
         }
     }
-    validate_omml_node(&parse_latex(latex), 0)
+    let node = parse_latex(latex);
+    if node.is_empty() {
+        return Err("OMML source has no mathematical content".into());
+    }
+    validate_omml_node(&node, 0)
 }
 
 fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(), String> {
@@ -141,6 +146,8 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
         | Delimited { content: nodes, .. } => nodes.iter().collect(),
         Command { name, args } => {
             let minimum_args = match name.as_str() {
+                "%" | "&" | "#" | "_" | "$" | "{" | "}" | "backslash" | "textasciicircum"
+                | "textasciitilde" => 0,
                 "binom" | "textcolor" | "color" => 2,
                 "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" | "underline"
                 | "tiny" | "scriptsize" | "footnotesize" | "small" | "normalsize" | "large"
@@ -158,8 +165,18 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
             }
             args.iter().collect()
         }
-        Superscript { base, exp } => vec![base, exp],
-        Subscript { base, sub } => vec![base, sub],
+        Superscript { base, exp } => {
+            if base.is_empty() || exp.is_empty() {
+                return Err("Incomplete OMML superscript".into());
+            }
+            vec![base, exp]
+        }
+        Subscript { base, sub } => {
+            if base.is_empty() || sub.is_empty() {
+                return Err("Incomplete OMML subscript".into());
+            }
+            vec![base, sub]
+        }
         Fraction { num, den } => {
             if num.is_empty() || den.is_empty() {
                 return Err("Incomplete OMML fraction".into());
@@ -522,9 +539,11 @@ fn ast_to_omml(node: &LatexNode) -> String {
                         ast_to_omml(&args[1])
                     )
                 }
+                "%" | "&" | "#" | "_" | "$" | "{" | "}" | "backslash" | "textasciicircum" | "textasciitilde" => wrap_normal_mtext(crate::latex_utils::literal_command_symbol(name).expect("matched literal command")),
+                _ if name.starts_with("begin{") => wrap_normal_mtext(&args.first().map(ToString::to_string).unwrap_or_default()),
                 "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" => {
                     let text = extract_text_from_args(args);
-                    wrap_normal_mtext(&text)
+                    wrap_normal_mtext(&crate::latex_utils::decode_text_symbols(&text))
                 }
                 "substack" => {
                     let rows = args.iter().map(|row| format!("<m:e>{}</m:e>", ast_to_omml(row)))
@@ -2170,7 +2189,11 @@ mod tests {
     fn trigonometric_function_owns_its_argument() {
         let r = latex_to_omml("\\frac{\\sin x}{x}");
         assert!(r.contains("<m:func>"), "{r}");
-        assert!(r.contains("<m:e><m:r><m:t> x</m:t></m:r></m:e>"), "{r}");
+        assert!(r.contains("<m:e><m:r><m:t>x</m:t></m:r></m:e>"), "{r}");
+        assert!(
+            !r.contains("<m:t> x</m:t>"),
+            "Control-word separator became visible: {r}"
+        );
         assert!(!r.contains("<m:e/>"), "{r}");
     }
 

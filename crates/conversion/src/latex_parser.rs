@@ -71,6 +71,10 @@ impl LatexParser {
         }
 
         match self.chars[self.pos] {
+            '%' => {
+                self.skip_comment();
+                None
+            }
             '\\' => {
                 self.pos += 1;
                 self.parse_command()
@@ -144,8 +148,8 @@ impl LatexParser {
                 let start = self.pos;
                 while self.pos < self.chars.len() {
                     match self.chars[self.pos] {
-                        '\\' | '{' | '}' | '$' | '^' | '_' | ' ' | '(' | ')' | '[' | ']' | ':'
-                        | ',' | ';' | '+' | '-' | '=' | '<' | '>' | '/' | '*' | '|' => break,
+                        '\\' | '{' | '}' | '$' | '^' | '_' | '%' | ' ' | '(' | ')' | '[' | ']'
+                        | ':' | ',' | ';' | '+' | '-' | '=' | '<' | '>' | '/' | '*' | '|' => break,
                         _ => self.pos += 1,
                     }
                 }
@@ -174,9 +178,7 @@ impl LatexParser {
                     continue;
                 }
                 '%' => {
-                    while self.pos < self.chars.len() && self.chars[self.pos] != '\n' {
-                        self.pos += 1;
-                    }
+                    self.skip_comment();
                     continue;
                 }
                 '{' => depth += 1,
@@ -197,8 +199,8 @@ impl LatexParser {
         let start = self.pos;
         while self.pos < self.chars.len() {
             match self.chars[self.pos] {
-                '\\' | '{' | '}' | '$' | '^' | '_' | ':' | ',' | ';' | '+' | '-' | '=' | '<'
-                | '>' | '/' | '*' | '|' => break,
+                '\\' | '{' | '}' | '$' | '^' | '_' | '%' | ':' | ',' | ';' | '+' | '-' | '='
+                | '<' | '>' | '/' | '*' | '|' => break,
                 _ => self.pos += 1,
             }
         }
@@ -230,6 +232,10 @@ impl LatexParser {
                 ':' => Some(LatexNode::Symbol(":".to_string())),
                 // \! is a negative thin space, not an exclamation mark
                 '!' => Some(LatexNode::Symbol("!".to_string())),
+                '%' | '&' | '#' | '_' | '$' | '{' | '}' => Some(LatexNode::Command {
+                    name: ch.to_string(),
+                    args: Vec::new(),
+                }),
                 '(' | ')' | '[' | ']' => Some(LatexNode::Text(ch.to_string())),
                 _ => Some(LatexNode::Text(ch.to_string())),
             };
@@ -241,7 +247,18 @@ impl LatexParser {
         }
 
         let cmd: String = self.chars[start..self.pos].iter().collect();
+        // A TeX control word consumes its following space/comment separator.
+        self.skip_whitespace();
 
+        if crate::latex_utils::literal_command_symbol(&cmd).is_some() {
+            if self.chars.get(self.pos..self.pos + 2) == Some(&['{', '}']) {
+                self.pos += 2;
+            }
+            return Some(LatexNode::Command {
+                name: cmd,
+                args: Vec::new(),
+            });
+        }
         match cmd.as_str() {
             // Greek letters
             "alpha" | "beta" | "gamma" | "delta" | "epsilon" | "varepsilon" | "zeta" | "eta"
@@ -336,14 +353,35 @@ impl LatexParser {
             }
             // Square root
             "sqrt" => {
+                self.skip_whitespace();
                 let mut index = None;
                 if self.pos < self.chars.len() && self.chars[self.pos] == '[' {
                     self.pos += 1;
                     let start = self.pos;
-                    while self.pos < self.chars.len() && self.chars[self.pos] != ']' {
+                    let mut groups = 0usize;
+                    while self.pos < self.chars.len() {
+                        match self.chars[self.pos] {
+                            '%' => {
+                                self.skip_comment();
+                                continue;
+                            }
+                            '\\' if self
+                                .chars
+                                .get(self.pos + 1)
+                                .is_some_and(|ch| !ch.is_ascii_alphabetic()) =>
+                            {
+                                self.pos += 2;
+                                continue;
+                            }
+                            '{' => groups += 1,
+                            '}' => groups = groups.saturating_sub(1),
+                            ']' if groups == 0 => break,
+                            _ => {}
+                        }
                         self.pos += 1;
                     }
-                    let idx_text: String = self.chars[start..self.pos].iter().collect();
+                    let raw: String = self.chars[start..self.pos].iter().collect();
+                    let idx_text = crate::latex_utils::without_comments(&raw).into_owned();
                     if !idx_text.is_empty() {
                         index = Some(Box::new(LatexNode::Text(idx_text)));
                     }
@@ -483,31 +521,8 @@ impl LatexParser {
             }
             // Text commands
             "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" | "underline" => {
-                let mut content_str = String::new();
-                if self.pos < self.chars.len() && self.chars[self.pos] == '{' {
-                    self.pos += 1;
-                    let start = self.pos;
-                    let mut depth = 0i32;
-                    while self.pos < self.chars.len() {
-                        match self.chars[self.pos] {
-                            '{' => {
-                                depth += 1;
-                            }
-                            '}' if depth == 0 => {
-                                break;
-                            }
-                            '}' => {
-                                depth -= 1;
-                            }
-                            _ => {}
-                        }
-                        self.pos += 1;
-                    }
-                    content_str = self.chars[start..self.pos].iter().collect();
-                    if self.pos < self.chars.len() {
-                        self.pos += 1; // consume '}'
-                    }
-                }
+                let raw = self.parse_group_text();
+                let content_str = crate::latex_utils::without_comments(&raw).into_owned();
                 let content = LatexNode::Text(content_str);
                 Some(LatexNode::Command {
                     name: cmd,
@@ -606,7 +621,7 @@ impl LatexParser {
                 })
             }
             // Matrix environments
-            "begin" => self.parse_environment(),
+            "begin" => self.parse_environment(start - 1),
             // \left ... \right
             "left" => self.parse_delimited(),
             // Standalone commands
@@ -619,7 +634,7 @@ impl LatexParser {
         }
     }
 
-    fn parse_environment(&mut self) -> Option<LatexNode> {
+    fn parse_environment(&mut self, raw_start: usize) -> Option<LatexNode> {
         // We already consumed \begin, now read {envname}
         self.skip_whitespace();
         if self.pos >= self.chars.len() || self.chars[self.pos] != '{' {
@@ -646,6 +661,7 @@ impl LatexParser {
         let content = self.parse_until_begin_end(&env_name);
 
         match env_name.as_str() {
+            "document" => Some(LatexParser::new(&content).parse()),
             "matrix" | "pmatrix" | "bmatrix" | "Bmatrix" | "vmatrix" | "Vmatrix"
             | "smallmatrix" => {
                 let rows = Self::parse_matrix_content(&content);
@@ -712,12 +728,12 @@ impl LatexParser {
                 })
             }
             _ => {
-                // Unknown environment — treat content as a group
-                let mut parser = LatexParser::new(&content);
-                let nodes = parser.parse();
+                // Unknown environments are opaque source, not successfully converted math.
                 Some(LatexNode::Command {
                     name: format!("begin{{{}}}", env_name),
-                    args: vec![nodes],
+                    args: vec![LatexNode::Text(
+                        self.chars[raw_start..self.pos].iter().collect(),
+                    )],
                 })
             }
         }
@@ -806,6 +822,22 @@ impl LatexParser {
         let mut content_str = String::new();
         let mut right_char = '\0';
         while self.pos < self.chars.len() {
+            if self.chars[self.pos] == '%' {
+                let start = self.pos;
+                self.skip_comment();
+                content_str.extend(self.chars[start..self.pos].iter());
+                continue;
+            }
+            if self.chars[self.pos] == '\\'
+                && self
+                    .chars
+                    .get(self.pos + 1)
+                    .is_some_and(|ch| !ch.is_ascii_alphabetic())
+            {
+                content_str.extend(self.chars[self.pos..self.pos + 2].iter());
+                self.pos += 2;
+                continue;
+            }
             if self.pos + 5 < self.chars.len() {
                 let next_six: String = self.chars[self.pos..].iter().take(6).collect();
                 if next_six.starts_with("\\right") {
@@ -825,21 +857,10 @@ impl LatexParser {
             self.pos += 1;
         }
 
-        let right = match right_char {
-            '(' => "(",
-            ')' => ")",
-            '[' => "[",
-            ']' => "]",
-            '{' => "{",
-            '}' => "}",
-            '|' => "|",
-            '.' => ".",  // invisible
-            '\0' => ".", // default
-            c => {
-                // For any other character (like \rangle), represent it
-                let s = c.to_string();
-                Box::leak(s.into_boxed_str())
-            }
+        let right = if right_char == '\0' {
+            ".".to_string()
+        } else {
+            right_char.to_string()
         };
 
         let mut parser = LatexParser::new(&content_str);
@@ -861,8 +882,19 @@ impl LatexParser {
         let mut environments: Vec<String> = Vec::new();
 
         while self.pos < self.chars.len() {
-            if self.chars[self.pos] == '\\' && self.chars.get(self.pos + 1) == Some(&'\\') {
-                result.push_str("\\\\");
+            if self.chars[self.pos] == '%' {
+                let start = self.pos;
+                self.skip_comment();
+                result.extend(self.chars[start..self.pos].iter());
+                continue;
+            }
+            if self.chars[self.pos] == '\\'
+                && self
+                    .chars
+                    .get(self.pos + 1)
+                    .is_some_and(|ch| !ch.is_ascii_alphabetic())
+            {
+                result.extend(self.chars[self.pos..self.pos + 2].iter());
                 self.pos += 2;
                 continue;
             }
@@ -897,21 +929,56 @@ impl LatexParser {
             return None;
         };
         let mut pos = command_len;
-        while remaining
-            .get(pos)
-            .is_some_and(|character| character.is_whitespace())
-        {
-            pos += 1;
+        loop {
+            if remaining.get(pos).is_some_and(|ch| ch.is_whitespace()) {
+                pos += 1;
+            } else if remaining.get(pos) == Some(&'%') {
+                while remaining
+                    .get(pos)
+                    .is_some_and(|ch| !matches!(ch, '\n' | '\r'))
+                {
+                    pos += 1;
+                }
+            } else {
+                break;
+            }
         }
         if remaining.get(pos) != Some(&'{') {
             return None;
         }
-        let start = pos + 1;
-        let end = start
-            + remaining[start..]
-                .iter()
-                .position(|character| *character == '}')?;
-        Some((begin, remaining[start..end].iter().collect(), end + 1))
+        pos += 1;
+        let mut name = String::new();
+        while let Some(ch) = remaining.get(pos) {
+            match ch {
+                '%' => {
+                    while remaining
+                        .get(pos)
+                        .is_some_and(|ch| !matches!(ch, '\n' | '\r'))
+                    {
+                        pos += 1;
+                    }
+                    if remaining.get(pos) == Some(&'\r') {
+                        pos += 1;
+                    }
+                    if remaining.get(pos) == Some(&'\n') {
+                        pos += 1;
+                    }
+                    while remaining
+                        .get(pos)
+                        .is_some_and(|ch| matches!(ch, ' ' | '\t'))
+                    {
+                        pos += 1;
+                    }
+                }
+                '}' => return Some((begin, name, pos + 1)),
+                '\\' | '{' => return None,
+                _ => {
+                    name.push(*ch);
+                    pos += 1;
+                }
+            }
+        }
+        None
     }
 
     fn parse_matrix_content(content: &str) -> Vec<Vec<LatexNode>> {
@@ -930,12 +997,29 @@ impl LatexParser {
             if self.chars[self.pos].is_whitespace() {
                 self.pos += 1;
             } else if self.chars[self.pos] == '%' {
-                while self.pos < self.chars.len() && self.chars[self.pos] != '\n' {
-                    self.pos += 1;
-                }
+                self.skip_comment();
             } else {
                 break;
             }
+        }
+    }
+
+    fn skip_comment(&mut self) {
+        while self.pos < self.chars.len() && !matches!(self.chars[self.pos], '\n' | '\r') {
+            self.pos += 1;
+        }
+        if self.chars.get(self.pos) == Some(&'\r') {
+            self.pos += 1;
+        }
+        if self.chars.get(self.pos) == Some(&'\n') {
+            self.pos += 1;
+        }
+        while self
+            .chars
+            .get(self.pos)
+            .is_some_and(|ch| matches!(ch, ' ' | '\t'))
+        {
+            self.pos += 1;
         }
     }
 

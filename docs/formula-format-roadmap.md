@@ -13,7 +13,7 @@ VSTO 不是公式格式；本应用 OLE 不等于 MathType 对象。
 | 编号 | 当前状态 | 剩余工作 |
 | --- | --- | --- |
 | FMT-01 | 基础完成：Rust/C/Python/WASM-JS 已有方向和模式能力投影 | 随新格式同步注册表与绑定；严格支持仍是有限 LaTeX→OMML 子集 |
-| FMT-02 | 进行中：array 原始列规格与有界常用语法已保留 | 补正文注释/定界符、复杂命令、星号多行环境及高级列修饰；明确不支持诊断 |
+| FMT-02 | 进行中：常用 array 与默认注释语法、原始区间和字面字符保护已有 | 补复杂/嵌套/命名定界符、复杂命令、星号多行环境及高级列修饰；不执行宏或动态 catcode |
 | FMT-03 | 进行中：array 常用列对齐/补空及有限竖线映射已有 | 继续分式、多行、上下标及样式；高级 array 和共享图像布局不由有限导出代表 |
 | FMT-04 | 进行中：OMML/MathML 常用数组列属性可重建，Word 三入口保存/重开结构已验证 | 补安装版与其他 XML/字体/布局；SVG 文本位置与裁切单独处理 |
 | FMT-05 | UnicodeMath/AsciiMath 各有独立有限 experimental parser | 扩大语法与损失范围，接入正式输入/输出注册表、各绑定与 Office UI |
@@ -41,6 +41,7 @@ VSTO 不是公式格式；本应用 OLE 不等于 MathType 对象。
 
 - [生成能力矩阵](generated/formula-capabilities.md)
 - [Array 列规格与布局边界](formats/array-column-layout.md)
+- [注释、定界符与源信息](formats/latex-comment-source.md)
 - [AsciiMath 边界](formats/asciimath-pilot.md)
 - [UnicodeMath 边界](formats/unicodemath-pilot.md)
 - [MTEF 只读边界](formats/mtef-readonly.md)

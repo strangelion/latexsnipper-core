@@ -153,6 +153,14 @@ fn convert_inline_to_mathml(inline: &Inline, mode: &MathmlMode) -> String {
 
 fn latex_to_mathml(latex: &str) -> String {
     let latex = latex.trim();
+    // Preserve raw column specifications in array fallbacks before lexical projection.
+    if latex.contains("\\begin") {
+        if let Some(rendered) = render_matrix_node(&crate::latex_parser::parse_latex(latex)) {
+            return rendered;
+        }
+    }
+    let lexical_source = crate::latex_utils::without_comments(latex);
+    let latex = lexical_source.trim();
     if let Some(rendered) = render_finite_symbol_expression(latex) {
         return rendered;
     }
@@ -162,12 +170,6 @@ fn latex_to_mathml(latex: &str) -> String {
             if end == chars.len() {
                 return format!("<mrow>{}</mrow>", latex_to_mathml(&inner));
             }
-        }
-    }
-
-    if latex.contains("\\begin") {
-        if let Some(rendered) = render_matrix_node(&crate::latex_parser::parse_latex(latex)) {
-            return rendered;
         }
     }
 
@@ -235,7 +237,10 @@ fn latex_to_mathml(latex: &str) -> String {
     }
     if let Some(content) = latex.strip_prefix("\\text{") {
         let inner = content.strip_suffix('}').unwrap_or(content);
-        return format!("<mtext>{}</mtext>", xml_escape(inner));
+        return format!(
+            "<mtext>{}</mtext>",
+            xml_escape(&crate::latex_utils::decode_text_symbols(inner))
+        );
     }
     // \mathbb{...} → <mi mathvariant="double-struck">
     if let Some(content) = latex.strip_prefix("\\mathbb{") {
@@ -990,7 +995,10 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
                     continue;
                 };
                 flush_mathml_plain(&mut output, &mut plain);
-                output.push_str(&format!("<mtext>{}</mtext>", xml_escape(&inner)));
+                output.push_str(&format!(
+                    "<mtext>{}</mtext>",
+                    xml_escape(&crate::latex_utils::decode_text_symbols(&inner))
+                ));
                 pos = after_inner;
                 found_style = true;
             }
@@ -1162,6 +1170,16 @@ fn mathml_color_name(name: &str) -> String {
 
 fn map_symbol_mathml(latex: &str) -> Option<&str> {
     match latex {
+        "\\%" => Some("<mo>%</mo>"),
+        "\\&" => Some("<mo>&amp;</mo>"),
+        "\\#" => Some("<mo>#</mo>"),
+        "\\_" => Some("<mo>_</mo>"),
+        "\\$" => Some("<mo>$</mo>"),
+        "\\{" => Some("<mo>{</mo>"),
+        "\\}" => Some("<mo>}</mo>"),
+        "\\backslash" => Some("<mo>\\</mo>"),
+        "\\textasciicircum" => Some("<mo>^</mo>"),
+        "\\textasciitilde" => Some("<mo>~</mo>"),
         "\\alpha" | "alpha" => Some("<mi>\u{03B1}</mi>"),
         "\\beta" | "beta" => Some("<mi>\u{03B2}</mi>"),
         "\\gamma" | "gamma" => Some("<mi>\u{03B3}</mi>"),
@@ -1415,6 +1433,10 @@ fn matrix_to_mathml(content: &str, delimiters: Option<(&str, &str)>) -> String {
 fn render_matrix_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
     use crate::latex_ast::LatexNode;
     match node {
+        LatexNode::Command { name, args } if name.starts_with("begin{") => Some(format!(
+            "<mtext>{}</mtext>",
+            xml_escape(&args.first().map(ToString::to_string).unwrap_or_default())
+        )),
         LatexNode::Array { column_spec, rows } => {
             let fallback = || format!("<mtext>{}</mtext>", xml_escape(&node.to_string()));
             let Ok(columns) = crate::array_columns::parse_columns(column_spec) else {

@@ -205,12 +205,18 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             } else if text.len() == 1 && text.chars().next().is_some_and(|c| c.is_alphabetic()) {
                 text.to_string()
             } else {
-                format!("\\mathrm{{{}}}", text)
+                format!(
+                    "\\mathrm{{{}}}",
+                    crate::latex_utils::escape_text_symbols(text)
+                )
             }
         }
-        "mn" => text.to_string(),
+        "mn" => crate::latex_utils::escape_text_symbols(text),
         "mo" => map_operator(text),
-        "mtext" | "ms" => format!("\\text{{{}}}", text),
+        "mtext" | "ms" => format!(
+            "\\text{{{}}}",
+            crate::latex_utils::escape_text_symbols(text)
+        ),
         "mspace" => "\\quad".to_string(),
 
         "mfrac" => {
@@ -582,6 +588,9 @@ fn is_greek(s: &str) -> bool {
 
 fn map_operator(text: &str) -> String {
     match text {
+        "%" | "&" | "#" | "_" | "$" | "{" | "}" | "\\" | "^" | "~" => {
+            crate::latex_utils::escape_text_symbols(text)
+        }
         "+" | "\u{2212}" | "\u{2B0}" => text.to_string(),
         "\u{00D7}" | "\u{2717}" => "\\times ".to_string(),
         "\u{00F7}" | "\u{2215}" => "\\div ".to_string(),
@@ -633,7 +642,7 @@ fn map_operator(text: &str) -> String {
         "\u{2228}" => "\\vee ".to_string(),
         "\u{2234}" => "\\therefore ".to_string(),
         "\u{2235}" => "\\because ".to_string(),
-        "(" | ")" | "[" | "]" | "{" | "}" | "||" => text.to_string(),
+        "(" | ")" | "[" | "]" | "||" => text.to_string(),
         _ => {
             if text.len() == 1 {
                 text.to_string()

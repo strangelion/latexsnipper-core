@@ -180,6 +180,8 @@ fn exported_arrays_compile_with_local_typst() {
         r"\begin{array}{>{\bfseries}p{2cm}}x\end{array}",
         r"\begin{array}{lc}\text{total}&\operatorname{rank}A\end{array}",
         r"A^{\overrightarrow{BC}}",
+        "\\begin{array}{lc}50\\%&\\text{a\\%b\\&c}\\\\% FAKE & \\end{array}\n\\alpha x&\\frac{a}{b}\\end{array}",
+        r"\text{literal \backslash{}frac\%+x\textasciicircum{}y\textasciitilde{}z}",
     ];
     let output = sources
         .iter()

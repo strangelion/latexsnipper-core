@@ -336,7 +336,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
             result
         }
-        "t" => _text.to_string(),
+        "t" => crate::latex_utils::escape_text_symbols(_text),
         "f" => {
             let (num, den) = get_two(children);
             format!("\\frac{{{}}}{{{}}}", num, den)
@@ -979,7 +979,7 @@ fn build_omml_layout_node(
         "r" => {
             if !text.is_empty() {
                 FormulaNode::Symbol(SymbolInfo {
-                    latex: text.to_string(),
+                    latex: crate::latex_utils::escape_text_symbols(text),
                     category: SymbolCategory::Letter,
                     rect: None,
                     confidence: 1.0,
@@ -1048,7 +1048,7 @@ fn build_omml_layout_node(
         _ => {
             if children.is_empty() && !text.is_empty() {
                 FormulaNode::Symbol(SymbolInfo {
-                    latex: text.to_string(),
+                    latex: crate::latex_utils::escape_text_symbols(text),
                     category: SymbolCategory::Letter,
                     rect: None,
                     confidence: 1.0,
@@ -1111,7 +1111,7 @@ fn find_nary_chr(children: &[latexsnipper_ast::FormulaNode]) -> String {
 fn make_symbol_from_text(text: &str) -> latexsnipper_ast::FormulaNode {
     use latexsnipper_ast::{SymbolCategory, SymbolInfo};
     latexsnipper_ast::FormulaNode::Symbol(SymbolInfo {
-        latex: text.to_string(),
+        latex: crate::latex_utils::escape_text_symbols(text),
         category: SymbolCategory::Letter,
         rect: None,
         confidence: 1.0,
