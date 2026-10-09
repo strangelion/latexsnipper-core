@@ -35,5 +35,10 @@
 - 本地 Typst 0.15.1 编译并目视检查 9 个实例，追加含注释数组、百分号和字面代码。
   忽略的渲染目录 `target/array-column-typst-1791556359193882700/`，PNG SHA-256：
   `510c43df0c21e8c98e3f8ec22a075fe12853c11744cbf808d83abe705c5c4e40`。
+- Office 使用 Core `dfbc1ac` 生成的 8 个数组样例通过隐藏 Word 16.0 三入口共 24 项插入、保存/只读重开验收。
+  原始注释源码、列布局和数学文字保持；包含百分号、字面反斜杠及控制词注释边界。
+  Word 的同属性相邻 run 合并误拒绝已在宿主层修复，仍保留操作数/单元格、属性、结构和身份门禁。
+  原生/auto/PNG/受管 SVG 复制回归同时通过，详细证据见
+  [Office 数组与源读入报告](https://github.com/strangelion/LaTeXSnipper-Office/blob/main/docs/office/array-column-layout-20261009.md)。
 
 这些不是完整 TeX 字体/间距等价证明，也不替代安装版 Office、所有 DPI 或 10000 条真实文档验收。
