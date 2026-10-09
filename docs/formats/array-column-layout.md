@@ -43,7 +43,10 @@ cargo test --locked -p latexsnipper-conversion --no-default-features --test arra
 可用 `LATEXSNIPPER_TYPST_TEST_BIN` 指定本机编译器。
 渲染产物在忽略的 `target/array-column-typst-*` 下，不向版本库提交机器路径或图片。
 最后一次 7 例渲染 PNG SHA-256：`3fdfeaf17a22b79742a9fe855683bcac8b88f9694e67292462bbd266bcdd30d2`。
-该批尚未以真实 Word 保存/重开证明逐列属性，不能将转换或 Typst 证据写成安装版 Office 验收。
+后续隐藏 x64 Word 16.0 生产适配器验证：6 例 × 行内/显示/编号共 18 项，插入、保存及只读重开后
+列组展开、行/格数及源码身份保持一致。Office 同时修复编号表格导出的生成 `rsidTr` 导致的源读入误拒绝。
+见 [Office 专项](https://github.com/strangelion/LaTeXSnipper-Office/blob/main/docs/office/array-column-layout-20261009.md)。
+该证据不代表安装版加载、Word 字体观感、x86 或全部 DPI；不将结构或 Typst 证据写成完整 Office 排版验收。
 
 ## 规范依据
 
