@@ -98,6 +98,28 @@ fn local(name: &[u8]) -> String {
     s.split(':').next_back().unwrap_or(&s).to_string()
 }
 
+fn attribute_value(
+    element: &quick_xml::events::BytesStart<'_>,
+    decoder: quick_xml::encoding::Decoder,
+) -> Result<Option<String>, String> {
+    let mut value = None;
+    for attribute in element.attributes() {
+        let attribute = attribute.map_err(|error| error.to_string())?;
+        if local(attribute.key.as_ref()) == "val" {
+            if value.is_some() {
+                return Err("Ambiguous OMML value attribute".into());
+            }
+            value = Some(
+                attribute
+                    .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, decoder)
+                    .map_err(|error| error.to_string())?
+                    .into_owned(),
+            );
+        }
+    }
+    Ok(value)
+}
+
 fn parse_inner(xml: &str) -> Result<String, String> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
@@ -109,7 +131,14 @@ fn parse_inner(xml: &str) -> Result<String, String> {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
                 let tag = local(e.name().as_ref());
-                stack.push((tag, Vec::new()));
+                let children = if matches!(tag.as_str(), "count" | "mcJc") {
+                    attribute_value(&e, reader.decoder())?
+                        .map(|value| vec![("$val".into(), value)])
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                stack.push((tag, children));
                 text_buf.clear();
             }
             Ok(Event::Text(e)) => {
@@ -126,12 +155,12 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                 if tag.starts_with("xmlns") {
                     continue;
                 }
-                let val = e
-                    .attributes()
-                    .flatten()
-                    .find(|a| local(a.key.as_ref()) == "val")
-                    .map(|a| String::from_utf8_lossy(&a.value).to_string())
-                    .unwrap_or_default();
+                let val = attribute_value(&e, reader.decoder())?.unwrap_or_default();
+                let val = if matches!(tag.as_str(), "mc" | "mcPr") {
+                    "c".into()
+                } else {
+                    val
+                };
                 let val = if tag == "spacing" {
                     match val.as_str() {
                         "1" => "\\quad ".to_owned(),
@@ -151,6 +180,52 @@ fn parse_inner(xml: &str) -> Result<String, String> {
             }
             Ok(Event::End(_)) => {
                 if let Some((tag, tagged_children)) = stack.pop() {
+                    let unique_properties: &[&str] = match tag.as_str() {
+                        "mcPr" => &["count", "mcJc"],
+                        "mc" => &["mcPr"],
+                        "mPr" => &["mcs"],
+                        "m" => &["mPr"],
+                        _ => &[],
+                    };
+                    for property in unique_properties {
+                        if tagged_children
+                            .iter()
+                            .filter(|(name, _)| name == property)
+                            .count()
+                            > 1
+                        {
+                            return Err("Ambiguous OMML matrix column properties".into());
+                        }
+                    }
+                    if tag == "mcs"
+                        && tagged_children
+                            .iter()
+                            .filter(|(tag, _)| tag == "mc")
+                            .map(|(_, value)| value.len())
+                            .sum::<usize>()
+                            > 128
+                    {
+                        return Err("OMML expanded matrix column count exceeds 128".into());
+                    }
+                    if tag == "mcPr" {
+                        let count = get_child(&tagged_children, "count");
+                        let count = if count.is_empty() {
+                            1
+                        } else {
+                            count
+                                .parse::<usize>()
+                                .map_err(|_| "Invalid OMML matrix column count")?
+                        };
+                        if count == 0 || count > 128 {
+                            return Err(
+                                "OMML matrix column count exceeds the supported bound".into()
+                            );
+                        }
+                        let alignment = get_child(&tagged_children, "mcJc");
+                        if !matches!(alignment.as_str(), "" | "left" | "center" | "right") {
+                            return Err("Unsupported OMML matrix column alignment".into());
+                        }
+                    }
                     let text = text_buf.clone();
                     text_buf.clear();
 
@@ -356,6 +431,14 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     return format!("\\begin{{{env}}} {body} \\end{{{env}}}");
                 }
             }
+            if joined.contains("\\begin{array}") {
+                // Do not replace explicit per-column layout with a delimiter matrix.
+                return format!(
+                    "\\left{}{joined}\\right{}",
+                    if beg.is_empty() { "." } else { &beg },
+                    if end.is_empty() { "." } else { &end }
+                );
+            }
             if joined.contains("\\begin{matrix}") {
                 // Retain nested or adjacent matrices instead of inferring a new outer table.
                 return format!("{beg}{joined}{end}");
@@ -442,7 +525,40 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     .collect::<Vec<_>>()
                     .join(" & ")
             };
-            format!("\\begin{{matrix}} {body} \\end{{matrix}}")
+            let columns = get_child(children, "mPr");
+            if columns.is_empty() {
+                format!("\\begin{{matrix}} {body} \\end{{matrix}}")
+            } else {
+                format!("\\begin{{array}}{{{columns}}}{body}\\end{{array}}")
+            }
+        }
+        "mPr" => get_child(children, "mcs"),
+        "count" | "mcJc" => get_child(children, "$val"),
+        "mcs" => children
+            .iter()
+            .filter(|(tag, _)| tag == "mc")
+            .map(|(_, value)| value.as_str())
+            .collect(),
+        "mc" => {
+            let properties = get_child(children, "mcPr");
+            if properties.is_empty() {
+                "c".into()
+            } else {
+                properties
+            }
+        }
+        "mcPr" => {
+            let count = get_child(children, "count")
+                .parse::<usize>()
+                .unwrap_or(1)
+                .min(128);
+            let alignment = get_child(children, "mcJc");
+            match alignment.as_str() {
+                "left" => "l",
+                "right" => "r",
+                _ => "c",
+            }
+            .repeat(count)
         }
         "mr" | "mRow" => {
             let cells: Vec<String> = children

@@ -363,7 +363,7 @@ fn typst_symbol_preservation() {
         (r"\sqrt[3]{x}", "root(3, x)"),
         (r"\binom{n}{k}", "binom(n, k)"),
         (r"\hat{x}", "hat(x)"),
-        (r"\vec{v}", "vec(v)"),
+        (r"\vec{v}", "arrow(v)"),
         (r"\sum", "sum"),
         (r"\int", "integral"),
     ];
@@ -671,7 +671,7 @@ fn common_formula_format_integrity_suite() {
             r"\hat{x}+\vec{v}+A\implies B",
             &["<m:acc>", "\u{21D2}"][..],
             &["<mover>", "\u{21D2}"][..],
-            &["hat(x)", "vec(v)", "arrow.r.double"][..],
+            &["hat(x)", "arrow(v)", "arrow.r.double"][..],
             &["\\hat{x}", "\\vec{v}", "\u{21D2}"][..],
         ),
         (

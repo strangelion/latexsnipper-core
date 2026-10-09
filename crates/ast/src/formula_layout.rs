@@ -195,6 +195,9 @@ pub struct EnvInfo {
     pub name: String,
     /// Content inside the environment.
     pub content: Vec<Vec<FormulaNode>>,
+    /// Raw array column specification, separate from mathematical row content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_spec: Option<String>,
 }
 
 impl FormulaLayout {
@@ -251,8 +254,13 @@ fn canonical_latex(node: &FormulaNode) -> String {
                 .map(|row| row.iter().map(canonical_latex).collect::<String>())
                 .collect();
             format!(
-                "\\begin{{{}}}{}\\end{{{}}}",
+                "\\begin{{{}}}{}{}\\end{{{}}}",
                 environment.name,
+                environment
+                    .column_spec
+                    .as_ref()
+                    .map(|spec| format!("{{{spec}}}"))
+                    .unwrap_or_default(),
                 rows.join("\\\\"),
                 environment.name
             )
@@ -338,6 +346,7 @@ impl EnvInfo {
         Self {
             name: name.into(),
             content: Vec::new(),
+            column_spec: None,
         }
     }
 
@@ -413,6 +422,29 @@ mod tests {
         });
         let value = serde_json::to_value(annotated).unwrap();
         assert_eq!(value["semantic_annotations"][0]["role"], "function_call");
+    }
+
+    #[test]
+    fn array_column_spec_is_optional_and_separate_in_the_wire_shape() {
+        let legacy: EnvInfo = serde_json::from_str(r#"{"name":"matrix","content":[]}"#).unwrap();
+        assert!(legacy.column_spec.is_none());
+        assert!(serde_json::to_value(&legacy)
+            .unwrap()
+            .get("column_spec")
+            .is_none());
+
+        let mut array = EnvInfo::new("array");
+        array.column_spec = Some("*{2}{lr}".into());
+        array
+            .content
+            .push(vec![FormulaNode::Text("a&b&c&d".into())]);
+        let json = serde_json::to_string(&array).unwrap();
+        let restored: EnvInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.column_spec.as_deref(), Some("*{2}{lr}"));
+        assert_eq!(
+            canonical_latex(&FormulaNode::Environment(restored)),
+            r"\begin{array}{*{2}{lr}}a&b&c&d\end{array}"
+        );
     }
 
     #[test]

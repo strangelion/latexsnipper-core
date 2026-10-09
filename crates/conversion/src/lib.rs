@@ -1,3 +1,4 @@
+mod array_columns;
 pub mod asciimath_pilot;
 pub mod asset_helper;
 pub mod asset_resolver;
@@ -708,7 +709,7 @@ mod tests {
                 latex: "x^{\\vec v}",
                 omml: &["<m:sSup>", "<m:acc>", "<m:t>v</m:t>"],
                 mathml: &["<msup>", "<mover>", "<mi>v</mi>", "→"],
-                typst: &["x^(vec(v))"],
+                typst: &["x^(arrow(v))"],
             },
             Case {
                 latex: "\\frac{\\alpha+\\beta}{\\sqrt{x_1^2}}",
@@ -742,7 +743,7 @@ mod tests {
                     "<mspace width=\"thinmathspace\"/>",
                     "<mi>dx</mi>",
                 ],
-                typst: &["integral", "vec(a)", "vec(b)", "f(x)", "dx"],
+                typst: &["integral", "arrow(a)", "arrow(b)", "f(x)", "d x"],
             },
             Case {
                 latex: "\\alpha \\leq \\beta \\neq \\gamma \\to \\infty",
@@ -813,7 +814,7 @@ mod tests {
 
         let mathml_typst =
             DocumentConverter::convert_mathml_string(mathml, OutputFormat::Typst).unwrap();
-        assert!(mathml_typst.contains("x^(vec(v))"), "{mathml_typst}");
+        assert!(mathml_typst.contains("x^(arrow(v))"), "{mathml_typst}");
     }
 
     #[test]
@@ -842,7 +843,7 @@ mod tests {
                 latex: "\\left(\\frac{a}{b}\\right)^{\\vec v}",
                 omml: &["<m:sSup>", "<m:d>", "<m:f>", "<m:acc>", "<m:t>v</m:t>"],
                 mathml: &["<msup>", "<mfenced", "<mfrac>", "<mover>", "<mi>v</mi>"],
-                typst: &["lr(", "frac(a, b)", "vec(v)"],
+                typst: &["lr(", "frac(a, b)", "arrow(v)"],
             },
             Case {
                 latex: "\\hat{x}+\\bar{y}+\\tilde{z}+\\dot{q}+\\ddot{r}+\\vec v",
@@ -854,7 +855,7 @@ mod tests {
                     "tilde(z)",
                     "dot(q)",
                     "dot.double(r)",
-                    "vec(v)",
+                    "arrow(v)",
                 ],
             },
             Case {
@@ -870,7 +871,7 @@ mod tests {
                     "<mo>∑</mo>",
                     "<mspace width=\"thinmathspace\"/>",
                 ],
-                typst: &["integral_", "sum_", "f(x)", "dx"],
+                typst: &["integral_", "sum_", "f(x)", "d x"],
             },
             Case {
                 latex: "\\frac{1}{\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}}",

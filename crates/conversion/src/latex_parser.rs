@@ -169,6 +169,16 @@ impl LatexParser {
         let mut depth = 0i32;
         while self.pos < self.chars.len() {
             match self.chars[self.pos] {
+                '\\' if self.pos + 1 < self.chars.len() => {
+                    self.pos += 2;
+                    continue;
+                }
+                '%' => {
+                    while self.pos < self.chars.len() && self.chars[self.pos] != '\n' {
+                        self.pos += 1;
+                    }
+                    continue;
+                }
                 '{' => depth += 1,
                 '}' if depth == 0 => break,
                 '}' => depth -= 1,
@@ -628,6 +638,11 @@ impl LatexParser {
             })
             .collect();
 
+        let column_spec = if env_name == "array" {
+            Some(self.parse_group_text())
+        } else {
+            None
+        };
         let content = self.parse_until_begin_end(&env_name);
 
         match env_name.as_str() {
@@ -652,8 +667,8 @@ impl LatexParser {
             }
             "array" => {
                 let rows = Self::parse_matrix_content(&content);
-                Some(LatexNode::Matrix {
-                    env: env_name,
+                Some(LatexNode::Array {
+                    column_spec: column_spec.unwrap_or_default(),
                     rows,
                 })
             }
@@ -911,8 +926,16 @@ impl LatexParser {
     }
 
     fn skip_whitespace(&mut self) {
-        while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
-            self.pos += 1;
+        while self.pos < self.chars.len() {
+            if self.chars[self.pos].is_whitespace() {
+                self.pos += 1;
+            } else if self.chars[self.pos] == '%' {
+                while self.pos < self.chars.len() && self.chars[self.pos] != '\n' {
+                    self.pos += 1;
+                }
+            } else {
+                break;
+            }
         }
     }
 

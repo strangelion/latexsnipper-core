@@ -58,6 +58,11 @@ pub enum LatexNode {
         env: String,
         rows: Vec<Vec<LatexNode>>,
     },
+    /// Array column source is kept separately from the first mathematical cell.
+    Array {
+        column_spec: String,
+        rows: Vec<Vec<LatexNode>>,
+    },
     /// Cases: \begin{cases} ... \end{cases}
     Cases(Vec<Vec<LatexNode>>),
     /// Description list item: `\item[label] content`.
@@ -283,6 +288,11 @@ impl std::fmt::Display for LatexNode {
             }
             LatexNode::FontModifier { font, content } => write!(f, "\\{}{{{}}}", font, content),
             LatexNode::Matrix { env, rows } => write_matrix(f, env, rows),
+            LatexNode::Array { column_spec, rows } => {
+                write!(f, "\\begin{{array}}{{{column_spec}}}")?;
+                write_matrix_rows(f, rows)?;
+                write!(f, "\\end{{array}}")
+            }
             LatexNode::Cases(rows) => write_matrix(f, "cases", rows),
             LatexNode::Accent { chr, content } => {
                 let name = match chr.as_str() {
@@ -430,6 +440,11 @@ fn write_matrix(
     rows: &[Vec<LatexNode>],
 ) -> std::fmt::Result {
     write!(f, "\\begin{{{env}}}")?;
+    write_matrix_rows(f, rows)?;
+    write!(f, "\\end{{{env}}}")
+}
+
+fn write_matrix_rows(f: &mut std::fmt::Formatter<'_>, rows: &[Vec<LatexNode>]) -> std::fmt::Result {
     for (row_index, row) in rows.iter().enumerate() {
         if row_index > 0 {
             write!(f, "\\\\")?;
@@ -441,5 +456,5 @@ fn write_matrix(
             write!(f, "{cell}")?;
         }
     }
-    write!(f, "\\end{{{env}}}")
+    Ok(())
 }

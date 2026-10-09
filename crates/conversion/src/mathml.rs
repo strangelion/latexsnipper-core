@@ -1415,6 +1415,59 @@ fn matrix_to_mathml(content: &str, delimiters: Option<(&str, &str)>) -> String {
 fn render_matrix_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
     use crate::latex_ast::LatexNode;
     match node {
+        LatexNode::Array { column_spec, rows } => {
+            let fallback = || format!("<mtext>{}</mtext>", xml_escape(&node.to_string()));
+            let Ok(columns) = crate::array_columns::parse_columns(column_spec) else {
+                return Some(fallback());
+            };
+            if columns.rules.iter().any(|count| *count > 1)
+                || rows.iter().any(|row| row.len() > columns.align.len())
+            {
+                return Some(fallback());
+            }
+            let body: String = rows
+                .iter()
+                .map(|row| {
+                    let cells: String = (0..columns.align.len())
+                        .map(|index| {
+                            let content = row
+                                .get(index)
+                                .map(|cell| {
+                                    render_matrix_node(cell)
+                                        .unwrap_or_else(|| latex_to_mathml(&cell.to_string()))
+                                })
+                                .unwrap_or_default();
+                            format!("<mtd><mrow>{content}</mrow></mtd>")
+                        })
+                        .collect();
+                    format!("<mtr>{cells}</mtr>")
+                })
+                .collect();
+            let lines = columns.rules[1..columns.align.len()]
+                .iter()
+                .map(|count| if *count == 0 { "none" } else { "solid" })
+                .collect::<Vec<_>>()
+                .join(" ");
+            let table = format!(
+                "<mtable columnalign=\"{}\" columnlines=\"{lines}\">{body}</mtable>",
+                columns.align.join(" ")
+            );
+            let mut notation = Vec::new();
+            if columns.rules[0] == 1 {
+                notation.push("left");
+            }
+            if *columns.rules.last().unwrap_or(&0) == 1 {
+                notation.push("right");
+            }
+            Some(if notation.is_empty() {
+                table
+            } else {
+                format!(
+                    "<menclose notation=\"{}\">{table}</menclose>",
+                    notation.join(" ")
+                )
+            })
+        }
         LatexNode::Matrix { env, rows } => {
             let (open, close) = match env.as_str() {
                 "matrix" | "smallmatrix" | "aligned" | "align" | "align*" | "gather"

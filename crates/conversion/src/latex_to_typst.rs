@@ -6,6 +6,13 @@ use crate::latex_ast::LatexNode;
 /// Convert a LaTeX AST node to Typst string.
 pub fn latex_ast_to_typst(node: &LatexNode) -> String {
     match node {
+        LatexNode::Text(s) if s.len() > 1 && s.bytes().all(|ch| ch.is_ascii_alphabetic()) => {
+            // Bare LaTeX letters are separate math atoms, not Typst identifiers.
+            s.chars()
+                .map(|ch| ch.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
         LatexNode::Text(s) => s.clone(),
         LatexNode::Sequence(nodes) => {
             let mut result = String::new();
@@ -112,6 +119,47 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 .collect();
             format!("{}({})", typst_fn, cell_rows.join("; "))
         }
+        LatexNode::Array { column_spec, rows } => {
+            let Ok(columns) = crate::array_columns::parse_columns(column_spec) else {
+                return format!(
+                    "#raw({}, lang: \"latex\")",
+                    serde_json::to_string(&node.to_string()).unwrap_or_default()
+                );
+            };
+            if columns.rules.iter().any(|count| *count > 1)
+                || rows.iter().any(|row| row.len() > columns.align.len())
+            {
+                return format!(
+                    "#raw({}, lang: \"latex\")",
+                    serde_json::to_string(&node.to_string()).unwrap_or_default()
+                );
+            }
+            let mut cells = Vec::new();
+            for (index, count) in columns.rules.iter().enumerate() {
+                if *count == 1 {
+                    cells.push(format!("grid.vline(x: {index}, stroke: 0.4pt)"));
+                }
+            }
+            for row in rows {
+                for index in 0..columns.align.len() {
+                    cells.push(format!(
+                        "${}$",
+                        row.get(index).map(latex_ast_to_typst).unwrap_or_default()
+                    ));
+                }
+            }
+            format!(
+                "#grid(columns: {}, align: ({}), column-gutter: 0.4em, row-gutter: 0.3em, {})",
+                columns.align.len(),
+                columns
+                    .align
+                    .iter()
+                    .map(|align| format!("{align},"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                cells.join(", ")
+            )
+        }
         LatexNode::Cases(rows) => {
             let cases: Vec<String> = rows
                 .iter()
@@ -140,13 +188,13 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 "\u{0308}" => format!("dot.double({})", inner),
                 "\u{030C}" | "\u{02C7}" => format!("check({})", inner),
                 "\u{0303}" | "\u{02DC}" => format!("tilde({})", inner),
-                "\u{20D7}" => format!("vec({})", inner),
+                "\u{20D7}" => format!("arrow({})", inner),
                 _ => format!("accent({})", inner),
             }
         }
         LatexNode::OperatorName { args, .. } => {
-            let text: String = args.iter().map(latex_ast_to_typst).collect();
-            format!("\"{}\"", text)
+            let text: String = args.iter().map(ToString::to_string).collect();
+            serde_json::to_string(&text).unwrap_or_default()
         }
         LatexNode::Overbrace { content, label } => {
             let inner = latex_ast_to_typst(content);
@@ -277,8 +325,7 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
         // Text commands
         "text" | "textbf" | "textit" => {
             if let Some(arg) = args.first() {
-                let text = latex_ast_to_typst(arg);
-                format!("\"{}\"", text)
+                serde_json::to_string(&arg.to_string()).unwrap_or_default()
             } else {
                 String::new()
             }
@@ -469,7 +516,8 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
         // Color
         "textcolor" => {
             if arg_str.len() >= 2 {
-                let color = arg_str[0].trim_matches('"');
+                let color = args[0].to_string();
+                let color = color.trim_matches('"');
                 let content = &arg_str[1];
                 format!("math.color({}, [{}])", color, content)
             } else {
@@ -478,7 +526,7 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
         }
         "color" => {
             if let Some(arg) = args.first() {
-                let color = latex_ast_to_typst(arg);
+                let color = arg.to_string();
                 format!("math.color({})", color)
             } else {
                 String::new()
@@ -542,7 +590,7 @@ fn convert_font_modifier(font: &str, inner: &str) -> String {
         "bar" | "overline" => format!("overline({})", inner),
         "hat" | "widehat" => format!("hat({})", inner),
         "tilde" | "widetilde" => format!("tilde({})", inner),
-        "vec" => format!("vec({})", inner),
+        "vec" => format!("arrow({})", inner),
         "dot" => format!("dot({})", inner),
         "ddot" => format!("dot.double({})", inner),
         "breve" => format!("breve({})", inner),
@@ -904,13 +952,25 @@ mod tests {
     #[test]
     fn vector_accents_own_braced_and_unbraced_arguments() {
         for (latex, expected) in [
-            ("x^{\\vec v}", "x^(vec(v))"),
-            ("x^{\\vec{v}}", "x^(vec(v))"),
-            ("A^{\\overrightarrow{BC}}", "A^(vec(BC))"),
+            ("x^{\\vec v}", "x^(arrow(v))"),
+            ("x^{\\vec{v}}", "x^(arrow(v))"),
+            ("A^{\\overrightarrow{BC}}", "A^(arrow(B C))"),
         ] {
             let result = latex_ast_to_typst(&parse_latex(latex));
             assert_eq!(result, expected, "{latex}");
         }
+    }
+
+    #[test]
+    fn bare_math_letters_do_not_change_explicit_text_operator_or_color_arguments() {
+        assert_eq!(latex_ast_to_typst(&parse_latex("abc")), "a b c");
+        assert_eq!(latex_ast_to_typst(&parse_latex(r"\text{abc}")), "\"abc\"");
+        assert_eq!(
+            latex_ast_to_typst(&parse_latex(r"\operatorname{rank}")),
+            "\"rank\""
+        );
+        assert!(latex_ast_to_typst(&parse_latex(r"\textcolor{red}{abc}")).contains("red"));
+        assert!(!latex_ast_to_typst(&parse_latex(r"\textcolor{red}{abc}")).contains("r e d"));
     }
 
     #[test]

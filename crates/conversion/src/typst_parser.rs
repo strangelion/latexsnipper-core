@@ -2,6 +2,15 @@
 /// Typst uses `frac(a,b)`, `sqrt(x)`, `mat(a,b; c,d)`, `hat(x)`, etc.
 pub fn parse_typst_to_latex(typst: &str) -> String {
     let s = typst.trim();
+    if let Some(inner) = s
+        .strip_prefix('$')
+        .and_then(|value| value.strip_suffix('$'))
+    {
+        // Only unwrap a single equation, not a mixed document or nested code math.
+        if !inner.contains('$') {
+            return convert_typst_expr(inner);
+        }
+    }
     convert_typst_expr(s)
 }
 
@@ -88,6 +97,10 @@ fn convert_typst_expr(s: &str) -> String {
             return format!("\\substack{{{}}}", rows.join("\\\\"));
         }
         return s.to_string();
+    }
+
+    if let Some(inner) = whole_call_body(s, "arrow(") {
+        return format!("\\vec{{{}}}", convert_typst_expr(inner));
     }
 
     if let Some(inner) = s.strip_prefix("vec(") {
@@ -635,6 +648,9 @@ mod tests {
 
     #[test]
     fn arrows() {
+        assert_eq!(parse_typst_to_latex("arrow(v)"), "\\vec{v}");
+        assert_eq!(parse_typst_to_latex("$ arrow(v) $"), "\\vec{v}");
+        assert_eq!(parse_typst_to_latex("arrow(B C)"), "\\vec{B C}");
         assert_eq!(parse_typst_to_latex("arrow.r"), "\\rightarrow ");
     }
 

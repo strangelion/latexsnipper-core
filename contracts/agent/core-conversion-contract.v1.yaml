@@ -3,6 +3,15 @@
   "name": "Conversion and Office output contract",
   "rules": [
     {
+      "id": "CORE-ARRAY-COLUMN-LAYOUT-001",
+      "description": "Array column source, common alignment, bounded repetitions and strict rejection stay independent of mathematical cells.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-conversion", "--no-default-features", "--test", "array_columns"]},
+      "failureMessage": "Array source identity, column layout or strict preservation boundaries regressed."
+    },
+    {
       "id": "CORE-PARSER-DIVERGENCE-001",
       "description": "Cross-parser divergence reports the first structural AST path.",
       "severity": "blocking",

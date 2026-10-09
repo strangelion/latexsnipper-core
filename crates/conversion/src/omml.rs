@@ -188,6 +188,18 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
             rows.iter().flatten().collect()
         }
         Cases(rows) => rows.iter().flatten().collect(),
+        Array { column_spec, rows } => {
+            let columns = crate::array_columns::parse_columns(column_spec)?;
+            if columns.rules.iter().any(|count| *count != 0) {
+                return Err("OMML array vertical rules require a separate layout route; original source must be retained".into());
+            }
+            if rows.is_empty() || rows.iter().any(|row| row.len() > columns.align.len()) {
+                return Err(
+                    "Array row width exceeds the declared columns or array has no rows".into(),
+                );
+            }
+            rows.iter().flatten().collect()
+        }
         Overbrace { content, label } | Underbrace { content, label } => {
             std::iter::once(content.as_ref())
                 .chain(label.iter().map(Box::as_ref))
@@ -478,6 +490,23 @@ fn ast_to_omml(node: &LatexNode) -> String {
 
         LatexNode::Matrix { env, rows } => {
             matrix_to_omml(rows, env)
+        }
+        LatexNode::Array { column_spec, rows } => {
+            match crate::array_columns::parse_columns(column_spec) {
+                Ok(columns) if columns.rules.iter().all(|count| *count == 0) &&
+                    !rows.is_empty() && rows.iter().all(|row| row.len() <= columns.align.len()) => {
+                    let properties: String = columns.align.iter().map(|align| format!(
+                        "<m:mc><m:mcPr><m:count m:val=\"1\"/><m:mcJc m:val=\"{align}\"/></m:mcPr></m:mc>"
+                    )).collect();
+                    let body: String = rows.iter().map(|row| {
+                        let cells: String = (0..columns.align.len()).map(|index| format!("<m:e>{}</m:e>",
+                            row.get(index).map(ast_to_omml).unwrap_or_default())).collect();
+                        format!("<m:mr>{cells}</m:mr>")
+                    }).collect();
+                    format!("<m:m><m:mPr><m:mcs>{properties}</m:mcs></m:mPr>{body}</m:m>")
+                }
+                _ => wrap_normal_mtext(&node.to_string()),
+            }
         }
 
         LatexNode::Cases(rows) => {

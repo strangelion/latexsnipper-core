@@ -15,12 +15,34 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
             Ok(Event::Start(e)) => {
                 let tag = local_tag(e.name().as_ref());
                 let mut attrs = String::new();
-                for attr in e.attributes().flatten() {
+                for attr in e.attributes() {
+                    let attr = attr.map_err(|error| error.to_string())?;
+                    if attr.key.as_ref() == b"xmlns" || attr.key.as_ref().starts_with(b"xmlns:") {
+                        continue;
+                    }
                     let key = local_tag(attr.key.as_ref());
                     if key == "xmlns" || key.starts_with("xmlns:") {
                         continue;
                     }
-                    let val = String::from_utf8_lossy(&attr.value).to_string();
+                    let val = if matches!(key.as_str(), "columnalign" | "columnlines" | "notation")
+                    {
+                        attr.decoded_and_normalized_value(
+                            quick_xml::XmlVersion::Implicit1_0,
+                            reader.decoder(),
+                        )
+                        .map_err(|error| error.to_string())?
+                        .into_owned()
+                    } else {
+                        String::from_utf8_lossy(&attr.value).to_string()
+                    };
+                    // Keep multi-valued layout attributes intact inside the legacy
+                    // tokenized attribute representation, without changing style keys.
+                    let val = if matches!(key.as_str(), "columnalign" | "columnlines" | "notation")
+                    {
+                        val.split_whitespace().collect::<Vec<_>>().join(",")
+                    } else {
+                        val
+                    };
                     if !attrs.is_empty() {
                         attrs.push(' ');
                     }
@@ -291,7 +313,77 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             }
         }
 
-        "mtable" => matrix_to_latex(children),
+        "mtable" => {
+            let align = attrs
+                .split_whitespace()
+                .find_map(|part| part.strip_prefix("columnalign="))
+                .or_else(|| {
+                    attrs
+                        .split_whitespace()
+                        .any(|part| part.starts_with("columnlines="))
+                        .then_some("center")
+                });
+            if let Some(align) = align {
+                let align: Vec<_> = align.split(',').collect();
+                let width = children
+                    .iter()
+                    .map(|row| {
+                        crate::latex_utils::split_matrix_rows(row)
+                            .first()
+                            .map_or(0, Vec::len)
+                    })
+                    .max()
+                    .unwrap_or(0)
+                    .max(align.len());
+                if width > 128
+                    || align.is_empty()
+                    || align
+                        .iter()
+                        .any(|value| !matches!(*value, "left" | "center" | "right"))
+                {
+                    return format!("\\unsupportedmathmlcolumns{{{}}}", children.join(" \\\\ "));
+                }
+                let lines = attrs
+                    .split_whitespace()
+                    .find_map(|part| part.strip_prefix("columnlines="))
+                    .unwrap_or("");
+                let lines: Vec<_> = if lines.is_empty() {
+                    Vec::new()
+                } else {
+                    lines.split(',').collect()
+                };
+                if lines
+                    .iter()
+                    .any(|value| !matches!(*value, "none" | "solid"))
+                {
+                    return format!("\\unsupportedmathmlcolumns{{{}}}", children.join(" \\\\ "));
+                }
+                let mut columns = String::new();
+                for index in 0..width {
+                    let value = align
+                        .get(index)
+                        .or(align.last())
+                        .copied()
+                        .unwrap_or("center");
+                    columns.push(match value {
+                        "left" => 'l',
+                        "right" => 'r',
+                        _ => 'c',
+                    });
+                    if index + 1 < width
+                        && lines.get(index).or(lines.last()).copied() == Some("solid")
+                    {
+                        columns.push('|');
+                    }
+                }
+                format!(
+                    "\\begin{{array}}{{{columns}}}{}\\end{{array}}",
+                    children.join(" \\\\ ")
+                )
+            } else {
+                matrix_to_latex(children)
+            }
+        }
         "mtr" => children.join(" & "),
         "mtd" => children.join(""),
 
@@ -302,6 +394,35 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
         }
         "menclose" => {
             let inner = children.join("");
+            let notation = attrs
+                .split_whitespace()
+                .find_map(|part| part.strip_prefix("notation="))
+                .unwrap_or("");
+            let notation: Vec<_> = notation
+                .split(',')
+                .filter(|value| !value.is_empty())
+                .collect();
+            if !notation.is_empty()
+                && notation
+                    .iter()
+                    .all(|value| matches!(*value, "left" | "right"))
+            {
+                if let crate::latex_ast::LatexNode::Array { column_spec, rows } =
+                    crate::latex_parser::parse_latex(&inner)
+                {
+                    let spec = format!(
+                        "{}{}{}",
+                        if notation.contains(&"left") { "|" } else { "" },
+                        column_spec,
+                        if notation.contains(&"right") { "|" } else { "" }
+                    );
+                    return crate::latex_ast::LatexNode::Array {
+                        column_spec: spec,
+                        rows,
+                    }
+                    .to_string();
+                }
+            }
             // Check for notation attribute
             let notation = attrs
                 .split_whitespace()

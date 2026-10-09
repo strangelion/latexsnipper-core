@@ -187,8 +187,14 @@ impl FormulaParser {
             "begin" => {
                 let env_name = self.parse_group()?;
                 let env_name_str = extract_text(&env_name);
+                let column_spec = if env_name_str == "array" {
+                    Some(self.parse_array_column_spec()?)
+                } else {
+                    None
+                };
                 let rows = self.parse_environment_content(&env_name_str)?;
-                let env = EnvInfo::new(env_name_str);
+                let mut env = EnvInfo::new(env_name_str);
+                env.column_spec = column_spec;
                 let env = rows.into_iter().fold(env, |e, row| e.with_row(row));
                 Ok(FormulaNode::Environment(env))
             }
@@ -690,6 +696,49 @@ impl FormulaParser {
         Ok(rows)
     }
 
+    fn parse_array_column_spec(&mut self) -> Result<String> {
+        self.skip_whitespace();
+        if self.peek_at(self.pos) != Some(&'{') {
+            return Err(SnipperError::Inference(
+                "array requires a braced column specification".into(),
+            ));
+        }
+        self.pos += 1;
+        let start = self.pos;
+        let mut depth = 0;
+        while self.pos < self.input.len() {
+            if self.pos - start > 4096 {
+                return Err(SnipperError::Inference(
+                    "array column specification exceeds the layout limit".into(),
+                ));
+            }
+            match self.input[self.pos] {
+                '\\' if self.pos + 1 < self.input.len() => {
+                    self.pos += 2;
+                    continue;
+                }
+                '%' => {
+                    while self.pos < self.input.len() && self.input[self.pos] != '\n' {
+                        self.pos += 1;
+                    }
+                    continue;
+                }
+                '{' => depth += 1,
+                '}' if depth == 0 => {
+                    let result = self.input[start..self.pos].iter().collect();
+                    self.pos += 1;
+                    return Ok(result);
+                }
+                '}' => depth -= 1,
+                _ => {}
+            }
+            self.pos += 1;
+        }
+        Err(SnipperError::Inference(
+            "unclosed array column specification".into(),
+        ))
+    }
+
     fn at_environment_delimiter(&self) -> bool {
         self.input.get(self.pos) == Some(&'&')
             || (self.input.get(self.pos) == Some(&'\\')
@@ -867,6 +916,32 @@ mod tests {
                 assert_eq!(environment.content.len(), 2);
             }
             _ => panic!("Expected Environment"),
+        }
+    }
+
+    #[test]
+    fn array_layout_keeps_column_spec_outside_mathematical_content() {
+        for columns in ["lc", "*{2}{lr}", r">{\bfseries}p{2cm}", "l% fake }\nc"] {
+            let source = format!("\\begin{{array}}{{{columns}}}a&b\\\\c&d\\end{{array}}");
+            let layout = parse_formula_latex(&source).unwrap();
+            assert_eq!(layout.symbol_count, 4);
+            assert_eq!(layout.canonical_latex(), source);
+            let FormulaNode::Environment(environment) = &layout.root else {
+                panic!("Expected Environment");
+            };
+            assert_eq!(environment.column_spec.as_deref(), Some(columns));
+            assert_eq!(environment.content.len(), 2);
+        }
+    }
+
+    #[test]
+    fn array_layout_rejects_missing_unclosed_or_oversized_column_spec() {
+        for source in [
+            r"\begin{array}x\end{array}".to_string(),
+            r"\begin{array}{l".to_string(),
+            format!("\\begin{{array}}{{{}}}x\\end{{array}}", "l".repeat(4098)),
+        ] {
+            assert!(parse_formula_latex(&source).is_err(), "{source}");
         }
     }
 

@@ -542,7 +542,7 @@ fn typst_critical_symbols() {
         ("sqrt_n", r"\sqrt[3]{x}", "root(3, x)"),
         ("binom", r"\binom{n}{k}", "binom(n, k)"),
         ("hat", r"\hat{x}", "hat(x)"),
-        ("vec", r"\vec{v}", "vec(v)"),
+        ("vec", r"\vec{v}", "arrow(v)"),
         ("sum", r"\sum", "sum"),
         ("int", r"\int", "integral"),
         ("prod", r"\prod", "product"),
