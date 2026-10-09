@@ -145,7 +145,7 @@
           "test",
           "--locked",
           "-p",
-          "latexsnipper-inference",
+          "latexsnipper-ast",
           "custom_glyph_node_roundtrips_through_json"
         ]
       },

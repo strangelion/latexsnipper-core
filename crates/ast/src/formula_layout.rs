@@ -464,4 +464,42 @@ mod tests {
         assert_eq!(sym.category, SymbolCategory::Letter);
         assert_eq!(sym.confidence, 0.95);
     }
+
+    #[test]
+    fn custom_glyph_node_roundtrips_through_json() {
+        let metrics = GlyphMetricsSnapshot {
+            units_per_em: 1000,
+            advance_width: 500.0,
+            baseline: 0.0,
+            math_axis: 250.0,
+            italic_correction: 0.0,
+            display_scale: 1.0,
+            text_scale: 1.0,
+            script_scale: 0.7,
+            scriptscript_scale: 0.5,
+        };
+        let node = FormulaNode::CustomGlyph(CustomGlyphNode {
+            symbol_id: "sym-1".into(),
+            pack_id: Some("pack-1".into()),
+            metrics_snapshot: metrics.clone(),
+            fallback: CustomGlyphFallback::MissingGlyph,
+            asset_sha256: Some("deadbeef".into()),
+        });
+        let json = serde_json::to_string(&node).unwrap();
+        let back: FormulaNode = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            serde_json::to_value(&back).unwrap(),
+            serde_json::to_value(&node).unwrap()
+        );
+        match back {
+            FormulaNode::CustomGlyph(g) => {
+                assert_eq!(g.symbol_id, "sym-1");
+                assert_eq!(g.pack_id.as_deref(), Some("pack-1"));
+                assert_eq!(g.metrics_snapshot, metrics);
+                assert_eq!(g.fallback, CustomGlyphFallback::MissingGlyph);
+                assert_eq!(g.asset_sha256.as_deref(), Some("deadbeef"));
+            }
+            other => panic!("expected CustomGlyph, got {other:?}"),
+        }
+    }
 }

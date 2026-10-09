@@ -887,38 +887,4 @@ mod tests {
         let layout = parse_formula_latex("a\\,b").unwrap();
         assert_eq!(layout.canonical_latex(), "a\\,b");
     }
-
-    #[test]
-    fn custom_glyph_node_roundtrips_through_json() {
-        use latexsnipper_ast::{
-            CustomGlyphFallback, CustomGlyphNode, FormulaNode, GlyphMetricsSnapshot,
-        };
-        let node = FormulaNode::CustomGlyph(CustomGlyphNode {
-            symbol_id: "sym-1".into(),
-            pack_id: Some("pack-1".into()),
-            metrics_snapshot: GlyphMetricsSnapshot {
-                units_per_em: 1000,
-                advance_width: 500.0,
-                baseline: 0.0,
-                math_axis: 250.0,
-                italic_correction: 0.0,
-                display_scale: 1.0,
-                text_scale: 1.0,
-                script_scale: 0.7,
-                scriptscript_scale: 0.5,
-            },
-            fallback: CustomGlyphFallback::MissingGlyph,
-            asset_sha256: Some("deadbeef".into()),
-        });
-        let json = serde_json::to_string(&node).unwrap();
-        let back: FormulaNode = serde_json::from_str(&json).unwrap();
-        match back {
-            FormulaNode::CustomGlyph(g) => {
-                assert_eq!(g.symbol_id, "sym-1");
-                assert_eq!(g.pack_id.as_deref(), Some("pack-1"));
-                assert_eq!(g.fallback, CustomGlyphFallback::MissingGlyph);
-            }
-            other => panic!("expected CustomGlyph, got {other:?}"),
-        }
-    }
 }
