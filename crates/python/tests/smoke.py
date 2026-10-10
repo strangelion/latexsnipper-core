@@ -45,6 +45,20 @@ def formula_smoke() -> None:
             else:
                 raise AssertionError(f"unavailable route succeeded: {route}")
     assert executed == 46
+    for input_format in ("latex", "typst", "mathml", "omml"):
+        bare = convert_formula(
+            samples[input_format], input_format=input_format,
+            output_format="latex-fragment", mode="best-effort",
+        )
+        assert bare == r"\frac{a}{b}"
+        inline = convert_formula(
+            samples[input_format], input_format=input_format,
+            output_format="markdown_inline", mode="best-effort",
+        )
+        assert inline == r"$\frac{a}{b}$"
+    assert r"\documentclass" in convert_formula(
+        samples["typst"], input_format="typst", output_format="latex", mode="best-effort",
+    )
     assert "<m:f>" in convert_formula(samples["latex"], input_format="latex", output_format="omml")
     failures = [
         ("x", {"input_format": "ole"}, "INVALID_ARGUMENT"),
@@ -53,6 +67,9 @@ def formula_smoke() -> None:
         (" ", {}, "CONVERSION_FAILED"),
         (r"\unknownmacro+x", {}, "CONVERSION_FAILED"),
         ("x" * (64 * 1024 + 1), {}, "INPUT_TOO_LARGE"),
+        ("x+" * 6000 + "x", {}, "OUTPUT_TOO_LARGE"),
+        ("frac(a,b)", {"input_format": "typst", "output_format": "latex-fragment"}, "UNSUPPORTED_FORMAT"),
+        (r"\documentclass{article}x", {"output_format": "latex-fragment", "mode": "best-effort"}, "CONVERSION_FAILED"),
         ("{" * 65 + "x" + "}" * 65, {"mode": "best-effort"}, "INPUT_TOO_LARGE"),
         (r"\sqrt" * 513, {"mode": "best-effort"}, "INPUT_TOO_LARGE"),
     ]

@@ -33,6 +33,7 @@ pub const APPLICATION_SESSION_ABI_VERSION: u32 = 1;
 const MAX_SESSIONS: usize = 64;
 const MAX_REQUEST_JSON_BYTES: usize = 1024 * 1024;
 const MAX_INPUT_BYTES: usize = 100 * 1024 * 1024;
+const MAX_FORMULA_RESULT_DATA_BYTES: usize = 256 * 1024;
 const MAX_TIMEOUT_MS: u64 = 10 * 60 * 1_000;
 
 type SessionEntry = Arc<Mutex<RecognitionSession>>;
@@ -207,10 +208,12 @@ impl FormulaConvertRequest {
             .trim()
             .to_ascii_lowercase()
             .replace('-', "_");
+        let fragment = label == "latex_fragment";
+        let output_label = if fragment { "latex_display" } else { &label };
         let output = OutputFormat::all()
             .iter()
             .copied()
-            .find(|format| format.name() == label)
+            .find(|format| format.name() == output_label)
             .ok_or_else(|| {
                 AdapterError::new("INVALID_ARGUMENT", "Unknown formula output format.", false)
             })?;
@@ -228,15 +231,36 @@ impl FormulaConvertRequest {
             )
             .with_details(json!({ "detail": capability.unavailable_reason })));
         }
-        let content = DocumentConverter::convert_formula_string(
-            &self.content,
-            self.input_format,
-            output,
-            self.mode,
-        )
+        let content = if fragment {
+            DocumentConverter::convert_formula_fragment(&self.content, self.input_format, self.mode)
+        } else {
+            DocumentConverter::convert_formula_string(
+                &self.content,
+                self.input_format,
+                output,
+                self.mode,
+            )
+        }
         .map_err(|error| AdapterError::from(ApplicationError::from(error)))?;
-        Ok(json!({ "content": content, "capability": capability }))
+        let mut data = json!({ "content": content, "capability": capability });
+        if fragment {
+            data["contentKind"] = json!("latex-fragment");
+        }
+        bound_formula_data(data)
     }
+}
+
+fn bound_formula_data(data: Value) -> Result<Value, AdapterError> {
+    let serialized = serde_json::to_vec(&data)
+        .map_err(|_| AdapterError::internal("The formula result could not be serialized."))?;
+    if serialized.len() > MAX_FORMULA_RESULT_DATA_BYTES {
+        return Err(AdapterError::new(
+            "OUTPUT_TOO_LARGE",
+            "Serialized formula result data exceeds the 256 KiB limit.",
+            false,
+        ));
+    }
+    Ok(data)
 }
 
 impl SessionCreateRequest {
@@ -694,6 +718,105 @@ mod tests {
             };
             assert_eq!(result["error"]["code"], "INVALID_JSON");
         }
+    }
+
+    #[test]
+    fn formula_fragment_c_api_keeps_document_and_inline_outputs_distinct() {
+        for (input, source) in [
+            ("latex", r"\frac{a}{b}"),
+            ("typst", "frac(a,b)"),
+            ("mathml", "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>"),
+            ("omml", "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>"),
+        ] {
+            let request = json!({
+                "content": source, "inputFormat": input,
+                "outputFormat": "latex-fragment", "mode": "best-effort"
+            }).to_string();
+            let result = unsafe {
+                take_json(latexsnipper_formula_convert(request.as_ptr(), request.len()))
+            };
+            assert_eq!(result["ok"], true);
+            assert_eq!(result["data"]["content"], r"\frac{a}{b}");
+            assert_eq!(result["data"]["contentKind"], "latex-fragment");
+            assert_eq!(result["data"]["capability"]["output"], "latex_display");
+            assert_eq!(result["data"]["capability"]["target"], "native");
+        }
+        for (output, expected) in [
+            ("latex", r"\documentclass"),
+            ("markdown_inline", r"$\frac{a}{b}$"),
+        ] {
+            let request = json!({
+                "content": "frac(a,b)", "inputFormat": "typst",
+                "outputFormat": output, "mode": "best-effort"
+            })
+            .to_string();
+            let result = unsafe {
+                take_json(latexsnipper_formula_convert(
+                    request.as_ptr(),
+                    request.len(),
+                ))
+            };
+            assert_eq!(result["ok"], true);
+            assert!(result["data"]["content"]
+                .as_str()
+                .unwrap()
+                .contains(expected));
+            assert!(result["data"].get("contentKind").is_none());
+        }
+    }
+
+    #[test]
+    fn formula_c_api_rejects_fragment_splicing_and_oversized_result_data() {
+        for (source, output, mode, code) in [
+            (
+                "frac(a,b)".into(),
+                "latex-fragment",
+                "strict",
+                "UNSUPPORTED_FORMAT",
+            ),
+            (
+                r"\documentclass{article}x".into(),
+                "latex-fragment",
+                "best-effort",
+                "CONVERSION_FAILED",
+            ),
+            (
+                format!("{}x", "x+".repeat(6000)),
+                "omml",
+                "strict",
+                "OUTPUT_TOO_LARGE",
+            ),
+        ] {
+            let request = json!({
+                "content": source, "inputFormat": if code == "UNSUPPORTED_FORMAT" { "typst" } else { "latex" },
+                "outputFormat": output, "mode": mode
+            }).to_string();
+            let result = unsafe {
+                take_json(latexsnipper_formula_convert(
+                    request.as_ptr(),
+                    request.len(),
+                ))
+            };
+            assert_eq!(result["error"]["code"], code);
+        }
+        let at_limit = json!({ "content": "x".repeat(MAX_FORMULA_RESULT_DATA_BYTES - 14) });
+        assert!(bound_formula_data(at_limit).is_ok());
+        assert_eq!(
+            bound_formula_data(
+                json!({ "content": "\"".repeat(MAX_FORMULA_RESULT_DATA_BYTES / 2) })
+            )
+            .unwrap_err()
+            .code,
+            "OUTPUT_TOO_LARGE"
+        );
+        let request = br#"{"content":"x","inputFormat":"latex","outputFormat":"omml"}"#;
+        let healthy = unsafe {
+            take_json(latexsnipper_formula_convert(
+                request.as_ptr(),
+                request.len(),
+            ))
+        };
+        assert_eq!(healthy["ok"], true);
     }
 
     #[test]

@@ -29,8 +29,15 @@ LATEXSNIPPER_API uint32_t latexsnipper_session_abi_version(void);
  * Only LaTeX-to-OMML currently supports strict. Select "best-effort" explicitly
  * for other available routes; UnicodeMath/AsciiMath/MTEF remain unsupported.
  * Conversion data contains content and the executed capability row.
+ * Explicit outputFormat "latex-fragment" returns one bare formula plus
+ * contentKind "latex-fragment"; capability describes the latex_display route.
+ * Legacy "latex" still exports a complete document. Projection is not a new
+ * semantic format or a guarantee of editor rendering/fidelity.
  * JSON is capped at 1 MiB. Source and reconstructed LaTeX are capped at 64 KiB,
  * 64 lexical nesting levels and 512 structural tokens; XML DTDs are rejected.
+ * Serialized conversion data is capped at 256 KiB, excluding the envelope.
+ * Exceeding this budget returns OUTPUT_TOO_LARGE, not a partial result.
+ * This budget is not a peak memory allocation or execution deadline guarantee.
  * Older v1 libraries may lack these symbols; feature-detect before using them.
  */
 LATEXSNIPPER_API char *latexsnipper_formula_capabilities(void);

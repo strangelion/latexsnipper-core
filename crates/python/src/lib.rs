@@ -29,6 +29,7 @@ use serde_json::{Map, Value};
 const MAX_THREADS: usize = 256;
 const MAX_TIMEOUT_MS: u64 = 10 * 60 * 1_000;
 const MAX_INPUT_BYTES: usize = 100 * 1024 * 1024;
+const MAX_FORMULA_RESULT_BYTES: usize = 256 * 1024;
 
 pyo3::create_exception!(
     latexsnipper_core,
@@ -211,7 +212,11 @@ fn formula_arguments(
         .copied()
         .find(|format| format.name() == input_label)
         .ok_or_else(|| BindingError::invalid(format!("unknown formula input format: {input}")))?;
-    let output = parse_output_formats(Some(vec![output.to_owned()]))?[0].1;
+    let output = if is_formula_fragment(output) {
+        OutputFormat::LatexDisplay
+    } else {
+        parse_output_formats(Some(vec![output.to_owned()]))?[0].1
+    };
     let mode = match mode.trim().to_ascii_lowercase().replace('_', "-").as_str() {
         "strict" => FormulaConversionMode::Strict,
         "best-effort" => FormulaConversionMode::BestEffort,
@@ -240,10 +245,39 @@ fn convert_formula(
     output_format: &str,
     mode: &str,
 ) -> PyResult<String> {
+    let fragment = is_formula_fragment(output_format);
     let (input, output, mode) = formula_arguments(input_format, output_format, mode)
         .map_err(|error| python_error(py, error))?;
-    py.detach(move || DocumentConverter::convert_formula_string(&content, input, output, mode))
-        .map_err(|error| python_error(py, BindingError::from(ApplicationError::from(error))))
+    py.detach(move || convert_formula_content(&content, input, output, mode, fragment))
+        .map_err(|error| python_error(py, error))
+}
+
+fn is_formula_fragment(output: &str) -> bool {
+    output.trim().to_ascii_lowercase().replace('_', "-") == "latex-fragment"
+}
+
+fn convert_formula_content(
+    content: &str,
+    input: FormulaInputFormat,
+    output: OutputFormat,
+    mode: FormulaConversionMode,
+    fragment: bool,
+) -> Result<String, BindingError> {
+    let content = if fragment {
+        DocumentConverter::convert_formula_fragment(content, input, mode)
+    } else {
+        DocumentConverter::convert_formula_string(content, input, output, mode)
+    }
+    .map_err(|error| BindingError::from(ApplicationError::from(error)))?;
+    if serialize_json(&content)?.len() > MAX_FORMULA_RESULT_BYTES {
+        return Err(BindingError {
+            code: "OUTPUT_TOO_LARGE".into(),
+            message: "Serialized formula result string exceeds the 256 KiB limit.".into(),
+            detail: None,
+            retryable: false,
+        });
+    }
+    Ok(content)
 }
 
 /// Return native direction/mode support from the shared executable registry.
@@ -677,6 +711,38 @@ mod tests {
             parse_profile("unknown").unwrap_err().code,
             "INVALID_ARGUMENT"
         );
+    }
+
+    #[test]
+    fn formula_fragment_arguments_and_content_preserve_budgets_and_strict_gate() {
+        for label in ["latex-fragment", " LATEX_FRAGMENT "] {
+            let (input, output, mode) = formula_arguments("typst", label, "best-effort").unwrap();
+            assert_eq!(output, OutputFormat::LatexDisplay);
+            let result = convert_formula_content("frac(a,b)", input, output, mode, true).unwrap();
+            assert_eq!(result, r"\frac{a}{b}");
+        }
+        assert_eq!(
+            formula_arguments("typst", "latex-fragment", "strict")
+                .unwrap_err()
+                .code,
+            "UNSUPPORTED_FORMAT"
+        );
+        let result = convert_formula_content(
+            r"\documentclass{article}x",
+            FormulaInputFormat::Latex,
+            OutputFormat::LatexDisplay,
+            FormulaConversionMode::BestEffort,
+            true,
+        );
+        assert_eq!(result.unwrap_err().code, "CONVERSION_FAILED");
+        let result = convert_formula_content(
+            &format!("{}x", "x+".repeat(6000)),
+            FormulaInputFormat::Latex,
+            OutputFormat::OMML,
+            FormulaConversionMode::Strict,
+            false,
+        );
+        assert_eq!(result.unwrap_err().code, "OUTPUT_TOO_LARGE");
     }
 
     #[test]

@@ -13,14 +13,14 @@
 | 原生独立进程 | `latexsnipper-worker` JSONL v1 | 长驻、串行、有界会话；识别使用路径，公式转换使用声明格式的字符串 |
 | 浏览器/支持 WASM 的 WebView | WASM v3 与官方 JS Worker | 公式转换可使用 conversion-only 构建；不依赖原生子进程 |
 | CLI | 单次命令内会话 | 多次启动不自动共享引擎，不等于 daemon |
-| Android JNI / iOS 专用桥接 | 旧平台桥接 | 尚未接入 `RecognitionSession`，现有 StubRuntime 不能被当作真实识别后端 |
+| Android / iOS 专用桥接 | 旧平台桥接 | 尚未接入 `RecognitionSession`；Android 的历史 `Java_*` 导出是原始 C 签名，不是完整 JNI；StubRuntime 不是实际识别后端 |
 
 ## 公式转换
 
 以共享能力矩阵的 `available`、`mode`、目标平台和限制为准。
 格式枚举、接口名称或存在一个试点 parser 均不代表该路线已开放。
 
-- Rust/WASM/JS 和原生 JSONL 提供显式裸公式入口或投影；
+- Rust/C/Python/WASM/JS 和原生 JSONL 提供显式裸公式入口或投影；
   `latex-fragment` 通过 `latex_display` 单公式形状检查获得裸 LaTeX。
 - 旧 `latex` 目标仍保留完整文档输出，不能直接塞进数学编辑器或 `$...$`。
 - 单公式 `markdown_inline` 使用行内包装；完整 Markdown 文档保留自己的
@@ -36,6 +36,8 @@ JSONL 的 `formula.capabilities` 和 `formula.convert` 复用原生 Core 门禁�
 不创建、加载或清空识别会话；普通转换错误后可处理下一条请求。
 输入最多 64 KiB UTF-8，序列化结果 `data` 最多 256 KiB；
 协议外壳、回显 ID 和错误信息不包含在结果数据预算内。
+Generic C 采用同样的 256 KiB 序列化 `data` 预算；Python 返回纯字符串，
+其 256 KiB 预算按该字符串的 UTF-8 JSON 序列化大小计算，而非进程内字符数。
 原生转换同步执行，不接受伪装成硬取消的 timeout 参数。
 进程监督者负责路径授权、OS 隔离、强制终止、重启和过期响应丢弃。
 
@@ -48,6 +50,8 @@ AbortSignal、活动执行超时和 Worker 重建。默认 64 KiB 输入、256 K
 相加，全功能构建并非精简包。精简包不包含识别运行时/模型能力；
 收到识别请求时明确拒绝，不退回主线程。
 JS runtime 当前是 private 包，正式分发必须固定匹配的胶水、WASM、协议和版本。
+旧 C/Python 库即使已有转换方法，也可能拒绝新增裸公式标签；必须明确处理
+不支持状态，不使用隐式文档剥离或转换降级来模拟新接口。
 自定义宿主需要单独验证资源 URL、CSP、打包、卸载及移动端 WebView；
 普通浏览器通过不能作为所有宿主的兼容保证。
 

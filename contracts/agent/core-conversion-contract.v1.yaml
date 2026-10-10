@@ -3,6 +3,15 @@
   "name": "Conversion and Office output contract",
   "rules": [
     {
+      "id": "CORE-FORMULA-NATIVE-BINDINGS-001",
+      "description": "C and Python formula adapters keep native capability/strict gates, distinguish bare/display/document/inline outputs and refuse oversized serialized results without partial fallback.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion", "ffi", "python"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-ffi", "-p", "latexsnipper-python", "formula"]},
+      "failureMessage": "Native C/Python formula projections, route guards or output budgets regressed."
+    },
+    {
       "id": "CORE-FORMULA-JSONL-001",
       "description": "Native JSONL formula RPC shares Core capability gates and bounded bare projection, preserves recognition sessions, and a real persistent process continues after conversion errors and exits on shutdown or EOF.",
       "severity": "blocking",

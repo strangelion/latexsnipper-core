@@ -1,7 +1,7 @@
 {
   "contractRelease": "3.0.0",
   "files": {
-    "contracts/agent/core-conversion-contract.v1.yaml": "94a8d8e62a570af0919d757b3bb1d2d42031d7145b3a1b534ae6e4155b16b68a",
+    "contracts/agent/core-conversion-contract.v1.yaml": "724cdc4c4f061791dcb8c9dd9cdf21c36786bed131645292828624677039e2f3",
     "contracts/agent/core-mixed-contract.v1.yaml": "ed21fac733c14c1450709574d09d1af39d69b623178992630bb19e817b173844",
     "contracts/agent/core-model-transport-contract.v1.yaml": "0ff4fdec673cde60f387d1b5f63caee9d7139199e6b262a25e3d7412d719291c",
     "contracts/agent/core-provider-contract.v1.yaml": "98b888cf32cbd4efb41065eae9259e9402eb779e30b3b41f339243c03cdd7a30",
@@ -21,6 +21,7 @@
     "crates/evaluation/src/failure_corpus.rs": "ab4e6012a2ae8c25786cdd616a4c711b996c73bd5a804940173e2d576ba4a80e",
     "crates/evaluation/src/int8.rs": "db9a4d1a6e6c60e7e5a3e431da8150b7d292fc1de719a4f9721d2923b4903d23",
     "crates/evaluation/src/schema.rs": "2dd3abc6ec391c5886035917f4cea1c16e8e95046293c8fa386568c1869d9e67",
+    "crates/ffi/include/latexsnipper_session.h": "306ee6f5097811a1d10e54b3541fb01ff3a249b157f15bdc90a1de48e5ec79b4",
     "crates/fidelity/src/lib.rs": "a0157dc34837a84e1bfce9f61e1bf0cfa4d5198e3a34736bad58718f0dfb115a",
     "crates/model/src/manifest_v3.rs": "7a7d2f15532978d732b633557ec1227713b633fdfe0b977aee5bc714236d9213",
     "crates/plugin/src/manifest_v3.rs": "4fb41389e3956a849dbe4d59c3c1d3e388f2fd0a5a8a80424c10338356f5ccbb",
@@ -39,7 +40,7 @@
     "crates/drawing/src": "05ff157df6e4d011d3008741e6117ce11a795e13e709015b19928194659821db",
     "crates/engine/src": "5cc56c913f2c5d3ff6401f6bc1ad914665a387b6fef60f8ff71ef0a0327c41c7",
     "crates/export/src": "503ef470a53cef25d6f3739c83144af50ad7684c8eec6bfdcb698e6c75a370b0",
-    "crates/ffi/src": "810e56a6284558b5d5700730e8b303ff606b9f69aee2b6ffc21400e97098344a",
+    "crates/ffi/src": "338a7fe6f4084aa07d24bdce24fb68a89dcb64437883232e8b754faa5af7185c",
     "crates/foundation/src": "afbbf9d5e3e47b3e7080eb6d02a182c0063f92005acb22358a03974f4f382fbe",
     "crates/image/src": "835962b9ddc6628bff25899b93c57ee29a743c2e222028c6fd0431e70a8d570d",
     "crates/inference/src": "4b89703a10156154919adcbefb59e789f2c444de170ae4a651616ec61cd59db5",
@@ -47,6 +48,7 @@
     "crates/pipeline/src": "51d5137301c3addade097ef3c61752d1d664cd73b813e35e5e48e069cbe8d451",
     "crates/plugin-wasi/src": "3a8454c458ed8ef7e8499c20be99df390599b3f994bacdb7261b1c1eae981c0f",
     "crates/plugin/src": "eaa2d23e1c074a6995b1faad45f2cedba979965a26ba260eeef61210f020cbbb",
+    "crates/python/src": "076593261e9aa0868f2fe093286d401fdf21a6902dedd3d7c374e181f4463363",
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
     "crates/syntax/src": "ffeda08867b0660bfbc9e38a895c0f8e31e3e33ca928b2c28e18c6319ed31e32",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",

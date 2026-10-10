@@ -41,8 +41,8 @@ from latexsnipper_core import convert_formula, formula_conversion_capabilities
 
 routes = formula_conversion_capabilities()  # 144 native direction/mode rows
 omml = convert_formula(r"\frac{a}{b}", input_format="latex", output_format="omml")
-latex = convert_formula(
-    "frac(a, b)", input_format="typst", output_format="latex", mode="best-effort",
+bare_latex = convert_formula(
+    "frac(a, b)", input_format="typst", output_format="latex-fragment", mode="best-effort",
 )
 ```
 
@@ -61,6 +61,20 @@ validator; XML DTDs are rejected. Exceeding them raises `INPUT_TOO_LARGE`.
 Unavailable routes raise `UNSUPPORTED_FORMAT`, unknown labels/modes raise
 `INVALID_ARGUMENT`, and source/conversion failures raise `CONVERSION_FAILED`.
 Conversion releases the GIL and does not require or alter a `Session`.
+
+`latex-fragment` (also accepting `latex_fragment`) is an explicit single-formula
+projection through the `latex_display` capability, not a new semantic format.
+It returns bare LaTeX and rejects document splicing. Legacy `latex` still returns
+a complete document; single-formula `markdown_inline` returns `$...$`.
+This does not guarantee that a renderer supports the projected source.
+Older adapters can reject this new output label even if `convert_formula` exists;
+handle refusal explicitly, without stripping a document or silently falling back.
+
+Conversion result strings are limited to 256 KiB after UTF-8 JSON serialization,
+including JSON string escaping and quotes. Exceeding the limit raises
+`OUTPUT_TOO_LARGE`, with no partial result or retry. This limit does not describe
+peak memory usage or a hard execution deadline. The Python API continues to
+return a plain string, not a transport envelope.
 
 The installed-wheel smoke test covers all 144 advertised routes (46 successful
 conversions, including the strict route), invalid arguments, failure isolation

@@ -319,12 +319,25 @@ modes fail with `INVALID_JSON`; unknown output labels fail with `INVALID_ARGUMEN
 known unavailable routes fail with `UNSUPPORTED_FORMAT`. Conversion and resource
 failures retain the existing application error codes.
 
+The additive `outputFormat: "latex-fragment"` projects one shape-checked bare
+formula through the `latex_display` route; success also has
+`contentKind: "latex-fragment"`. It rejects document splicing, but does not prove
+renderer support or fidelity. Legacy `latex` remains a complete document and
+single-formula `markdown_inline` remains `$...$`. Older libraries with the same
+function symbol may reject the new label; do not infer projection support from
+the symbol alone or silently strip a document as fallback.
+
 No recognition session or model directory is needed. The same source and
 reconstructed-LaTeX budgets as the Python API apply: 64 KiB, 64 lexical nesting
 levels, 512 structural tokens, and no XML DTDs. These budgets are not grammar
 validation or a fidelity guarantee. OLE is not a string format and MTEF remains
 unsupported. JSON requests remain capped at 1 MiB and all returned strings must
 be freed exactly once with `latexsnipper_string_free`.
+Serialized conversion result `data`, including capability metadata and string
+escaping, is capped at 256 KiB, excluding the v3 envelope. Exceeding the budget
+returns `OUTPUT_TOO_LARGE` without partial output. This is not a peak allocation
+or hard execution deadline guarantee. Python applies the same numeric ceiling
+to its serialized returned string, not to a capability/envelope object.
 
 The session ABI remains v1: existing symbols/signatures and wire spellings are
 unchanged. Older v1 libraries can lack these additive symbols; feature-detect

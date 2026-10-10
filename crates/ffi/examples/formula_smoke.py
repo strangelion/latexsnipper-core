@@ -51,6 +51,19 @@ def main() -> None:
             assert result["capability"] == route
             successful += 1
     assert (successful, rejected) == (46, 98)
+    for input_format in ("latex", "typst", "mathml", "omml"):
+        bare = library.convert_formula(
+            samples[input_format], input_format=input_format,
+            output_format="latex-fragment", mode="best-effort",
+        )
+        assert bare["content"] == r"\frac{a}{b}"
+        assert bare["contentKind"] == "latex-fragment"
+        assert bare["capability"]["output"] == "latex_display"
+        inline = library.convert_formula(
+            samples[input_format], input_format=input_format,
+            output_format="markdown_inline", mode="best-effort",
+        )
+        assert inline["content"] == r"$\frac{a}{b}$"
     unicode_formula = r"\text{中文}+\frac{a}{b}"
     assert unicode_formula in library.convert_formula(
         unicode_formula, input_format="latex", output_format="latex", mode="best-effort",
@@ -63,6 +76,9 @@ def main() -> None:
         ("x", {"input_format": "ole"}, "INVALID_JSON"),
         ("x", {"output_format": "pdf"}, "INVALID_ARGUMENT"),
         ("x" * (64 * 1024 + 1), {}, "INPUT_TOO_LARGE"),
+        ("x+" * 6000 + "x", {}, "OUTPUT_TOO_LARGE"),
+        ("frac(a,b)", {"input_format": "typst", "output_format": "latex-fragment"}, "UNSUPPORTED_FORMAT"),
+        (r"\documentclass{article}x", {"output_format": "latex-fragment", "mode": "best-effort"}, "CONVERSION_FAILED"),
         ("{" * 65 + "x" + "}" * 65, {"mode": "best-effort"}, "INPUT_TOO_LARGE"),
         ("<!DOCTYPE math><math><mi>x</mi></math>", {"input_format": "mathml", "mode": "best-effort"}, "CONVERSION_FAILED"),
     ]
