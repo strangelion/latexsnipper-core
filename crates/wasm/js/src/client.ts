@@ -3,6 +3,7 @@ import {
   type ModelArtifact,
   type ProgressEvent,
   type RecognitionInput,
+  type FormulaWorkerInput,
   type WorkerError,
   type WorkerFactory,
   type WorkerInitOptions,
@@ -10,16 +11,19 @@ import {
   type WorkerRequest,
   type WorkerResponse,
 } from "./types.js";
+import { validateWorkerRequest } from "./worker-request-validation.js";
 
 interface PendingCall {
   resolve(value: unknown): void;
   reject(error: WorkerRuntimeError): void;
 }
 
-interface RecognitionTask extends PendingCall {
+interface WorkerTask extends PendingCall {
   requestId: string;
   wireRequestId: string;
-  input: Omit<RecognitionInput, "requestId">;
+  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" }>;
+  durationMillis: number;
+  resultBytes: number;
   onProgress?: (event: ProgressEvent) => void;
   generation: number;
   timeout?: ReturnType<typeof setTimeout>;
@@ -44,6 +48,9 @@ export interface WasmWorkerClientOptions extends WorkerInitOptions {
   maxImageHeight?: number;
   maxImagePixels?: number;
   maxResultBytes?: number;
+  maxFormulaInputBytes?: number;
+  maxFormulaResultBytes?: number;
+  maxFormulaDurationMillis?: number;
 }
 
 export interface WorkerCallOptions {
@@ -55,8 +62,8 @@ export class WasmWorkerClient {
   private worker!: WorkerLike;
   private readonly calls = new Map<string, PendingCall>();
   private readonly models = new Map<string, ModelArtifact>();
-  private readonly queue: RecognitionTask[] = [];
-  private active?: RecognitionTask;
+  private readonly queue: WorkerTask[] = [];
+  private active?: WorkerTask;
   private generation = 0;
   private sequence = 0;
   private initialized: Promise<void>;
@@ -70,6 +77,9 @@ export class WasmWorkerClient {
   private readonly maxImageHeight: number;
   private readonly maxImagePixels: number;
   private readonly maxResultBytes: number;
+  private readonly maxFormulaInputBytes: number;
+  private readonly maxFormulaResultBytes: number;
+  private readonly maxFormulaDurationMillis: number;
   private restarting?: Promise<void>;
 
   constructor(private readonly options: WasmWorkerClientOptions) {
@@ -82,6 +92,9 @@ export class WasmWorkerClient {
     this.maxImageHeight = options.maxImageHeight ?? 8_192;
     this.maxImagePixels = options.maxImagePixels ?? 40_000_000;
     this.maxResultBytes = options.maxResultBytes ?? 16 * 1024 * 1024;
+    this.maxFormulaInputBytes = options.maxFormulaInputBytes ?? 64 * 1024;
+    this.maxFormulaResultBytes = options.maxFormulaResultBytes ?? 256 * 1024;
+    this.maxFormulaDurationMillis = options.maxFormulaDurationMillis ?? 30_000;
     positiveInteger("maxQueueLength", this.maxQueueLength);
     positiveInteger("rpcTimeoutMillis", this.rpcTimeoutMillis);
     positiveInteger("maxTaskDurationMillis", this.maxTaskDurationMillis);
@@ -91,6 +104,11 @@ export class WasmWorkerClient {
     positiveInteger("maxImageHeight", this.maxImageHeight);
     positiveInteger("maxImagePixels", this.maxImagePixels);
     positiveInteger("maxResultBytes", this.maxResultBytes);
+    positiveInteger("maxFormulaInputBytes", this.maxFormulaInputBytes);
+    positiveInteger("maxFormulaResultBytes", this.maxFormulaResultBytes);
+    positiveInteger("maxFormulaDurationMillis", this.maxFormulaDurationMillis);
+    if (this.maxFormulaInputBytes > 64 * 1024) throw new RangeError("maxFormulaInputBytes must not exceed Core's 64 KiB limit");
+    if (this.maxFormulaResultBytes > 256 * 1024) throw new RangeError("maxFormulaResultBytes must not exceed the worker's 256 KiB envelope limit");
     if (this.maxModelBytes > this.maxTotalModelBytes) {
       throw new RangeError("maxModelBytes must not exceed maxTotalModelBytes");
     }
@@ -134,15 +152,53 @@ export class WasmWorkerClient {
       return Promise.reject(this.runtimeError("WORKER_QUEUE_FULL", "Recognition queue is full"));
     }
     return new Promise((resolve, reject) => {
+      const wireRequestId = this.nextId("recognize");
       this.queue.push({
         requestId,
-        wireRequestId: this.nextId("recognize"),
-        input: { width: input.width, height: input.height, pixels: input.pixels.slice(), mode: input.mode },
+        wireRequestId,
+        request: { protocolVersion: WORKER_PROTOCOL_VERSION, type: "recognize", requestId: wireRequestId, input: { width: input.width, height: input.height, pixels: input.pixels.slice(), mode: input.mode } },
+        durationMillis: this.maxTaskDurationMillis,
+        resultBytes: this.maxResultBytes,
         onProgress,
         resolve,
         reject,
         generation: this.generation,
       });
+      void this.pump();
+    });
+  }
+
+  /** Model-free conversion shares the bounded execution queue, not inference state. */
+  convertFormula(input: FormulaWorkerInput, callOptions: WorkerCallOptions = {}): Promise<unknown> {
+    const signal = callOptions.signal;
+    if (this.terminated) return Promise.reject(this.runtimeError("WORKER_TERMINATED", "Worker client is terminated"));
+    if (signal?.aborted) return Promise.reject(this.runtimeError("CANCELLED", "Formula request was aborted"));
+    const requestId = input.requestId ?? this.nextId("formula");
+    const wireRequestId = this.nextId("formula");
+    const request: Extract<WorkerRequest, { type: "convert-formula" }> = {
+      protocolVersion: WORKER_PROTOCOL_VERSION, type: "convert-formula", requestId: wireRequestId,
+      input: { content: input.content, inputFormat: input.inputFormat, outputFormat: input.outputFormat, mode: input.mode },
+    };
+    const validation = validateWorkerRequest({ ...request, requestId });
+    if (!validation.ok) return Promise.reject(this.runtimeError(validation.code, validation.message));
+    if (new TextEncoder().encode(input.content).byteLength > this.maxFormulaInputBytes) {
+      return Promise.reject(this.runtimeError("WORKER_FORMULA_INPUT_LIMIT", "Formula exceeds the configured UTF-8 input budget"));
+    }
+    const durationMillis = callOptions.timeoutMillis ?? this.maxFormulaDurationMillis;
+    if (!Number.isSafeInteger(durationMillis) || durationMillis <= 0) return Promise.reject(this.runtimeError("WORKER_RPC_INVALID_TIMEOUT", "Formula timeout must be a positive safe integer"));
+    if (this.hasRequest(requestId)) return Promise.reject(this.runtimeError("DUPLICATE_REQUEST_ID", `Request '${requestId}' already exists`));
+    if (this.queue.length >= this.maxQueueLength) return Promise.reject(this.runtimeError("WORKER_QUEUE_FULL", "Worker task queue is full"));
+    return new Promise((resolve, reject) => {
+      const abort = (): void => { this.cancel(requestId); };
+      const cleanup = (): void => { signal?.removeEventListener("abort", abort); };
+      this.queue.push({
+        requestId, wireRequestId, request, durationMillis, resultBytes: this.maxFormulaResultBytes,
+        generation: this.generation,
+        resolve: (value) => { cleanup(); resolve(value); },
+        reject: (error) => { cleanup(); reject(error); },
+      });
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) abort();
       void this.pump();
     });
   }
@@ -208,33 +264,31 @@ export class WasmWorkerClient {
   }
 
   private async pump(): Promise<void> {
+    const generation = this.generation;
     try {
       await this.initialized;
     } catch {
       return;
     }
-    if (this.active || this.terminated) return;
+    // A restart may have replaced the resolved promise while this pump was
+    // suspended. Recovery owns the next pump after the new worker is ready.
+    if (generation !== this.generation || this.active || this.terminated) return;
     const task = this.queue.shift();
     if (!task) return;
     task.generation = this.generation;
     this.active = task;
     try {
-      this.worker.postMessage({
-        protocolVersion: WORKER_PROTOCOL_VERSION,
-        type: "recognize",
-        requestId: task.wireRequestId,
-        input: task.input,
-      });
+      this.worker.postMessage(task.request);
       task.timeout = setTimeout(() => {
         if (this.active !== task) return;
         this.restartWorker(
           "WORKER_TASK_TIMEOUT",
-          `Recognition exceeded ${this.maxTaskDurationMillis} ms`,
-          this.runtimeError("WORKER_TASK_TIMEOUT", "Recognition exceeded the configured duration limit", {
+          `Worker task exceeded ${task.durationMillis} ms`,
+          this.runtimeError("WORKER_TASK_TIMEOUT", "Worker task exceeded the configured duration limit", {
             workerRestarted: true,
           }),
         );
-      }, this.maxTaskDurationMillis);
+      }, task.durationMillis);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       this.restartWorker(
@@ -273,8 +327,8 @@ export class WasmWorkerClient {
     const task = this.active;
     this.active = undefined;
     if (task.timeout) clearTimeout(task.timeout);
-    if (response.type === "result" && serializedBytes(response.data) > this.maxResultBytes) {
-      task.reject(this.runtimeError("WORKER_RESULT_LIMIT", "Recognition result exceeds the configured byte limit"));
+    if (response.type === "result" && serializedBytes(response.data) > task.resultBytes) {
+      task.reject(this.runtimeError("WORKER_RESULT_LIMIT", "Worker result exceeds the configured byte limit"));
     } else {
       response.type === "result" ? task.resolve(response.data) : task.reject(new WorkerRuntimeError(response.error));
     }

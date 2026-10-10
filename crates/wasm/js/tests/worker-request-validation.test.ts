@@ -4,6 +4,17 @@ import test from "node:test";
 import { WORKER_PROTOCOL_VERSION } from "../src/types.js";
 import { validateWorkerRequest } from "../src/worker-request-validation.js";
 
+test("formula RPC validates modes, formats, request identity and UTF-8 bytes", () => {
+  const request = { protocolVersion: 1, type: "convert-formula", requestId: "formula:1", input: { content: "frac(a,b)", inputFormat: "typst", outputFormat: "latex-fragment", mode: "best-effort" } };
+  assert.equal(validateWorkerRequest(request).ok, true);
+  for (const field of [
+    { content: " " }, { content: "x".repeat(65537) }, { content: "中".repeat(22000) },
+    { inputFormat: "ole" }, { outputFormat: "pdf" }, { mode: "lossless" },
+    { inputFormat: { toString: () => "typst" } }, { outputFormat: null },
+  ]) assert.equal(validateWorkerRequest({ ...request, input: { ...request.input, ...field } }).ok, false);
+  assert.equal(validateWorkerRequest({ ...request, requestId: "" }).ok, false);
+});
+
 test("accepts a valid initialize request", () => {
   const result = validateWorkerRequest({
     protocolVersion: WORKER_PROTOCOL_VERSION,

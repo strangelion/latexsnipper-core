@@ -112,6 +112,14 @@ export interface RecognitionInput {
   mode: string;
 }
 
+export interface FormulaWorkerInput {
+  requestId?: string;
+  content: string;
+  inputFormat: FormulaInputFormat;
+  outputFormat: FormulaOutputFormat | "latex-fragment";
+  mode?: FormulaConversionMode;
+}
+
 export interface ProgressEvent {
   requestId: string;
   stage: string;
@@ -119,6 +127,12 @@ export interface ProgressEvent {
 }
 
 export type WorkerRequest =
+  | {
+      protocolVersion: typeof WORKER_PROTOCOL_VERSION;
+      type: "convert-formula";
+      requestId: string;
+      input: Omit<FormulaWorkerInput, "requestId">;
+    }
   | {
       protocolVersion: typeof WORKER_PROTOCOL_VERSION;
       type: "initialize";
@@ -188,3 +202,4 @@ export interface WorkerLike {
 }
 
 export type WorkerFactory = () => WorkerLike;
+import type { FormulaInputFormat, FormulaOutputFormat, FormulaConversionMode } from "./formula.js";

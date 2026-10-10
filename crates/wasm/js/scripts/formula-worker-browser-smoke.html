@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Formula Worker conformance</title>
+<link rel="icon" href="data:,">
+<pre id="result">Running real browser Worker conversion checks...</pre>
+<script type="module">
+import { WasmWorkerClient } from "../dist/index.js";
+
+const verify = (condition, message) => { if (!condition) throw new Error(message); };
+const clients = [];
+const workerUrl = new URL("../dist/worker-entry.js", import.meta.url);
+const moduleUrl = new URL("../../../../target/wasm-fragment-web/latexsnipper_wasm.js", import.meta.url).href;
+
+window.formulaWorkerProof = (async () => {
+  try {
+    const client = new WasmWorkerClient({ workerUrl, moduleUrl });
+    clients.push(client);
+    await client.ready();
+    const inputs = [
+      ["latex", String.raw`\frac{a}{b}`],
+      ["typst", "frac(a,b)"],
+      ["mathml", "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>"],
+      ["omml", '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>'],
+    ];
+    for (const [inputFormat, content] of inputs) {
+      const bare = await client.convertFormula({ content, inputFormat, outputFormat: "latex-fragment", mode: "best-effort" });
+      verify(bare.ok && bare.data.contentKind === "latex-fragment" && bare.data.content === String.raw`\frac{a}{b}`, `${inputFormat} bare projection`);
+      const inline = await client.convertFormula({ content, inputFormat, outputFormat: "markdown_inline", mode: "best-effort" });
+      verify(inline.ok && inline.data.content === String.raw`$\frac{a}{b}$`, `${inputFormat} inline projection`);
+    }
+    const malformed = await client.convertFormula({ content: String.raw`\documentclass{article}x`, inputFormat: "latex", outputFormat: "latex-fragment", mode: "best-effort" });
+    verify(!malformed.ok && malformed.error.code === "CONVERSION_FAILED", "document splice refusal");
+    const unavailable = await client.convertFormula({ content: "x", inputFormat: "mtef", outputFormat: "omml" });
+    verify(!unavailable.ok && unavailable.error.code === "UNSUPPORTED_FORMAT", "unsupported route remains explicit");
+    client.terminate();
+
+    let entered;
+    let probe;
+    const workers = [];
+    const lifecycle = new WasmWorkerClient({
+      workerUrl,
+      moduleUrl: new URL("./formula-worker-browser-fixture.mjs", import.meta.url).href,
+      workerFactory: () => {
+        const worker = new Worker(workerUrl, { type: "module" });
+        workers.push(worker);
+        worker.addEventListener("message", (event) => { if (event.data.stage === "fixture-spin") entered?.(); });
+        return worker;
+      },
+    });
+    clients.push(lifecycle);
+    await lifecycle.ready();
+    const oversized = await lifecycle.convertFormula({ content: "fixture:oversize", inputFormat: "latex", outputFormat: "omml" }).then(() => { throw new Error("Oversized envelope unexpectedly posted"); }, (error) => error);
+    verify(oversized.detail.code === "WORKER_RESULT_LIMIT", "worker-side result ceiling");
+    for (const cancellation of ["abort", "timeout"]) {
+      const signal = new AbortController();
+      probe = new Promise((resolve) => { entered = resolve; });
+      const stalled = lifecycle.convertFormula({ content: "fixture:infinite", inputFormat: "latex", outputFormat: "omml" }, { signal: signal.signal, timeoutMillis: 1000 });
+      const failure = stalled.then(() => { throw new Error("Stalled Wasm unexpectedly completed"); }, (error) => error);
+      await probe;
+      const before = workers.length;
+      if (cancellation === "abort") signal.abort();
+      const error = await failure;
+      verify(error.detail.code === (cancellation === "abort" ? "CANCELLED" : "WORKER_TASK_TIMEOUT") && error.detail.workerRestarted, `${cancellation} did not hard restart`);
+      await lifecycle.ready();
+      verify(workers.length === before + 1, `${cancellation} did not create a new Worker`);
+      const recovered = await lifecycle.convertFormula({ content: "x^2", inputFormat: "latex", outputFormat: "omml" });
+      verify(recovered.ok && recovered.data.content.includes("sSup"), `${cancellation} recovery did not execute Core`);
+    }
+    const result = { ok: true, projections: 8, refusalCases: 2, workerResultBudget: true, hardCancellation: true, wasmTimeout: true, postRestartCoreConversions: 2, host: "browser-only, not Obsidian" };
+    document.querySelector("#result").textContent = JSON.stringify(result, null, 2);
+    return result;
+  } catch (error) {
+    const result = { ok: false, message: error.message, stack: error.stack };
+    document.querySelector("#result").textContent = JSON.stringify(result, null, 2);
+    return result;
+  } finally {
+    clients.forEach((client) => client.terminate());
+  }
+})();
+</script>

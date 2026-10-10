@@ -26,10 +26,10 @@ Android JNI/iOS C 桥接仍使用旧全局引擎与 StubRuntime，尚未接入 R
 | 顺序 | 工作项 | 状态与验收边界 |
 | --- | --- | --- |
 | OBS-01 | 裸公式与行内输出 | Core/Rust/WASM/TS 独立裸公式入口已有，保留 `latex` 文档兼容行为；LaTeX/Typst/MathML/OMML 单公式行内输出实测通过，宿主接入待 OBS-05 |
-| OBS-02 | 专用转换 Worker | 待接入：公式转换 RPC、有限队列、输入/输出预算、超时及取消；同步 WASM 硬取消须终止/重建 Worker，不能仅丢弃 Promise |
+| OBS-02 | 专用转换 Worker | 官方客户端公式 RPC、队列/预算、硬取消及超时重建已有，真实 Chrome Worker 通过；继续接精简构建和宿主资源加载 |
 | OBS-03 | 精简转换 WASM | 待实现：转换专用 feature/产物，不加载 OCR 模型或识别运行时；构建后测量体积、启动与内存，不预先承诺数值 |
 | OBS-04 | 原生转换 RPC | 待实现：JSONL 新增版本化公式动作，保留既有识别协议；独立进程监督由桌面宿主负责，移动端不用该路线 |
-| OBS-05 | 宿主集成验收 | 待实际插件：桌面/移动 WebView 分别验证 Worker、资源路径、模型无关转换、错误/取消与 Markdown 插入；不以 Node 冒充真实 Obsidian 验收 |
+| OBS-05 | 宿主集成验收 | 待实际宿主：将现有 Obsidian 插件接入该链路，桌面/移动分别验证资源路径、错误/取消与 Markdown 插入；不以 Node 或普通 Chrome 冒充 Obsidian 验收 |
 
 `typst` 的有限重建仍是 best-effort；裸公式投影不保证任意 MathLive/TeX
 语法支持、视觉保真或自定义宏可执行。WASI 转换插件不是浏览器转换 Worker。

@@ -4,8 +4,11 @@ import {
   type WorkerResponse,
 } from "./types.js";
 import { validateWorkerRequest } from "./worker-request-validation.js";
+import type { WasmFormulaApi, WasmFormulaFragmentApi } from "./formula.js";
 
 interface WasmApi {
+  convert_formula_v3?: WasmFormulaApi["convert_formula_v3"];
+  convert_formula_fragment_v3?: WasmFormulaFragmentApi["convert_formula_fragment_v3"];
   default?: (wasmUrl?: string) => Promise<unknown>;
   init?: () => void;
   load_model_v2(name: string, bytes: Uint8Array, expectedSha256?: string): unknown;
@@ -58,6 +61,23 @@ async function handle(request: WorkerRequest): Promise<void> {
     }
     if (!api) {
       error(request.requestId, "WORKER_NOT_INITIALIZED", "Initialize the worker before use");
+      return;
+    }
+    if (request.type === "convert-formula") {
+      const input = request.input;
+      const fragment = input.outputFormat === "latex-fragment";
+      if (fragment ? !api.convert_formula_fragment_v3 : !api.convert_formula_v3) {
+        error(request.requestId, "WORKER_FORMULA_UNAVAILABLE", "Loaded WASM package lacks the requested formula export");
+        return;
+      }
+      const data = fragment
+        ? api.convert_formula_fragment_v3!(input.content, input.inputFormat, input.mode ?? "strict")
+        : api.convert_formula_v3!(input.content, input.inputFormat, input.outputFormat as Exclude<typeof input.outputFormat, "latex-fragment">, input.mode ?? "strict");
+      if (new TextEncoder().encode(JSON.stringify(data)).byteLength > 256 * 1024) {
+        error(request.requestId, "WORKER_RESULT_LIMIT", "Formula envelope exceeds the 256 KiB worker result budget");
+        return;
+      }
+      respond({ protocolVersion: WORKER_PROTOCOL_VERSION, type: "result", requestId: request.requestId, data });
       return;
     }
     if (request.type === "load-model") {

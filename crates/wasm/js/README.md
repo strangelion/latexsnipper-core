@@ -83,13 +83,47 @@ are not grammar validation. Over-limit input returns `INPUT_TOO_LARGE`, unknown
 labels/modes return `INVALID_ARGUMENT`, unavailable routes return `UNSUPPORTED_FORMAT`,
 and source/export failures return `CONVERSION_FAILED`.
 
-The helpers are synchronous direct-module adapters, not new `WasmWorkerClient`
-RPC methods. Run them in a caller-owned Worker for UI isolation; they do not supply
-hard cancellation or conversion queue management. Feature-detect the additive exports
-on older WASM packages. Existing recognition/worker and v2/v3 document-conversion APIs
-remain unchanged. Package smoke executes all routes in Node and initialized Web ESM
+The direct helpers remain synchronous. `WasmWorkerClient.convertFormula` now uses
+the additive `convert-formula` worker action; existing actions and protocol version
+1 remain compatible. Prefer a dedicated client instance for conversion-only work.
+No recognition model is required or automatically loaded. If models were explicitly
+loaded into a shared client, hard restart restores them as before.
+
+```ts
+const controller = new AbortController();
+const result = await client.convertFormula({
+  requestId: "editor-revision-1",
+  content: "frac(a,b)", inputFormat: "typst",
+  outputFormat: "latex-fragment", mode: "best-effort",
+}, { signal: controller.signal, timeoutMillis: 5000 });
+// result is the raw Core v3 envelope: check ok before using its content.
+// controller.abort() cancels queued work or terminates/rebuilds the active Worker.
+```
+
+Conversion and recognition share the bounded queue. Formula defaults are 64 KiB
+UTF-8 input, 256 KiB serialized result envelope and 30 seconds of active execution;
+input/result limits may be lowered but not raised above these ceilings. Timeout
+does not include queue waiting. Queued abort removes only that task; active abort
+or timeout terminates the Worker, suppresses stale responses and reinitializes it
+before continuing queued tasks. This is not merely a Promise timeout. The worker
+checks formula input before invoking WASM and result size before posting it.
+Missing exports on an older WASM package return `WORKER_FORMULA_UNAVAILABLE`; there
+is no silent main-thread fallback. An older worker rejects the new action explicitly.
+
+Feature-detect additive exports on older generated packages. Recognition behavior
+and v2/v3 document-conversion APIs remain compatible. Package smoke executes all
+routes in Node and initialized Web ESM
 packages under Node, calls the built TS helper, and checks bundler builds; this is
 not a real-browser visual test. Browser unit tests cover the same new API.
+
+For actual browser Worker conformance, build the web package at
+`target/wasm-fragment-web`, run `npm run build` here and then start
+`node crates/wasm/js/scripts/formula-worker-server.mjs` from the repository root.
+Open the printed loopback page. It executes Core conversion through the production
+worker and uses a separate clearly named fixture with a deliberately infinite
+Wasm loop to verify hard cancellation, timeout and post-restart Core conversion.
+This does not claim Obsidian desktop/mobile, WebKit or Android acceptance; see
+[the integration plan](../../../docs/application-adapter-roadmap.md).
 
 The wasm-pack `bundler` target uses the Wasm ESM integration proposal. Vite consumers must add
 `vite-plugin-wasm` and target `esnext`; the checked-in `vite.config.ts` is the canonical example.

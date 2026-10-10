@@ -16,6 +16,8 @@ class FakeWorker implements WorkerLike {
   readonly requests: WorkerRequest[] = [];
   terminated = false;
   failRecognitionPost = false;
+  initialized = false;
+  formulaBeforeReady = false;
 
   constructor(private readonly respondToControl = true) {}
 
@@ -24,13 +26,17 @@ class FakeWorker implements WorkerLike {
       throw new Error("fixture recognition post failed");
     }
     this.requests.push(request);
+    if (request.type === "convert-formula" && !this.initialized) this.formulaBeforeReady = true;
     if (this.respondToControl && (request.type === "initialize" || request.type === "load-model")) {
-      queueMicrotask(() => this.emit({
+      queueMicrotask(() => {
+        if (request.type === "initialize") this.initialized = true;
+        this.emit({
         protocolVersion: 1,
         type: "result",
         requestId: request.requestId,
         data: { ok: true },
-      }));
+        });
+      });
     }
   }
 
@@ -56,11 +62,130 @@ class FakeWorker implements WorkerLike {
     if (!request) throw new Error(`Missing recognition request at index ${index}`);
     return request;
   }
+
+  formula(index = 0): Extract<WorkerRequest, { type: "convert-formula" }> {
+    const request = this.requests.filter((request): request is Extract<WorkerRequest, { type: "convert-formula" }> => request.type === "convert-formula")[index];
+    if (!request) throw new Error(`Missing formula request at index ${index}`);
+    return request;
+  }
 }
 
 async function tick(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+test("model-free formulas share ordering and queue limits with recognition", async () => {
+  const worker = new FakeWorker();
+  const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => worker, maxQueueLength: 1 });
+  await client.ready();
+  const formula = client.convertFormula({ requestId: "formula", content: "frac(a,b)", inputFormat: "typst", outputFormat: "latex-fragment", mode: "best-effort" });
+  await tick();
+  assert.equal(worker.requests.some((request) => request.type === "load-model"), false);
+  const recognition = client.recognize({ requestId: "image", width: 1, height: 1, pixels: new Uint8Array(4), mode: "text" });
+  await assert.rejects(client.convertFormula({ content: "x", inputFormat: "latex", outputFormat: "omml" }), (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "WORKER_QUEUE_FULL");
+  const wire = worker.formula();
+  assert.equal(wire.input.mode, "best-effort");
+  assert.equal(worker.requests.some((request) => request.type === "recognize"), false);
+  worker.emit({ protocolVersion: 1, type: "result", requestId: wire.requestId, data: { ok: true, data: { content: "\\frac{a}{b}", contentKind: "latex-fragment" } } });
+  assert.deepEqual(await formula, { ok: true, data: { content: "\\frac{a}{b}", contentKind: "latex-fragment" } });
+  await tick();
+  worker.emit({ protocolVersion: 1, type: "result", requestId: worker.recognition().requestId, data: "image result" });
+  assert.equal(await recognition, "image result");
+  client.terminate();
+});
+
+test("formula AbortSignal hard-cancels active work and suppresses old results", async () => {
+  const workers: FakeWorker[] = [];
+  const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => { const worker = new FakeWorker(); workers.push(worker); return worker; } });
+  await client.ready();
+  const signal = new AbortController();
+  const first = client.convertFormula({ requestId: "cancel", content: "x", inputFormat: "latex", outputFormat: "omml" }, { signal: signal.signal });
+  const rejected = assert.rejects(first, (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "CANCELLED" && error.detail.hardCancellation === true);
+  const next = client.convertFormula({ requestId: "next", content: "y", inputFormat: "latex", outputFormat: "omml" });
+  await tick();
+  const old = workers[0]!.formula();
+  signal.abort();
+  await rejected;
+  await tick();
+  assert.equal(workers[0]!.terminated, true);
+  assert.equal(workers[1]!.requests.some((request) => request.type === "load-model"), false);
+  workers[0]!.emit({ protocolVersion: 1, type: "result", requestId: old.requestId, data: "stale" });
+  workers[1]!.emit({ protocolVersion: 1, type: "result", requestId: workers[1]!.formula().requestId, data: "current" });
+  assert.equal(await next, "current");
+  client.terminate();
+});
+
+test("cancellation in the enqueue microtask window waits for replacement initialization", async () => {
+  const workers: FakeWorker[] = [];
+  const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => { const worker = new FakeWorker(); workers.push(worker); return worker; } });
+  await client.ready();
+  const signal = new AbortController();
+  const first = client.convertFormula({ content: "x", inputFormat: "latex", outputFormat: "omml" }, { signal: signal.signal });
+  const rejected = assert.rejects(first, (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "CANCELLED");
+  await tick();
+  const next = client.convertFormula({ content: "y", inputFormat: "latex", outputFormat: "omml" });
+  signal.abort();
+  await rejected;
+  await tick();
+  workers[1]!.emit({ protocolVersion: 1, type: "result", requestId: workers[1]!.formula().requestId, data: "current" });
+  assert.equal(await next, "current");
+  client.terminate();
+  assert.equal(workers[1]!.formulaBeforeReady, false);
+});
+
+test("formula timeout terminates a stuck worker and subsequent formula work recovers", async () => {
+  const workers: FakeWorker[] = [];
+  const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => { const worker = new FakeWorker(); workers.push(worker); return worker; }, maxFormulaDurationMillis: 10 });
+  await client.ready();
+  await assert.rejects(client.convertFormula({ content: "x", inputFormat: "latex", outputFormat: "omml" }), (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "WORKER_TASK_TIMEOUT" && error.detail.workerRestarted === true);
+  await client.ready();
+  assert.equal(workers[0]!.terminated, true);
+  const next = client.convertFormula({ content: "y", inputFormat: "latex", outputFormat: "omml" }, { timeoutMillis: 1000 });
+  await tick();
+  workers[1]!.emit({ protocolVersion: 1, type: "result", requestId: workers[1]!.formula().requestId, data: "recovered" });
+  assert.equal(await next, "recovered");
+  client.terminate();
+});
+
+test("formula input and result limits preserve queue usability", async () => {
+  const worker = new FakeWorker();
+  const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => worker, maxFormulaInputBytes: 3, maxFormulaResultBytes: 8 });
+  await client.ready();
+  await assert.rejects(client.convertFormula({ content: "中文", inputFormat: "latex", outputFormat: "omml" }), (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "WORKER_FORMULA_INPUT_LIMIT");
+  assert.equal(worker.requests.some((request) => request.type === "convert-formula"), false);
+  const first = client.convertFormula({ content: "x", inputFormat: "latex", outputFormat: "omml" });
+  const rejected = assert.rejects(first, (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "WORKER_RESULT_LIMIT");
+  await tick();
+  worker.emit({ protocolVersion: 1, type: "result", requestId: worker.formula().requestId, data: "too much output" });
+  await rejected;
+  const next = client.convertFormula({ content: "x", inputFormat: "latex", outputFormat: "omml" });
+  await tick();
+  worker.emit({ protocolVersion: 1, type: "result", requestId: worker.formula(1).requestId, data: "ok" });
+  assert.equal(await next, "ok");
+  client.terminate();
+});
+
+test("formula queued and pre-aborted signals do not restart the active worker", async () => {
+  const worker = new FakeWorker();
+  const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => worker });
+  await client.ready();
+  const stopped = new AbortController();
+  stopped.abort();
+  await assert.rejects(client.convertFormula({ content: "x", inputFormat: "latex", outputFormat: "omml" }, { signal: stopped.signal }), (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "CANCELLED");
+  const active = client.convertFormula({ requestId: "active", content: "x", inputFormat: "latex", outputFormat: "omml" });
+  await tick();
+  await assert.rejects(client.convertFormula({ requestId: "active", content: "x", inputFormat: "latex", outputFormat: "omml" }), (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "DUPLICATE_REQUEST_ID");
+  const signal = new AbortController();
+  const queued = client.convertFormula({ content: "y", inputFormat: "latex", outputFormat: "omml" }, { signal: signal.signal });
+  const rejected = assert.rejects(queued, (error: unknown) => error instanceof WorkerRuntimeError && error.detail.code === "CANCELLED" && error.detail.hardCancellation === false);
+  signal.abort();
+  await rejected;
+  assert.equal(worker.terminated, false);
+  worker.emit({ protocolVersion: 1, type: "result", requestId: worker.formula().requestId, data: "ok" });
+  assert.equal(await active, "ok");
+  assert.equal(worker.requests.filter((request) => request.type === "convert-formula").length, 1);
+  client.terminate();
+});
 
 test("hard cancellation terminates, restarts, reloads models, and suppresses stale output", async () => {
   const workers: FakeWorker[] = [];

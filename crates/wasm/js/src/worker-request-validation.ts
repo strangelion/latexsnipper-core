@@ -146,6 +146,28 @@ function validateRecognize(value: Record<string, unknown>): WorkerRequestValidat
   return { ok: true, request: value as unknown as WorkerRequest };
 }
 
+function validateFormula(value: Record<string, unknown>): WorkerRequestValidationResult {
+  const input = value.input;
+  if (!isRecord(input) || typeof input.content !== "string") {
+    return invalid(value, "Formula conversion requires non-empty string content");
+  }
+  // Check UTF-16 length first so over-limit input cannot allocate a huge encoder buffer.
+  if (input.content.length > 64 * 1024 || new TextEncoder().encode(input.content).byteLength > 64 * 1024) {
+    return invalid(value, "Formula input exceeds 64 KiB UTF-8");
+  }
+  if (input.content.trim().length === 0) return invalid(value, "Formula conversion requires non-empty string content");
+  if (typeof input.inputFormat !== "string" || !["latex", "typst", "mathml", "omml", "markdown", "unicode-math", "ascii-math", "mtef"].includes(input.inputFormat)) {
+    return invalid(value, "Unknown formula input format");
+  }
+  if (typeof input.outputFormat !== "string" || !["latex", "latex_display", "latex_equation", "typst", "markdown_inline", "markdown_block", "mathml", "omml", "html", "latex-fragment"].includes(input.outputFormat)) {
+    return invalid(value, "Unknown formula output format");
+  }
+  if (input.mode !== undefined && input.mode !== "strict" && input.mode !== "best-effort") {
+    return invalid(value, "Formula conversion mode must be strict or best-effort");
+  }
+  return { ok: true, request: value as unknown as WorkerRequest };
+}
+
 export function validateWorkerRequest(
   value: unknown,
   options: WorkerRequestValidationOptions = {},
@@ -171,6 +193,8 @@ export function validateWorkerRequest(
       return validateLoadModel(value);
     case "recognize":
       return validateRecognize(value);
+    case "convert-formula":
+      return validateFormula(value);
     case "cooperative-cancel":
     case "clear-models":
       return { ok: true, request: value as unknown as WorkerRequest };

@@ -25,7 +25,7 @@
     "crates/model/src/manifest_v3.rs": "7a7d2f15532978d732b633557ec1227713b633fdfe0b977aee5bc714236d9213",
     "crates/plugin/src/manifest_v3.rs": "4fb41389e3956a849dbe4d59c3c1d3e388f2fd0a5a8a80424c10338356f5ccbb",
     "crates/plugin/src/signed_registry.rs": "3ab061a24eeb038469170a8d7ec7ffbc9c9ddae5f4748cd70adf1dd62ea09464",
-    "crates/wasm/js/src/types.ts": "11dbd9c80b55ef41d49ba18227d16b21ce0915a3a72f0c76c3bbbf2d0790d03e",
+    "crates/wasm/js/src/types.ts": "ab61c8ba223484ef1b7698279d6d7c6d74d1e751901bca6edd2a300756446539",
     "quality/failure-corpus/candidate.schema.json": "c5a2f6bd1c4098f02fe1faf90f10772a45c61eabbb071b96a42887928e9423ec",
     "quality/int8/thresholds.v1.json": "2dbde09e4e91f13738d237e4467aff20aba82e9f4b13789afaa889ee1b7e3140",
     "wit/plugin-v1/plugin.wit": "48b4879e822ec0f055074af9421746ecaf3412c2363960c72f7f7ce846ea3471"
