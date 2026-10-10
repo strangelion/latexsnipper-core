@@ -19,7 +19,8 @@ use latexsnipper_conversion::{
 };
 use latexsnipper_engine::application::{ApplicationError, RecognitionOptions, RuntimePreference};
 use latexsnipper_engine::{
-    DocumentParseMode, RecognitionIntegrationApi, RecognitionRequest, RecognitionSession,
+    DocumentParseMode, RecognitionIntegrationApi, RecognitionRequest, RecognitionResult,
+    RecognitionSession,
 };
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -546,12 +547,40 @@ pub unsafe extern "C" fn latexsnipper_session_recognize_bytes(
         }
         let options = request.options()?;
         let bytes = unsafe { std::slice::from_raw_parts(data, data_len) }.to_vec();
-        let recognition = RecognitionRequest::from_bytes(bytes, None)
-            .with_profile(request.profile)
-            .with_options(options);
-        with_session(handle, |session| {
-            session.recognize(recognition).map_err(Into::into)
-        })
+        recognize_owned(handle, request, options, bytes)
+    })
+}
+
+fn recognize_owned(
+    handle: u64,
+    request: SessionRecognizeRequest,
+    options: RecognitionOptions,
+    bytes: Vec<u8>,
+) -> Result<RecognitionResult, AdapterError> {
+    let recognition = RecognitionRequest::from_bytes(bytes, None)
+        .with_profile(request.profile)
+        .with_options(options);
+    with_session(handle, |session| {
+        session.recognize(recognition).map_err(Into::into)
+    })
+}
+
+/// Share session dispatch without copying an already-owned JNI image a second time.
+#[cfg(feature = "android-jni")]
+pub(crate) fn recognize_owned_bytes(handle: u64, request: &[u8], bytes: Vec<u8>) -> *mut c_char {
+    ffi_response(|| {
+        // SAFETY: The slice supplies its exact readable length during this call.
+        let request: SessionRecognizeRequest =
+            unsafe { parse_request(request.as_ptr(), request.len()) }?;
+        if bytes.is_empty() || bytes.len() > MAX_INPUT_BYTES {
+            return Err(AdapterError::new(
+                "INVALID_ARGUMENT",
+                "Encoded image length is invalid.",
+                false,
+            ));
+        }
+        let options = request.options()?;
+        recognize_owned(handle, request, options, bytes)
     })
 }
 

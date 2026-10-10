@@ -13,7 +13,8 @@
 | 原生独立进程 | `latexsnipper-worker` JSONL v1 | 长驻、串行、有界会话；识别使用路径，公式转换使用声明格式的字符串 |
 | 浏览器/支持 WASM 的 WebView | WASM v3 与官方 JS Worker | 公式转换可使用 conversion-only 构建；不依赖原生子进程 |
 | CLI | 单次命令内会话 | 多次启动不自动共享引擎，不等于 daemon |
-| Android / iOS 专用桥接 | 旧平台桥接 | 尚未接入 `RecognitionSession`；Android 的历史 `Java_*` 导出是原始 C 签名，不是完整 JNI；StubRuntime 不是实际识别后端 |
+| Android / JVM | `android-jni` + `NativeSessionBridge` | 真正 JNI 参数，复用 opaque C 会话；历史 `NativeBridge` C 签名不变，不能冒充 JNI；桌面 JVM 通过不代表 ART/设备推理通过 |
+| iOS 专用桥接 | Generic C session ABI / 旧平台 API | 新调用者可用有界独立句柄；旧全局引擎仍未迁移，其 StubRuntime 不是真实识别后端 |
 
 ## 公式转换
 
@@ -69,6 +70,7 @@ JS runtime 当前是 private 包，正式分发必须固定匹配的胶水、WAS
 - [原生应用 API](application-integration.md)
 - [JSONL 动作及错误](../crates/worker/README.md)
 - [C session ABI](../crates/ffi/include/latexsnipper_session.h)
+- [JNI 会话接口与迁移边界](../crates/ffi/java/README.md)
 - [Python 绑定](../crates/python)
 - [JS runtime](../crates/wasm/js/README.md)
 - [精简 WASM 边界与测量](formats/conversion-only-wasm.md)

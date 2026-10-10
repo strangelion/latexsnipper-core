@@ -88,6 +88,16 @@
         "docs/application-adapters.md"
       ],
       "nextMilestone": "Keep ABI v1 lifecycle tests blocking and add release-library symbol checks on Windows, Linux, and macOS."
+    },
+    {
+      "id": "jni-application-session-transport",
+      "status": "implemented",
+      "evidence": [
+        "crates/ffi/src/android/session_bridge.rs",
+        "crates/ffi/java/com/latexsnipper/core/NativeSessionBridge.java",
+        "crates/ffi/examples/jni_smoke.py"
+      ],
+      "nextMilestone": "Validate Android ABI/ART, packaged libraries and licensed device models separately; desktop JVM transport conformance is not device inference acceptance."
     }
   ]
 }

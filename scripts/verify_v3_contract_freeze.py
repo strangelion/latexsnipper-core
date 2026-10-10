@@ -22,6 +22,7 @@ CONTRACT_FILES = (
     "crates/cli/src/main.rs",
     "crates/wasm/js/src/types.ts",
     "crates/ffi/include/latexsnipper_session.h",
+    "crates/ffi/java/com/latexsnipper/core/NativeSessionBridge.java",
     "crates/evaluation/src/schema.rs",
     "crates/evaluation/src/int8.rs",
     "crates/evaluation/src/failure_corpus.rs",

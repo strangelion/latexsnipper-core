@@ -69,9 +69,15 @@ jobs:
         working-directory: crates/python
         run: python tests/smoke.py
       - name: Build the C formula shared library
-        run: cargo build --locked -p latexsnipper-ffi --release
+        run: cargo build --locked -p latexsnipper-ffi --features android-jni --release
       - name: Validate exported C formula symbols and session compatibility
         run: python crates/ffi/examples/formula_smoke.py --library-dir target/release
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verify genuine JNI calls in a checked desktop JVM
+        run: python crates/ffi/examples/jni_smoke.py --library-dir target/release
 
   coreml-contract:
     name: Core ML native contract
