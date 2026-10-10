@@ -3,6 +3,15 @@
   "name": "Conversion and Office output contract",
   "rules": [
     {
+      "id": "CORE-FORMULA-JSONL-001",
+      "description": "Native JSONL formula RPC shares Core capability gates and bounded bare projection, preserves recognition sessions, and a real persistent process continues after conversion errors and exits on shutdown or EOF.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion", "worker"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-worker", "formula"]},
+      "failureMessage": "Native formula RPC gates, budgets, session isolation or persistent process lifecycle regressed."
+    },
+    {
       "id": "CORE-FORMULA-FRAGMENT-001",
       "description": "Explicit bare-formula projection rejects document splicing, preserves comments and budgets, and single formula inline output uses inline delimiters without changing legacy document export.",
       "severity": "blocking",

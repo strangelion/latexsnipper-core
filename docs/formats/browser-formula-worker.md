@@ -48,5 +48,6 @@ not a complete parser/renderer safety or lossless fidelity proof. Timeout applie
 to active execution, not queue waiting; renderer/editor support must be checked
 separately. Package/module assets remain constrained to the worker origin.
 
-Next work: conversion-only WASM, native JSONL conversion actions, and real
-[Obsidian integration acceptance](../application-adapter-roadmap.md).
+Conversion-only WASM and native JSONL conversion actions are documented in the
+[application adapter boundaries](../application-adapters.md). These interfaces
+do not establish actual host asset loading or insertion acceptance.

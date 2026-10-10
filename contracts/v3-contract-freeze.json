@@ -1,7 +1,7 @@
 {
   "contractRelease": "3.0.0",
   "files": {
-    "contracts/agent/core-conversion-contract.v1.yaml": "b5f2dc2b70a5f561c9266dc9784ba04aaf0e57766a9cb2ba93d64b2461826d1f",
+    "contracts/agent/core-conversion-contract.v1.yaml": "94a8d8e62a570af0919d757b3bb1d2d42031d7145b3a1b534ae6e4155b16b68a",
     "contracts/agent/core-mixed-contract.v1.yaml": "ed21fac733c14c1450709574d09d1af39d69b623178992630bb19e817b173844",
     "contracts/agent/core-model-transport-contract.v1.yaml": "0ff4fdec673cde60f387d1b5f63caee9d7139199e6b262a25e3d7412d719291c",
     "contracts/agent/core-provider-contract.v1.yaml": "98b888cf32cbd4efb41065eae9259e9402eb779e30b3b41f339243c03cdd7a30",
@@ -50,7 +50,8 @@
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
     "crates/syntax/src": "ffeda08867b0660bfbc9e38a895c0f8e31e3e33ca928b2c28e18c6319ed31e32",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
-    "crates/wasm/src": "6bce1b802dec76d3a64cec2c54646ec92527f4ac053a14958554f033a7554abf"
+    "crates/wasm/src": "6bce1b802dec76d3a64cec2c54646ec92527f4ac053a14958554f033a7554abf",
+    "crates/worker/src": "922016f069c35f8722cbbdbd0f360e0d6f0930c5be9cd6c5f05e2a20a6596ed9"
   },
   "schemaVersion": 1
 }

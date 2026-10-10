@@ -144,7 +144,7 @@ Open the printed loopback page. It executes Core conversion through the producti
 worker and uses a separate clearly named fixture with a deliberately infinite
 Wasm loop to verify hard cancellation, timeout and post-restart Core conversion.
 This does not claim Obsidian desktop/mobile, WebKit or Android acceptance; see
-[the integration plan](../../../docs/application-adapter-roadmap.md).
+[the application adapter boundaries](../../../docs/application-adapters.md).
 
 Use `?profile=full` or `?profile=conversion` on that page to test freshly built
 packages under `target/wasm-full-web` or `target/wasm-conversion-web`. The default

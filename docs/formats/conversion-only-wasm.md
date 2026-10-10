@@ -74,6 +74,6 @@ Reproduce byte/output comparison with
 Node/web packages in `target/wasm-full-*` and `target/wasm-conversion-*`.
 Build commands and Worker usage are in [the JS runtime guide](../../crates/wasm/js/README.md).
 
-Remaining: native JSONL formula RPC and actual Obsidian asset loading, package
-selection, desktop/mobile lifecycle and Markdown insertion. See
-[OBS-01 to OBS-05](../application-adapter-roadmap.md).
+Native JSONL formula RPC is documented separately in [the worker guide](../../crates/worker/README.md).
+Host asset loading, package selection, lifecycle and insertion remain separate
+acceptance boundaries; see [application adapters](../application-adapters.md).

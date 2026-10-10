@@ -38,5 +38,5 @@ WASI/WIT v1 的受限单公式导入/导出已有；公共绑定、CLI 与 Offic
 - 不允许修改 Core 函数地址或全局状态；任意宏执行、动态 catcode 和第三方对象写回仍需独立范围与评审。
 
 相关资料：[插件系统](plugin.md)、[WASI 指南](v3/wasi-plugin-guide.md)、
-[格式计划](formula-format-roadmap.md)、[适配器计划](application-adapter-roadmap.md)、
+[格式计划](formula-format-roadmap.md)、[应用适配文档](application-adapters.md)、
 [总计划](closing-plan.md)、[收尾清单](closing-issue-ledger.md)。

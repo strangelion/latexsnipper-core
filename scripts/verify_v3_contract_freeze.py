@@ -60,6 +60,7 @@ PUBLIC_RUST_TREES = (
     "crates/plugin-wasi/src",
     "crates/ffi/src",
     "crates/wasm/src",
+    "crates/worker/src",
     "crates/drawing/src",
     "crates/custom-symbols/src",
 )

@@ -2796,6 +2796,7 @@ dependencies = [
  "latexsnipper-ast",
  "latexsnipper-conversion",
  "latexsnipper-engine",
+ "latexsnipper-foundation",
  "serde",
  "serde_json",
  "tempfile",

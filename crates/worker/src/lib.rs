@@ -1,4 +1,4 @@
-//! Bounded JSONL transport for long-lived application recognition sessions.
+//! Bounded JSONL transport for recognition sessions and model-free conversion.
 //!
 //! This crate deliberately owns protocol framing only. Every live worker
 //! session contains the same [`RecognitionSession`] used by the C and Python
@@ -12,12 +12,16 @@ use std::time::Duration;
 
 use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3, RecognitionProfile};
 use latexsnipper_ast::{Diagnostic, ImportOptions};
-use latexsnipper_conversion::OutputFormat;
+use latexsnipper_conversion::{
+    CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
+    FormulaInputFormat, OutputFormat,
+};
 use latexsnipper_engine::application::{ApplicationError, RecognitionOptions, RuntimePreference};
 use latexsnipper_engine::{
     DocumentParseMode, RecognitionIntegrationApi, RecognitionRequest, RecognitionResult,
     RecognitionSession,
 };
+use latexsnipper_foundation::SnipperError;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -26,6 +30,9 @@ pub const DEFAULT_MAX_SESSIONS: usize = 32;
 pub const MAX_REQUEST_LINE_BYTES: usize = 1024 * 1024;
 pub const MAX_INPUT_BYTES: u64 = 100 * 1024 * 1024;
 pub const MAX_TIMEOUT_MS: u64 = 10 * 60 * 1_000;
+pub const MAX_FORMULA_INPUT_BYTES: usize = 64 * 1024;
+/// Maximum serialized formula result data, excluding the transport envelope.
+pub const MAX_FORMULA_RESULT_BYTES: usize = 256 * 1024;
 const MAX_THREADS: usize = 256;
 
 #[derive(Debug, Deserialize)]
@@ -164,6 +171,16 @@ struct RecognizePathParams {
     formats: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FormulaConvertParams {
+    content: String,
+    input_format: String,
+    output_format: String,
+    #[serde(default)]
+    mode: Option<String>,
+}
+
 #[derive(Debug)]
 struct DispatchOutcome {
     data: Value,
@@ -236,6 +253,25 @@ impl Worker {
 
     fn dispatch(&mut self, request: WorkerRequest) -> Result<DispatchOutcome, WorkerError> {
         match request.action.as_str() {
+            "formula.capabilities" => {
+                require_empty_params(request.params)?;
+                Ok(DispatchOutcome::data(json!({
+                    "schemaVersion": 1,
+                    "target": "native",
+                    "conversions": CapabilityRegistry::formula_conversions(CapabilityTarget::Native),
+                    "projections": [{
+                        "outputFormat": "latex-fragment",
+                        "underlyingOutputFormat": "latex_display",
+                        "contentKind": "latex-fragment"
+                    }],
+                    "limits": {
+                        "maxInputBytes": MAX_FORMULA_INPUT_BYTES,
+                        "maxResultDataBytes": MAX_FORMULA_RESULT_BYTES,
+                        "hardCancellation": "supervisor-terminates-process"
+                    }
+                })))
+            }
+            "formula.convert" => self.convert_formula(request.params),
             "session.create" => self.create_session(request.params),
             "session.health" => self.session_health(request.params),
             "session.capabilities" => self.session_capabilities(request.params),
@@ -264,6 +300,67 @@ impl Worker {
                 format!("Unknown worker action: {}", request.action),
             )),
         }
+    }
+
+    fn convert_formula(&self, params: Value) -> Result<DispatchOutcome, WorkerError> {
+        let params: FormulaConvertParams = decode_params(params)?;
+        if params.content.len() > MAX_FORMULA_INPUT_BYTES {
+            return Err(WorkerError::protocol(
+                "INPUT_TOO_LARGE",
+                "Formula source exceeds the 64 KiB UTF-8 limit.",
+            ));
+        }
+        let input: FormulaInputFormat = serde_json::from_value(json!(params
+            .input_format
+            .trim()
+            .to_ascii_lowercase()
+            .replace('_', "-")))
+        .map_err(|_| WorkerError::protocol("INVALID_ARGUMENT", "Unknown formula input format."))?;
+        let mode: FormulaConversionMode = serde_json::from_value(json!(params
+            .mode
+            .as_deref()
+            .unwrap_or("strict")
+            .trim()
+            .to_ascii_lowercase()
+            .replace('_', "-")))
+        .map_err(|_| {
+            WorkerError::protocol("INVALID_ARGUMENT", "Mode must be strict or best-effort.")
+        })?;
+        let output_name = params.output_format.trim().to_ascii_lowercase();
+        let fragment = output_name.replace('_', "-") == "latex-fragment";
+        let output = if fragment {
+            OutputFormat::LatexDisplay
+        } else {
+            parse_output_formats(vec![output_name])?[0].1
+        };
+        let capability =
+            CapabilityRegistry::formula_conversion(input, output, mode, CapabilityTarget::Native);
+        if !capability.available {
+            return Err(WorkerError::protocol(
+                "UNSUPPORTED_FORMAT",
+                "The formula conversion route is not supported.",
+            )
+            .with_details(json!({ "reason": capability.unavailable_reason })));
+        }
+        let content = if fragment {
+            DocumentConverter::convert_formula_fragment(&params.content, input, mode)
+        } else {
+            DocumentConverter::convert_formula_string(&params.content, input, output, mode)
+        }
+        .map_err(|error| {
+            let code = if matches!(error, SnipperError::LimitExceeded(_)) {
+                "INPUT_TOO_LARGE"
+            } else {
+                "CONVERSION_FAILED"
+            };
+            WorkerError::protocol(code, "Formula conversion failed.")
+                .with_details(json!({ "detail": error.to_string() }))
+        })?;
+        let mut data = json!({ "content": content, "capability": capability });
+        if fragment {
+            data["contentKind"] = json!("latex-fragment");
+        }
+        bound_formula_result(data).map(DispatchOutcome::data)
     }
 
     fn create_session(&mut self, params: Value) -> Result<DispatchOutcome, WorkerError> {
@@ -710,6 +807,20 @@ fn to_value(value: impl Serialize) -> Result<Value, WorkerError> {
     })
 }
 
+fn bound_formula_result(data: Value) -> Result<Value, WorkerError> {
+    let bytes = serde_json::to_vec(&data).map_err(|error| {
+        WorkerError::protocol("INTERNAL", "Formula result could not be serialized.")
+            .with_details(json!({ "detail": error.to_string() }))
+    })?;
+    if bytes.len() > MAX_FORMULA_RESULT_BYTES {
+        return Err(WorkerError::protocol(
+            "OUTPUT_TOO_LARGE",
+            "Serialized formula result data exceeds the 256 KiB limit.",
+        ));
+    }
+    Ok(data)
+}
+
 fn session_not_found(session_id: u64) -> WorkerError {
     WorkerError::protocol(
         "SESSION_NOT_FOUND",
@@ -735,6 +846,206 @@ mod tests {
     fn response_data(response: &WorkerResponse) -> &Value {
         assert!(response.envelope.ok, "{:?}", response.envelope.error);
         response.envelope.data.as_ref().unwrap()
+    }
+
+    fn formula_params(content: &str, input: &str, output: &str) -> Value {
+        json!({
+            "content": content, "inputFormat": input,
+            "outputFormat": output, "mode": "best-effort"
+        })
+    }
+
+    #[test]
+    fn formula_capabilities_match_core_and_create_no_sessions() {
+        let mut worker = Worker::default();
+        let (response, _) = worker.process_line(&request(1, "formula.capabilities", json!({})));
+        let data = response_data(&response);
+        assert_eq!(data["schemaVersion"], 1);
+        assert_eq!(data["limits"]["maxInputBytes"], MAX_FORMULA_INPUT_BYTES);
+        assert_eq!(
+            data["limits"]["maxResultDataBytes"],
+            MAX_FORMULA_RESULT_BYTES
+        );
+        assert_eq!(
+            data["conversions"],
+            to_value(CapabilityRegistry::formula_conversions(
+                CapabilityTarget::Native
+            ))
+            .unwrap()
+        );
+        assert!(worker.sessions.is_empty());
+        let (extra, _) = worker.process_line(&request(
+            2,
+            "formula.capabilities",
+            json!({ "backend": "other" }),
+        ));
+        assert_eq!(extra.envelope.error.unwrap().code, "INVALID_PARAMS");
+    }
+
+    #[test]
+    fn formula_fragment_supports_four_inputs_and_keeps_legacy_document_export() {
+        let mut worker = Worker::default();
+        let samples = [
+            ("latex", r"\frac{a}{b}"),
+            ("typst", "frac(a,b)"),
+            ("mathml", "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>"),
+            ("omml", "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>"),
+        ];
+        for (index, (format, source)) in samples.into_iter().enumerate() {
+            let (response, shutdown) = worker.process_line(&request(
+                index,
+                "formula.convert",
+                formula_params(source, format, "latex-fragment"),
+            ));
+            assert!(!shutdown);
+            let data = response_data(&response);
+            assert_eq!(data["content"], r"\frac{a}{b}");
+            assert_eq!(data["contentKind"], "latex-fragment");
+            assert_eq!(data["capability"]["output"], "latex_display");
+            assert_eq!(data["capability"]["target"], "native");
+        }
+        let (document, _) = worker.process_line(&request(
+            5,
+            "formula.convert",
+            formula_params("frac(a,b)", "typst", "latex"),
+        ));
+        assert!(response_data(&document)["content"]
+            .as_str()
+            .unwrap()
+            .contains(r"\documentclass"));
+        let (inline, _) = worker.process_line(&request(
+            6,
+            "formula.convert",
+            formula_params("frac(a,b)", "typst", "markdown_inline"),
+        ));
+        assert_eq!(response_data(&inline)["content"], r"$\frac{a}{b}$");
+        assert!(worker.sessions.is_empty());
+    }
+
+    #[test]
+    fn formula_strict_default_and_errors_do_not_poison_following_requests() {
+        let mut worker = Worker::default();
+        let mut strict = formula_params("frac(a,b)", "typst", "latex-fragment");
+        strict.as_object_mut().unwrap().remove("mode");
+        let cases = [
+            (strict, "UNSUPPORTED_FORMAT"),
+            (formula_params("x", "mtef", "omml"), "UNSUPPORTED_FORMAT"),
+            (formula_params("x", "other", "omml"), "INVALID_ARGUMENT"),
+            (formula_params("x", "latex", "other"), "INVALID_ARGUMENT"),
+            (
+                formula_params(r"\documentclass{article}x", "latex", "latex-fragment"),
+                "CONVERSION_FAILED",
+            ),
+            (
+                formula_params(&"x".repeat(MAX_FORMULA_INPUT_BYTES + 1), "latex", "omml"),
+                "INPUT_TOO_LARGE",
+            ),
+            (
+                formula_params(
+                    &format!("{}x{}", "{".repeat(65), "}".repeat(65)),
+                    "latex",
+                    "omml",
+                ),
+                "INPUT_TOO_LARGE",
+            ),
+        ];
+        for (index, (params, code)) in cases.into_iter().enumerate() {
+            let (response, shutdown) =
+                worker.process_line(&request(index, "formula.convert", params));
+            assert!(!shutdown);
+            assert_eq!(response.envelope.error.unwrap().code, code);
+            let (status, _) = worker.process_line(&request("healthy", "worker.status", json!({})));
+            assert_eq!(response_data(&status)["liveSessions"], 0);
+        }
+        let (valid, _) = worker.process_line(&request(
+            "valid",
+            "formula.convert",
+            json!({ "content": "x^2", "inputFormat": "latex", "outputFormat": "omml" }),
+        ));
+        assert!(response_data(&valid)["content"]
+            .as_str()
+            .unwrap()
+            .contains("oMath"));
+        for (key, value) in [("backend", "other"), ("timeoutMs", "10"), ("mode", "auto")] {
+            let mut params = formula_params("x", "latex", "omml");
+            params[key] = json!(value);
+            let (failed, _) = worker.process_line(&request(key, "formula.convert", params));
+            let expected = if key == "mode" {
+                "INVALID_ARGUMENT"
+            } else {
+                "INVALID_PARAMS"
+            };
+            assert_eq!(failed.envelope.error.unwrap().code, expected);
+        }
+    }
+
+    #[test]
+    fn formula_result_limit_counts_serialized_json_not_just_content() {
+        let data = json!({ "content": "x".repeat(MAX_FORMULA_RESULT_BYTES - 14) });
+        assert_eq!(
+            serde_json::to_vec(&data).unwrap().len(),
+            MAX_FORMULA_RESULT_BYTES
+        );
+        assert!(bound_formula_result(data).is_ok());
+        assert_eq!(
+            bound_formula_result(json!({ "content": "\"".repeat(MAX_FORMULA_RESULT_BYTES / 2) }))
+                .unwrap_err()
+                .code,
+            "OUTPUT_TOO_LARGE"
+        );
+    }
+
+    #[test]
+    fn formula_conversion_preserves_existing_recognition_session() {
+        let models = tempfile::tempdir().unwrap();
+        let mut worker = Worker::default();
+        let (created, _) = worker.process_line(&request(
+            "create",
+            "session.create",
+            json!({ "modelsDir": models.path() }),
+        ));
+        let session_id = response_data(&created)["sessionId"].as_u64().unwrap();
+        let (converted, _) = worker.process_line(&request(
+            "convert",
+            "formula.convert",
+            formula_params("x^2", "latex", "latex-fragment"),
+        ));
+        assert!(converted.envelope.ok);
+        let (failed, _) = worker.process_line(&request(
+            "failed",
+            "formula.convert",
+            formula_params("x", "mtef", "omml"),
+        ));
+        assert!(!failed.envelope.ok);
+        let (healthy, _) = worker.process_line(&request(
+            "health",
+            "session.health",
+            json!({ "sessionId": session_id }),
+        ));
+        assert!(healthy.envelope.ok);
+        assert_eq!(worker.sessions.len(), 1);
+    }
+
+    #[test]
+    fn formula_input_limit_uses_utf8_bytes_and_normalizes_labels() {
+        let mut worker = Worker::default();
+        let source = "中".repeat(MAX_FORMULA_INPUT_BYTES / 3 + 1);
+        assert!(source.chars().count() < MAX_FORMULA_INPUT_BYTES);
+        let (response, _) = worker.process_line(&request(
+            1,
+            "formula.convert",
+            formula_params(&source, "latex", "omml"),
+        ));
+        assert_eq!(response.envelope.error.unwrap().code, "INPUT_TOO_LARGE");
+        let (response, _) = worker.process_line(&request(
+            2,
+            "formula.convert",
+            json!({
+                "content": "frac(a,b)", "inputFormat": " Typst ",
+                "outputFormat": " LATEX_FRAGMENT ", "mode": " BEST_EFFORT "
+            }),
+        ));
+        assert_eq!(response_data(&response)["content"], r"\frac{a}{b}");
     }
 
     #[test]

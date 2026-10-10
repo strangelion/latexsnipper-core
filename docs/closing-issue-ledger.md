@@ -16,10 +16,11 @@
 | C-05 | 外部真实分布准确率 | 评估/发布 | 待外部条件 | 获得许可明确的独立数据，限定公开声明 |
 | C-06 | Zig 接入决策 | Core 性能 | 决策完成：暂不接入 | 有新热点与跨平台收益时再评估 |
 | C-07 | 转换扩展与局部修复接口 | Core 转换/插件及应用绑定 | 进行中：可信 Rust 注册及受限 WASI 单公式路线已有 | 接公共绑定/Office 和二进制/文档路线；见 EXT-01 至 EXT-04 |
+| C-08 | Core 应用适配与会话兼容 | Core 原生/移动/WASM 接口 | 进行中：会话、裸公式、精简 WASM、转换 Worker 和原生公式 RPC 已有 | 升级 JNI/iOS 会话桥接；补缓存失效、监督与恢复接口，宿主打包和写回另行验收 |
 
 格式扩展见 [FMT-01 至 FMT-08](formula-format-roadmap.md)；
 第三方转换与修复接口见 [EXT-01 至 EXT-04](conversion-extension-roadmap.md)；
-持久会话见 [适配器计划](application-adapter-roadmap.md)；
+持久会话和转换接口见 [应用适配文档](application-adapters.md)；
 个性化补全见 [辅助计划](formula-assistance-roadmap.md)。
 
 ## Office 与 OLE

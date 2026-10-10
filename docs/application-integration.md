@@ -207,8 +207,9 @@ Adapters should be thin owners of one `RecognitionSession`:
   policy outside Core.
 
 None of those adapters requires a second engine lifecycle. Their persistence
-boundary, delivery order, and acceptance gates are tracked in
-[`application-adapter-roadmap.md`](application-adapter-roadmap.md).
+and compatibility boundaries are documented in
+[`application-adapters.md`](application-adapters.md); unfinished Core adapter
+work remains in [the closing checklist](closing-issue-ledger.md).
 
 ## Python application sessions
 
@@ -254,6 +255,16 @@ results in the Core v3 envelope. It supports create, health, capabilities,
 warmup, path recognition, model reload, idempotent close, status, and graceful
 shutdown. Each successful path recognition returns the authoritative
 `Document` plus explicitly requested derived formats.
+
+Additive `formula.capabilities` and `formula.convert` actions expose the shared
+native model-free conversion gate without creating or modifying recognition
+sessions. Conversion defaults to strict, accepts bounded source strings, and
+returns `content` plus its capability. The explicit `latex-fragment` projection
+returns bare LaTeX; legacy `latex` remains a document export. Source bytes and
+serialized result data are capped at 64 KiB and 256 KiB respectively. The result
+cap excludes the transport envelope and is not a peak allocation guarantee.
+There is no conversion deadline parameter or automatic fallback: synchronous
+conversion hard cancellation remains a supervising process responsibility.
 
 One stream is deliberately serial. The registry has 32 live-session slots,
 request lines are capped at 1 MiB, recognized files at 100 MiB, timeouts at ten

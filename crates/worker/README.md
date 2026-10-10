@@ -44,6 +44,8 @@ or `error`). A successful recognition keeps the authoritative `document` in
 | `session.recognizePath` | Recognize a local raster path and optionally derive text formats. |
 | `session.reloadModels` | Reload verified model manifests and clear warmup reports. |
 | `session.close` | Close one session; duplicate close is a successful no-op. |
+| `formula.capabilities` | Query model-free native conversion capabilities and projection limits. |
+| `formula.convert` | Convert a declared formula string without creating or changing recognition sessions. |
 | `worker.status` | Read live and maximum session counts. |
 | `worker.shutdown` | Close all sessions, flush the response, and exit successfully. |
 
@@ -52,16 +54,58 @@ Supported profiles are `formula`, `croppedFormula`, `text`, `mixed`, `table`,
 `latex_display`, `latex_equation`, `typst`, `markdown_inline`, `markdown_block`,
 `mathml`, `omml`, and `html`.
 
+## Model-free formula conversion
+
+These additive actions retain protocol version 1. They require no model directory,
+recognition session, OCR warmup or external conversion service:
+
+```json
+{"version":1,"id":"formats","action":"formula.capabilities","params":{}}
+{"version":1,"id":"bare","action":"formula.convert","params":{"content":"frac(a,b)","inputFormat":"typst","outputFormat":"latex-fragment","mode":"best-effort"}}
+{"version":1,"id":"native-math","action":"formula.convert","params":{"content":"x^2","inputFormat":"latex","outputFormat":"omml"}}
+```
+
+Capability data has `schemaVersion: 1`, `target: "native"`, the shared Core
+`conversions` array, `projections` and `limits`. A projection is not a new semantic
+output format: `latex-fragment` uses the underlying `latex_display` capability.
+Check each route's `available`, `mode`, limitations and unavailable reason before
+offering it. Input labels include unsupported formats for diagnostic purposes;
+their presence does not enable MTEF, UnicodeMath or AsciiMath conversion.
+
+Conversion parameters are `content`, `inputFormat`, `outputFormat`, and optional
+`mode` (`strict` by default, or explicit `best-effort`). Unknown fields, including
+`backend` and `timeoutMs`, are rejected. This action uses builtin Core routes,
+not third-party plugin selection or a document/binary/OLE interface.
+
+Success data contains `content` and the actual native `capability`. Bare projection
+also contains `contentKind: "latex-fragment"`. Legacy `latex` exports a document;
+do not insert it directly into a math editor or between `$` delimiters. Single-formula
+`markdown_inline` uses `$...$`; full Markdown document conversion has separate
+semantics. Bare shape checks do not prove renderer support or visual fidelity.
+
+`UNSUPPORTED_FORMAT`, `INVALID_ARGUMENT`, `INVALID_PARAMS`, `CONVERSION_FAILED`,
+`INPUT_TOO_LARGE` and `OUTPUT_TOO_LARGE` are explicit failure envelopes, not
+fallback results. A failed request does not stop the process or clear recognition
+sessions. No implicit best-effort, retry, output file or document replacement occurs.
+
 ## Limits and concurrency
 
 - at most 32 live sessions by default;
 - at most 1 MiB per request line;
 - at most 100 MiB per recognized input file;
 - at most 10 minutes for a requested recognition timeout;
+- formula source is at most 64 KiB UTF-8, with Core depth/token/reconstruction guards;
+- formula result `data` is at most 256 KiB after JSON serialization (not including
+  protocol fields, echoed ID or error envelope); this is not a peak allocation limit;
 - requests on one stdin/stdout stream execute serially.
 
 Run multiple supervised worker processes when parallel inference or hard
 cancellation is required. A request timeout is cooperative at Core pipeline
 boundaries; the supervisor remains responsible for a hard process deadline.
-The v1 JSONL protocol intentionally accepts paths only. Binary-buffer callers
-should use the C or Python adapter instead of expanding binary data into JSON.
+Formula conversion is synchronous and has no in-process interruption or deadline
+parameter. Hard cancellation requires terminating the child; all process-local
+recognition sessions then disappear. The supervisor must correlate IDs, discard
+stale replies and explicitly recreate any sessions; it must not automatically
+repeat a document mutation. Mobile integrations should use the WASM Worker route.
+Image recognition remains path-only. Binary-buffer callers should use the C or
+Python adapter instead of expanding binary data into JSON.
