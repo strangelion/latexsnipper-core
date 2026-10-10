@@ -55,6 +55,28 @@ unsupported; OLE is a host object, not a string format. Reconstruction does not
 recover the author's original source, and best-effort can lose syntax/style.
 LaTeX output uses the existing document exporter, not a promise of bare-source identity.
 
+For a standalone formula, feature-detect the additive
+`convert_formula_fragment_v3(content, inputFormat, mode?)` export or use
+`convertFormulaFragment`. Success includes `contentKind: "latex-fragment"`;
+the capability describes the underlying `latex_display` route, followed by a
+bounded, exactly-one-display shape check. This does not imply complete MathLive
+syntax support, TeX execution safety or lossless reconstruction.
+
+```ts
+import { convertFormulaFragment } from "@latexsnipper/wasm-runtime";
+
+const bare = convertFormulaFragment(initializedWasmModule, "frac(a,b)", {
+  inputFormat: "typst", mode: "best-effort",
+});
+// Check bare.ok before inserting bare.data.content into a formula editor.
+```
+
+LaTeX/Typst/MathML/OMML single-formula `markdown_inline` conversion now emits
+`$...$`, while `markdown_block` emits `$$...$$`. Full Markdown document conversion
+preserves source display modes; it is not an unconditional inline projection.
+Fragment projection refuses extra blocks, preambles, nested math-mode boundaries
+and document environments, and retains newline termination for trailing comments.
+
 Source and reconstructed LaTeX are bounded to 64 KiB, 64 lexical nesting levels and
 512 structural tokens per call; XML DTDs are rejected. These conservative budgets
 are not grammar validation. Over-limit input returns `INPUT_TOO_LARGE`, unknown

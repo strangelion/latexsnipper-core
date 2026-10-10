@@ -146,6 +146,52 @@ fn fixture_error(message: &str) -> PluginError {
 
 impl importer::Guest for Fixture {
     fn import_document(request: ImportRequest) -> Result<Document, PluginError> {
+        if request.format == "application/vnd.fixture.power" {
+            if request.payload == b"control:infinite" {
+                loop {
+                    core::hint::spin_loop();
+                }
+            }
+            if request.payload == b"control:wrong-media" {
+                return Ok(Document {
+                    schema_version: "1.0.0".into(),
+                    media_type: "text/plain".into(),
+                    payload: b"x^2".to_vec(),
+                });
+            }
+            if request.payload == b"control:invalid-json" {
+                return Ok(Document {
+                    schema_version: "1.0.0".into(),
+                    media_type: "application/vnd.latexsnipper.document+json".into(),
+                    payload: b"not JSON".to_vec(),
+                });
+            }
+            let source = if request.payload == b"control:extra-block" {
+                "x^2".into()
+            } else {
+                let [variable, b':', exponent] = request.payload.as_slice() else {
+                    return Err(fixture_error("invalid power syntax"));
+                };
+                if !variable.is_ascii_lowercase() || !exponent.is_ascii_digit() {
+                    return Err(fixture_error("invalid power operands"));
+                }
+                format!("{}^{}", *variable as char, *exponent as char)
+            };
+            let ast = latexsnipper_ast::DocumentBuilder::new()
+                .page(0.0, 0.0, |page| {
+                    page.display_formula(source);
+                    if request.payload == b"control:extra-block" {
+                        page.text_paragraph("unprojected content");
+                    }
+                })
+                .build();
+            return Ok(Document {
+                schema_version: "1.0.0".into(),
+                media_type: "application/vnd.latexsnipper.document+json".into(),
+                payload: serde_json::to_vec(&ast)
+                    .map_err(|_| fixture_error("serialization failed"))?,
+            });
+        }
         Ok(Document {
             schema_version: "1.0.0".to_string(),
             media_type: request.format,
@@ -156,6 +202,43 @@ impl importer::Guest for Fixture {
 
 impl exporter::Guest for Fixture {
     fn export_document(request: ExportRequest) -> Result<ExportResult, PluginError> {
+        if request.format == "application/vnd.fixture.power" {
+            if request.document.media_type != "application/vnd.latexsnipper.document+json" {
+                return Err(fixture_error("real AST required"));
+            }
+            let ast: latexsnipper_ast::Document = serde_json::from_slice(&request.document.payload)
+                .map_err(|_| fixture_error("invalid AST"))?;
+            let [latexsnipper_ast::Block::Formula(block)] = ast
+                .pages
+                .first()
+                .ok_or_else(|| fixture_error("no page"))?
+                .blocks
+                .as_slice()
+            else {
+                return Err(fixture_error("one formula required"));
+            };
+            let latexsnipper_ast::FormulaSource::Latex(source) = &block.formula.source else {
+                return Err(fixture_error("LaTeX projection required"));
+            };
+            if source == "control:invalid-utf8" {
+                return Ok(ExportResult {
+                    media_type: request.format,
+                    payload: vec![255],
+                    diagnostics: Vec::new(),
+                });
+            }
+            let [variable, b'^', exponent] = source.as_bytes() else {
+                return Err(fixture_error("unsupported power"));
+            };
+            if !variable.is_ascii_lowercase() || !exponent.is_ascii_digit() {
+                return Err(fixture_error("unsupported power operands"));
+            }
+            return Ok(ExportResult {
+                media_type: request.format,
+                payload: vec![*variable, b':', *exponent],
+                diagnostics: Vec::new(),
+            });
+        }
         Ok(ExportResult {
             media_type: request.format,
             payload: request.document.payload,

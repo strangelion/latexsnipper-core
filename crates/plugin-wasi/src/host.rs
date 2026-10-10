@@ -8,7 +8,7 @@ use latexsnipper_ast::DOCUMENT_SCHEMA_VERSION;
 use latexsnipper_plugin::{CancellationToken, PluginHook, PluginRegistrationGrantsV3};
 use sha2::{Digest, Sha256};
 use wasmtime::component::{Component, HasSelf, Linker, Resource, ResourceTable};
-use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, UpdateDeadline};
+use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, Trap, UpdateDeadline};
 
 use crate::bindings::latexsnipper::plugin::{
     environment_broker, execution_broker, filesystem_broker, model_artifact_broker, network_broker,
@@ -104,6 +104,10 @@ pub struct WasiComponentHost {
 }
 
 impl WasiComponentHost {
+    pub(crate) fn resource_limits(&self) -> &WasiResourceLimits {
+        &self.package.permissions.limits
+    }
+
     pub fn new(package: VerifiedComponentPackage) -> Result<Self, WasiDiagnostic> {
         let mut config = Config::new();
         config.consume_fuel(true);
@@ -1369,9 +1373,16 @@ fn filesystem_access_error(error: FilesystemOperationError) -> filesystem_broker
 }
 
 fn classify_runtime_error(error: wasmtime::Error) -> WasiDiagnostic {
-    let message = error.to_string();
+    // Runtime traps can sit beneath a component backtrace/context wrapper.
+    // Preserve the cause chain and inspect the typed trap before text fallbacks.
+    let message = format!("{error:#}");
     let lower = message.to_ascii_lowercase();
-    let code = if lower.contains("fuel") || lower.contains("epoch") || lower.contains("interrupt") {
+    let trap = error.downcast_ref::<Trap>();
+    let code = if matches!(trap, Some(Trap::OutOfFuel | Trap::Interrupt)) {
+        WasiDiagnosticCode::PluginWasiTimeout
+    } else if trap.is_some() {
+        WasiDiagnosticCode::PluginWasiTrap
+    } else if lower.contains("fuel") || lower.contains("epoch") || lower.contains("interrupt") {
         WasiDiagnosticCode::PluginWasiTimeout
     } else if lower.contains("memory") && (lower.contains("limit") || lower.contains("grow")) {
         WasiDiagnosticCode::PluginWasiMemoryLimit
@@ -1509,6 +1520,24 @@ impl Drop for ConcurrencyPermit {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wrapped_fuel_and_interrupt_traps_keep_timeout_classification() {
+        for trap in [wasmtime::Trap::OutOfFuel, wasmtime::Trap::Interrupt] {
+            let error = wasmtime::Error::from(trap).context("component execution backtrace");
+            let diagnostic = super::classify_runtime_error(error);
+            assert_eq!(
+                diagnostic.code,
+                crate::WasiDiagnosticCode::PluginWasiTimeout
+            );
+        }
+        let error = wasmtime::Error::from(wasmtime::Trap::UnreachableCodeReached)
+            .context("component execution backtrace");
+        // Known ordinary traps should not be misclassified by their wrapper.
+        assert_eq!(
+            super::classify_runtime_error(error).code,
+            crate::WasiDiagnosticCode::PluginWasiTrap
+        );
+    }
     use super::*;
     use wasmtime::component::TypedFunc;
 

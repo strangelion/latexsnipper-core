@@ -24,6 +24,26 @@ export interface FormulaConversionResult {
   capability: FormulaConversionCapability;
 }
 
+export interface FormulaFragmentResult extends FormulaConversionResult {
+  /** Capability is the underlying latex_display route, not a fidelity claim. */
+  contentKind: "latex-fragment";
+}
+
+/** Feature-detect the additive export when supporting older WASM packages. */
+export interface WasmFormulaFragmentApi extends WasmFormulaApi {
+  convert_formula_fragment_v3(
+    content: string, inputFormat: string, mode?: string,
+  ): ApiEnvelopeV3<FormulaFragmentResult>;
+}
+
+export function convertFormulaFragment(
+  api: WasmFormulaFragmentApi,
+  content: string,
+  options: { inputFormat: FormulaInputFormat; mode?: FormulaConversionMode },
+): ApiEnvelopeV3<FormulaFragmentResult> {
+  return api.convert_formula_fragment_v3(content, options.inputFormat, options.mode ?? "strict");
+}
+
 /** Feature-detect these additive exports on older generated WASM packages. */
 export interface WasmFormulaApi {
   formula_capabilities_v3(): ApiEnvelopeV3<FormulaConversionCapability[]>;

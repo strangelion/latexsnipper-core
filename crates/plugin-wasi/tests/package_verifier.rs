@@ -113,7 +113,7 @@ fn manifest(component: &[u8]) -> Value {
                 "diagnosticBytes": 16384,
                 "modelArtifactBytes": 1048576,
                 "temporaryStorageBytes": 1048576,
-                "tableElements": 100,
+                "tableElements": 256,
                 "resources": 8,
                 "fuel": 1000000,
                 "maxConcurrentExecutions": 1
@@ -182,7 +182,11 @@ fn typed_success_component() -> Vec<u8> {
 }
 
 fn remote_archive(component: &[u8]) -> Vec<u8> {
-    let manifest = serde_json::to_vec_pretty(&manifest(component)).unwrap();
+    remote_archive_with_manifest(component, manifest(component))
+}
+
+fn remote_archive_with_manifest(component: &[u8], manifest: Value) -> Vec<u8> {
+    let manifest = serde_json::to_vec_pretty(&manifest).unwrap();
     let mut output = Cursor::new(Vec::new());
     {
         let mut archive = zip::ZipWriter::new(&mut output);
@@ -196,6 +200,358 @@ fn remote_archive(component: &[u8]) -> Vec<u8> {
         archive.finish().unwrap();
     }
     output.into_inner()
+}
+
+fn power_store(configure: impl FnOnce(&mut Value)) -> (tempfile::TempDir, RemotePluginStore) {
+    let component = typed_success_component();
+    let mut definition = manifest(&component);
+    let mut import = definition["formatCapabilities"][0].clone();
+    import["input"] = json!("application/vnd.fixture.power");
+    import["output"] = json!("AST");
+    import["fidelity"] = json!("BestEffort");
+    import["notes"] = json!(["Finite power fixture, not full math fidelity"]);
+    let mut export = import.clone();
+    export["input"] = json!("AST");
+    export["output"] = json!("application/vnd.fixture.power");
+    definition["formatCapabilities"]
+        .as_array_mut()
+        .unwrap()
+        .extend([import, export]);
+    configure(&mut definition);
+    let archive = remote_archive_with_manifest(&component, definition);
+    let target = RegistryTarget {
+        plugin_id: "fixture.component".into(),
+        version: "1.0.0".into(),
+        package_path: "packages/fixture.zip".into(),
+        length: archive.len() as u64,
+        sha256: hex::encode(Sha256::digest(&archive)),
+        execution_class: PluginExecutionClassV3::WasiComponent,
+        core_version_requirement: ">=3.0.0, <4.0.0".into(),
+        revoked: false,
+        revocation_reason: None,
+    };
+    let temporary = tempfile::tempdir().unwrap();
+    let store = RemotePluginStore::new(temporary.path().join("store"));
+    store
+        .install(
+            &target,
+            &archive,
+            RemotePluginProvenance {
+                registry_name: "fixture".into(),
+                registry_origin: "https://registry.example.invalid".into(),
+                targets_version: 1,
+                package_path: target.package_path.clone(),
+                package_sha256: target.sha256.clone(),
+                verified_at_unix: 1_900_000_000,
+            },
+            "3.0.0",
+        )
+        .unwrap();
+    store.set_enabled("fixture.component", true).unwrap();
+    (temporary, store)
+}
+
+fn formula_registry() -> latexsnipper_conversion::conversion_registry::SemanticConversionRegistry {
+    use latexsnipper_conversion::conversion_registry::*;
+    let mut registry = SemanticConversionRegistry::default();
+    registry
+        .register_trusted_format(
+            ConversionFormatDescriptor {
+                schema_version: 1,
+                id: "fixture:power".into(),
+                mime_type: "application/vnd.fixture.power".into(),
+                description: "Finite executable fixture protocol".into(),
+            },
+            |source| {
+                if source.is_ascii() && source.len() <= 128 {
+                    Ok(())
+                } else {
+                    Err(ConversionRegistryError::new(
+                        ConversionRegistryErrorCode::InputRejected,
+                        "fixture input must be bounded ASCII",
+                    ))
+                }
+            },
+        )
+        .unwrap();
+    registry
+}
+
+fn formula_request(
+    input: &str,
+    output: &str,
+    backend: &str,
+    content: &str,
+) -> latexsnipper_conversion::conversion_registry::RegisteredConversionRequest {
+    latexsnipper_conversion::conversion_registry::RegisteredConversionRequest {
+        schema_version: 1,
+        input: input.into(),
+        output: output.into(),
+        mode: latexsnipper_conversion::FormulaConversionMode::BestEffort,
+        backend: Some(backend.into()),
+        content: content.into(),
+        context_sha256: "a".repeat(64),
+    }
+}
+
+#[test]
+fn registered_wasi_formula_importer_and_exporter_execute_real_ast_projection() {
+    use latexsnipper_conversion::{
+        conversion_registry::*, DocumentConverter, FormulaInputFormat, OutputFormat,
+    };
+    use latexsnipper_plugin_wasi::WasiFormulaBackend;
+    let (_temporary, store) = power_store(|_| {});
+    let mut registry = formula_registry();
+    WasiFormulaBackend::importer(
+        ActivatedRemoteWasiPlugin::activate(&store, "fixture.component").unwrap(),
+        "fixture:import",
+        "fixture:power",
+        "application/vnd.fixture.power",
+        OutputFormat::OMML,
+    )
+    .unwrap()
+    .register(&mut registry)
+    .unwrap();
+    WasiFormulaBackend::exporter(
+        ActivatedRemoteWasiPlugin::activate(&store, "fixture.component").unwrap(),
+        "fixture:export",
+        FormulaInputFormat::Latex,
+        "fixture:power",
+        "application/vnd.fixture.power",
+    )
+    .unwrap()
+    .register(&mut registry)
+    .unwrap();
+    let request = formula_request("fixture:power", "omml", "fixture:import", "x:2");
+    assert_eq!(
+        registry.convert(&request).unwrap_err().code,
+        ConversionRegistryErrorCode::BackendDisabled
+    );
+    registry
+        .set_backend_enabled("fixture:import", true)
+        .unwrap();
+    registry
+        .set_backend_enabled("fixture:export", true)
+        .unwrap();
+    for (power, latex) in [("x:2", "x^2"), ("y:4", "y^4")] {
+        let imported = DocumentConverter::convert_registered_formula(
+            &registry,
+            &formula_request("fixture:power", "omml", "fixture:import", power),
+        )
+        .unwrap();
+        assert_eq!(
+            imported.candidate.content,
+            DocumentConverter::convert_latex_string(latex, OutputFormat::OMML).unwrap()
+        );
+        assert_eq!(imported.backend, "fixture:import");
+        assert!(!imported.candidate.losses.is_empty());
+        let exported = registry
+            .convert(&formula_request(
+                "latex",
+                "fixture:power",
+                "fixture:export",
+                latex,
+            ))
+            .unwrap();
+        assert_eq!(exported.candidate.content, power);
+        assert_eq!(exported.mime_type, "application/vnd.fixture.power");
+    }
+    store.set_enabled("fixture.component", false).unwrap();
+    assert!(
+        !registry
+            .capabilities()
+            .iter()
+            .find(|entry| entry.backend == "fixture:import")
+            .unwrap()
+            .available
+    );
+    assert_eq!(
+        registry.convert(&request).unwrap_err().code,
+        ConversionRegistryErrorCode::BackendFailed
+    );
+    assert_eq!(request.content, "x:2");
+    store.set_enabled("fixture.component", true).unwrap();
+    store.revoke("fixture.component").unwrap();
+    assert_eq!(
+        registry.convert(&request).unwrap_err().code,
+        ConversionRegistryErrorCode::BackendFailed
+    );
+}
+
+#[test]
+fn registered_wasi_formula_bridge_refuses_media_shape_utf8_and_undeclared_routes() {
+    use latexsnipper_conversion::{FormulaInputFormat, OutputFormat};
+    use latexsnipper_plugin_wasi::WasiFormulaBackend;
+    let (_temporary, store) = power_store(|_| {});
+    let activated = ActivatedRemoteWasiPlugin::activate(&store, "fixture.component").unwrap();
+    assert!(WasiFormulaBackend::importer(
+        activated,
+        "fixture:import",
+        "fixture:power",
+        "undeclared",
+        OutputFormat::OMML
+    )
+    .is_err());
+    let mut registry = formula_registry();
+    WasiFormulaBackend::importer(
+        ActivatedRemoteWasiPlugin::activate(&store, "fixture.component").unwrap(),
+        "fixture:import",
+        "fixture:power",
+        "application/vnd.fixture.power",
+        OutputFormat::OMML,
+    )
+    .unwrap()
+    .register(&mut registry)
+    .unwrap();
+    WasiFormulaBackend::exporter(
+        ActivatedRemoteWasiPlugin::activate(&store, "fixture.component").unwrap(),
+        "fixture:export",
+        FormulaInputFormat::Latex,
+        "fixture:power",
+        "application/vnd.fixture.power",
+    )
+    .unwrap()
+    .register(&mut registry)
+    .unwrap();
+    registry
+        .set_backend_enabled("fixture:import", true)
+        .unwrap();
+    registry
+        .set_backend_enabled("fixture:export", true)
+        .unwrap();
+    for source in [
+        "control:wrong-media",
+        "control:invalid-json",
+        "control:extra-block",
+        "bad syntax",
+    ] {
+        let failure = registry
+            .convert(&formula_request(
+                "fixture:power",
+                "omml",
+                "fixture:import",
+                source,
+            ))
+            .unwrap_err();
+        if source == "bad syntax" {
+            assert!(
+                failure.message.contains("invalid power syntax"),
+                "{failure}"
+            );
+        } else {
+            assert_eq!(failure.code, latexsnipper_conversion::conversion_registry::ConversionRegistryErrorCode::InputRejected, "{source}: {failure}");
+        }
+    }
+    let failure = registry
+        .convert(&formula_request(
+            "latex",
+            "fixture:power",
+            "fixture:export",
+            "control:invalid-utf8",
+        ))
+        .unwrap_err();
+    assert!(failure.message.contains("non-UTF-8"), "{failure}");
+    for source in [
+        "\\documentclass{article}\\begin{document}x^2\\end{document}",
+        "x^2\\]\\[y^2",
+        "$x^2$",
+    ] {
+        let failure = registry
+            .convert(&formula_request(
+                "latex",
+                "fixture:power",
+                "fixture:export",
+                source,
+            ))
+            .unwrap_err();
+        assert_eq!(failure.code, latexsnipper_conversion::conversion_registry::ConversionRegistryErrorCode::InputRejected, "{failure}");
+    }
+    let mut input = formula_request("fixture:power", "omml", "fixture:import", "x:2");
+    input.mode = latexsnipper_conversion::FormulaConversionMode::Strict;
+    assert!(registry.convert(&input).is_err());
+}
+
+#[test]
+fn registered_wasi_formula_bridge_retains_host_output_budget_cancellation_and_interrupt() {
+    use latexsnipper_conversion::OutputFormat;
+    use latexsnipper_plugin_wasi::WasiFormulaBackend;
+    let (_temporary, store) = power_store(|definition| {
+        definition["permissions"]["limits"]["outputBytes"] = json!(64);
+    });
+    let mut registry = formula_registry();
+    WasiFormulaBackend::importer(
+        ActivatedRemoteWasiPlugin::activate(&store, "fixture.component").unwrap(),
+        "fixture:limited",
+        "fixture:power",
+        "application/vnd.fixture.power",
+        OutputFormat::OMML,
+    )
+    .unwrap()
+    .register(&mut registry)
+    .unwrap();
+    registry
+        .set_backend_enabled("fixture:limited", true)
+        .unwrap();
+    let failure = registry
+        .convert(&formula_request(
+            "fixture:power",
+            "omml",
+            "fixture:limited",
+            "x:2",
+        ))
+        .unwrap_err();
+    assert!(
+        failure.message.contains("PLUGIN_WASI_OUTPUT_LIMIT"),
+        "{failure}"
+    );
+    let (_temporary2, store2) = power_store(|_| {});
+    let cancellation = latexsnipper_plugin::CancellationToken::default();
+    WasiFormulaBackend::importer(
+        ActivatedRemoteWasiPlugin::activate(&store2, "fixture.component").unwrap(),
+        "fixture:cancelled",
+        "fixture:power",
+        "application/vnd.fixture.power",
+        OutputFormat::OMML,
+    )
+    .unwrap()
+    .with_cancellation(cancellation.clone())
+    .register(&mut registry)
+    .unwrap();
+    registry
+        .set_backend_enabled("fixture:cancelled", true)
+        .unwrap();
+    cancellation.cancel();
+    let failure = registry
+        .convert(&formula_request(
+            "fixture:power",
+            "omml",
+            "fixture:cancelled",
+            "x:2",
+        ))
+        .unwrap_err();
+    assert!(failure.message.contains("PLUGIN_WASI_CANCELLED"));
+    WasiFormulaBackend::importer(
+        ActivatedRemoteWasiPlugin::activate(&store2, "fixture.component").unwrap(),
+        "fixture:interrupt",
+        "fixture:power",
+        "application/vnd.fixture.power",
+        OutputFormat::OMML,
+    )
+    .unwrap()
+    .register(&mut registry)
+    .unwrap();
+    registry
+        .set_backend_enabled("fixture:interrupt", true)
+        .unwrap();
+    let failure = registry
+        .convert(&formula_request(
+            "fixture:power",
+            "omml",
+            "fixture:interrupt",
+            "control:infinite",
+        ))
+        .unwrap_err();
+    assert!(failure.message.contains("PLUGIN_WASI_TIMEOUT"), "{failure}");
 }
 
 fn patch_payload(result: latexsnipper_plugin_wasi::ComponentInvocationResult) -> Vec<u8> {

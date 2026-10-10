@@ -2,7 +2,7 @@ use latexsnipper_plugin::PluginResourceLimitsV3;
 
 use crate::{WasiDiagnostic, WasiDiagnosticCode};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WasiResourceLimits {
     pub timeout_millis: u64,
     pub memory_bytes: usize,

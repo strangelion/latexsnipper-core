@@ -87,13 +87,25 @@ function formulaSmoke(api) {
     }
   }
   if (!api.capabilities_v3().ok) throw new Error("Formula errors affected legacy state");
+  for (const input of ["latex", "mathml", "omml", "typst"]) {
+    const fragment = api.convert_formula_fragment_v3(samples[input], input, "best-effort");
+    assert.equal(fragment.ok, true);
+    assert.equal(fragment.data.contentKind, "latex-fragment");
+    assert.equal(fragment.data.content, String.raw`\frac{a}{b}`);
+    assert.equal(fragment.data.capability.output, "latex_display");
+    assert.equal(api.convert_formula_v3(samples[input], input, "markdown_inline", "best-effort").data.content, String.raw`$\frac{a}{b}$`);
+  }
+  const invalidFragment = api.convert_formula_fragment_v3(String.raw`\documentclass{article}x`, "latex", "best-effort");
+  assert.equal(invalidFragment.ok, false);
+  assert.equal(invalidFragment.error.code, "CONVERSION_FAILED");
 }
 formulaSmoke(nodePackage);
-const { convertFormula, formulaConversionCapabilities } = await import("../dist/index.js");
+const { convertFormula, convertFormulaFragment, formulaConversionCapabilities } = await import("../dist/index.js");
 assert.deepEqual(formulaConversionCapabilities(nodePackage), nodePackage.formula_capabilities_v3());
 assert.equal(convertFormula(nodePackage, String.raw`\frac{a}{b}`, {
   inputFormat: "latex", outputFormat: "omml",
 }).ok, true);
+assert.equal(convertFormulaFragment(nodePackage, "frac(a,b)", { inputFormat: "typst", mode: "best-effort" }).data.contentKind, "latex-fragment");
 
 const webPackage = await import(pathToFileURL(webEntry).href);
 if (typeof webPackage.default !== "function") {

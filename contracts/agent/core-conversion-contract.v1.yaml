@@ -3,6 +3,15 @@
   "name": "Conversion and Office output contract",
   "rules": [
     {
+      "id": "CORE-FORMULA-FRAGMENT-001",
+      "description": "Explicit bare-formula projection rejects document splicing, preserves comments and budgets, and single formula inline output uses inline delimiters without changing legacy document export.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-conversion", "--no-default-features", "--test", "formula_fragments"]},
+      "failureMessage": "Formula fragment shape, budgets, inline packaging or legacy document export regressed."
+    },
+    {
       "id": "CORE-CONVERSION-REGISTRY-001",
       "description": "Executable trusted formula registry preserves builtin dispatch, explicit activation/selection, source-bound result identity and bounded target validation.",
       "severity": "blocking",

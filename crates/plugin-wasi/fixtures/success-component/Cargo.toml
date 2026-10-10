@@ -9,6 +9,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wit-bindgen = "=0.46.0"
+latexsnipper-ast = { path = "../../../ast" }
+serde_json = "1"
 
 [profile.release]
 opt-level = "s"

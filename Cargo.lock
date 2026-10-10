@@ -2552,6 +2552,7 @@ dependencies = [
  "getrandom 0.3.4",
  "hex",
  "latexsnipper-ast",
+ "latexsnipper-conversion",
  "latexsnipper-plugin",
  "semver",
  "serde",

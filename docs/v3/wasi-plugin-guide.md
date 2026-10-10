@@ -69,3 +69,14 @@ invalidates activation.
 
 See [wasi-component-host.md](wasi-component-host.md) for the host boundary and
 [registry-operator-guide.md](registry-operator-guide.md) for distribution.
+
+## Registered formula conversion
+
+`WasiFormulaBackend` bridges verified import/export operations to the instance-local
+semantic conversion registry. WIT v1 is unchanged. The adapter accepts only one
+standalone formula in current-schema Document JSON; exporters receive a real AST
+with shape-checked bare LaTeX, never a complete LaTeX document disguised as a formula.
+Registration remains disabled until explicitly enabled. Existing trust checks,
+fuel/epoch interruption, memory and payload budgets apply. See the
+[executable registry guide](../formats/conversion-registry.md) for declarations,
+refusal cases, fixture source and remaining application/binary-format work.

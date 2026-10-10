@@ -151,6 +151,19 @@ pub struct DocumentConverter {
 }
 
 impl DocumentConverter {
+    /// Return one bare LaTeX formula via a shape-checked display projection.
+    /// This is not a full TeX syntax, rendering safety or lossless fidelity gate.
+    /// Direction/mode support and input budgets match the formula string API.
+    pub fn convert_formula_fragment(
+        content: &str,
+        input: FormulaInputFormat,
+        mode: FormulaConversionMode,
+    ) -> Result<String> {
+        let display =
+            Self::convert_formula_string(content, input, OutputFormat::LatexDisplay, mode)?;
+        crate::formula_fragment::latex_display_to_fragment(&display)
+    }
+
     /// Convert a declared formula string input using the shared capability gate.
     /// Strict currently guards LaTeX to OMML source syntax; it is not a claim of
     /// lossless layout or support for arbitrary macros. Legacy APIs are unchanged.
@@ -357,7 +370,7 @@ impl DocumentConverter {
                 blocks: vec![Block::Formula(FormulaBlock {
                     formula: Formula {
                         source: FormulaSource::Latex(latex.to_string()),
-                        display_mode: true,
+                        display_mode: format != OutputFormat::MarkdownInline,
                         confidence: 1.0,
                         source_info: None,
                         layout: None,

@@ -3,12 +3,14 @@
 mod activation;
 pub mod bindings;
 pub mod diagnostic;
+pub mod formula_conversion;
 pub mod host;
 pub mod limits;
 pub mod package;
 pub mod permissions;
 
 pub use activation::ActivatedRemoteWasiPlugin;
+pub use formula_conversion::{WasiFormulaBackend, WASI_DOCUMENT_JSON_MEDIA_TYPE};
 
 pub use diagnostic::{
     WasiDiagnostic, WasiDiagnosticCode, WasiDiagnosticDetail, WasiDiagnosticSeverity,

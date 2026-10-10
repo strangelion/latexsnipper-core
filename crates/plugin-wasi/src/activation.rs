@@ -73,6 +73,10 @@ impl ActivatedRemoteWasiPlugin {
         self.compiled.sha256()
     }
 
+    pub(crate) fn resource_limits(&self) -> &crate::WasiResourceLimits {
+        self.host.resource_limits()
+    }
+
     pub fn execute(
         &self,
         invocation: ComponentInvocation,
@@ -82,7 +86,7 @@ impl ActivatedRemoteWasiPlugin {
         self.host.execute(&self.compiled, invocation, cancellation)
     }
 
-    fn ensure_still_enabled(&self) -> Result<(), WasiDiagnostic> {
+    pub(crate) fn ensure_still_enabled(&self) -> Result<(), WasiDiagnostic> {
         let current = self
             .store
             .get(&self.manifest.id)

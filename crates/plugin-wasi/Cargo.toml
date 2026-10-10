@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 latexsnipper-plugin.workspace = true
 latexsnipper-ast.workspace = true
+latexsnipper-conversion.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
