@@ -24,7 +24,10 @@
   忽略目录 `target/array-column-typst-1791594139700774000/`，PNG SHA-256：
   `6e6aad52185f14612a606edb659f8d5ff4ebbe5d482684906d0832a855f01e69`。
   符号名参考 [Typst 官方符号表](https://typst.app/docs/reference/symbols/sym/)。
-- 本批真实 Word 保存/重开、安装版和跨平台字体验证尚未完成；不能用 XML 或 Typst 检查代替宿主验收。
+- Office pin `beff6a8` 的 11 个数组混合样例通过隐藏 x64 Word 16.0 行内/显示/编号三入口，共 33 项插入、保存/只读重开验证。
+  源码、数学文字、列布局、定界符 glyph 和脚本/操作数相关祖先结构保持；详细输入及证据哈希见
+  [Word 报告](https://github.com/strangelion/LaTeXSnipper-Office/blob/main/docs/office/array-column-layout-20261009.md)。
+  安装版、截图字体观感和跨平台字体验证尚未完成；直接生产适配器不等于安装版管道。
 
 ## 仍需推进
 
