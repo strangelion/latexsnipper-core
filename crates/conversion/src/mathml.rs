@@ -177,6 +177,12 @@ fn latex_to_mathml(latex: &str) -> String {
         return rendered;
     }
 
+    if latex.contains("\\left") || (latex.contains('_') && latex.contains('^')) {
+        if let Some(rendered) = render_left_right_mathml(latex) {
+            return rendered;
+        }
+    }
+
     // \textcolor{color}{content} → <mstyle mathcolor="color"><mrow>content</mrow></mstyle>
     if let Some(content) = latex.strip_prefix("\\textcolor{") {
         if let Some(close) = content.find('}') {
@@ -297,10 +303,6 @@ fn latex_to_mathml(latex: &str) -> String {
     }
 
     if let Some(rendered) = render_accent_mathml(latex) {
-        return rendered;
-    }
-
-    if let Some(rendered) = render_left_right_mathml(latex) {
         return rendered;
     }
 
@@ -634,71 +636,131 @@ fn render_accent_mathml(latex: &str) -> Option<String> {
 }
 
 fn render_left_right_mathml(latex: &str) -> Option<String> {
-    let rest = latex.strip_prefix("\\left")?;
-    let mut chars = rest.chars();
-    let left = chars.next()?;
-    let content_start = "\\left".len() + left.len_utf8();
-    let right_pos = latex[content_start..].rfind("\\right")? + content_start;
-    let right_rest = &latex[right_pos + "\\right".len()..];
-    let right = right_rest.chars().next()?;
-    let mut pos = skip_ascii_whitespace(latex, right_pos + "\\right".len() + right.len_utf8());
-    let content = &latex[content_start..right_pos];
-    let open = if left == '.' {
-        ""
-    } else {
-        &latex["\\left".len()..content_start]
-    };
-    let close_start = right_pos + "\\right".len();
-    let close_end = close_start + right.len_utf8();
-    let close = if right == '.' {
-        ""
-    } else {
-        &latex[close_start..close_end]
-    };
-    let base = format!(
-        "<mfenced open=\"{}\" close=\"{}\"><mrow>{}</mrow></mfenced>",
-        xml_escape(open),
-        xml_escape(close),
-        latex_to_mathml(content)
-    );
+    render_delimited_node(&crate::latex_parser::parse_latex(latex))
+}
 
-    let mut sub = None;
-    let mut sup = None;
-    while pos < latex.len() {
-        match latex[pos..].chars().next()? {
-            '_' => {
-                let (value, next_pos) = read_script_argument(latex, pos + 1)?;
-                sub = Some(value);
-                pos = skip_ascii_whitespace(latex, next_pos);
-            }
-            '^' => {
-                let (value, next_pos) = read_script_argument(latex, pos + 1)?;
-                sup = Some(value);
-                pos = skip_ascii_whitespace(latex, next_pos);
-            }
-            _ => return None,
+fn render_delimited_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
+    use crate::latex_ast::LatexNode;
+    let child = |node: &LatexNode| {
+        render_delimited_node(node).unwrap_or_else(|| latex_to_mathml(&node.to_string()))
+    };
+    Some(match node {
+        LatexNode::Delimited {
+            left,
+            content,
+            right,
+        } => {
+            let (Some(left), Some(right)) = (
+                latexsnipper_syntax::latex::scalable_delimiter_glyph(left),
+                latexsnipper_syntax::latex::scalable_delimiter_glyph(right),
+            ) else {
+                return Some(format!("<mtext>{}</mtext>", xml_escape(&node.to_string())));
+            };
+            let inner: String = content.iter().map(child).collect();
+            format!(
+                "<mfenced open=\"{}\" close=\"{}\" separators=\"\"><mrow>{inner}</mrow></mfenced>",
+                xml_escape(left),
+                xml_escape(right)
+            )
         }
-    }
-
-    Some(match (sub, sup) {
-        (Some(sub), Some(sup)) => format!(
-            "<msubsup><mrow>{}</mrow><mrow>{}</mrow><mrow>{}</mrow></msubsup>",
-            base,
-            latex_to_mathml(&sub),
-            latex_to_mathml(&sup)
-        ),
-        (Some(sub), None) => format!(
-            "<msub><mrow>{}</mrow><mrow>{}</mrow></msub>",
-            base,
-            latex_to_mathml(&sub)
-        ),
-        (None, Some(sup)) => format!(
-            "<msup><mrow>{}</mrow><mrow>{}</mrow></msup>",
-            base,
-            latex_to_mathml(&sup)
-        ),
-        (None, None) => base,
+        LatexNode::Command { name, args } if name == "invalid-scalable-delimiter" => {
+            format!(
+                "<mtext>{}</mtext>",
+                xml_escape(&args.first().map(ToString::to_string).unwrap_or_default())
+            )
+        }
+        LatexNode::Sequence(nodes) | LatexNode::Group(nodes) => {
+            if !nodes.iter().any(has_delimited_node) {
+                return None;
+            }
+            format!(
+                "<mrow>{}</mrow>",
+                nodes.iter().map(child).collect::<String>()
+            )
+        }
+        LatexNode::Superscript { base, exp } => {
+            if let LatexNode::Subscript { base, sub } = base.as_ref() {
+                if matches!(
+                    base.as_ref(),
+                    LatexNode::Operator(_) | LatexNode::OperatorName { .. }
+                ) {
+                    return None;
+                }
+                return Some(format!(
+                    "<msubsup><mrow>{}</mrow><mrow>{}</mrow><mrow>{}</mrow></msubsup>",
+                    child(base),
+                    child(sub),
+                    child(exp)
+                ));
+            }
+            if !has_delimited_node(base) && !has_delimited_node(exp) {
+                return None;
+            }
+            format!(
+                "<msup><mrow>{}</mrow><mrow>{}</mrow></msup>",
+                child(base),
+                child(exp)
+            )
+        }
+        LatexNode::Subscript { base, sub } => {
+            if let LatexNode::Superscript { base, exp } = base.as_ref() {
+                if matches!(
+                    base.as_ref(),
+                    LatexNode::Operator(_) | LatexNode::OperatorName { .. }
+                ) {
+                    return None;
+                }
+                return Some(format!(
+                    "<msubsup><mrow>{}</mrow><mrow>{}</mrow><mrow>{}</mrow></msubsup>",
+                    child(base),
+                    child(sub),
+                    child(exp)
+                ));
+            }
+            if !has_delimited_node(base) && !has_delimited_node(sub) {
+                return None;
+            }
+            format!(
+                "<msub><mrow>{}</mrow><mrow>{}</mrow></msub>",
+                child(base),
+                child(sub)
+            )
+        }
+        LatexNode::Fraction { num, den } => {
+            if !has_delimited_node(num) && !has_delimited_node(den) {
+                return None;
+            }
+            format!(
+                "<mfrac><mrow>{}</mrow><mrow>{}</mrow></mfrac>",
+                child(num),
+                child(den)
+            )
+        }
+        _ => return None,
     })
+}
+
+fn has_delimited_node(node: &crate::latex_ast::LatexNode) -> bool {
+    use crate::latex_ast::LatexNode;
+    match node {
+        LatexNode::Delimited { .. } => true,
+        LatexNode::Command { name, .. } => name == "invalid-scalable-delimiter",
+        LatexNode::Sequence(nodes) | LatexNode::Group(nodes) => {
+            nodes.iter().any(has_delimited_node)
+        }
+        LatexNode::Superscript { base, exp } => {
+            matches!(base.as_ref(), LatexNode::Subscript { .. })
+                || has_delimited_node(base)
+                || has_delimited_node(exp)
+        }
+        LatexNode::Subscript { base, sub } => {
+            matches!(base.as_ref(), LatexNode::Superscript { .. })
+                || has_delimited_node(base)
+                || has_delimited_node(sub)
+        }
+        LatexNode::Fraction { num, den } => has_delimited_node(num) || has_delimited_node(den),
+        _ => false,
+    }
 }
 
 fn split_math_sequence(latex: &str) -> Option<Vec<String>> {
@@ -1353,16 +1415,30 @@ fn render_symbol_ast(
                 format!("<msqrt>{content}</msqrt>")
             })
         }
-        LatexNode::Superscript { base, exp } => Some(format!(
-            "<msup>{}{}</msup>",
-            row(base, found)?,
-            row(exp, found)?
-        )),
-        LatexNode::Subscript { base, sub } => Some(format!(
-            "<msub>{}{}</msub>",
-            row(base, found)?,
-            row(sub, found)?
-        )),
+        LatexNode::Superscript { base, exp } => {
+            Some(if let LatexNode::Subscript { base, sub } = base.as_ref() {
+                format!(
+                    "<msubsup>{}{}{}</msubsup>",
+                    row(base, found)?,
+                    row(sub, found)?,
+                    row(exp, found)?
+                )
+            } else {
+                format!("<msup>{}{}</msup>", row(base, found)?, row(exp, found)?)
+            })
+        }
+        LatexNode::Subscript { base, sub } => Some(
+            if let LatexNode::Superscript { base, exp } = base.as_ref() {
+                format!(
+                    "<msubsup>{}{}{}</msubsup>",
+                    row(base, found)?,
+                    row(sub, found)?,
+                    row(exp, found)?
+                )
+            } else {
+                format!("<msub>{}{}</msub>", row(base, found)?, row(sub, found)?)
+            },
+        ),
         LatexNode::Matrix { env, rows } => {
             let (open, close) = match env.as_str() {
                 "matrix" | "smallmatrix" | "aligned" | "align" | "align*" | "gather"

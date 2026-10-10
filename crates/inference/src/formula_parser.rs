@@ -229,8 +229,37 @@ impl FormulaParser {
             }
 
             // Delimiters
-            "left" | "right" => {
-                let delimiter = self.parse_atom()?;
+            "left" | "right" | "middle" => {
+                self.skip_whitespace();
+                let start = self.pos;
+                let first = *self
+                    .input
+                    .get(self.pos)
+                    .ok_or_else(|| SnipperError::Inference("Missing scalable delimiter".into()))?;
+                self.pos += 1;
+                if first == '\\' {
+                    let next = *self.input.get(self.pos).ok_or_else(|| {
+                        SnipperError::Inference("Missing scalable delimiter control symbol".into())
+                    })?;
+                    self.pos += 1;
+                    if next.is_ascii_alphabetic() {
+                        while self
+                            .input
+                            .get(self.pos)
+                            .is_some_and(char::is_ascii_alphabetic)
+                        {
+                            self.pos += 1;
+                        }
+                    }
+                }
+                let token: String = self.input[start..self.pos].iter().collect();
+                if latexsnipper_ast::formula_layout::latex_delimiter_glyph(&token).is_none() {
+                    return Err(SnipperError::Inference(
+                        "Unsupported scalable delimiter".into(),
+                    ));
+                }
+                let delimiter =
+                    FormulaNode::Symbol(SymbolInfo::new(token, SymbolCategory::Delimiter));
                 Ok(FormulaNode::Command(
                     CommandInfo::new(&cmd).with_arg(delimiter),
                 ))
@@ -1014,5 +1043,20 @@ mod tests {
         let layout = parse_formula_latex(r"50\%x").unwrap();
         assert_eq!(layout.canonical_latex(), r"50\%x");
         assert!(parse_formula_latex("\\begin{verbatim}a%literal\n\\end{verbatim}").is_err());
+    }
+
+    #[test]
+    fn scalable_delimiter_tokens_do_not_consume_bracket_or_named_contents() {
+        for source in [
+            r"\left[\frac{x}{y}\right]",
+            r"\left\langle x\right\rangle",
+            r"\left\{x\right\}",
+        ] {
+            assert_eq!(
+                parse_formula_latex(source).unwrap().canonical_latex(),
+                source
+            );
+        }
+        assert!(parse_formula_latex(r"\left\unknown x\right)").is_err());
     }
 }

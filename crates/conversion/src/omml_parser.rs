@@ -185,6 +185,8 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                         "mc" => &["mcPr"],
                         "mPr" => &["mcs"],
                         "m" => &["mPr"],
+                        "dPr" => &["begChr", "endChr", "sepChr"],
+                        "d" => &["dPr"],
                         _ => &[],
                     };
                     for property in unique_properties {
@@ -403,11 +405,6 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .join(""),
         "d" => {
             let (beg, end) = get_delimiter_chars(children);
-            let (beg, end) = if beg.is_empty() && end.is_empty() {
-                ("(".to_string(), ")".to_string())
-            } else {
-                (beg, end)
-            };
             let rows: Vec<String> = children
                 .iter()
                 .filter(|(t, _)| t == "r")
@@ -433,15 +430,11 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
             if joined.contains("\\begin{array}") {
                 // Do not replace explicit per-column layout with a delimiter matrix.
-                return format!(
-                    "\\left{}{joined}\\right{}",
-                    if beg.is_empty() { "." } else { &beg },
-                    if end.is_empty() { "." } else { &end }
-                );
+                return crate::latex_utils::delimited_source(&beg, &joined, &end);
             }
             if joined.contains("\\begin{matrix}") {
                 // Retain nested or adjacent matrices instead of inferring a new outer table.
-                return format!("{beg}{joined}{end}");
+                return crate::latex_utils::delimited_source(&beg, &joined, &end);
             }
             if beg == "{" && end.is_empty() && (joined.contains(" & ") || joined.contains("\\\\")) {
                 return format!("\\begin{{cases}} {} \\end{{cases}}", joined);
@@ -451,7 +444,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     return format!("\\begin{{{}}} {} \\end{{{}}}", env, joined, env);
                 }
             }
-            format!("{}{}{}", beg, joined, end)
+            crate::latex_utils::delimited_source(&beg, &joined, &end)
         }
         "bar" => {
             let pos = get_child(children, "pos");
@@ -583,8 +576,16 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .collect::<Vec<_>>()
             .join(""),
         "dPr" => {
-            let beg = get_child(children, "begChr");
-            let end = get_child(children, "endChr");
+            let beg = children
+                .iter()
+                .find(|(tag, _)| tag == "begChr")
+                .map(|(_, value)| value.clone())
+                .unwrap_or_else(|| "(".into());
+            let end = children
+                .iter()
+                .find(|(tag, _)| tag == "endChr")
+                .map(|(_, value)| value.clone())
+                .unwrap_or_else(|| ")".into());
             format!("beg={},end={}", beg, end)
         }
         // Run properties: extract color/bold/italic/style for parent <m:r>
@@ -698,7 +699,7 @@ fn get_delimiter_chars(children: &[(String, String)]) -> (String, String) {
     }
     let mut chars = dpr.chars();
     let Some(first) = chars.next() else {
-        return (String::new(), String::new());
+        return ("(".into(), ")".into());
     };
     let Some(last) = chars.next_back() else {
         return (first.to_string(), String::new());

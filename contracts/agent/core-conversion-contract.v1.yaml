@@ -3,6 +3,15 @@
   "name": "Conversion and Office output contract",
   "rules": [
     {
+      "id": "CORE-SCALABLE-DELIMITER-001",
+      "description": "Finite named and nested scalable delimiters retain glyphs, operand ownership and source boundaries; invalid pairs remain non-replaceable.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["syntax", "conversion"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-conversion", "--no-default-features", "--test", "scalable_delimiters"]},
+      "failureMessage": "Scalable delimiter scope, glyph readback, scripts or strict replacement boundaries regressed."
+    },
+    {
       "id": "CORE-LATEX-COMMENT-SOURCE-001",
       "description": "Default-catcode comments cannot create formula boundaries, cells or operands; literal XML symbols and opaque unsupported environments remain preserved.",
       "severity": "blocking",

@@ -107,6 +107,36 @@ pub(crate) fn literal_command_symbol(command: &str) -> Option<&'static str> {
     }
 }
 
+/// Rebuild scalable source without interpreting XML braces/backslashes as syntax.
+pub(crate) fn delimited_source(left: &str, body: &str, right: &str) -> String {
+    latexsnipper_ast::formula_layout::join_latex_fragments([
+        format!("\\left{}", delimiter_source_token(left)),
+        body.to_string(),
+        format!("\\right{}", delimiter_source_token(right)),
+    ])
+}
+
+pub(crate) fn delimiter_source_token(glyph: &str) -> String {
+    match glyph {
+        "" => ".".into(),
+        "\\" => r"\backslash".into(),
+        "⟨" => r"\langle".into(),
+        "⟩" => r"\rangle".into(),
+        "⌊" => r"\lfloor".into(),
+        "⌋" => r"\rfloor".into(),
+        "⌈" => r"\lceil".into(),
+        "⌉" => r"\rceil".into(),
+        "‖" => r"\Vert".into(),
+        "↑" => r"\uparrow".into(),
+        "↓" => r"\downarrow".into(),
+        "↕" => r"\updownarrow".into(),
+        "⇑" => r"\Uparrow".into(),
+        "⇓" => r"\Downarrow".into(),
+        "⇕" => r"\Updownarrow".into(),
+        _ => escape_text_symbols(glyph),
+    }
+}
+
 /// Split stack rows without splitting grouped operands or nested environments.
 pub(crate) fn split_stack_rows(source: &str) -> Vec<&str> {
     split_math_top_level(source, true)

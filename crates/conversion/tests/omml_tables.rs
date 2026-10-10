@@ -81,7 +81,7 @@ fn adjacent_matrices_and_siblings_are_not_unwrapped_as_one_matrix() {
         let rebuilt = parse_omml_to_latex(&xml).unwrap();
         assert!(!rebuilt.contains(r"\begin{pmatrix}"), "{rebuilt}");
         assert!(
-            rebuilt.starts_with('(') && rebuilt.ends_with(')'),
+            rebuilt.starts_with(r"\left(") && rebuilt.ends_with(r"\right)"),
             "{rebuilt}"
         );
         assert_eq!(

@@ -23,6 +23,35 @@ pub const E_LATEX_UNCLOSED_ENVIRONMENT: &str = "E_LATEX_UNCLOSED_ENVIRONMENT";
 pub const E_LATEX_ENVIRONMENT_MISMATCH: &str = "E_LATEX_ENVIRONMENT_MISMATCH";
 /// A closing math delimiter did not match the active delimiter.
 pub const E_LATEX_DELIMITER_MISMATCH: &str = "E_LATEX_DELIMITER_MISMATCH";
+/// A scalable delimiter token is missing or not in the supported finite set.
+pub const E_LATEX_SCALABLE_DELIMITER_INVALID: &str = "E_LATEX_SCALABLE_DELIMITER_INVALID";
+/// A scalable delimiter pair is unclosed or crosses a group/environment boundary.
+pub const E_LATEX_SCALABLE_DELIMITER_MISMATCH: &str = "E_LATEX_SCALABLE_DELIMITER_MISMATCH";
+
+/// Resolve common literal/named scalable delimiters; a dot is invisible.
+pub fn scalable_delimiter_glyph(token: &str) -> Option<&str> {
+    latexsnipper_ast::formula_layout::latex_delimiter_glyph(token)
+}
+
+/// Read one delimiter token after whitespace/default-catcode comments.
+/// Returns the source token (including a backslash), not an expanded macro.
+pub fn read_scalable_delimiter(input: &str, mut pos: usize) -> Option<(&str, usize)> {
+    input.get(pos..)?;
+    let bytes = input.as_bytes();
+    loop {
+        match bytes.get(pos) {
+            Some(b'%') => pos = comment_end(input, pos),
+            Some(byte) if byte.is_ascii_whitespace() => pos += 1,
+            _ => break,
+        }
+    }
+    let end = if bytes.get(pos) == Some(&b'\\') {
+        control_sequence(input, pos)?.1
+    } else {
+        pos + input.get(pos..)?.chars().next()?.len_utf8()
+    };
+    Some((&input[pos..end], end))
+}
 
 impl LatexParser {
     /// Parse LaTeX while preserving source spans and parser-local provisional IDs.
@@ -94,6 +123,7 @@ pub fn validate_latex_structure(input: &str) -> Vec<Diagnostic> {
     let mut groups = Vec::new();
     let mut environments: Vec<(String, usize)> = Vec::new();
     let mut math_delimiters: Vec<(MathDelimiter, usize)> = Vec::new();
+    let mut scalable_delimiters = Vec::new();
     let mut index = 0;
 
     while index < bytes.len() {
@@ -104,6 +134,53 @@ pub fn validate_latex_structure(input: &str) -> Vec<Diagnostic> {
             b'\\' => {
                 if let Some((command, next_index)) = control_sequence(input, index) {
                     match command {
+                        "left" | "right" | "middle" => {
+                            let token = read_scalable_delimiter(input, next_index);
+                            let end = token.map_or(next_index, |(_, end)| end);
+                            if token
+                                .is_none_or(|(token, _)| scalable_delimiter_glyph(token).is_none())
+                            {
+                                diagnostics.push(structural_diagnostic(
+                                    DiagnosticLevel::Error,
+                                    E_LATEX_SCALABLE_DELIMITER_INVALID,
+                                    "missing or unsupported scalable delimiter token",
+                                    input,
+                                    index,
+                                    end,
+                                    false,
+                                ));
+                            }
+                            if command == "left" {
+                                scalable_delimiters.push((
+                                    index,
+                                    groups.last().copied(),
+                                    environments.last().map(|(_, start)| *start),
+                                    math_delimiters.last().map(|(_, start)| *start),
+                                ));
+                            } else if scalable_delimiters.last().is_some_and(
+                                |(_, group, env, math)| {
+                                    *group == groups.last().copied()
+                                        && *env == environments.last().map(|(_, start)| *start)
+                                        && *math == math_delimiters.last().map(|(_, start)| *start)
+                                },
+                            ) {
+                                if command == "right" {
+                                    scalable_delimiters.pop();
+                                }
+                            } else {
+                                diagnostics.push(structural_diagnostic(
+                                    DiagnosticLevel::Error,
+                                    E_LATEX_SCALABLE_DELIMITER_MISMATCH,
+                                    "scalable delimiter has no opener in this group/environment",
+                                    input,
+                                    index,
+                                    end,
+                                    false,
+                                ));
+                            }
+                            index = end;
+                            continue;
+                        }
                         "begin" | "end" => {
                             if let Some((name, end_index)) = environment_name(input, next_index) {
                                 if command == "begin" {
@@ -234,6 +311,17 @@ pub fn validate_latex_structure(input: &str) -> Vec<Diagnostic> {
         }
     }
 
+    for (start, _, _, _) in scalable_delimiters {
+        diagnostics.push(structural_diagnostic(
+            DiagnosticLevel::Error,
+            E_LATEX_SCALABLE_DELIMITER_MISMATCH,
+            "scalable delimiter has no matching right delimiter",
+            input,
+            start,
+            input.len(),
+            false,
+        ));
+    }
     for start in groups {
         diagnostics.push(structural_diagnostic(
             DiagnosticLevel::Warning,

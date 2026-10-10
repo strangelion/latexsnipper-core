@@ -11,6 +11,7 @@ pub fn parse_latex(latex: &str) -> LatexNode {
 struct LatexParser {
     chars: Vec<char>,
     pos: usize,
+    delimiter_depth: usize,
 }
 
 impl LatexParser {
@@ -18,6 +19,7 @@ impl LatexParser {
         Self {
             chars: input.chars().collect(),
             pos: 0,
+            delimiter_depth: 0,
         }
     }
 
@@ -130,7 +132,12 @@ impl LatexParser {
             '{' => {
                 self.pos += 1;
                 let content = self.parse_until('}');
-                if content.len() == 1 {
+                if content.len() == 1
+                    && !matches!(
+                        content.first(),
+                        Some(LatexNode::Subscript { .. } | LatexNode::Superscript { .. })
+                    )
+                {
                     content
                         .into_iter()
                         .next()
@@ -623,7 +630,7 @@ impl LatexParser {
             // Matrix environments
             "begin" => self.parse_environment(start - 1),
             // \left ... \right
-            "left" => self.parse_delimited(),
+            "left" => self.parse_delimited(start - 1),
             // Standalone commands
             "tableofcontents" => Some(LatexNode::TableOfContents),
             // Unknown command — store as Command node
@@ -799,71 +806,82 @@ impl LatexParser {
         items
     }
 
-    fn parse_delimited(&mut self) -> Option<LatexNode> {
+    fn delimiter_token(&mut self) -> Option<String> {
         self.skip_whitespace();
-        if self.pos >= self.chars.len() {
-            return None;
-        }
-
-        let left_ch = self.chars[self.pos];
+        let start = self.pos;
+        let ch = *self.chars.get(self.pos)?;
         self.pos += 1;
+        if ch == '\\' {
+            let first = *self.chars.get(self.pos)?;
+            self.pos += 1;
+            if first.is_ascii_alphabetic() {
+                while self
+                    .chars
+                    .get(self.pos)
+                    .is_some_and(char::is_ascii_alphabetic)
+                {
+                    self.pos += 1;
+                }
+                let token = self.chars[start..self.pos].iter().collect();
+                self.skip_whitespace();
+                return Some(token);
+            }
+        }
+        Some(self.chars[start..self.pos].iter().collect())
+    }
 
-        let left = match left_ch {
-            '(' => "(".to_string(),
-            ')' => ")".to_string(),
-            '[' => "[".to_string(),
-            ']' => "]".to_string(),
-            '|' => "|".to_string(),
-            '{' | '.' => ".".to_string(), // \left{ or \left. → invisible
-            _ => left_ch.to_string(),
-        };
-
-        // Parse content until actual \right followed by any character
-        let mut content_str = String::new();
-        let mut right_char = '\0';
+    fn parse_delimited(&mut self, raw_start: usize) -> Option<LatexNode> {
+        let left = self.delimiter_token().unwrap_or_default();
+        let content_start = self.pos;
+        let mut content_end = self.pos;
+        let mut nesting = 0usize;
+        let mut braces = 0usize;
+        let mut valid = latexsnipper_syntax::latex::scalable_delimiter_glyph(&left).is_some();
+        let mut right = None;
         while self.pos < self.chars.len() {
             if self.chars[self.pos] == '%' {
-                let start = self.pos;
                 self.skip_comment();
-                content_str.extend(self.chars[start..self.pos].iter());
                 continue;
             }
-            if self.chars[self.pos] == '\\'
-                && self
-                    .chars
-                    .get(self.pos + 1)
-                    .is_some_and(|ch| !ch.is_ascii_alphabetic())
-            {
-                content_str.extend(self.chars[self.pos..self.pos + 2].iter());
-                self.pos += 2;
-                continue;
-            }
-            if self.pos + 5 < self.chars.len() {
-                let next_six: String = self.chars[self.pos..].iter().take(6).collect();
-                if next_six.starts_with("\\right") {
-                    let after = if self.pos + 6 < self.chars.len() {
-                        self.chars[self.pos + 6]
-                    } else {
-                        right_char = ')';
-                        self.pos += 7;
+            if self.chars[self.pos] == '\\' {
+                let start = self.pos;
+                let command = self.delimiter_token().unwrap_or_default();
+                if command == r"\left" {
+                    nesting += 1;
+                    valid &= nesting + self.delimiter_depth < 128;
+                    let token = self.delimiter_token().unwrap_or_default();
+                    valid &= latexsnipper_syntax::latex::scalable_delimiter_glyph(&token).is_some();
+                } else if command == r"\right" {
+                    let token = self.delimiter_token().unwrap_or_default();
+                    valid &= latexsnipper_syntax::latex::scalable_delimiter_glyph(&token).is_some();
+                    if nesting == 0 {
+                        valid &= braces == 0;
+                        content_end = start;
+                        right = Some(token);
                         break;
-                    };
-                    right_char = after;
-                    self.pos += 7; // skip \rightX
-                    break;
+                    }
+                    nesting -= 1;
                 }
+                continue;
             }
-            content_str.push(self.chars[self.pos]);
+            match self.chars[self.pos] {
+                '{' => braces += 1,
+                '}' => braces = braces.saturating_sub(1),
+                _ => {}
+            }
             self.pos += 1;
         }
-
-        let right = if right_char == '\0' {
-            ".".to_string()
-        } else {
-            right_char.to_string()
-        };
-
+        if !valid || right.is_none() || self.delimiter_depth >= 128 {
+            return Some(LatexNode::Command {
+                name: "invalid-scalable-delimiter".into(),
+                args: vec![LatexNode::Text(
+                    self.chars[raw_start..self.pos].iter().collect(),
+                )],
+            });
+        }
+        let content_str: String = self.chars[content_start..content_end].iter().collect();
         let mut parser = LatexParser::new(&content_str);
+        parser.delimiter_depth = self.delimiter_depth + 1;
         let content_nodes = parser.parse();
 
         Some(LatexNode::Delimited {
@@ -873,7 +891,7 @@ impl LatexParser {
             } else {
                 vec![content_nodes]
             },
-            right: right.to_string(),
+            right: right.expect("checked right delimiter"),
         })
     }
 

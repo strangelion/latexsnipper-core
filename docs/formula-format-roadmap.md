@@ -13,8 +13,8 @@ VSTO 不是公式格式；本应用 OLE 不等于 MathType 对象。
 | 编号 | 当前状态 | 剩余工作 |
 | --- | --- | --- |
 | FMT-01 | 基础完成：Rust/C/Python/WASM-JS 已有内置方向和模式能力投影 | 随新格式同步注册表/绑定，第三方统一路由按 EXT-01 至 EXT-04 接通；严格支持仍是有限 LaTeX→OMML 子集 |
-| FMT-02 | 进行中：常用 array 与默认注释语法、原始区间和字面字符保护已有 | 补复杂/嵌套/命名定界符、复杂命令、星号多行环境及高级列修饰；不执行宏或动态 catcode |
-| FMT-03 | 进行中：array 常用列对齐/补空及有限竖线映射已有 | 继续分式、多行、上下标及样式；高级 array 和共享图像布局不由有限导出代表 |
+| FMT-02 | 进行中：常用 array、注释/源保护及常用嵌套/命名/不可见定界符已有 | 补 middle/固定大小定界符、复杂命令、星号多行环境及高级列修饰；不执行宏或动态 catcode |
+| FMT-03 | 进行中：array 常用列布局与定界符/组合上下标归属已有 | 继续多行、样式与真实宿主验证；高级 array 和共享图像布局不由有限导出代表 |
 | FMT-04 | 进行中：常用数组列属性与 XML 字面字符可重建，Word 三入口保存/重开源码、文字和结构已验证 | 补安装版与其他 XML/字体/布局；SVG 文本位置与裁切单独处理 |
 | FMT-05 | UnicodeMath/AsciiMath 各有独立有限 experimental parser | 扩大语法与损失范围，接入正式输入/输出注册表、各绑定与 Office UI |
 | FMT-06 | raw 检查、精确去重/结构分组、有限诊断、独立 experimental AST/LaTeX 读取及有界语义批次复用已有 | 补显式字体/更多模板和有界容器提取，再接 Office；真实/旧版样例与正式注册仍需独立验收 |
@@ -43,6 +43,7 @@ VSTO 不是公式格式；本应用 OLE 不等于 MathType 对象。
 - [生成能力矩阵](generated/formula-capabilities.md)
 - [Array 列规格与布局边界](formats/array-column-layout.md)
 - [注释、定界符与源信息](formats/latex-comment-source.md)
+- [可伸缩定界符与上下标](formats/scalable-delimiters.md)
 - [AsciiMath 边界](formats/asciimath-pilot.md)
 - [UnicodeMath 边界](formats/unicodemath-pilot.md)
 - [MTEF 只读边界](formats/mtef-readonly.md)

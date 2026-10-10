@@ -53,7 +53,11 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             None => format!("sqrt({})", latex_ast_to_typst(content)),
         },
         LatexNode::Superscript { base, exp } => {
-            let base_str = latex_ast_to_typst(base);
+            let mut base_str = latex_ast_to_typst(base);
+            if matches!(base.as_ref(), LatexNode::Group(nodes) if nodes.len() > 1 || nodes.first().is_some_and(|node| matches!(node, LatexNode::Subscript { .. } | LatexNode::Superscript { .. })))
+            {
+                base_str = format!("({base_str})");
+            }
             if base_str.is_empty() {
                 format!("^({})", latex_ast_to_typst(exp))
             } else {
@@ -61,7 +65,11 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             }
         }
         LatexNode::Subscript { base, sub } => {
-            let base_str = latex_ast_to_typst(base);
+            let mut base_str = latex_ast_to_typst(base);
+            if matches!(base.as_ref(), LatexNode::Group(nodes) if nodes.len() > 1 || nodes.first().is_some_and(|node| matches!(node, LatexNode::Subscript { .. } | LatexNode::Superscript { .. })))
+            {
+                base_str = format!("({base_str})");
+            }
             if base_str.is_empty() {
                 format!("_({})", latex_ast_to_typst(sub))
             } else {
@@ -92,7 +100,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 .join(" ");
             let typst_left = convert_delimiter(left);
             let typst_right = convert_delimiter(right);
-            format!("lr({}{}{})", typst_left, inner, typst_right)
+            format!("lr({} {} {})", typst_left, inner, typst_right)
         }
         LatexNode::Operator(op) => convert_operator(op),
         LatexNode::Relation(rel) => convert_relation(rel),
@@ -308,21 +316,34 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
 
 /// Convert delimiter to Typst syntax.
 fn convert_delimiter(s: &str) -> &str {
-    match s {
-        "(" | ")" => s,
-        "[" | "]" => s,
-        "{" | "}" => s,
-        "|" => "|",
-        "||" => "||",
-        "." => ".", // invisible delimiter
-        _ => s,
+    match latexsnipper_syntax::latex::scalable_delimiter_glyph(s) {
+        Some("") => "",
+        Some("{") => "brace.l",
+        Some("}") => "brace.r",
+        Some("⟨") => "chevron.l",
+        Some("⟩") => "chevron.r",
+        Some("⌊") => "floor.l",
+        Some("⌋") => "floor.r",
+        Some("⌈") => "ceil.l",
+        Some("⌉") => "ceil.r",
+        Some("‖") => "bar.v.double",
+        Some("\\") => "backslash",
+        Some("/") => "slash",
+        Some("↑") => "arrow.t",
+        Some("↓") => "arrow.b",
+        Some("↕") => "arrow.t.b",
+        Some("⇑") => "arrow.t.double",
+        Some("⇓") => "arrow.b.double",
+        Some("⇕") => "arrow.t.b.double",
+        Some(value) => value,
+        None => s,
     }
 }
 
 /// Convert LaTeX command to Typst.
 fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String {
     match name {
-        _ if name.starts_with("begin{") => format!(
+        _ if name.starts_with("begin{") || name == "invalid-scalable-delimiter" => format!(
             "#raw({}, lang: \"latex\")",
             serde_json::to_string(&args.first().map(ToString::to_string).unwrap_or_default())
                 .unwrap_or_default()
@@ -824,12 +845,10 @@ fn convert_symbol(s: &str) -> String {
         "rfloor" => "floor.r".to_string(),
         "lceil" => "ceil.l".to_string(),
         "rceil" => "ceil.r".to_string(),
-        "langle" => "angle.l".to_string(),
-        "rangle" => "angle.r".to_string(),
-        "lvert" => "abs.l".to_string(),
-        "rvert" => "abs.r".to_string(),
-        "lVert" => "norm.l".to_string(),
-        "rVert" => "norm.r".to_string(),
+        "langle" => "chevron.l".to_string(),
+        "rangle" => "chevron.r".to_string(),
+        "lvert" | "rvert" | "vert" => "bar.v".to_string(),
+        "lVert" | "rVert" | "Vert" => "bar.v.double".to_string(),
         "lbrace" => "brace.l".to_string(),
         "rbrace" => "brace.r".to_string(),
 

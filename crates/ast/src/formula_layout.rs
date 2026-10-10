@@ -235,6 +235,35 @@ impl FormulaLayout {
     }
 }
 
+/// Resolve the finite common LaTeX delimiter vocabulary without macro expansion.
+pub fn latex_delimiter_glyph(token: &str) -> Option<&str> {
+    Some(match token {
+        "." => "",
+        "(" | ")" | "[" | "]" | "|" | "/" | "⟨" | "⟩" | "⌊" | "⌋" | "⌈" | "⌉" | "‖" | "↑" | "↓"
+        | "↕" | "⇑" | "⇓" | "⇕" => token,
+        r"\{" | r"\lbrace" => "{",
+        r"\}" | r"\rbrace" => "}",
+        r"\lbrack" => "[",
+        r"\rbrack" => "]",
+        r"\langle" => "⟨",
+        r"\rangle" => "⟩",
+        r"\lfloor" => "⌊",
+        r"\rfloor" => "⌋",
+        r"\lceil" => "⌈",
+        r"\rceil" => "⌉",
+        r"\vert" | r"\lvert" | r"\rvert" => "|",
+        r"\|" | r"\Vert" | r"\lVert" | r"\rVert" => "‖",
+        r"\backslash" => "\\",
+        r"\uparrow" => "↑",
+        r"\downarrow" => "↓",
+        r"\updownarrow" => "↕",
+        r"\Uparrow" => "⇑",
+        r"\Downarrow" => "⇓",
+        r"\Updownarrow" => "⇕",
+        _ => return None,
+    })
+}
+
 /// Join canonical fragments without merging a terminal TeX control word with letters.
 pub fn join_latex_fragments(fragments: impl IntoIterator<Item = String>) -> String {
     let mut result = String::new();
@@ -263,6 +292,11 @@ fn canonical_latex(node: &FormulaNode) -> String {
     match node {
         FormulaNode::Symbol(symbol) => symbol.latex.clone(),
         FormulaNode::Command(command) => {
+            if matches!(command.name.as_str(), "left" | "right" | "middle")
+                && command.args.len() == 1
+            {
+                return format!("\\{}{}", command.name, canonical_latex(&command.args[0]));
+            }
             let args: String = command
                 .args
                 .iter()

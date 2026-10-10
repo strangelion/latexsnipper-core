@@ -191,11 +191,27 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Superscript { base, exp } if base.is_empty() => {
                 write!(f, "^{{{}}}", exp)
             }
+            LatexNode::Superscript { base, exp }
+                if matches!(base.as_ref(), LatexNode::Subscript { .. }) =>
+            {
+                let LatexNode::Subscript { base, sub } = base.as_ref() else {
+                    unreachable!()
+                };
+                write!(f, "{base}_{{{sub}}}^{{{exp}}}")
+            }
             LatexNode::Superscript { base, exp } => {
                 write!(f, "{{{}}}^{{{}}}", base, exp)
             }
             LatexNode::Subscript { base, sub } if base.is_empty() => {
                 write!(f, "_{{{}}}", sub)
+            }
+            LatexNode::Subscript { base, sub }
+                if matches!(base.as_ref(), LatexNode::Superscript { .. }) =>
+            {
+                let LatexNode::Superscript { base, exp } = base.as_ref() else {
+                    unreachable!()
+                };
+                write!(f, "{base}^{{{exp}}}_{{{sub}}}")
             }
             LatexNode::Subscript { base, sub } => {
                 write!(f, "{{{}}}_{{{}}}", base, sub)
@@ -212,8 +228,13 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Operator(op) => write!(f, "\\{}", op),
             LatexNode::Relation(rel) => write!(f, "\\{}", rel),
             LatexNode::Greek(g) => write!(f, "\\{}", g),
+            LatexNode::Symbol(s) if matches!(s.as_str(), "," | ";" | ":" | "!") => {
+                write!(f, "\\{s}")
+            }
             LatexNode::Symbol(s) => write!(f, "{}", s),
-            LatexNode::Command { name, args } if name.starts_with("begin{") => {
+            LatexNode::Command { name, args }
+                if name.starts_with("begin{") || name == "invalid-scalable-delimiter" =>
+            {
                 if let Some(source) = args.first() {
                     write!(f, "{source}")
                 } else {
@@ -265,12 +286,14 @@ impl std::fmt::Display for LatexNode {
                 content,
                 right,
             } => {
-                let s: String = content
-                    .iter()
-                    .map(|n| format!("{}", n))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                write!(f, "\\left{}{}\\right{}", left, s, right)
+                let s = latexsnipper_ast::formula_layout::join_latex_fragments(
+                    content.iter().map(ToString::to_string),
+                );
+                f.write_str(&latexsnipper_ast::formula_layout::join_latex_fragments([
+                    format!("\\left{left}"),
+                    s,
+                    format!("\\right{right}"),
+                ]))
             }
             LatexNode::FontModifier { font, content } => write!(f, "\\{}{{{}}}", font, content),
             LatexNode::Matrix { env, rows } => write_matrix(f, env, rows),

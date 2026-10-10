@@ -21,11 +21,24 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                         continue;
                     }
                     let key = local_tag(attr.key.as_ref());
+                    if tag == "mfenced"
+                        && matches!(key.as_str(), "open" | "close" | "separators")
+                        && attr.key.as_ref().contains(&b':')
+                    {
+                        return Err("Qualified MathML fence attributes are not supported; retain the original XML".into());
+                    }
                     if key == "xmlns" || key.starts_with("xmlns:") {
                         continue;
                     }
-                    let val = if matches!(key.as_str(), "columnalign" | "columnlines" | "notation")
-                    {
+                    let val = if matches!(
+                        key.as_str(),
+                        "columnalign"
+                            | "columnlines"
+                            | "notation"
+                            | "open"
+                            | "close"
+                            | "separators"
+                    ) {
                         attr.decoded_and_normalized_value(
                             quick_xml::XmlVersion::Implicit1_0,
                             reader.decoder(),
@@ -35,6 +48,19 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                     } else {
                         String::from_utf8_lossy(&attr.value).to_string()
                     };
+                    if tag == "mfenced"
+                        && matches!(key.as_str(), "open" | "close")
+                        && latexsnipper_syntax::latex::scalable_delimiter_glyph(
+                            &crate::latex_utils::delimiter_source_token(&val),
+                        ) != Some(val.as_str())
+                    {
+                        return Err(
+                            "Unsupported MathML fence glyph; retain the original XML".into()
+                        );
+                    }
+                    if tag == "mfenced" && key == "separators" && val.chars().count() > 1 {
+                        return Err("Multiple MathML fence separators are not supported; retain the original XML".into());
+                    }
                     // Keep multi-valued layout attributes intact inside the legacy
                     // tokenized attribute representation, without changing style keys.
                     let val = if matches!(key.as_str(), "columnalign" | "columnlines" | "notation")
@@ -53,18 +79,74 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
             }
             Ok(Event::Text(e)) => {
                 let t = e.decode().map_err(|error| error.to_string())?;
+                if stack.last().is_some_and(|(tag, _, _)| tag == "mfenced") && !t.trim().is_empty()
+                {
+                    return Err(
+                        "MathML fence content must use token elements; retain the original XML"
+                            .into(),
+                    );
+                }
                 current_text.push_str(&t);
             }
             Ok(Event::GeneralRef(e)) => {
+                if stack.last().is_some_and(|(tag, _, _)| tag == "mfenced") {
+                    return Err(
+                        "MathML fence content must use token elements; retain the original XML"
+                            .into(),
+                    );
+                }
                 current_text.push_str(&crate::xml_util::decode_xml_reference(&e)?);
             }
             Ok(Event::CData(e)) => {
+                if stack.last().is_some_and(|(tag, _, _)| tag == "mfenced") {
+                    return Err(
+                        "MathML fence content must use token elements; retain the original XML"
+                            .into(),
+                    );
+                }
                 current_text.push_str(&e.decode().map_err(|error| error.to_string())?);
             }
             Ok(Event::Empty(e)) => {
                 let tag = local_tag(e.name().as_ref());
                 let text = extract_text_attrs(&e);
-                let node = build_mathml_node(&tag, &text, &[], "");
+                let attrs = if tag == "mfenced" {
+                    let mut fields = Vec::new();
+                    for attr in e.attributes() {
+                        let attr = attr.map_err(|error| error.to_string())?;
+                        let key = local_tag(attr.key.as_ref());
+                        if matches!(key.as_str(), "open" | "close" | "separators")
+                            && attr.key.as_ref().contains(&b':')
+                        {
+                            return Err("Qualified MathML fence attributes are not supported; retain the original XML".into());
+                        }
+                        if !matches!(key.as_str(), "open" | "close" | "separators") {
+                            continue;
+                        }
+                        let value = attr
+                            .decoded_and_normalized_value(
+                                quick_xml::XmlVersion::Implicit1_0,
+                                reader.decoder(),
+                            )
+                            .map_err(|error| error.to_string())?;
+                        if matches!(key.as_str(), "open" | "close")
+                            && latexsnipper_syntax::latex::scalable_delimiter_glyph(
+                                &crate::latex_utils::delimiter_source_token(&value),
+                            ) != Some(value.as_ref())
+                        {
+                            return Err(
+                                "Unsupported MathML fence glyph; retain the original XML".into()
+                            );
+                        }
+                        if key == "separators" && value.chars().count() > 1 {
+                            return Err("Multiple MathML fence separators are not supported; retain the original XML".into());
+                        }
+                        fields.push(format!("{key}={value}"));
+                    }
+                    fields.join(" ")
+                } else {
+                    String::new()
+                };
+                let node = build_mathml_node(&tag, &text, &[], &attrs);
                 if let Some((_, ref mut parent, _)) = stack.last_mut() {
                     parent.push(node);
                 } else {
@@ -142,6 +224,18 @@ fn collect_text(children: &[String]) -> String {
 
 fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) -> String {
     match tag {
+        "mfenced" => {
+            let attribute = |key: &str| {
+                attrs
+                    .split_whitespace()
+                    .find_map(|part| part.strip_prefix(key))
+            };
+            let left = attribute("open=").unwrap_or("(");
+            let right = attribute("close=").unwrap_or(")");
+            let separator =
+                crate::latex_utils::escape_text_symbols(attribute("separators=").unwrap_or(","));
+            crate::latex_utils::delimited_source(left, &children.join(&separator), right)
+        }
         "math" | "mrow" | "style" | "semantics" | "annotation-xml" | "none" => {
             if children.is_empty() {
                 text.to_string()

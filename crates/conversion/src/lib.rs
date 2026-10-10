@@ -713,8 +713,16 @@ mod tests {
             },
             Case {
                 latex: "\\frac{\\alpha+\\beta}{\\sqrt{x_1^2}}",
-                omml: &["<m:f>", "<m:rad>", "α", "β", "<m:sSub>", "<m:sSup>"],
-                mathml: &["<mfrac>", "<msqrt>", "α", "β", "<msub>", "<msup>"],
+                omml: &[
+                    "<m:f>",
+                    "<m:rad>",
+                    "α",
+                    "β",
+                    "<m:sSubSup>",
+                    "<m:sub>",
+                    "<m:sup>",
+                ],
+                mathml: &["<mfrac>", "<msqrt>", "α", "β", "<msubsup>"],
                 typst: &["frac(", "alpha", "beta", "sqrt(", "x_(1)^(2)"],
             },
             Case {
@@ -829,8 +837,14 @@ mod tests {
         let cases = [
             Case {
                 latex: "\\sum_{i=1}^{n}\\frac{x_i}{1+x_i^2}",
-                omml: &["<m:nary>", "<m:f>", "<m:sSub>", "<m:sSup>"],
-                mathml: &["<munderover>", "<mo>∑</mo>", "<mfrac>", "<msub>", "<msup>"],
+                omml: &["<m:nary>", "<m:f>", "<m:sSub>", "<m:sSubSup>"],
+                mathml: &[
+                    "<munderover>",
+                    "<mo>∑</mo>",
+                    "<mfrac>",
+                    "<msub>",
+                    "<msubsup>",
+                ],
                 typst: &["sum_(i = 1)^(n)", "frac(", "x_(i)", "x_(i)^(2)"],
             },
             Case {

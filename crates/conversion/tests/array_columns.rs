@@ -182,6 +182,14 @@ fn exported_arrays_compile_with_local_typst() {
         r"A^{\overrightarrow{BC}}",
         "\\begin{array}{lc}50\\%&\\text{a\\%b\\&c}\\\\% FAKE & \\end{array}\n\\alpha x&\\frac{a}{b}\\end{array}",
         r"\text{literal \backslash{}frac\%+x\textasciicircum{}y\textasciitilde{}z}",
+        r"\left\langle\frac{a}{\left[b\right]}\right\rangle_i^2+z",
+        r"\left.\frac{a}{b}\right|",
+        r"\left\{\left\lfloor x\right\rfloor\right\}",
+        r"\left\lVert x\right\rVert_i^2",
+        r"\left\backslash x\right/",
+        r"\left\uparrow x\right\Downarrow",
+        r"{x_i}^2+x_i^2+\left(x\,y\right)",
+        r"\langle x\rangle+\lVert y\rVert+\lvert z\rvert",
     ];
     let output = sources
         .iter()

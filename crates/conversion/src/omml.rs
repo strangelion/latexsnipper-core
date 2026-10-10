@@ -140,10 +140,19 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
     }
     let children: Vec<&LatexNode> = match node {
         Text(_) | Operator(_) | Relation(_) | Greek(_) | Symbol(_) => Vec::new(),
-        Sequence(nodes)
-        | Group(nodes)
-        | Math { content: nodes, .. }
-        | Delimited { content: nodes, .. } => nodes.iter().collect(),
+        Sequence(nodes) | Group(nodes) | Math { content: nodes, .. } => nodes.iter().collect(),
+        Delimited {
+            left,
+            content,
+            right,
+        } => {
+            if latexsnipper_syntax::latex::scalable_delimiter_glyph(left).is_none()
+                || latexsnipper_syntax::latex::scalable_delimiter_glyph(right).is_none()
+            {
+                return Err("Unsupported OMML scalable delimiter".into());
+            }
+            content.iter().collect()
+        }
         Command { name, args } => {
             let minimum_args = match name.as_str() {
                 "%" | "&" | "#" | "_" | "$" | "{" | "}" | "backslash" | "textasciicircum"
@@ -350,6 +359,10 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Superscript { base, exp } => {
+            if let LatexNode::Subscript { base, sub } = base.as_ref() {
+                return format!("<m:sSubSup><m:e>{}</m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>",
+                    ast_to_omml(base), ast_to_omml(sub), ast_to_omml(exp));
+            }
             let base_omml = match base.as_ref() {
                 LatexNode::Operator(name) => wrap_normal_mtext(name),
                 _ => ast_to_omml(base),
@@ -362,6 +375,10 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Subscript { base, sub } => {
+            if let LatexNode::Superscript { base, exp } = base.as_ref() {
+                return format!("<m:sSubSup><m:e>{}</m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>",
+                    ast_to_omml(base), ast_to_omml(sub), ast_to_omml(exp));
+            }
             if let LatexNode::Operator(name) = base.as_ref() {
                 if is_limit_operator(name) {
                     return format!(
@@ -497,6 +514,12 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::Delimited { left, content, right } => {
+            let Some(left) = latexsnipper_syntax::latex::scalable_delimiter_glyph(left) else {
+                return wrap_normal_mtext(&node.to_string());
+            };
+            let Some(right) = latexsnipper_syntax::latex::scalable_delimiter_glyph(right) else {
+                return wrap_normal_mtext(&node.to_string());
+            };
             format!(
                 "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
                 xml_escape(left),
@@ -540,7 +563,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
                     )
                 }
                 "%" | "&" | "#" | "_" | "$" | "{" | "}" | "backslash" | "textasciicircum" | "textasciitilde" => wrap_normal_mtext(crate::latex_utils::literal_command_symbol(name).expect("matched literal command")),
-                _ if name.starts_with("begin{") => wrap_normal_mtext(&args.first().map(ToString::to_string).unwrap_or_default()),
+                _ if name.starts_with("begin{") || name == "invalid-scalable-delimiter" => wrap_normal_mtext(&args.first().map(ToString::to_string).unwrap_or_default()),
                 "text" | "textbf" | "textit" | "textrm" | "textsf" | "texttt" => {
                     // Text arguments are source, not already escaped XML fragments.
                     let text: String = args.iter().map(ToString::to_string).collect();

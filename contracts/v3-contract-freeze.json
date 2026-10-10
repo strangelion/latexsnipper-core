@@ -1,7 +1,7 @@
 {
   "contractRelease": "3.0.0",
   "files": {
-    "contracts/agent/core-conversion-contract.v1.yaml": "88e32c9a8ce9aebc7068e902296d6a262dc17ff9f8fed7bcd7c28b982575b518",
+    "contracts/agent/core-conversion-contract.v1.yaml": "6f7011c592035200bf39453c6ca08e6c20f67d5abb06fe066dd4fc3941c14301",
     "contracts/agent/core-mixed-contract.v1.yaml": "ed21fac733c14c1450709574d09d1af39d69b623178992630bb19e817b173844",
     "contracts/agent/core-model-transport-contract.v1.yaml": "0ff4fdec673cde60f387d1b5f63caee9d7139199e6b262a25e3d7412d719291c",
     "contracts/agent/core-provider-contract.v1.yaml": "98b888cf32cbd4efb41065eae9259e9402eb779e30b3b41f339243c03cdd7a30",
@@ -33,8 +33,8 @@
   "hashAlgorithm": "sha256-normalized-lf",
   "publicRustSourceTrees": {
     "crates/api-types/src": "af916d1842bb732912633a9e225fbd53c1a1a06d75dc4e38a79f78c53bba8e49",
-    "crates/ast/src": "a382b150a253f7c60d5332656a5d4906e4f8048e45a7cf5a75b09f3bede7d2f8",
-    "crates/conversion/src": "006ea512e0168a500d5843361bd04121ddf0d3bbbfca98df45b655dc739aaca6",
+    "crates/ast/src": "a6a0fa052df124abbdee8f633f309db0b3d57218a03bd06e7524199bf05338ad",
+    "crates/conversion/src": "3970bd9a16f3aedc68fbb0ad3fcd57b9e5b8912e91d400aab3f2707bf842fd3a",
     "crates/custom-symbols/src": "42654e79bcf161ad17eefad1c191af8c7bd730123dfd265441d0bc41c77cd55b",
     "crates/drawing/src": "05ff157df6e4d011d3008741e6117ce11a795e13e709015b19928194659821db",
     "crates/engine/src": "5cc56c913f2c5d3ff6401f6bc1ad914665a387b6fef60f8ff71ef0a0327c41c7",
@@ -42,13 +42,13 @@
     "crates/ffi/src": "810e56a6284558b5d5700730e8b303ff606b9f69aee2b6ffc21400e97098344a",
     "crates/foundation/src": "afbbf9d5e3e47b3e7080eb6d02a182c0063f92005acb22358a03974f4f382fbe",
     "crates/image/src": "835962b9ddc6628bff25899b93c57ee29a743c2e222028c6fd0431e70a8d570d",
-    "crates/inference/src": "1d285d5104d12216356caf4daccb294582cb59d8acee889c5b69355c8dcbfa3e",
+    "crates/inference/src": "4b89703a10156154919adcbefb59e789f2c444de170ae4a651616ec61cd59db5",
     "crates/model/src": "5c3d4c094f12d4b679b84b8bb6c2cedf6535aa7ab9667277a0232ad647084df4",
     "crates/pipeline/src": "51d5137301c3addade097ef3c61752d1d664cd73b813e35e5e48e069cbe8d451",
     "crates/plugin-wasi/src": "7c5bb16b853f03d4bb4bb5d14f0a21fff4cdd41cb9afdf34a59ae8c168f08061",
     "crates/plugin/src": "eaa2d23e1c074a6995b1faad45f2cedba979965a26ba260eeef61210f020cbbb",
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
-    "crates/syntax/src": "f1c8405d6ffc3bf4896ce4559cdb1c353aa5a2a096f95ebe14c9bd7d42d14dac",
+    "crates/syntax/src": "ffeda08867b0660bfbc9e38a895c0f8e31e3e33ca928b2c28e18c6319ed31e32",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
     "crates/wasm/src": "8d3db4e8fce38a667186101c04f0df814d2d733a70bad6ec0b8bde6bb27bfa51"
   },
