@@ -43,6 +43,12 @@ jobs:
         run: cargo check --locked -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown
       - name: Lint WASM package
         run: cargo clippy --locked -p latexsnipper-wasm --all-targets --target wasm32-unknown-unknown -- -D warnings
+      - name: Verify isolated conversion dependency boundary
+        run: python scripts/verify_conversion_wasm_dependencies.py
+      - name: Check conversion-only package
+        run: cargo check --locked -p latexsnipper-wasm --no-default-features --features conversion-only --all-targets --target wasm32-unknown-unknown
+      - name: Lint conversion-only package
+        run: cargo clippy --locked -p latexsnipper-wasm --no-default-features --features conversion-only --all-targets --target wasm32-unknown-unknown -- -D warnings
 
   package:
     name: Build and package WASM
@@ -76,11 +82,27 @@ jobs:
         run: >-
           wasm-pack build crates/wasm --target nodejs --release
           --out-dir ../../target/wasm-nodejs --locked
+      - name: Prepare full profile comparison aliases
+        run: |
+          cp -r target/wasm-web target/wasm-full-web
+          cp -r target/wasm-nodejs target/wasm-full-nodejs
+      - name: Build conversion-only web package
+        run: >-
+          wasm-pack build crates/wasm --target web --release
+          --out-dir ../../target/wasm-conversion-web --locked
+          --no-default-features --features conversion-only
+      - name: Build conversion-only Node package
+        run: >-
+          wasm-pack build crates/wasm --target nodejs --release
+          --out-dir ../../target/wasm-conversion-nodejs --locked
+          --no-default-features --features conversion-only
       - name: Include license in generated npm packages
         run: |
           cp LICENSE target/wasm-web/LICENSE
           cp LICENSE target/wasm-bundler/LICENSE
           cp LICENSE target/wasm-nodejs/LICENSE
+          cp LICENSE target/wasm-conversion-web/LICENSE
+          cp LICENSE target/wasm-conversion-nodejs/LICENSE
       - name: Record package sizes
         run: |
           find target/wasm-web -maxdepth 1 -type f -printf '%f %s bytes\n' | sort | tee target/wasm-web/size-report.txt
@@ -92,11 +114,19 @@ jobs:
         run: |
           npm run build
           npm run smoke:packages
+          node scripts/conversion-profile-smoke.mjs
       - name: Upload browser package
         uses: actions/upload-artifact@v7
         with:
           name: latexsnipper-wasm-web
           path: target/wasm-web
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload conversion-only browser package
+        uses: actions/upload-artifact@v7
+        with:
+          name: latexsnipper-wasm-conversion-web
+          path: target/wasm-conversion-web
           if-no-files-found: error
           retention-days: 14
 
@@ -140,6 +170,8 @@ jobs:
 
             echo "Retrying ${{ matrix.browser }} after first failure"
           done
+      - name: Test conversion-only profile in the browser
+        run: wasm-pack test --release --headless --${{ matrix.browser }} crates/wasm --no-default-features --features conversion-only
       - name: Upload browser diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -150,7 +182,6 @@ jobs:
             target/wasm-bindgen-test*
           if-no-files-found: warn
           retention-days: 14
-
   production-handwriting:
     name: Production TrOCR compatibility
     runs-on: ubuntu-latest

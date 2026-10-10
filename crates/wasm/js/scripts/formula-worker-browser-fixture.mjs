@@ -1,5 +1,8 @@
 // Browser-only lifecycle fixture: real Core conversions plus a deliberate Wasm stall.
-import * as core from "../../../../target/wasm-fragment-web/latexsnipper_wasm.js";
+const profile = new URL(import.meta.url).searchParams.get("profile") ?? "baseline";
+const packages = { baseline: "wasm-fragment-web", full: "wasm-full-web", conversion: "wasm-conversion-web" };
+if (!Object.hasOwn(packages, profile)) throw new Error("Unknown test WASM profile");
+const core = await import(new URL(`../../../../target/${packages[profile]}/latexsnipper_wasm.js`, import.meta.url).href);
 
 const spinModule = new WebAssembly.Module(new Uint8Array([
   0, 97, 115, 109, 1, 0, 0, 0,

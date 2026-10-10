@@ -2,7 +2,7 @@
 //!
 //! This crate contains the shared types used across the LaTeXSnipper ecosystem:
 //! - [`RecognizeMode`] — recognition mode selector
-//! - [`RecognizeRequest`] — builder-pattern request
+//! - `RecognizeRequest` — builder-pattern request (default `image-input` feature)
 //! - [`RecognizeResponse`] — recognition result wrapper
 //! - [`StreamItem`] — streaming recognition events
 
@@ -22,6 +22,7 @@ pub use v3::{
 };
 
 use latexsnipper_ast::Document;
+#[cfg(feature = "image-input")]
 use latexsnipper_image::SnipperImage;
 use serde::{Deserialize, Serialize};
 
@@ -169,6 +170,7 @@ impl RecognizeMode {
 
 /// A request to recognize content in an image.
 /// Supports Builder pattern for flexible configuration.
+#[cfg(feature = "image-input")]
 pub struct RecognizeRequest {
     pub image: SnipperImage,
     pub mode: RecognizeMode,
@@ -176,6 +178,7 @@ pub struct RecognizeRequest {
     pub min_confidence: f32,
 }
 
+#[cfg(feature = "image-input")]
 impl RecognizeRequest {
     /// Create a new request with an image and default settings.
     pub fn new(image: SnipperImage) -> Self {

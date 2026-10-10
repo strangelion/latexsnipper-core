@@ -9,13 +9,22 @@ import { WasmWorkerClient } from "../dist/index.js";
 const verify = (condition, message) => { if (!condition) throw new Error(message); };
 const clients = [];
 const workerUrl = new URL("../dist/worker-entry.js", import.meta.url);
-const moduleUrl = new URL("../../../../target/wasm-fragment-web/latexsnipper_wasm.js", import.meta.url).href;
+const profile = new URL(location.href).searchParams.get("profile") ?? "baseline";
+const packages = { baseline: "wasm-fragment-web", full: "wasm-full-web", conversion: "wasm-conversion-web" };
+if (!Object.hasOwn(packages, profile)) throw new Error("Unknown test WASM profile");
+const moduleUrl = new URL(`../../../../target/${packages[profile]}/latexsnipper_wasm.js`, import.meta.url).href;
 
 window.formulaWorkerProof = (async () => {
   try {
     const client = new WasmWorkerClient({ workerUrl, moduleUrl });
     clients.push(client);
+    const readyStart = performance.now();
     await client.ready();
+    const clientReadyWallMillis = performance.now() - readyStart;
+    if (profile === "conversion") {
+      const rejected = await client.recognize({ width: 1, height: 1, pixels: new Uint8Array(4), mode: "text" }).then(() => { throw new Error("Slim profile unexpectedly recognized an image"); }, (error) => error);
+      verify(rejected.detail.code === "WORKER_RECOGNITION_UNAVAILABLE", "slim recognition refusal");
+    }
     const inputs = [
       ["latex", String.raw`\frac{a}{b}`],
       ["typst", "frac(a,b)"],
@@ -39,7 +48,7 @@ window.formulaWorkerProof = (async () => {
     const workers = [];
     const lifecycle = new WasmWorkerClient({
       workerUrl,
-      moduleUrl: new URL("./formula-worker-browser-fixture.mjs", import.meta.url).href,
+      moduleUrl: new URL(`./formula-worker-browser-fixture.mjs?profile=${profile}`, import.meta.url).href,
       workerFactory: () => {
         const worker = new Worker(workerUrl, { type: "module" });
         workers.push(worker);
@@ -66,7 +75,7 @@ window.formulaWorkerProof = (async () => {
       const recovered = await lifecycle.convertFormula({ content: "x^2", inputFormat: "latex", outputFormat: "omml" });
       verify(recovered.ok && recovered.data.content.includes("sSup"), `${cancellation} recovery did not execute Core`);
     }
-    const result = { ok: true, projections: 8, refusalCases: 2, workerResultBudget: true, hardCancellation: true, wasmTimeout: true, postRestartCoreConversions: 2, host: "browser-only, not Obsidian" };
+    const result = { ok: true, profile, clientReadyWallMillis, projections: 8, refusalCases: 2, workerResultBudget: true, hardCancellation: true, wasmTimeout: true, postRestartCoreConversions: 2, host: "browser-only, not Obsidian" };
     document.querySelector("#result").textContent = JSON.stringify(result, null, 2);
     return result;
   } catch (error) {

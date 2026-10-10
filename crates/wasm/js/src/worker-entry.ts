@@ -11,10 +11,10 @@ interface WasmApi {
   convert_formula_fragment_v3?: WasmFormulaFragmentApi["convert_formula_fragment_v3"];
   default?: (wasmUrl?: string) => Promise<unknown>;
   init?: () => void;
-  load_model_v2(name: string, bytes: Uint8Array, expectedSha256?: string): unknown;
-  clear_models_v2(): unknown;
-  cancel_recognition_v2(): unknown;
-  recognize_v2_with_progress(
+  load_model_v2?(name: string, bytes: Uint8Array, expectedSha256?: string): unknown;
+  clear_models_v2?(): unknown;
+  cancel_recognition_v2?(): unknown;
+  recognize_v2_with_progress?(
     width: number,
     height: number,
     pixels: Uint8Array,
@@ -81,6 +81,10 @@ async function handle(request: WorkerRequest): Promise<void> {
       return;
     }
     if (request.type === "load-model") {
+      if (!api.load_model_v2) {
+        error(request.requestId, "WORKER_RECOGNITION_UNAVAILABLE", "Loaded package does not include recognition models");
+        return;
+      }
       const data = api.load_model_v2(
         request.artifact.name,
         request.artifact.bytes,
@@ -90,13 +94,25 @@ async function handle(request: WorkerRequest): Promise<void> {
       return;
     }
     if (request.type === "clear-models") {
+      if (!api.clear_models_v2) {
+        error(request.requestId, "WORKER_RECOGNITION_UNAVAILABLE", "Loaded package does not include recognition models");
+        return;
+      }
       const data = api.clear_models_v2();
       respond({ protocolVersion: WORKER_PROTOCOL_VERSION, type: "result", requestId: request.requestId, data });
       return;
     }
     if (request.type === "cooperative-cancel") {
+      if (!api.cancel_recognition_v2) {
+        error(request.requestId, "WORKER_RECOGNITION_UNAVAILABLE", "Loaded package does not include recognition");
+        return;
+      }
       const data = api.cancel_recognition_v2();
       respond({ protocolVersion: WORKER_PROTOCOL_VERSION, type: "result", requestId: request.requestId, data });
+      return;
+    }
+    if (!api.recognize_v2_with_progress) {
+      error(request.requestId, "WORKER_RECOGNITION_UNAVAILABLE", "Loaded package does not include recognition");
       return;
     }
     const data = await api.recognize_v2_with_progress(

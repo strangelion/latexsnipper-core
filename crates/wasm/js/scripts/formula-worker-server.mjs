@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const port = Number(process.argv[2] ?? 8766);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid loopback test port");
-const prefixes = ["/crates/wasm/js/dist/", "/target/wasm-fragment-web/"];
+const prefixes = ["/crates/wasm/js/dist/", "/target/wasm-fragment-web/", "/target/wasm-full-web/", "/target/wasm-conversion-web/"];
 const fixtures = ["/crates/wasm/js/scripts/formula-worker-browser-fixture.mjs", "/crates/wasm/js/scripts/formula-worker-browser-smoke.html"];
 const mime = { ".js": "text/javascript", ".mjs": "text/javascript", ".html": "text/html", ".wasm": "application/wasm" };
 const realRoot = await realpath(root);

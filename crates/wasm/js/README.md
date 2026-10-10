@@ -28,6 +28,27 @@ is reported. These pipelines are experimental until OCR accuracy gates are avail
 
 ## Model-free formula conversion
 
+The default Rust feature set preserves recognition and every previous export.
+For a conversion-only package, build explicitly with default features disabled:
+
+```text
+wasm-pack build crates/wasm --target web --release --out-dir ../../target/wasm-conversion-web --locked --no-default-features --features conversion-only
+```
+
+Cargo features are additive: `--features conversion-only` alone still includes
+default recognition. The isolated profile exports `init`, `api_info_v3`,
+`formula_capabilities_v3`, `convert_formula_v3` and `convert_formula_fragment_v3`.
+It reports `v2CompatibilityExports: false` and does not export recognition,
+model loading or document-conversion APIs. Existing default packages remain compatible.
+`latexsnipper-api-types` keeps image request builders enabled by default; this leaf
+uses only its protocol types and does not pull image decoders into the slim build.
+
+`WasmWorkerClient` works with either package. Recognition requests against the slim
+package return `WORKER_RECOGNITION_UNAVAILABLE`, not a missing-function exception
+or silent fallback. No models are loaded. Conversion capabilities and output
+envelopes are shared between profiles, including strict/best-effort limitations.
+See [the measured profile report](../../../docs/formats/conversion-only-wasm.md).
+
 After initializing a generated WASM module, its additive exports are
 `formula_capabilities_v3()` and
 `convert_formula_v3(content, inputFormat, outputFormat, mode?)`. They return the
@@ -124,6 +145,13 @@ worker and uses a separate clearly named fixture with a deliberately infinite
 Wasm loop to verify hard cancellation, timeout and post-restart Core conversion.
 This does not claim Obsidian desktop/mobile, WebKit or Android acceptance; see
 [the integration plan](../../../docs/application-adapter-roadmap.md).
+
+Use `?profile=full` or `?profile=conversion` on that page to test freshly built
+packages under `target/wasm-full-web` or `target/wasm-conversion-web`. The default
+test profile still uses `target/wasm-fragment-web`. `smoke:conversion-profile`
+compares generated Node package output for every capability row and records web
+package bytes, initialization wall time and the initialized linear memory size;
+the latter is not whole-process or peak memory.
 
 The wasm-pack `bundler` target uses the Wasm ESM integration proposal. Vite consumers must add
 `vite-plugin-wasm` and target `esnext`; the checked-in `vite.config.ts` is the canonical example.

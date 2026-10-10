@@ -2,8 +2,10 @@ use latexsnipper_ast::DOCUMENT_SCHEMA_VERSION;
 use serde::Serialize;
 
 /// Version of the stable JavaScript response contract.
+#[cfg(feature = "recognition")]
 pub const WASM_API_VERSION: u32 = 2;
 /// Version of the capability document returned by this package.
+#[cfg(feature = "recognition")]
 pub const CAPABILITY_VERSION: u32 = 2;
 /// Version of the Core 3 JavaScript response contract.
 pub const WASM_API_VERSION_V3: u32 = latexsnipper_api_types::API_ENVELOPE_VERSION_V3;
@@ -12,6 +14,7 @@ pub const CAPABILITY_VERSION_V3: u32 = latexsnipper_api_types::CAPABILITY_SCHEMA
 /// Current document schema produced by recognition.
 pub const AST_SCHEMA_VERSION: &str = DOCUMENT_SCHEMA_VERSION;
 
+#[cfg(feature = "recognition")]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiInfo {
@@ -21,6 +24,7 @@ pub struct ApiInfo {
     pub schema_version: &'static str,
 }
 
+#[cfg(feature = "recognition")]
 impl ApiInfo {
     pub const fn current() -> Self {
         Self {
@@ -49,7 +53,7 @@ impl ApiInfoV3 {
             capability_schema_version: CAPABILITY_VERSION_V3,
             core_version: env!("CARGO_PKG_VERSION"),
             document_schema_version: AST_SCHEMA_VERSION,
-            v2_compatibility_exports: true,
+            v2_compatibility_exports: cfg!(feature = "recognition"),
         }
     }
 }

@@ -32,7 +32,7 @@
   },
   "hashAlgorithm": "sha256-normalized-lf",
   "publicRustSourceTrees": {
-    "crates/api-types/src": "af916d1842bb732912633a9e225fbd53c1a1a06d75dc4e38a79f78c53bba8e49",
+    "crates/api-types/src": "1a5a24f4dfdb1d665d7a7c2457e6459683a1e54c34d3714822c430c905c57878",
     "crates/ast/src": "a6a0fa052df124abbdee8f633f309db0b3d57218a03bd06e7524199bf05338ad",
     "crates/conversion/src": "253244625f297461f48c8b5a2eaf74b98fd41d58669df61a2bfb77576834ec50",
     "crates/custom-symbols/src": "42654e79bcf161ad17eefad1c191af8c7bd730123dfd265441d0bc41c77cd55b",
@@ -50,7 +50,7 @@
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
     "crates/syntax/src": "ffeda08867b0660bfbc9e38a895c0f8e31e3e33ca928b2c28e18c6319ed31e32",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
-    "crates/wasm/src": "d67468eab79206a0e726c0cacca0979e6fe042c7e515391f08be02233c805081"
+    "crates/wasm/src": "6bce1b802dec76d3a64cec2c54646ec92527f4ac053a14958554f033a7554abf"
   },
   "schemaVersion": 1
 }

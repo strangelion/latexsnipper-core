@@ -31,6 +31,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/*.test.js",
     "build:example": "vite build example",
     "smoke:packages": "node scripts/package-smoke.mjs",
+    "smoke:conversion-profile": "node scripts/conversion-profile-smoke.mjs",
     "smoke:production-model": "node scripts/production-model-smoke.mjs"
   },
   "devDependencies": {
