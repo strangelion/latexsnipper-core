@@ -75,7 +75,7 @@
       "evidence": [
         "crates/ffi/examples/python_session.py",
         "crates/ffi/src/application_c.rs",
-        "docs/application-adapter-roadmap.md"
+        "docs/application-adapters.md"
       ],
       "nextMilestone": "Package an independently closable PyO3 Session as tested wheels while preserving the reference client's handle and error semantics."
     },
@@ -85,7 +85,7 @@
       "evidence": [
         "crates/ffi/src/application_c.rs",
         "crates/ffi/include/latexsnipper_session.h",
-        "docs/application-adapter-roadmap.md"
+        "docs/application-adapters.md"
       ],
       "nextMilestone": "Keep ABI v1 lifecycle tests blocking and add release-library symbol checks on Windows, Linux, and macOS."
     }

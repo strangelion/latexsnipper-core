@@ -9,7 +9,12 @@ import { performance } from "node:perf_hooks";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const require = createRequire(import.meta.url);
-const full = require(resolve(root, "target/wasm-full-nodejs/latexsnipper_wasm.js"));
+const args = process.argv.slice(2);
+assert.ok(args.length <= 1, "Expected at most one full-package prefix argument");
+const argument = args[0] ?? "--full-prefix=wasm-full";
+assert.ok(["--full-prefix=wasm-full", "--full-prefix=wasm"].includes(argument), "Unknown full-package prefix");
+const fullPrefix = argument.slice("--full-prefix=".length);
+const full = require(resolve(root, `target/${fullPrefix}-nodejs/latexsnipper_wasm.js`));
 const conversion = require(resolve(root, "target/wasm-conversion-nodejs/latexsnipper_wasm.js"));
 const sample = {
   latex: String.raw`\frac{a}{b}`,
@@ -39,7 +44,7 @@ for (const [source, input] of [["x".repeat(65537), "latex"], [String.raw`\docume
 
 const profiles = [];
 for (const profile of ["full", "conversion"]) {
-  const directory = resolve(root, `target/wasm-${profile}-web`);
+  const directory = resolve(root, `target/${profile === "full" ? fullPrefix : "wasm-conversion"}-web`);
   const bytes = await readFile(resolve(directory, "latexsnipper_wasm_bg.wasm"));
   const module = await import(pathToFileURL(resolve(directory, "latexsnipper_wasm.js")).href);
   const start = performance.now();

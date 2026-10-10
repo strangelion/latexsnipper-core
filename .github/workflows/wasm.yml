@@ -82,10 +82,6 @@ jobs:
         run: >-
           wasm-pack build crates/wasm --target nodejs --release
           --out-dir ../../target/wasm-nodejs --locked
-      - name: Prepare full profile comparison aliases
-        run: |
-          cp -r target/wasm-web target/wasm-full-web
-          cp -r target/wasm-nodejs target/wasm-full-nodejs
       - name: Build conversion-only web package
         run: >-
           wasm-pack build crates/wasm --target web --release
@@ -114,7 +110,7 @@ jobs:
         run: |
           npm run build
           npm run smoke:packages
-          node scripts/conversion-profile-smoke.mjs
+          node scripts/conversion-profile-smoke.mjs --full-prefix=wasm
       - name: Upload browser package
         uses: actions/upload-artifact@v7
         with:
