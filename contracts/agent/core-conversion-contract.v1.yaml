@@ -3,6 +3,24 @@
   "name": "Conversion and Office output contract",
   "rules": [
     {
+      "id": "CORE-CONVERSION-REGISTRY-001",
+      "description": "Executable trusted formula registry preserves builtin dispatch, explicit activation/selection, source-bound result identity and bounded target validation.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-conversion", "--no-default-features", "--test", "conversion_registry"]},
+      "failureMessage": "Conversion registry selection, revocation, identity, limits or output validation regressed."
+    },
+    {
+      "id": "CORE-CONVERSION-EXTENSION-EXAMPLE-001",
+      "description": "New-format and finite command-extension examples use the registered runtime path and refuse undeclared syntax without implicit fallback.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion"],
+      "evidence": {"kind": "command", "command": ["cargo", "run", "--locked", "-p", "latexsnipper-conversion", "--no-default-features", "--example", "conversion_extensions"]},
+      "failureMessage": "The executable conversion extension contributor example failed."
+    },
+    {
       "id": "CORE-SCALABLE-DELIMITER-001",
       "description": "Finite named and nested scalable delimiters retain glyphs, operand ownership and source boundaries; invalid pairs remain non-replaceable.",
       "severity": "blocking",

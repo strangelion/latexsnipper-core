@@ -9,7 +9,8 @@ Native dynamic-library ABI 仍未实现。
 
 转换专用的统一格式/后端路由、局部转换器选择、开发者示例与公共绑定/Office 接入，
 按 [转换扩展计划（EXT-01 至 EXT-04）](conversion-extension-roadmap.md) 推进。
-独立插件接口或能力声明不代表 `DocumentConverter` 与全部应用已经能够调用第三方格式。
+`DocumentConverter` 已有 [可信 Rust 公式字符串注册入口](formats/conversion-registry.md)；
+WASI 适配和各应用未接通，独立插件接口或能力声明不代表全部应用能够调用第三方格式。
 
 ## 执行类别
 

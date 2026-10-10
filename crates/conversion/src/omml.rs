@@ -62,15 +62,20 @@ fn convert_formula_to_omml(f: &Formula) -> String {
         FormulaSource::Typst(s) => latex_to_omml(&typst_to_latex(s)),
         FormulaSource::MathML(s) => format!("<m:oMath>\n{}\n</m:oMath>", s),
     };
+    let word_namespace = if content.contains("<w:") {
+        " xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\""
+    } else {
+        ""
+    };
     if f.display_mode {
         format!(
-            "<m:oMathPara xmlns:m=\"{}\">\n<m:oMath>{}\n</m:oMath>\n</m:oMathPara>",
-            OMML_NAMESPACE, content
+            "<m:oMathPara xmlns:m=\"{}\"{}>\n<m:oMath>{}\n</m:oMath>\n</m:oMathPara>",
+            OMML_NAMESPACE, word_namespace, content
         )
     } else {
         format!(
-            "<m:oMath xmlns:m=\"{}\">{}\n</m:oMath>",
-            OMML_NAMESPACE, content
+            "<m:oMath xmlns:m=\"{}\"{}>{}\n</m:oMath>",
+            OMML_NAMESPACE, word_namespace, content
         )
     }
 }
@@ -1092,17 +1097,41 @@ fn wrap_with_size(omml_content: &str, half_points: u16) -> String {
 }
 
 fn wrap_omml_runs_with_word_rpr(omml_content: &str, word_rpr_tag: &str) -> String {
-    if omml_content.contains(word_rpr_tag) {
-        return omml_content.to_string();
-    }
-
     let word_rpr = format!("<w:rPr>{}</w:rPr>", word_rpr_tag);
-    omml_content
-        .replace("<m:r><m:rPr>", &format!("<m:r><m:rPr>{}", word_rpr))
-        .replace(
-            "<m:r><m:t>",
-            &format!("<m:r><m:rPr>{}</m:rPr><m:t>", word_rpr),
-        )
+    let property_name = word_rpr_tag.split([' ', '>', '/']).next().unwrap_or("");
+    let mut output = String::with_capacity(omml_content.len());
+    let mut remainder = omml_content;
+    while let Some(start) = remainder.find("<m:r>") {
+        output.push_str(&remainder[..start]);
+        let run = &remainder[start..];
+        let Some(end) = run.find("</m:r>").map(|position| position + "</m:r>".len()) else {
+            output.push_str(run);
+            return output;
+        };
+        let run = &run[..end];
+        // An inner explicit property takes precedence over an outer declaration.
+        if run.contains(&format!("{property_name} ")) || run.contains(&format!("{property_name}>"))
+        {
+            output.push_str(run);
+        } else if let Some(position) = run.find("</w:rPr>") {
+            output.push_str(&run[..position]);
+            output.push_str(word_rpr_tag);
+            output.push_str(&run[position..]);
+        } else {
+            // Word properties are siblings of math run properties, not their children.
+            let position = run
+                .find("</m:rPr>")
+                .map(|index| index + "</m:rPr>".len())
+                .or_else(|| run.find("<m:rPr/>").map(|index| index + "<m:rPr/>".len()))
+                .unwrap_or("<m:r>".len());
+            output.push_str(&run[..position]);
+            output.push_str(&word_rpr);
+            output.push_str(&run[position..]);
+        }
+        remainder = &remainder[start + end..];
+    }
+    output.push_str(remainder);
+    output
 }
 
 fn latex_size_to_half_points(name: &str) -> u16 {

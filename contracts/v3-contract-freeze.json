@@ -1,7 +1,7 @@
 {
   "contractRelease": "3.0.0",
   "files": {
-    "contracts/agent/core-conversion-contract.v1.yaml": "6f7011c592035200bf39453c6ca08e6c20f67d5abb06fe066dd4fc3941c14301",
+    "contracts/agent/core-conversion-contract.v1.yaml": "26d80da6bb107e9ac4a27e3868a07d95027f22f270fcc54a629d1b12591d40a0",
     "contracts/agent/core-mixed-contract.v1.yaml": "ed21fac733c14c1450709574d09d1af39d69b623178992630bb19e817b173844",
     "contracts/agent/core-model-transport-contract.v1.yaml": "0ff4fdec673cde60f387d1b5f63caee9d7139199e6b262a25e3d7412d719291c",
     "contracts/agent/core-provider-contract.v1.yaml": "98b888cf32cbd4efb41065eae9259e9402eb779e30b3b41f339243c03cdd7a30",
@@ -34,7 +34,7 @@
   "publicRustSourceTrees": {
     "crates/api-types/src": "af916d1842bb732912633a9e225fbd53c1a1a06d75dc4e38a79f78c53bba8e49",
     "crates/ast/src": "a6a0fa052df124abbdee8f633f309db0b3d57218a03bd06e7524199bf05338ad",
-    "crates/conversion/src": "3970bd9a16f3aedc68fbb0ad3fcd57b9e5b8912e91d400aab3f2707bf842fd3a",
+    "crates/conversion/src": "026f97dc455d001f90e7dcddb774ac78b8151ba741344144d61af82867ab0727",
     "crates/custom-symbols/src": "42654e79bcf161ad17eefad1c191af8c7bd730123dfd265441d0bc41c77cd55b",
     "crates/drawing/src": "05ff157df6e4d011d3008741e6117ce11a795e13e709015b19928194659821db",
     "crates/engine/src": "5cc56c913f2c5d3ff6401f6bc1ad914665a387b6fef60f8ff71ef0a0327c41c7",

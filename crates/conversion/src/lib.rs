@@ -5,6 +5,7 @@ pub mod asset_resolver;
 pub mod capability_registry;
 #[cfg(feature = "native")]
 pub mod clipboard;
+pub mod conversion_registry;
 pub mod converter;
 pub mod document_cleaner;
 pub mod document_converter;

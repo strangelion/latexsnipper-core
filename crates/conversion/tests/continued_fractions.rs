@@ -28,7 +28,14 @@ fn nested_continued_fractions_preserve_two_operands_per_level() {
     let roundtrip =
         DocumentConverter::convert_latex_string(&rebuilt, OutputFormat::MathML).unwrap();
     assert_eq!(roundtrip.matches("<mfrac>").count(), 2);
-    assert_eq!(roundtrip.matches("displaystyle=\"true\"").count(), 2);
+    // Two fraction styles plus the standard display-style formula wrapper.
+    assert_eq!(roundtrip.matches("displaystyle=\"true\"").count(), 3);
+    assert_eq!(
+        roundtrip
+            .matches("displaystyle=\"true\" scriptlevel=\"0\"")
+            .count(),
+        2
+    );
     for (format, element) in [
         (OutputFormat::MathML, "<mfrac>"),
         (OutputFormat::OMML, "<m:f>"),

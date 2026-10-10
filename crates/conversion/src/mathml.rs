@@ -137,7 +137,7 @@ fn convert_formula_to_mathml(f: &Formula, _mode: &MathmlMode) -> String {
         FormulaSource::Typst(s) => latex_to_mathml(&typst_to_latex(s)),
     };
     if f.display_mode {
-        format!("<displaymath>\n{}\n</displaymath>", content)
+        format!("<mstyle displaystyle=\"true\">\n{}\n</mstyle>", content)
     } else {
         format!("<inlinemath>\n{}\n</inlinemath>", content)
     }
