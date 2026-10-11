@@ -73,8 +73,13 @@ or changing a host discards its stale requests/grants. This does not provide
 external-writer CAS, whole-invocation rollback or crash recovery. Windows staging
 now preserves and verifies owner/group/DACL before payload writes and rechecks that
 security identity before publication. Unix ownership and other extended metadata,
-Windows SACL/security resource attributes, streams and encryption/compression are
-still open; controlled x64 evidence is not every-filesystem or enterprise-policy
+Windows SACL/security resource attributes and encryption/compression are
+still open. Bounded named `$DATA` streams are copied to owned staging files,
+checkpointed and rechecked on both original and candidate; stream-only edits refuse
+publication, and unknown/oversize metadata is not silently dropped. Enumeration,
+names, record count and aggregate bytes have independent limits. Stream creation
+cannot implicitly create a missing base or overwrite an existing stream. Controlled
+x64 evidence is not every-filesystem, remote-share or enterprise-policy
 approval. No process privileges or global machine settings are enabled to bypass
 preservation failures. These boundaries remain open for independent review.
 

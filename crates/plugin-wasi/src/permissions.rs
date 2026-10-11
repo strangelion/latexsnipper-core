@@ -245,11 +245,16 @@ impl ComponentPermissions {
         }
         let (parent, target) = write_parent(grant, Path::new(relative))?;
         let security = crate::write_security::WriteSecurity::read(&parent, &target)?;
+        #[cfg(windows)]
+        let streams =
+            crate::write_streams::WriteStreams::read(&parent, &target, limit, &mut checkpoint)?;
         let (mut staged, mut file) = StagedWrite::create(&parent, &security)?;
         for chunk in payload.chunks(64 * 1024) {
             checkpoint().map_err(CheckedWriteError::Interrupted)?;
             file.write_all(chunk).map_err(map_io_error)?;
         }
+        #[cfg(windows)]
+        streams.apply(&parent, &staged.name, &mut checkpoint)?;
         file.sync_all().map_err(map_io_error)?;
         drop(file);
         // Clones of this grant share publication ordering. Other hosts and
@@ -268,6 +273,11 @@ impl ComponentPermissions {
             return Err(FilesystemOperationError::Conflict.into());
         }
         security.recheck(&parent, &target)?;
+        #[cfg(windows)]
+        {
+            streams.recheck(&parent, &target, limit, &mut checkpoint)?;
+            streams.recheck(&parent, Path::new(&staged.name), limit, &mut checkpoint)?;
+        }
         // Preserve ordinary permissions as well as platform staging security.
         if let Ok(metadata) = parent.symlink_metadata(&target) {
             let mut options = OpenOptions::new();

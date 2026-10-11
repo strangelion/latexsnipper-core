@@ -127,7 +127,28 @@ no privilege enabling or ignore-ACL fallback is performed. The staging filename 
 one safe component, and native `CREATE_NEW` never overwrites a collision.
 These checks were exercised on controlled Windows x64 files, not every filesystem
 or enterprise policy. Unix owner identity, Windows SACL/security resource attributes,
-alternate streams, encryption/compression and other extended metadata remain open.
+encryption/compression and other extended metadata remain open.
+Windows named `$DATA` streams are now enumerated with a fixed, eight-byte-aligned
+64 KiB buffer. The parser bounds linked offsets, UTF-16 names (1024 bytes), types,
+duplicates and 128 named records. Named data is bounded in aggregate by the lesser
+of the input budget and 4 MiB; empty, Unicode and binary streams are retained,
+including `Zone.Identifier`. Unknown types, invalid names/UTF-16, unsupported
+enumeration and excess budgets fail without silently dropping metadata. Driver and
+filesystem support is separate; see Microsoft's [stream information contract](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_stream_info).
+Named data is read into a bounded private snapshot, copied only to the owned staged
+file in checkpointed 64 KiB chunks and synced. Native stream opens derive the path
+from the pinned directory handle, validate base/suffix separately, and do not follow
+the final reparse point; single-letter base names are not parsed as drive prefixes.
+Creation requires an existing regular staging base and denies delete sharing while
+opening/writing the stream, so it cannot implicitly create a missing base with a
+broader DACL or overwrite an existing stream. Before publication both original and
+staged stream sets/content are rechecked. A stream-only edit is a write conflict;
+cancellation, expiry and revocation stop at the same existing consent checkpoints,
+without another approval use or dialog. Deleting an owned staged base removes its
+streams too. Stream bytes/names can be sensitive and are never logged or uploaded.
+This retains observed streams, not a global atomic metadata/filesystem CAS or a
+complete security/extended-attribute clone. Controlled NTFS x64 evidence does not
+prove every filesystem, remote share or enterprise policy.
 Grants remain package-relative; do not use this implementation as a
 general-purpose editor for external security-sensitive files. Platform metadata
 preservation, multi-file transactions and crash recovery remain separate work.

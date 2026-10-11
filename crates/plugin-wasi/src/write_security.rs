@@ -9,6 +9,16 @@ pub(crate) struct WriteSecurity {
     snapshot: Option<windows::SecuritySnapshot>,
 }
 
+#[cfg(windows)]
+pub(crate) fn open_named_stream(
+    parent: &Dir,
+    base: &Path,
+    stream: &str,
+    create: bool,
+) -> std::io::Result<File> {
+    windows::open_named_stream(parent, base, stream, create)
+}
+
 impl WriteSecurity {
     pub(crate) fn read(parent: &Dir, target: &Path) -> Result<Self, FilesystemOperationError> {
         #[cfg(windows)]
@@ -83,8 +93,8 @@ mod windows {
     };
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, GetFinalPathNameByHandleW, CREATE_NEW, FILE_ATTRIBUTE_NORMAL,
-        FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_DELETE, FILE_SHARE_READ,
-        FILE_SHARE_WRITE, READ_CONTROL, WRITE_DAC,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_DELETE,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
     };
     const INFO: u32 =
         OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
@@ -302,6 +312,83 @@ mod windows {
             return Err(std::io::Error::other("staging path exceeds budget"));
         }
         Ok(buffer)
+    }
+
+    pub(super) fn open_named_stream(
+        parent: &Dir,
+        base: &Path,
+        stream: &str,
+        create: bool,
+    ) -> std::io::Result<File> {
+        crate::write_streams::validate_name(stream).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid named data stream",
+            )
+        })?;
+        let base = base.to_str().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid stream base")
+        })?;
+        let mut path = staging_path(parent, base)?;
+        path.pop();
+        path.extend(stream.encode_utf16());
+        path.push(0);
+        if path.len() > 32768 {
+            return Err(std::io::Error::other("stream path exceeds budget"));
+        }
+        // Do not let CREATE_NEW implicitly create a missing base file with a
+        // broader default DACL. Hold an existing no-follow base without delete
+        // sharing until the stream handle takes over that protection.
+        let _base_guard = if create {
+            use cap_fs_ext::MetadataExt;
+            use cap_std::fs::OpenOptionsExt;
+            let mut options = OpenOptions::new();
+            options
+                .read(true)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+                .follow(FollowSymlinks::No);
+            let file = parent.open_with(base, &options)?;
+            let metadata = file.metadata()?;
+            if !metadata.is_file() || metadata.is_symlink() || metadata.nlink() > 1 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "stream base is not a regular owned file",
+                ));
+            }
+            Some(file)
+        } else {
+            None
+        };
+        let access = if create {
+            FILE_GENERIC_WRITE
+        } else {
+            FILE_GENERIC_READ
+        };
+        let disposition = if create { CREATE_NEW } else { OPEN_EXISTING };
+        let share = FILE_SHARE_READ | FILE_SHARE_WRITE | if create { 0 } else { FILE_SHARE_DELETE };
+        // SAFETY: Directory-handle-derived, bounded terminated path; base and
+        // named-$DATA suffix are individually validated, not arbitrary caller paths.
+        // Native path resolution is not atomic with external directory moves.
+        // Existing-file reads do not follow the final reparse point. New streams
+        // are created only on this invocation's owned staging file with CREATE_NEW.
+        let handle = unsafe {
+            CreateFileW(
+                path.as_ptr(),
+                access,
+                share,
+                null(),
+                disposition,
+                FILE_FLAG_OPEN_REPARSE_POINT,
+                null_mut(),
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: One successful native open transfers one owned handle.
+        Ok(File::from_std(unsafe {
+            std::fs::File::from_raw_handle(handle)
+        }))
     }
 
     #[cfg(test)]

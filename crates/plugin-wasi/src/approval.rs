@@ -653,6 +653,88 @@ mod tests {
         assert!(permits[1].check().is_err());
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn live_consent_revocation_interrupts_partial_named_stream_copy_without_reprompting() {
+        use crate::permissions::CheckedWriteError;
+        let temporary = tempfile::tempdir().unwrap();
+        std::fs::create_dir(temporary.path().join("write")).unwrap();
+        let root = temporary.path().join("write");
+        let target = root.join("output.txt");
+        let mut stream = target.as_os_str().to_os_string();
+        stream.push(":data");
+        std::fs::write(&target, b"original").unwrap();
+        let metadata = vec![b'x'; 128 * 1024];
+        std::fs::write(&stream, &metadata).unwrap();
+        let value: latexsnipper_plugin::PluginPermissionsV3 = serde_json::from_value(serde_json::json!({
+            "paths": [{"path": "write", "access": "write"}], "temporaryDirectory": false, "clocks": false, "randomness": false,
+            "registrations": {"capabilities": false, "importers": false, "exporters": false, "runtimes": false},
+            "limits": {"maxConcurrentExecutions": 1}
+        })).unwrap();
+        let permissions =
+            crate::ComponentPermissions::from_manifest(&value, temporary.path()).unwrap();
+        let controller = SensitiveActionController::default();
+        let context = context();
+        let expected = hex::encode(Sha256::digest(b"original"));
+        let operation = SensitiveAction::FileWrite {
+            grant_id: "path-0".into(),
+            root: root.to_str().unwrap().into(),
+            relative_path: "output.txt".into(),
+            target_sha256: Some(expected.clone()),
+            payload_sha256: hex::encode(Sha256::digest(b"new")),
+            payload_bytes: 3,
+        };
+        controller
+            .authorize(&context, operation.clone())
+            .unwrap_err();
+        let id = controller.pending().unwrap()[0].id.clone();
+        controller.approve_once(&id).unwrap();
+        let permit = controller.authorize(&context, operation).unwrap();
+        let mut revoked_during_copy = false;
+        let result = permissions.write_file_checked(
+            "path-0",
+            "output.txt",
+            b"new",
+            metadata.len(),
+            Some(&expected),
+            || {
+                for entry in std::fs::read_dir(&root).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with(".snipper-write-")
+                    {
+                        let mut named = path.as_os_str().to_os_string();
+                        named.push(":data");
+                        if std::fs::metadata(&named).is_ok_and(|metadata| metadata.len() > 0)
+                            && !revoked_during_copy
+                        {
+                            assert!(controller.revoke(&id).unwrap());
+                            revoked_during_copy = true;
+                        }
+                    }
+                }
+                permit.check()
+            },
+        );
+        assert!(revoked_during_copy);
+        assert!(matches!(
+            result,
+            Err(CheckedWriteError::Interrupted(WasiDiagnostic {
+                code: WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                ..
+            }))
+        ));
+        assert!(controller.pending().unwrap().is_empty());
+        assert_eq!(std::fs::read(&target).unwrap(), b"original");
+        assert_eq!(std::fs::read(&stream).unwrap(), metadata);
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+        drop(permissions);
+        temporary.close().unwrap();
+    }
+
     #[test]
     fn revoking_clearing_or_expiring_staged_consent_preserves_original_and_cleans_up() {
         use crate::permissions::CheckedWriteError;
