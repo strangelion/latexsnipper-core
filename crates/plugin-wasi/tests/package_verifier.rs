@@ -1083,6 +1083,8 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
     let host = host
         .with_configuration(b"updated-host-context".to_vec())
         .unwrap();
+    assert!(approvals.grants().unwrap().is_empty());
+    assert!(approvals.pending().unwrap().is_empty());
     assert_eq!(
         transform(&host, &compiled, b"broker:network")
             .unwrap_err()
@@ -1100,6 +1102,16 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
         transform(&host, &compiled, b"broker:system").unwrap().len(),
         8
     );
+    assert_eq!(
+        transform(&host, &compiled, b"broker:network")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
+    assert_eq!(approvals.pending().unwrap().len(), 1);
+    drop(host);
+    assert!(approvals.pending().unwrap().is_empty());
+    assert!(approvals.grants().unwrap().is_empty());
 }
 
 #[test]

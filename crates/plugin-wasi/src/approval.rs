@@ -1,7 +1,8 @@
 //! Host-owned, nonblocking consent for sensitive WASI broker actions.
 //! Requests are descriptions, not capabilities. No guest interface grants consent.
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -73,6 +74,7 @@ pub struct ApprovalGrantSnapshot {
     pub request_id: String,
     pub scope: ApprovalScope,
     pub remaining_uses: u32,
+    pub in_flight_uses: usize,
     pub expires_in_millis: u64,
 }
 
@@ -85,7 +87,48 @@ struct Grant {
     request: ApprovalRequest,
     scope: ApprovalScope,
     remaining: u32,
+    lease: Arc<ApprovalLease>,
+}
+
+#[derive(Debug)]
+struct ApprovalLease {
+    revoked: AtomicBool,
     expires: Instant,
+}
+
+/// Private per-use authority; exhaustion does not invalidate a started use.
+#[derive(Debug)]
+pub(crate) struct ActionPermit {
+    lease: Arc<ApprovalLease>,
+}
+
+impl ActionPermit {
+    pub(crate) fn check(&self) -> Result<(), WasiDiagnostic> {
+        self.check_at(Instant::now())
+    }
+
+    fn check_at(&self, now: Instant) -> Result<(), WasiDiagnostic> {
+        if self.lease.revoked.load(Ordering::Acquire) {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                "sensitive action consent was revoked before publication or dispatch",
+            ));
+        }
+        if now >= self.lease.expires {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiApprovalExpired,
+                "sensitive action consent expired before publication or dispatch",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn lease(expires: Instant) -> Arc<ApprovalLease> {
+    Arc::new(ApprovalLease {
+        revoked: AtomicBool::new(false),
+        expires,
+    })
 }
 
 /// In-memory authority, usable only by trusted host code after user consent.
@@ -111,7 +154,9 @@ impl SensitiveActionController {
                 request_id: id.clone(),
                 scope: grant.scope.clone(),
                 remaining_uses: grant.remaining,
+                in_flight_uses: Arc::strong_count(&grant.lease).saturating_sub(1),
                 expires_in_millis: grant
+                    .lease
                     .expires
                     .saturating_duration_since(now)
                     .as_millis()
@@ -166,15 +211,17 @@ impl SensitiveActionController {
             return Err(invalid("approval grant capacity reached"));
         }
         state.pending.remove(request_id);
-        state.grants.insert(
+        if let Some(old) = state.grants.insert(
             request_id.into(),
             Grant {
                 request,
                 scope,
                 remaining: uses,
-                expires,
+                lease: lease(expires),
             },
-        );
+        ) {
+            old.lease.revoked.store(true, Ordering::Release);
+        }
         Ok(())
     }
 
@@ -216,33 +263,63 @@ impl SensitiveActionController {
         }
         for request in requests {
             state.pending.remove(&request.id);
-            state.grants.insert(
+            if let Some(old) = state.grants.insert(
                 request.id.clone(),
                 Grant {
                     request,
                     scope: ApprovalScope::Exact,
                     remaining: 1,
-                    expires,
+                    lease: lease(expires),
                 },
-            );
+            ) {
+                old.lease.revoked.store(true, Ordering::Release);
+            }
         }
         Ok(())
     }
 
-    /// Revokes future uses. Already-started IO cannot be undone by this controller.
+    /// Revokes future uses and interrupts staged IO at its next checkpoint.
+    /// Already-published files or dispatched native network IO cannot be undone.
     pub fn revoke(&self, request_id: &str) -> Result<bool, WasiDiagnostic> {
         let mut state = self.lock()?;
         let pending = state.pending.remove(request_id).is_some();
-        Ok(state.grants.remove(request_id).is_some() || pending)
+        let grant = state.grants.remove(request_id);
+        if let Some(grant) = &grant {
+            grant.lease.revoked.store(true, Ordering::Release);
+        }
+        Ok(grant.is_some() || pending)
     }
 
     pub fn clear(&self) -> Result<(), WasiDiagnostic> {
-        *self.lock()? = State::default();
+        let mut state = self.lock()?;
+        for grant in state.grants.values() {
+            grant.lease.revoked.store(true, Ordering::Release);
+        }
+        *state = State::default();
         Ok(())
     }
 
+    pub(crate) fn invalidate_context(&self, context: &ApprovalContext) {
+        // A poisoned controller already rejects every future authorization.
+        if let Ok(mut state) = self.lock() {
+            state
+                .pending
+                .retain(|_, request| request.host_context_sha256 != context.context_sha256);
+            state.grants.retain(|_, grant| {
+                let keep = grant.request.host_context_sha256 != context.context_sha256;
+                if !keep {
+                    grant.lease.revoked.store(true, Ordering::Release);
+                }
+                keep
+            });
+        }
+    }
+
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, State>, WasiDiagnostic> {
-        self.state.lock().map_err(|_| {
+        self.state.lock().map_err(|poisoned| {
+            for grant in poisoned.get_ref().grants.values() {
+                grant.lease.revoked.store(true, Ordering::Release);
+            }
             WasiDiagnostic::new(
                 WasiDiagnosticCode::PluginWasiHostFailure,
                 "approval controller lock poisoned",
@@ -254,7 +331,7 @@ impl SensitiveActionController {
         &self,
         context: &ApprovalContext,
         action: SensitiveAction,
-    ) -> Result<(), WasiDiagnostic> {
+    ) -> Result<ActionPermit, WasiDiagnostic> {
         let action_bytes =
             serde_json::to_vec(&action).map_err(|_| invalid("action serialization failed"))?;
         if action_bytes.len() > MAX_ACTION_BYTES {
@@ -273,7 +350,8 @@ impl SensitiveActionController {
         let mut state = self.lock()?;
         prune(&mut state, Instant::now());
         let matching = |grant: &Grant| {
-            grant.request.host_context_sha256 == context.context_sha256
+            grant.remaining > 0
+                && grant.request.host_context_sha256 == context.context_sha256
                 && grant.request.plugin_id == context.plugin_id
                 && grant.request.plugin_version == context.plugin_version
                 && grant.request.component_sha256 == context.component_sha256
@@ -299,8 +377,11 @@ impl SensitiveActionController {
             });
         if let Some(grant) = selected.and_then(|id| state.grants.get_mut(&id)) {
             grant.remaining -= 1;
+            let permit = ActionPermit {
+                lease: Arc::clone(&grant.lease),
+            };
             state.pending.remove(&id);
-            return Ok(());
+            return Ok(permit);
         }
         if !state.pending.contains_key(&id) && state.pending.len() >= MAX_ENTRIES {
             return Err(invalid("pending approval capacity reached"));
@@ -410,9 +491,9 @@ fn validate_options(uses: u32, ttl: Duration) -> Result<(), WasiDiagnostic> {
     Ok(())
 }
 fn prune(state: &mut State, now: Instant) {
-    state
-        .grants
-        .retain(|_, grant| grant.remaining > 0 && grant.expires > now);
+    state.grants.retain(|_, grant| {
+        (grant.remaining > 0 || Arc::strong_count(&grant.lease) > 1) && grant.lease.expires > now
+    });
 }
 fn invalid(message: &str) -> WasiDiagnostic {
     WasiDiagnostic::new(WasiDiagnosticCode::PluginWasiResourcePolicy, message)
@@ -438,6 +519,215 @@ mod tests {
             payload_sha256: format!("{:x}", Sha256::digest(payload)),
             payload_bytes: payload.len(),
         }
+    }
+
+    #[test]
+    fn exhausted_started_use_remains_revocable_and_reapproval_is_not_a_blacklist() {
+        let controller = SensitiveActionController::default();
+        let context = context();
+        controller.authorize(&context, action("x")).unwrap_err();
+        let id = controller.pending().unwrap()[0].id.clone();
+        controller.approve_once(&id).unwrap();
+        let permit = controller.authorize(&context, action("x")).unwrap();
+        assert!(permit.check().is_ok());
+        let grants = controller.grants().unwrap();
+        assert_eq!(grants[0].remaining_uses, 0);
+        assert_eq!(grants[0].in_flight_uses, 1);
+        assert!(controller.authorize(&context, action("x")).is_err());
+        assert!(controller.revoke(&id).unwrap());
+        assert_eq!(
+            permit.check().unwrap_err().code,
+            WasiDiagnosticCode::PluginWasiApprovalRevoked
+        );
+        controller.authorize(&context, action("x")).unwrap_err();
+        controller.approve_once(&id).unwrap();
+        let fresh = controller.authorize(&context, action("x")).unwrap();
+        assert!(fresh.check().is_ok());
+        assert!(permit.check().is_err());
+        drop(fresh);
+        assert!(controller.grants().unwrap().is_empty());
+    }
+
+    #[test]
+    fn updating_consent_revokes_old_permits_without_revoking_the_new_grant() {
+        let controller = SensitiveActionController::default();
+        let context = context();
+        controller.authorize(&context, action("x")).unwrap_err();
+        let id = controller.pending().unwrap()[0].id.clone();
+        controller
+            .approve(&id, ApprovalScope::Exact, 2, Duration::from_secs(60))
+            .unwrap();
+        let old = controller.authorize(&context, action("x")).unwrap();
+        controller.approve_once(&id).unwrap();
+        assert_eq!(
+            old.check().unwrap_err().code,
+            WasiDiagnosticCode::PluginWasiApprovalRevoked
+        );
+        let fresh = controller.authorize(&context, action("x")).unwrap();
+        assert!(fresh.check().is_ok());
+        controller.clear().unwrap();
+        assert_eq!(
+            fresh.check().unwrap_err().code,
+            WasiDiagnosticCode::PluginWasiApprovalRevoked
+        );
+    }
+
+    #[test]
+    fn started_use_expiry_is_checked_independently_of_remaining_quota() {
+        let controller = SensitiveActionController::default();
+        let context = context();
+        controller.authorize(&context, action("x")).unwrap_err();
+        let id = controller.pending().unwrap()[0].id.clone();
+        controller.approve_once(&id).unwrap();
+        let permit = controller.authorize(&context, action("x")).unwrap();
+        assert!(permit.check().is_ok());
+        assert_eq!(
+            permit.check_at(permit.lease.expires).unwrap_err().code,
+            WasiDiagnosticCode::PluginWasiApprovalExpired
+        );
+        assert_eq!(controller.grants().unwrap()[0].remaining_uses, 0);
+    }
+
+    #[test]
+    fn observed_controller_poisoning_invalidates_started_permits() {
+        let controller = SensitiveActionController::default();
+        let context = context();
+        controller.authorize(&context, action("x")).unwrap_err();
+        let id = controller.pending().unwrap()[0].id.clone();
+        controller.approve_once(&id).unwrap();
+        let permit = controller.authorize(&context, action("x")).unwrap();
+        std::thread::scope(|scope| {
+            assert!(scope
+                .spawn(|| {
+                    let _guard = controller.state.lock().unwrap();
+                    panic!("controlled mutex poisoning");
+                })
+                .join()
+                .is_err());
+        });
+        assert_eq!(
+            controller.revoke(&id).unwrap_err().code,
+            WasiDiagnosticCode::PluginWasiHostFailure
+        );
+        assert_eq!(
+            permit.check().unwrap_err().code,
+            WasiDiagnosticCode::PluginWasiApprovalRevoked
+        );
+        assert!(controller.authorize(&context, action("x")).is_err());
+    }
+
+    #[test]
+    fn invalidated_context_removes_stale_requests_and_revokes_only_its_permits() {
+        let controller = SensitiveActionController::default();
+        let first = context();
+        let mut second = first.clone();
+        second.invalidate();
+        let mut permits = Vec::new();
+        for context in [&first, &second] {
+            controller.authorize(context, action("x")).unwrap_err();
+            let id = controller
+                .pending()
+                .unwrap()
+                .into_iter()
+                .find(|request| request.host_context_sha256 == context.context_sha256)
+                .unwrap()
+                .id;
+            controller.approve_once(&id).unwrap();
+            permits.push(controller.authorize(context, action("x")).unwrap());
+            controller
+                .authorize(context, action("pending"))
+                .unwrap_err();
+        }
+        controller.invalidate_context(&first);
+        assert_eq!(
+            permits[0].check().unwrap_err().code,
+            WasiDiagnosticCode::PluginWasiApprovalRevoked
+        );
+        assert!(permits[1].check().is_ok());
+        assert_eq!(controller.pending().unwrap().len(), 1);
+        assert_eq!(
+            controller.pending().unwrap()[0].host_context_sha256,
+            second.context_sha256
+        );
+        controller.clear().unwrap();
+        assert!(permits[1].check().is_err());
+    }
+
+    #[test]
+    fn revoking_clearing_or_expiring_staged_consent_preserves_original_and_cleans_up() {
+        use crate::permissions::CheckedWriteError;
+        let temporary = tempfile::tempdir().unwrap();
+        std::fs::create_dir(temporary.path().join("write")).unwrap();
+        let root = temporary.path().join("write");
+        std::fs::write(root.join("output.txt"), b"original").unwrap();
+        let manifest_permissions: latexsnipper_plugin::PluginPermissionsV3 = serde_json::from_value(serde_json::json!({
+            "paths": [{"path": "write", "access": "write"}],
+            "temporaryDirectory": false, "clocks": false, "randomness": false,
+            "registrations": {"capabilities": false, "importers": false, "exporters": false, "runtimes": false},
+            "limits": {"maxConcurrentExecutions": 1}
+        })).unwrap();
+        let permissions =
+            crate::ComponentPermissions::from_manifest(&manifest_permissions, temporary.path())
+                .unwrap();
+        let payload = vec![b'x'; 128 * 1024];
+        let expected = format!("{:x}", Sha256::digest(b"original"));
+        let operation = SensitiveAction::FileWrite {
+            grant_id: "path-0".into(),
+            root: root.to_str().unwrap().into(),
+            relative_path: "output.txt".into(),
+            target_sha256: Some(expected.clone()),
+            payload_sha256: format!("{:x}", Sha256::digest(&payload)),
+            payload_bytes: payload.len(),
+        };
+        for stop in 0..3 {
+            let controller = SensitiveActionController::default();
+            let context = context();
+            controller
+                .authorize(&context, operation.clone())
+                .unwrap_err();
+            let id = controller.pending().unwrap()[0].id.clone();
+            controller.approve_once(&id).unwrap();
+            let permit = controller.authorize(&context, operation.clone()).unwrap();
+            let mut checkpoints = 0;
+            let result = permissions.write_file_checked(
+                "path-0",
+                "output.txt",
+                &payload,
+                payload.len(),
+                Some(&expected),
+                || {
+                    checkpoints += 1;
+                    if checkpoints == 3 && stop < 2 {
+                        if stop == 1 {
+                            controller.clear().unwrap();
+                        } else {
+                            assert!(controller.revoke(&id).unwrap());
+                        }
+                    }
+                    // Deterministic expiry exactly at the pre-publication checkpoint.
+                    if checkpoints == 5 && stop == 2 {
+                        return permit.check_at(permit.lease.expires);
+                    }
+                    permit.check()
+                },
+            );
+            let Err(CheckedWriteError::Interrupted(error)) = result else {
+                panic!("invalid consent must prevent publication");
+            };
+            assert_eq!(
+                error.code,
+                if stop == 2 {
+                    WasiDiagnosticCode::PluginWasiApprovalExpired
+                } else {
+                    WasiDiagnosticCode::PluginWasiApprovalRevoked
+                }
+            );
+            assert_eq!(std::fs::read(root.join("output.txt")).unwrap(), b"original");
+            assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+            assert!(controller.authorize(&context, operation.clone()).is_err());
+        }
+        drop(permissions);
+        temporary.close().unwrap();
     }
     #[test]
     fn consent_is_default_deny_once_atomic_and_not_a_permanent_refusal() {
@@ -528,7 +818,7 @@ mod tests {
         let current_id = controller.pending().unwrap()[0].id.clone();
         controller.approve_once(&current_id).unwrap();
         for grant in controller.state.lock().unwrap().grants.values_mut() {
-            grant.expires = Instant::now();
+            Arc::get_mut(&mut grant.lease).unwrap().expires = Instant::now();
         }
         assert!(controller.authorize(&context, action("x")).is_err());
         assert!(controller

@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use wasmtime::component::{Component, HasSelf, Linker, Resource, ResourceTable};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, Trap, UpdateDeadline};
 
-use crate::approval::ApprovalContext;
+use crate::approval::{ActionPermit, ApprovalContext};
 use crate::bindings::latexsnipper::plugin::{
     environment_broker, execution_broker, filesystem_broker, model_artifact_broker, network_broker,
     system_broker, temporary_storage_broker, types,
@@ -107,6 +107,12 @@ pub struct WasiComponentHost {
     approval_context: ApprovalContext,
 }
 
+impl Drop for WasiComponentHost {
+    fn drop(&mut self) {
+        self.approvals.invalidate_context(&self.approval_context);
+    }
+}
+
 impl WasiComponentHost {
     pub(crate) fn resource_limits(&self) -> &WasiResourceLimits {
         &self.package.permissions.limits
@@ -164,6 +170,7 @@ impl WasiComponentHost {
             }
         }
         if self.environment != environment {
+            self.approvals.invalidate_context(&self.approval_context);
             self.approval_context.invalidate();
         }
         self.environment = environment;
@@ -178,6 +185,7 @@ impl WasiComponentHost {
             ));
         }
         if self.configuration != value {
+            self.approvals.invalidate_context(&self.approval_context);
             self.approval_context.invalidate();
         }
         self.configuration = value;
@@ -215,6 +223,7 @@ impl WasiComponentHost {
             total = next;
         }
         if self.model_artifacts != artifacts {
+            self.approvals.invalidate_context(&self.approval_context);
             self.approval_context.invalidate();
         }
         self.model_artifacts = artifacts;
@@ -223,6 +232,7 @@ impl WasiComponentHost {
 
     pub fn with_network_broker(mut self, broker: Arc<dyn NetworkBroker>) -> Self {
         if !Arc::ptr_eq(&self.network, &broker) {
+            self.approvals.invalidate_context(&self.approval_context);
             self.approval_context.invalidate();
         }
         self.network = broker;
@@ -234,6 +244,9 @@ impl WasiComponentHost {
     }
 
     pub fn with_approval_controller(mut self, controller: Arc<SensitiveActionController>) -> Self {
+        if !Arc::ptr_eq(&self.approvals, &controller) {
+            self.approvals.invalidate_context(&self.approval_context);
+        }
         self.approvals = controller;
         self
     }
@@ -506,19 +519,48 @@ impl HostState {
         self.declared_capabilities.contains(capability)
     }
 
-    fn require_approval(&mut self, action: SensitiveAction) -> wasmtime::Result<()> {
+    fn require_approval(&mut self, action: SensitiveAction) -> wasmtime::Result<ActionPermit> {
         self.checkpoint()?;
-        if let Err(error) = self
+        let permit = match self
             .approval
             .controller
             .authorize(&self.approval.context, action)
         {
-            self.broker_failure = Some(error);
-            // A trap stops the guest: denial cannot be ignored to keep probing
-            // or to disguise a pending sensitive action as a valid candidate.
-            return Err(wasmtime::Error::msg("PLUGIN_WASI_APPROVAL_REQUIRED"));
+            Ok(permit) => permit,
+            Err(error) => {
+                self.broker_failure = Some(error);
+                // A trap stops the guest: denial cannot be ignored to keep probing
+                // or to disguise a pending sensitive action as a valid candidate.
+                return Err(wasmtime::Error::msg("PLUGIN_WASI_APPROVAL_REQUIRED"));
+            }
+        };
+        self.checkpoint()?;
+        if let Err(error) = permit.check() {
+            return self.stop_approved_action(error);
         }
-        self.checkpoint()
+        Ok(permit)
+    }
+
+    fn approved_checkpoint(&self, permit: &ActionPermit) -> Result<(), WasiDiagnostic> {
+        if self.cancellation.is_cancelled() {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiCancelled,
+                "component execution cancelled",
+            ));
+        }
+        if Instant::now() >= self.deadline {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiTimeout,
+                "component execution deadline elapsed",
+            ));
+        }
+        permit.check()
+    }
+
+    fn stop_approved_action<T>(&mut self, error: WasiDiagnostic) -> wasmtime::Result<T> {
+        let code = error.code.as_str();
+        self.broker_failure = Some(error);
+        Err(wasmtime::Error::msg(code))
     }
 }
 
@@ -591,7 +633,7 @@ impl filesystem_broker::Host for HostState {
             Err(FilesystemOperationError::NotFound) => None,
             Err(error) => return Ok(Err(filesystem_access_error(error))),
         };
-        self.require_approval(SensitiveAction::FileWrite {
+        let permit = self.require_approval(SensitiveAction::FileWrite {
             grant_id: grant_id.clone(),
             root,
             relative_path: relative_path.clone(),
@@ -605,10 +647,10 @@ impl filesystem_broker::Host for HostState {
             &payload,
             self.permissions.limits.input_bytes,
             target_sha256.as_deref(),
-            || self.checkpoint(),
+            || self.approved_checkpoint(&permit),
         ) {
             Ok(()) => Ok(Ok(())),
-            Err(CheckedWriteError::Interrupted(error)) => Err(error),
+            Err(CheckedWriteError::Interrupted(error)) => self.stop_approved_action(error),
             Err(CheckedWriteError::Filesystem(FilesystemOperationError::Conflict)) => {
                 self.broker_failure = Some(WasiDiagnostic::new(
                     WasiDiagnosticCode::PluginWasiWriteConflict,
@@ -679,7 +721,7 @@ impl network_broker::Host for HostState {
         {
             return Ok(Err(invalid_input_plugin_error("invalid network request")));
         }
-        self.require_approval(SensitiveAction::NetworkSend {
+        let permit = self.require_approval(SensitiveAction::NetworkSend {
             scheme: match scheme {
                 ComponentNetworkScheme::Https => "https",
                 ComponentNetworkScheme::Http => "http",
@@ -693,6 +735,9 @@ impl network_broker::Host for HostState {
             payload_sha256: hex::encode(Sha256::digest(&request.body)),
             payload_bytes: request.body.len(),
         })?;
+        if let Err(error) = self.approved_checkpoint(&permit) {
+            return self.stop_approved_action(error);
+        }
         let response = self.network.send(&NetworkRequest {
             scheme,
             host: grant.host,
@@ -1372,9 +1417,9 @@ fn diagnostic_code(code: types::DiagnosticCode) -> WasiDiagnosticCode {
 fn broker_plugin_error(error: WasiDiagnostic, limits: &WasiResourceLimits) -> types::PluginError {
     let code = match error.code {
         WasiDiagnosticCode::PluginWasiPermissionDenied
-        | WasiDiagnosticCode::PluginWasiApprovalRequired => {
-            types::PluginErrorCode::PermissionDenied
-        }
+        | WasiDiagnosticCode::PluginWasiApprovalRequired
+        | WasiDiagnosticCode::PluginWasiApprovalRevoked
+        | WasiDiagnosticCode::PluginWasiApprovalExpired => types::PluginErrorCode::PermissionDenied,
         WasiDiagnosticCode::PluginWasiCancelled => types::PluginErrorCode::Cancelled,
         WasiDiagnosticCode::PluginWasiProtocolMismatch
         | WasiDiagnosticCode::PluginWasiCapabilityMismatch
@@ -1451,7 +1496,9 @@ fn wit_diagnostic_code(code: WasiDiagnosticCode) -> types::DiagnosticCode {
             types::DiagnosticCode::PluginWasiOutputLimit
         }
         WasiDiagnosticCode::PluginWasiPermissionDenied
-        | WasiDiagnosticCode::PluginWasiApprovalRequired => {
+        | WasiDiagnosticCode::PluginWasiApprovalRequired
+        | WasiDiagnosticCode::PluginWasiApprovalRevoked
+        | WasiDiagnosticCode::PluginWasiApprovalExpired => {
             types::DiagnosticCode::PluginWasiPermissionDenied
         }
         WasiDiagnosticCode::PluginWasiProtocolMismatch

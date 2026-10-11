@@ -62,10 +62,19 @@ grant is limited to 1..10000 uses and a positive lifetime of at most one hour.
 a displayed list of pending exact requests, once each. Valid in-scope uses proceed
 without additional prompts. Exhaustion, expiry, target changes or context changes
 require fresh confirmation. `revoke`/`clear` remove future consent and pending
-requests, not a permanent blacklist. Consumption is synchronized across callers;
+requests and invalidate live per-use permits, not a permanent blacklist.
+Consumption is synchronized across callers;
 unknown IDs and over-budget/invalid batches fail closed.
 Each use is consumed before IO, even if that IO subsequently fails or is cancelled;
 there is no automatic retry or quota refund.
+An exhausted grant stays revocable while its started use still holds a permit;
+`grants()` includes `inFlightUses` for that current grant even with zero remaining
+uses. Exhaustion itself does not stop an already-approved use. Renewing/replacing
+consent invalidates the old permits and creates a fresh grant; it never silently
+extends a started use. Context changes, switching controllers and host destruction
+discard only that host context's requests/grants, preserving other live hosts on
+a shared controller. Observing a poisoned controller lock also invalidates its
+recorded permits and fails closed.
 
 This is an in-memory Rust host interface, not an application dialog or a durable
 user policy store. Controllers are available from `WasiComponentHost`,
@@ -88,9 +97,18 @@ Staging is removed on normal error/cancellation paths, not by deleting the origi
 The consumed consent use is not refunded, and a valid session grant remains usable
 for a fresh user-directed operation. Successful publication does not remove a later
 file created at the former staging name.
+Every staging/publication checkpoint also rechecks that use's consent expiry and
+revocation flag. Host-only `PLUGIN_WASI_APPROVAL_REVOKED` and
+`PLUGIN_WASI_APPROVAL_EXPIRED` stop execution and preserve the original file before
+replacement; both retain the existing WIT `permission-denied` mapping. No checkpoint
+opens a dialog or consumes another consent use. Network sends have a final consent
+checkpoint before dispatch to the native broker. Revocation is cooperative: a
+native replacement/send already entered after the last checkpoint cannot be
+undone, and the last check plus OS call is not atomic with controller revocation.
+Already-dispatched native network IO is not forcibly cancelled or retried.
 
 Approval is per action, not a transaction for a whole invocation. Previously
-approved writes cannot be rolled back by a later denial or revocation. The old
+published writes cannot be rolled back by a later denial or revocation. The old
 file digest is an observed precondition, not an atomic filesystem compare-and-swap:
 external/native writers can race between the last check and replacement, and
 independently created grant/host instances do not share a global filesystem lock.

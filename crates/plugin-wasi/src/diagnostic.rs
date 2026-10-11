@@ -13,6 +13,8 @@ pub enum WasiDiagnosticCode {
     PluginWasiResourcePolicy,
     PluginWasiPermissionDenied,
     PluginWasiApprovalRequired,
+    PluginWasiApprovalRevoked,
+    PluginWasiApprovalExpired,
     PluginWasiWriteConflict,
     PluginWasiCapabilityMismatch,
     PluginWasiInvocationNotDeclared,
@@ -33,6 +35,8 @@ impl WasiDiagnosticCode {
             Self::PluginWasiResourcePolicy => "PLUGIN_WASI_RESOURCE_POLICY",
             Self::PluginWasiPermissionDenied => "PLUGIN_WASI_PERMISSION_DENIED",
             Self::PluginWasiApprovalRequired => "PLUGIN_WASI_APPROVAL_REQUIRED",
+            Self::PluginWasiApprovalRevoked => "PLUGIN_WASI_APPROVAL_REVOKED",
+            Self::PluginWasiApprovalExpired => "PLUGIN_WASI_APPROVAL_EXPIRED",
             Self::PluginWasiWriteConflict => "PLUGIN_WASI_WRITE_CONFLICT",
             Self::PluginWasiCapabilityMismatch => "PLUGIN_WASI_CAPABILITY_MISMATCH",
             Self::PluginWasiInvocationNotDeclared => "PLUGIN_WASI_INVOCATION_NOT_DECLARED",
@@ -103,6 +107,14 @@ mod tests {
 
     #[test]
     fn codes_are_stable_machine_values() {
+        assert_eq!(
+            WasiDiagnosticCode::PluginWasiApprovalRevoked.as_str(),
+            "PLUGIN_WASI_APPROVAL_REVOKED"
+        );
+        assert_eq!(
+            WasiDiagnosticCode::PluginWasiApprovalExpired.as_str(),
+            "PLUGIN_WASI_APPROVAL_EXPIRED"
+        );
         assert_eq!(
             WasiDiagnosticCode::PluginWasiWriteConflict.as_str(),
             "PLUGIN_WASI_WRITE_CONFLICT"
