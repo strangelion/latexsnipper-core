@@ -118,6 +118,409 @@ fn builtin_routes_still_execute_without_extension_selection() {
         ));
 }
 
+fn fallback_policy(ids: &[&str]) -> ConversionFallbackPolicy {
+    ConversionFallbackPolicy {
+        schema_version: CONVERSION_REGISTRY_VERSION,
+        backends: ids.iter().map(|id| (*id).to_string()).collect(),
+    }
+}
+
+fn fallback_error(report: &ConversionFallbackReport) -> ConversionRegistryErrorCode {
+    match &report.outcome {
+        ConversionFallbackOutcome::Rejected { error } => error.code,
+        other => panic!("expected a rejected decision: {other:?}"),
+    }
+}
+
+#[test]
+fn explicit_fallback_skips_only_registry_owned_availability_failures() {
+    let mut registry = SemanticConversionRegistry::default();
+    let (disabled, _, disabled_calls) = handler("disabled");
+    let (wrong_route, _, wrong_calls) = handler("wrong route");
+    let (good, _, good_calls) = handler("safe result");
+    registry
+        .register_trusted_backend(descriptor("demo:disabled", "latex", "latex"), disabled)
+        .unwrap();
+    registry
+        .register_trusted_backend(
+            descriptor("demo:other-route", "mathml", "latex"),
+            wrong_route,
+        )
+        .unwrap();
+    registry
+        .register_trusted_backend(descriptor("demo:good", "latex", "latex"), good)
+        .unwrap();
+    registry
+        .set_backend_enabled("demo:other-route", true)
+        .unwrap();
+    registry.set_backend_enabled("demo:good", true).unwrap();
+    let mut input = request("latex", "latex");
+    input.backend = Some("demo:missing".into());
+    let before = serde_json::to_string(&input).unwrap();
+    assert_eq!(
+        registry.convert(&input).unwrap_err().code,
+        ConversionRegistryErrorCode::UnknownBackend
+    );
+    let report = registry.convert_with_fallback(
+        &input,
+        &fallback_policy(&["demo:disabled", "demo:other-route", "demo:good"]),
+    );
+    let ConversionFallbackOutcome::Converted { result } = &report.outcome else {
+        panic!("{report:?}");
+    };
+    assert_eq!(result.backend, "demo:good");
+    assert_eq!(result.candidate.content, "safe result");
+    assert_eq!(report.requested_backend, "demo:missing");
+    assert_eq!(report.attempts.len(), 4);
+    for (attempt, code) in report.attempts.iter().zip([
+        ConversionRegistryErrorCode::UnknownBackend,
+        ConversionRegistryErrorCode::BackendDisabled,
+        ConversionRegistryErrorCode::RouteUnavailable,
+    ]) {
+        assert!(
+            matches!(&attempt.status, ConversionFallbackAttemptStatus::Unavailable { error } if error.code == code)
+        );
+    }
+    assert_eq!(disabled_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(wrong_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(good_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(serde_json::to_string(&input).unwrap(), before);
+    let json = serde_json::to_value(&report).unwrap();
+    assert_eq!(json["coreVersion"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(json["route"]["input"], input.input);
+    assert_eq!(json["route"]["output"], input.output);
+    assert_eq!(json["outcome"]["kind"], "converted");
+    assert_eq!(json["attempts"][3]["status"]["kind"], "converted");
+}
+
+#[test]
+fn fallback_policy_is_default_off_bounded_and_validated_before_any_callback() {
+    let registry = SemanticConversionRegistry::default();
+    let mut input = request("latex", "latex");
+    input.backend = Some("demo:missing".into());
+    let report = registry.convert_with_fallback(&input, &ConversionFallbackPolicy::default());
+    assert_eq!(report.attempts.len(), 1);
+    assert_eq!(
+        fallback_error(&report),
+        ConversionRegistryErrorCode::UnknownBackend
+    );
+    for (policy, expected) in [
+        (
+            fallback_policy(&["demo:missing"]),
+            ConversionRegistryErrorCode::DuplicateRegistration,
+        ),
+        (
+            fallback_policy(&["demo:good", "demo:good"]),
+            ConversionRegistryErrorCode::DuplicateRegistration,
+        ),
+        (
+            fallback_policy(&["not canonical"]),
+            ConversionRegistryErrorCode::InvalidDeclaration,
+        ),
+        (
+            fallback_policy(&["core:unknown"]),
+            ConversionRegistryErrorCode::InvalidDeclaration,
+        ),
+        (
+            fallback_policy(&["demo:a", "demo:b", "demo:c", "demo:d"]),
+            ConversionRegistryErrorCode::LimitExceeded,
+        ),
+        (
+            ConversionFallbackPolicy {
+                schema_version: 2,
+                backends: Vec::new(),
+            },
+            ConversionRegistryErrorCode::VersionMismatch,
+        ),
+    ] {
+        let report = registry.convert_with_fallback(&input, &policy);
+        assert_eq!(fallback_error(&report), expected);
+        assert!(report.attempts.is_empty());
+        assert!(report.route.is_none());
+        assert!(report.policy_sha256.is_none());
+        assert!(report.request_sha256.is_none());
+        assert!(report.decision_sha256.is_none());
+    }
+    assert!(serde_json::from_str::<ConversionFallbackPolicy>(
+        r#"{"schemaVersion":1,"backends":[],"retryOnTimeout":true}"#
+    )
+    .is_err());
+}
+
+struct AvailabilityCodeImpersonator {
+    code: ConversionRegistryErrorCode,
+    fail_readiness: Arc<AtomicBool>,
+    calls: Arc<AtomicUsize>,
+}
+impl RegisteredFormulaBackend for AvailabilityCodeImpersonator {
+    fn check_ready(&self) -> Result<(), ConversionRegistryError> {
+        if self.fail_readiness.load(Ordering::SeqCst) {
+            Err(ConversionRegistryError::new(
+                self.code,
+                "revoked or cancelled",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+    fn convert(
+        &self,
+        _: &RegisteredConversionRequest,
+    ) -> Result<ConversionCandidate, ConversionRegistryError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Err(ConversionRegistryError::new(
+            self.code,
+            "handler cannot authorize retry",
+        ))
+    }
+}
+
+#[test]
+fn handler_errors_cannot_impersonate_preflight_availability_or_trigger_retry() {
+    for code in [
+        ConversionRegistryErrorCode::UnknownBackend,
+        ConversionRegistryErrorCode::BackendDisabled,
+        ConversionRegistryErrorCode::RouteUnavailable,
+        ConversionRegistryErrorCode::BackendFailed,
+        ConversionRegistryErrorCode::LimitExceeded,
+        ConversionRegistryErrorCode::InputRejected,
+    ] {
+        for readiness in [false, true] {
+            let mut registry = SemanticConversionRegistry::default();
+            let fail_readiness = Arc::new(AtomicBool::new(false));
+            let calls = Arc::new(AtomicUsize::new(0));
+            registry
+                .register_trusted_backend(
+                    descriptor("demo:primary", "latex", "latex"),
+                    AvailabilityCodeImpersonator {
+                        code,
+                        fail_readiness: fail_readiness.clone(),
+                        calls: calls.clone(),
+                    },
+                )
+                .unwrap();
+            let (good, _, good_calls) = handler("safe");
+            registry
+                .register_trusted_backend(descriptor("demo:good", "latex", "latex"), good)
+                .unwrap();
+            registry.set_backend_enabled("demo:primary", true).unwrap();
+            registry.set_backend_enabled("demo:good", true).unwrap();
+            fail_readiness.store(readiness, Ordering::SeqCst);
+            let mut input = request("latex", "latex");
+            input.backend = Some("demo:primary".into());
+            let report = registry.convert_with_fallback(&input, &fallback_policy(&["demo:good"]));
+            assert_eq!(fallback_error(&report), code);
+            assert_eq!(report.attempts.len(), 1);
+            assert!(matches!(
+                report.attempts[0].status,
+                ConversionFallbackAttemptStatus::Rejected { .. }
+            ));
+            assert_eq!(calls.load(Ordering::SeqCst), usize::from(!readiness));
+            assert_eq!(good_calls.load(Ordering::SeqCst), 0);
+        }
+    }
+}
+
+#[test]
+fn fallback_input_output_and_budget_errors_are_terminal() {
+    let mut registry = SemanticConversionRegistry::default();
+    let (bad, _, _) =
+        handler("<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><script/></math>");
+    let (good, _, good_calls) =
+        handler("<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mi>x</mi></math>");
+    registry
+        .register_trusted_backend(descriptor("demo:bad", "latex", "mathml"), bad)
+        .unwrap();
+    registry
+        .register_trusted_backend(descriptor("demo:good", "latex", "mathml"), good)
+        .unwrap();
+    registry.set_backend_enabled("demo:bad", true).unwrap();
+    registry.set_backend_enabled("demo:good", true).unwrap();
+    let mut input = request("latex", "mathml");
+    input.backend = Some("demo:bad".into());
+    let policy = fallback_policy(&["demo:good"]);
+    let report = registry.convert_with_fallback(&input, &policy);
+    assert_eq!(
+        fallback_error(&report),
+        ConversionRegistryErrorCode::OutputRejected
+    );
+    assert_eq!(report.attempts.len(), 1);
+    input.content = "x".repeat(1025);
+    let report = registry.convert_with_fallback(&input, &policy);
+    assert_eq!(
+        fallback_error(&report),
+        ConversionRegistryErrorCode::LimitExceeded
+    );
+    assert_eq!(report.attempts.len(), 1);
+    input.content = "x".repeat(65537);
+    let report = registry.convert_with_fallback(&input, &policy);
+    assert_eq!(
+        fallback_error(&report),
+        ConversionRegistryErrorCode::LimitExceeded
+    );
+    assert!(report.attempts.is_empty());
+    assert_eq!(good_calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn fallback_decision_identity_binds_policy_input_context_and_unavailable_versions() {
+    let mut registry = SemanticConversionRegistry::default();
+    registry
+        .register_trusted_backend(
+            descriptor("demo:disabled", "latex", "latex"),
+            handler("unused").0,
+        )
+        .unwrap();
+    let mut input = request("latex", "latex");
+    input.backend = Some("demo:disabled".into());
+    let policy = fallback_policy(&[BUILTIN_CONVERSION_BACKEND]);
+    let first = registry.convert_with_fallback(&input, &policy);
+    assert_eq!(
+        first.decision_sha256,
+        registry
+            .convert_with_fallback(&input, &policy)
+            .decision_sha256
+    );
+    let mut changed = input.clone();
+    changed.content = "y_i^2".into();
+    assert_ne!(
+        first.decision_sha256,
+        registry
+            .convert_with_fallback(&changed, &policy)
+            .decision_sha256
+    );
+    changed = input.clone();
+    changed.context_sha256 = "c".repeat(64);
+    assert_ne!(
+        first.decision_sha256,
+        registry
+            .convert_with_fallback(&changed, &policy)
+            .decision_sha256
+    );
+    let reordered = fallback_policy(&["demo:missing", BUILTIN_CONVERSION_BACKEND]);
+    assert_ne!(
+        first.policy_sha256,
+        registry
+            .convert_with_fallback(&input, &reordered)
+            .policy_sha256
+    );
+    let mut another = SemanticConversionRegistry::default();
+    let mut version = descriptor("demo:disabled", "latex", "latex");
+    version.version = "2.0.0".into();
+    another
+        .register_trusted_backend(version, handler("unused").0)
+        .unwrap();
+    assert_ne!(
+        first.decision_sha256,
+        another
+            .convert_with_fallback(&input, &policy)
+            .decision_sha256
+    );
+    // Identity is also meaningful when no backend can execute.
+    let unavailable = ConversionFallbackPolicy::default();
+    assert_ne!(
+        registry
+            .convert_with_fallback(&input, &unavailable)
+            .decision_sha256,
+        registry
+            .convert_with_fallback(&changed, &unavailable)
+            .decision_sha256
+    );
+}
+
+#[test]
+fn fallback_keeps_platform_and_strict_mode_gates() {
+    let mut registry = SemanticConversionRegistry::new(CapabilityTarget::Wasm32UnknownUnknown);
+    let (native, _, native_calls) = handler("native");
+    let (wasm, _, wasm_calls) = handler("wasm");
+    registry
+        .register_trusted_backend(descriptor("demo:native", "latex", "latex"), native)
+        .unwrap();
+    let mut wasm_descriptor = descriptor("demo:wasm", "latex", "latex");
+    wasm_descriptor.routes[0].target = CapabilityTarget::Wasm32UnknownUnknown;
+    registry
+        .register_trusted_backend(wasm_descriptor, wasm)
+        .unwrap();
+    registry.set_backend_enabled("demo:native", true).unwrap();
+    registry.set_backend_enabled("demo:wasm", true).unwrap();
+    let mut input = request("latex", "latex");
+    input.backend = Some("demo:native".into());
+    let report = registry.convert_with_fallback(&input, &fallback_policy(&["demo:wasm"]));
+    assert!(matches!(
+        report.outcome,
+        ConversionFallbackOutcome::Converted { .. }
+    ));
+    assert_eq!(native_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(wasm_calls.load(Ordering::SeqCst), 1);
+
+    let mut registry = SemanticConversionRegistry::default();
+    let (strict, _, strict_calls) = handler("unused");
+    let (best, _, best_calls) = handler("unused");
+    let mut strict_descriptor = descriptor("demo:strict", "latex", "omml");
+    strict_descriptor.routes[0].mode = FormulaConversionMode::Strict;
+    registry
+        .register_trusted_backend(strict_descriptor, strict)
+        .unwrap();
+    registry
+        .register_trusted_backend(descriptor("demo:best", "latex", "omml"), best)
+        .unwrap();
+    registry.set_backend_enabled("demo:strict", true).unwrap();
+    registry.set_backend_enabled("demo:best", true).unwrap();
+    let mut input = request("latex", "omml");
+    input.mode = FormulaConversionMode::Strict;
+    input.content = r"\unknown{x}".into();
+    input.backend = Some("demo:strict".into());
+    let report = registry.convert_with_fallback(&input, &fallback_policy(&["demo:best"]));
+    assert_eq!(
+        fallback_error(&report),
+        ConversionRegistryErrorCode::InputRejected
+    );
+    assert_eq!(report.attempts.len(), 1);
+    assert_eq!(strict_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(best_calls.load(Ordering::SeqCst), 0);
+    registry.set_backend_enabled("demo:strict", false).unwrap();
+    let report = registry.convert_with_fallback(&input, &fallback_policy(&["demo:best"]));
+    assert_eq!(
+        fallback_error(&report),
+        ConversionRegistryErrorCode::RouteUnavailable
+    );
+    assert_eq!(best_calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn validator_refusal_is_not_an_availability_fallback() {
+    let mut registry = SemanticConversionRegistry::default();
+    registry
+        .register_trusted_format(
+            ConversionFormatDescriptor {
+                schema_version: 1,
+                id: "demo:input".into(),
+                mime_type: "text/plain".into(),
+                description: "Rejected test input".into(),
+            },
+            |_| {
+                Err(ConversionRegistryError::new(
+                    ConversionRegistryErrorCode::RouteUnavailable,
+                    "validator refusal",
+                ))
+            },
+        )
+        .unwrap();
+    let (good, _, calls) = handler("unused");
+    registry
+        .register_trusted_backend(descriptor("demo:good", "demo:input", "latex"), good)
+        .unwrap();
+    registry.set_backend_enabled("demo:good", true).unwrap();
+    let input = request("demo:input", "latex");
+    let report = registry.convert_with_fallback(&input, &fallback_policy(&["demo:good"]));
+    assert_eq!(
+        fallback_error(&report),
+        ConversionRegistryErrorCode::InputRejected
+    );
+    assert!(report.attempts.is_empty());
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
 #[test]
 fn new_formats_have_callable_validation_and_never_shadow_builtins() {
     let mut registry = SemanticConversionRegistry::default();

@@ -164,6 +164,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         other_result.candidate.content
     );
     assert_ne!(power_result.route_sha256, other_result.route_sha256);
+    let mut primary = power.clone();
+    primary.backend = None;
+    let fallback = registry.convert_with_fallback(
+        &primary,
+        &ConversionFallbackPolicy {
+            schema_version: CONVERSION_REGISTRY_VERSION,
+            backends: vec!["demo:power".into()],
+        },
+    );
+    let ConversionFallbackOutcome::Converted { result } = &fallback.outcome else {
+        panic!("explicit example fallback must succeed");
+    };
+    assert_eq!(result.backend, "demo:power");
+    assert_eq!(fallback.attempts.len(), 2);
+    assert!(fallback.decision_sha256.is_some());
     let square = request("latex", "omml", "demo:square-command", r"\demoSquare{z}");
     let square_result = registry.convert(&square)?;
     assert_eq!(
@@ -184,7 +199,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!(
         "{}",
-        serde_json::to_string_pretty(&[power_result, other_result, square_result])?
+        serde_json::to_string_pretty(&serde_json::json!({
+            "direct": [power_result, other_result, square_result],
+            "availabilityFallback": fallback,
+        }))?
     );
     Ok(())
 }

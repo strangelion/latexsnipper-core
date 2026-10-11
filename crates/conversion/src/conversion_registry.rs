@@ -9,6 +9,13 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+#[path = "conversion_registry_fallback.rs"]
+mod fallback;
+pub use fallback::{
+    ConversionFallbackAttempt, ConversionFallbackAttemptStatus, ConversionFallbackOutcome,
+    ConversionFallbackPolicy, ConversionFallbackReport,
+};
+
 use crate::{
     CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
     FormulaInputFormat, OutputFormat,
@@ -394,6 +401,11 @@ impl SemanticConversionRegistry {
         &self,
         request: &RegisteredConversionRequest,
     ) -> RegistryResult<RegisteredConversionResult> {
+        self.validate_request(request)?;
+        self.convert_validated(request)
+    }
+
+    fn validate_request(&self, request: &RegisteredConversionRequest) -> RegistryResult<()> {
         check_version(request.schema_version)?;
         if !sha256_id(&request.context_sha256)
             || request.content.trim().is_empty()
@@ -415,6 +427,13 @@ impl SemanticConversionRegistry {
             ));
         }
         self.validate_format(&request.input, &request.content, true)?;
+        Ok(())
+    }
+
+    fn convert_validated(
+        &self,
+        request: &RegisteredConversionRequest,
+    ) -> RegistryResult<RegisteredConversionResult> {
         let id = request
             .backend
             .as_deref()

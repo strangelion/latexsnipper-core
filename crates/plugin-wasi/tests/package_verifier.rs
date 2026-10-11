@@ -375,6 +375,18 @@ fn registered_wasi_formula_importer_and_exporter_execute_real_ast_projection() {
         assert!(!exported.candidate.losses.is_empty());
     }
     store.set_enabled("fixture.component", false).unwrap();
+    let report = registry.convert_with_fallback(
+        &request,
+        &ConversionFallbackPolicy {
+            schema_version: CONVERSION_REGISTRY_VERSION,
+            backends: vec![BUILTIN_CONVERSION_BACKEND.into()],
+        },
+    );
+    assert_eq!(report.attempts.len(), 1);
+    assert!(
+        matches!(report.outcome, ConversionFallbackOutcome::Rejected { error }
+        if error.code == ConversionRegistryErrorCode::BackendFailed)
+    );
     assert!(
         !registry
             .capabilities()

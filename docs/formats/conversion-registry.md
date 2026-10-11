@@ -34,6 +34,28 @@ cargo run --locked -p latexsnipper-conversion --no-default-features --example co
   调用方必须提供包含实际 Core build、定义、字体、样式和宿主依赖的上下文 SHA-256；不能只用包版本判断缓存有效。
 - 不修改 Office 文档、不返回写入许可。宿主仍需定位、确认、修订、回读/回滚及旧预览失效门禁。
 
+## 显式可用性 fallback
+
+原 `convert` 和 `DocumentConverter::convert_registered_formula` 不自动 fallback。
+Rust 调用者可明确调用 `convert_with_fallback(request, policy)`，指定原后端外最多三个
+按序备用 ID。策略默认空列表；版本、规范 ID、数量和去重先校验，不自动安装或启用后端。
+
+只有注册器自身确认的未注册、未启用或路线/模式/平台不匹配可以继续选择；这些项标为
+`unavailable`，不会执行 handler。一旦调用实际转换，成功或失败均结束，最多执行一次转换。
+输入/输出校验、预算、未知格式、信任撤销、取消与超时均不能重试；handler 或验证器返回
+类似“不可用”的错误码也不能授权继续。模式、来源/目标、原始输入及宿主上下文不改变。
+这不是执行失败后恢复或自动寻找语义替代器。
+
+报告用闭合 `converted`/`rejected` 结果区分候选和拒绝，列出 Core 版本、已验证的路线及实际考虑过的后端、版本、
+配置和状态。`policySha256` 绑定有序策略；有效请求的 `requestSha256` 绑定 Core 版本、
+平台、路线、原文摘要和调用方上下文；`decisionSha256` 再绑定实际选择和结果。
+无效策略不产生可复用摘要，无效请求没有请求摘要；报告自身仍不是缓存许可或文档写入许可。
+缓存必须使用决策摘要并重新检查实际 Core build、定义、字体、样式及宿主身份，不能只看
+备用列表或最终后端名称。拒绝报告不能作为候选写入。
+
+贡献者示例已有实际新格式 fallback；C/Python/WASM/CLI/Office 尚未接入此策略，不据此宣称
+它们已支持动态后端或自动恢复。WASI 后端仍保留既有启用和每次执行信任门禁。
+
 ## 本轮发现的内置输出问题
 
 新目标校验发现有色/字号 OMML 的 Word 属性缺少命名空间且嵌进 `m:rPr`；修复为 `m:r` 内的同级 `w:rPr`，
@@ -76,15 +98,16 @@ fixture 独立锁文件已固定；重建的 core WASM SHA-256 为
 注册器自身不是加载器或沙箱，可信同步 Rust handler 不具备任意线程强制超时、内存限额或取消。
 响应预算是返回后观察预算，不是 handler 分配的峰值内存限制；格式验证器也属于可信代码。
 不可信第三方必须走既有受限 WASI host；签名安装/启用/每次执行信任复验不能以一个 `check_ready = Ok` 示例代替。
-WASI/WIT 单公式适配已有；公开绑定/CLI/Office 的扩展选择、二进制格式/容器和明确 fallback 策略继续推进。
+WASI/WIT 单公式适配及 Rust 的预执行可用性 fallback 已有；公开绑定/CLI/Office 的扩展选择、
+二进制格式/容器及其他 fallback 范围继续推进，不能借此重试执行失败。
 LaTeX/Typst/Markdown/HTML 字符串候选不会在此执行；展示、TeX 编译或宿主插入仍必须经过对应安全管线。
 
 ## 本地验证
 
-- 注册路由专项 10 项及两个可运行示例通过；覆盖默认路由、新格式验证、显式启用/撤销、失败不重试、
+- 注册路由专项 17 项及可运行示例通过；覆盖默认路由、新格式验证、显式启用/撤销、可用性 fallback、执行失败不重试、
   原文不变、预算/版本/平台/注册冲突、身份摘要与输出安全反例。
-- 转换 featureless 全套 464 项、native 全套 517 项（含文档测试）通过；既有往返契约通过。
+- 转换 featureless 全套 483 项、native 全套 536 项（含文档测试）通过，各有一项显式忽略；既有往返契约通过。
 - all-targets/all-features Clippy warnings-as-errors、`wasm32-unknown-unknown` featureless 编译、格式及公共契约冻结校验通过。
-- WASI 宿主 unit/integration 40 项通过，含三项注册公式实际组件回归；公开绑定/CLI/Office 的扩展选择和新样式真实 Word 验收仍未完成。
+- WASI 单公式 importer/exporter 实际组件及禁用门禁回归通过；公开绑定/CLI/Office 的扩展选择和新样式真实 Word 验收仍未完成。
 
 相关：[扩展计划](../conversion-extension-roadmap.md)、[插件边界](../plugin.md)、[格式计划](../formula-format-roadmap.md)。
