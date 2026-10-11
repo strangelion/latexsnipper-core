@@ -18,6 +18,38 @@ Get-Content input.json -Raw | snipper convert - --to markdown -o -
 二进制 artifact 在 rename 前由 importer 重新打开验证。Diagnostics 支持
 `text|json|sarif`、strict、fail-on-warning、quiet 和 verbose。
 
+## Registered single-formula conversion
+
+`formula` 是独立的单公式入口，不改变原 `convert` 文档路线，也不直接修改 Office。
+
+```text
+snipper formula capabilities
+snipper formula convert --from latex --to omml --input formula.tex --context-sha256 <CALLER_CONTEXT_SHA256>
+snipper formula convert --from latex --to omml --input formula.tex --context-sha256 <CALLER_CONTEXT_SHA256> --backend unavailable:route --fallback core:builtin
+```
+
+输入文件或 `--input -` 的 UTF-8 stdin 最多 64 KiB。`--mode strict|best-effort`、规范格式 ID、
+显式 `--backend` 与最多三个重复 `--fallback` 使用同一注册器；只允许执行前可用性选择，
+校验或执行失败不自动重试。stdout 输出有界 JSON 决策报告（最多 512 KiB），拒绝结果返回非零退出码；
+参数、读取、配置或激活失败只写 stderr，不产生候选。没有选择后端时只调用 `core:builtin`。
+
+上下文参数必须是 64 位小写十六进制 SHA-256，由调用方绑定定义、字体、样式及真实宿主身份。
+CLI 再绑定实际运行的可执行文件摘要、Core 版本及规范化 profile 摘要；包版本不是 build 身份。
+每次进程启动会重新计算可执行身份，本入口没有承诺批量转换速度或持久缓存。
+
+默认构建不含 WASI 公式加载器，显式构建后才接受 [v1 profile](formats/conversion-registry.md#声明式-wasi-profile-与-cli)：
+
+```text
+cargo build --locked -p latexsnipper-cli --features wasi-formula
+snipper formula capabilities --profile power-profile.json --plugin-store ./remote-store
+snipper formula convert --from publisher:power --to omml --input power.txt --context-sha256 <CALLER_CONTEXT_SHA256> --profile power-profile.json --plugin-store ./remote-store --backend publisher:import --enable-profile-backend
+```
+
+`remote-store` 必须已通过既有可信安装流程安装并显式启用对应包。profile 不安装、联网、授权、
+启用或撤销包；新注册后端仍默认禁用，`--enable-profile-backend` 只启用本次 registry 的该条路线。
+默认 store 为 `.snipper/plugins/signed-registries/remote`。WASI profile 命令使用固定 8 MiB 宿主工作线程栈，
+避免 Windows 主线程栈不足；不放宽 guest 内存、fuel、epoch、并发或执行超时，也不把编译阶段当 guest 执行。
+
 ## Batch
 
 `convert` 支持多输入、glob、递归目录、相对路径保留、并发上限、continue-on-error

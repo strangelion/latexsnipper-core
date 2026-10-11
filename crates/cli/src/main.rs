@@ -21,6 +21,7 @@ use latexsnipper_syntax::latex::{LatexParser, LatexRenderer};
 use latexsnipper_syntax::{Parser as _, Renderer as _};
 use std::io::{self, Read, Write};
 
+mod formula;
 mod fs_util;
 mod migration;
 mod model_transport;
@@ -91,6 +92,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Inspect or convert one formula through explicit registered routes
+    Formula {
+        #[command(subcommand)]
+        command: formula::FormulaCommand,
+    },
     /// Import a supported document and emit its unified JSON AST
     Import {
         /// Input document path
@@ -720,6 +726,11 @@ fn main() {
     let cli = parse_cli();
 
     match cli.command {
+        Commands::Formula { command } => {
+            if let Err((code, message)) = formula::run(command) {
+                exit_with_code(code, "Formula conversion failed", message);
+            }
+        }
         Commands::Import { input, output } => {
             let document = DocumentImporter::from_path(&input, ImportOptions::default())
                 .unwrap_or_else(|error| exit_with_error("Import failed", error));

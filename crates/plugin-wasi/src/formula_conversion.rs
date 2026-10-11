@@ -188,6 +188,16 @@ impl WasiFormulaBackend {
     pub fn descriptor(&self) -> &ConversionBackendDescriptor {
         &self.descriptor
     }
+    pub(crate) fn bind_profile_identity(mut self, profile_sha256: &str) -> Self {
+        let identity = serde_json::to_vec(&(
+            "wasi-formula-profile-v1",
+            &self.descriptor.configuration_sha256,
+            profile_sha256,
+        ))
+        .expect("profile identity consists of strings");
+        self.descriptor.configuration_sha256 = format!("{:x}", Sha256::digest(identity));
+        self
+    }
     pub fn with_cancellation(mut self, cancellation: CancellationToken) -> Self {
         self.cancellation = cancellation;
         self

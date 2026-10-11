@@ -7,6 +7,9 @@ a stable non-zero exit instead of silently ignoring the value.
 | Command | Options and arguments | Disposition |
 |---|---|---|
 | `import` | `input`, `--output` | propagated to importer and JSON writer |
+| `formula capabilities` | `--profile`, `--plugin-store` | same registry projection; explicit installed/enabled WASI package only, profile backend stays disabled; featureless loader refused |
+| `formula convert` | `--from`, `--to`, `--input`, `--mode`, `--backend`, `--fallback`, `--context-sha256` | bounded source and canonical route to registry; explicit availability-only policy, actual executable/context identity and JSON report; no host writes |
+| `formula convert` | `--profile`, `--plugin-store`, `--enable-profile-backend` | verified WASI profile and per-invocation route enable; package never enabled or installed implicitly; invalid policy refused before activation |
 | `convert` | inputs, `--to`, `--output`, `--force-binary-stdout` | propagated to format resolution and output policy |
 | `convert` | `--force`, `--no-clobber`, `--atomic` | propagated; contradictory overwrite flags rejected by Clap |
 | `convert` | `--diagnostics`, `--strict`, `--fail-on-warning` | propagated to diagnostic rendering and failure policy |

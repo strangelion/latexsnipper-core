@@ -2215,14 +2215,18 @@ dependencies = [
  "latexsnipper-model",
  "latexsnipper-pipeline",
  "latexsnipper-plugin",
+ "latexsnipper-plugin-wasi",
  "latexsnipper-runtime",
  "latexsnipper-syntax",
  "log",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tempfile",
  "tokio",
  "windows-sys 0.61.2",
+ "wit-component",
+ "zip",
 ]
 
 [[package]]
@@ -2554,6 +2558,7 @@ dependencies = [
  "latexsnipper-ast",
  "latexsnipper-conversion",
  "latexsnipper-plugin",
+ "regex",
  "semver",
  "serde",
  "serde_json",

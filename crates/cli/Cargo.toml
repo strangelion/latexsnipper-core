@@ -9,6 +9,10 @@ publish = false
 name = "snipper"
 path = "src/main.rs"
 
+[features]
+default = []
+wasi-formula = ["dep:latexsnipper-plugin-wasi"]
+
 [dependencies]
 latexsnipper-foundation.workspace = true
 latexsnipper-api-types.workspace = true
@@ -22,6 +26,7 @@ latexsnipper-export.workspace = true
 latexsnipper-model = { workspace = true, features = ["native"] }
 latexsnipper-pipeline = { workspace = true, features = ["native"] }
 latexsnipper-plugin = { workspace = true, features = ["registry-network"] }
+latexsnipper-plugin-wasi = { workspace = true, optional = true }
 latexsnipper-syntax.workspace = true
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
@@ -33,6 +38,11 @@ serde.workspace = true
 sha2.workspace = true
 log.workspace = true
 env_logger = "0.11"
+
+[dev-dependencies]
+tempfile = "3"
+wit-component = { version = "0.239.0", features = ["dummy-module"] }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

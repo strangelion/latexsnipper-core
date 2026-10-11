@@ -7,7 +7,7 @@
 已有 `Importer`、`SemanticConverter`、`Exporter`、`Converter`，以及版本化插件钩子、
 能力声明、权限、文档 patch 和受限 WASI 调用；WASI import/export 可通过独立 Rust host 调用。
 `DocumentConverter` 已有实例级可信 Rust 公式字符串注册入口，旧 `OutputFormat` 兼容保留。
-WASI/WIT v1 的受限单公式导入/导出已有；公共绑定、CLI 与 Office 的扩展选择尚未贯通。
+WASI/WIT v1 的受限单公式导入/导出、声明式 profile 及 CLI 显式选择已有；其他公共绑定与 Office 尚未贯通。
 
 ## 安排
 
@@ -16,7 +16,7 @@ WASI/WIT v1 的受限单公式导入/导出已有；公共绑定、CLI 与 Offic
 | EXT-01 | P1；先于 FMT-05 通用接入 | 进行中：可信 Rust 注册及受限 WASI 单公式路线已有 | 补二进制/文档路线及应用接入；不能用 handler 自述代替信任及执行预算 |
 | EXT-02 | P1；随 EXT-01 推进 | 进行中：显式选择、默认禁用及预执行可用性 fallback 审计已有 | 扩大 scoped 声明和应用接入；执行失败不重试，缓存/预览继续绑定决策、后端版本和宿主上下文 |
 | EXT-03 | 与 EXT-01/02 同步 | Rust 示例与实际 WASI conformance 已有 | 扩大贡献者模板和格式样例；不将有限 power fixture 当通用格式支持 |
-| EXT-04 | EXT-01/02 验收后，随 FMT-05 和 Office 格式闭环推进 | 待接入 | Rust/C/Python/WASM/CLI 使用同一能力投影；Office 按宿主能力展示来源/目标和后端，预览绑定版本，扩展禁用或更新后旧结果不得直接写入 |
+| EXT-04 | EXT-01/02 验收后，随 FMT-05 和 Office 格式闭环推进 | 进行中：Rust/CLI 同一能力投影及显式 WASI profile 已有 | 接 C/Python/WASM 和 Office；按宿主能力展示来源/目标和后端，预览绑定版本，扩展禁用或更新后旧结果不得直接写入 |
 
 先交付可调用的纵向路线，再扩大格式和平台；每阶段只关闭已有证据的范围。
 当前入口、支持/拒绝范围及未接通项见 [注册路由 v1](formats/conversion-registry.md)。

@@ -20,6 +20,7 @@ CONTRACT_FILES = (
     "crates/model/src/manifest_v3.rs",
     "crates/conversion/src/capability_registry.rs",
     "crates/cli/src/main.rs",
+    "crates/cli/src/formula.rs",
     "crates/wasm/js/src/types.ts",
     "crates/ffi/include/latexsnipper_session.h",
     "crates/ffi/include/latexsnipper_legacy.h",

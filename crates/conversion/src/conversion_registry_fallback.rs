@@ -20,6 +20,13 @@ impl Default for ConversionFallbackPolicy {
     }
 }
 
+impl ConversionFallbackPolicy {
+    /// Validate without touching any handler, dependency or package store.
+    pub fn validate_for_backend(&self, backend: Option<&str>) -> RegistryResult<()> {
+        validate_policy(backend.unwrap_or(BUILTIN_CONVERSION_BACKEND), self)
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ConversionFallbackAttemptStatus {

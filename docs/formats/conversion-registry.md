@@ -53,7 +53,7 @@ Rust 调用者可明确调用 `convert_with_fallback(request, policy)`，指定�
 缓存必须使用决策摘要并重新检查实际 Core build、定义、字体、样式及宿主身份，不能只看
 备用列表或最终后端名称。拒绝报告不能作为候选写入。
 
-贡献者示例已有实际新格式 fallback；C/Python/WASM/CLI/Office 尚未接入此策略，不据此宣称
+贡献者示例和 `snipper formula` 已有实际新格式 fallback；C/Python/WASM/Office 尚未接入此策略，不据此宣称
 它们已支持动态后端或自动恢复。WASI 后端仍保留既有启用和每次执行信任门禁。
 
 ## 本轮发现的内置输出问题
@@ -93,12 +93,52 @@ MathML 显示公式由非标准 `displaymath` 改为 `mstyle displaystyle="true"
 fixture 独立锁文件已固定；重建的 core WASM SHA-256 为
 `cd51c67716a727b85a75dbfe03a7bed93db1a4c407bc9ceec6ba967f05bc1eef`，已扫描无本机路径标记。
 
+## 声明式 WASI profile 与 CLI
+
+`WasiFormulaProfile::from_json` 接收最多 16 KiB 的闭合 v1 JSON；`prepare(store)` 只激活
+既有已验证、已启用的包，返回新 registry，避免失败污染调用方已有注册项。没有组件路径、URL、
+安装、权限或包启用字段。以下配置是贡献者示例，需要真实包声明对应 transport/AST 能力；
+并非内置安装的 `publisher:power` 支持。
+
+```json
+{
+  "schemaVersion": 1,
+  "pluginId": "publisher.power",
+  "backendId": "publisher:import",
+  "transport": "application/vnd.publisher.power",
+  "operation": { "kind": "importer", "output": "omml" },
+  "format": {
+    "id": "publisher:power",
+    "mimeType": "application/vnd.publisher.power",
+    "description": "One lowercase ASCII variable and exponent 0..9",
+    "validation": { "kind": "regex", "pattern": "[a-z]:[0-9]" }
+  }
+}
+```
+
+`operation` 可改为 `{"kind":"exporter","input":"latex"}`，将真实单公式 AST 导出到该 custom 格式。
+importer 目标只能是规范内置语义 ID；exporter 源只能是当前实现的 LaTeX/MathML/OMML/Typst AST 投影。
+字符串 API 仍不接二进制 MTEF、图片或 OLE。配置及所有嵌套字段拒绝未知项，版本不匹配拒绝。
+
+验证器为 Core 编译的完整字符串正则，不运行脚本、宏或 guest validator；模式最多 2048 字节、
+编译及 DFA cache 各限 64 KiB、nest limit 32，输入最多 64 KiB。完整匹配拒绝尾随正文/换行，除非
+配置明确声明接受它们。该检查只能保证声明的字符串子集，不证明数学语义，也不是完整 JSON/XML schema。
+内置目标继续执行 Core 安全校验。配置规范化摘要绑定格式、方向、验证规则和元数据，并加入后端配置摘要；
+验证器改变即使候选文本相同，路线身份也必须改变。包 identity、限制及每次执行信任复验仍保留。
+Rust 调用方可用 `prepare_with_cancellation` 共享取消 token；激活前已取消则拒绝，
+注册后取消继续由既有 handler/host 检查。CLI 本轮没有新增交互式取消或监督进程恢复。
+
+CLI 默认没有 WASI profile loader；`--features wasi-formula` 是显式构建开关。
+`formula capabilities` 使用同一能力投影，新 profile 后端默认显示禁用；转换必须显式启用并选择后端，
+或将它列入明确的可用性 fallback。操作、上下文身份、输出及退出码见 [CLI](../cli.md#registered-single-formula-conversion)。
+实际组件和 CLI importer/exporter 回归只验证有限 power fixture，不当作通用第三方格式或 Office 宿主验收。
+
 ## 尚未接通
 
 注册器自身不是加载器或沙箱，可信同步 Rust handler 不具备任意线程强制超时、内存限额或取消。
 响应预算是返回后观察预算，不是 handler 分配的峰值内存限制；格式验证器也属于可信代码。
 不可信第三方必须走既有受限 WASI host；签名安装/启用/每次执行信任复验不能以一个 `check_ready = Ok` 示例代替。
-WASI/WIT 单公式适配及 Rust 的预执行可用性 fallback 已有；公开绑定/CLI/Office 的扩展选择、
+WASI/WIT 单公式适配、声明式 profile、CLI 和 Rust 的预执行可用性 fallback 已有；其他公开绑定/Office 的扩展选择、
 二进制格式/容器及其他 fallback 范围继续推进，不能借此重试执行失败。
 LaTeX/Typst/Markdown/HTML 字符串候选不会在此执行；展示、TeX 编译或宿主插入仍必须经过对应安全管线。
 
@@ -108,6 +148,6 @@ LaTeX/Typst/Markdown/HTML 字符串候选不会在此执行；展示、TeX 编�
   原文不变、预算/版本/平台/注册冲突、身份摘要与输出安全反例。
 - 转换 featureless 全套 483 项、native 全套 536 项（含文档测试）通过，各有一项显式忽略；既有往返契约通过。
 - all-targets/all-features Clippy warnings-as-errors、`wasm32-unknown-unknown` featureless 编译、格式及公共契约冻结校验通过。
-- WASI 单公式 importer/exporter 实际组件及禁用门禁回归通过；公开绑定/CLI/Office 的扩展选择和新样式真实 Word 验收仍未完成。
+- WASI 单公式 importer/exporter 实际组件及禁用门禁回归通过；其他公开绑定/Office 的扩展选择和新样式真实 Word 验收仍未完成。
 
 相关：[扩展计划](../conversion-extension-roadmap.md)、[插件边界](../plugin.md)、[格式计划](../formula-format-roadmap.md)。

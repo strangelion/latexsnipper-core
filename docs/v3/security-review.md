@@ -47,6 +47,21 @@ tract packages are pinned to 0.21.10 because the upstream 0.21.16 graph
 translator rejects the frozen production decoder model; the exact production
 profile is exercised in CI.
 
+## Pending host approval gate
+
+C-09 prioritizes Core/WASI sensitive broker actions. Existing manifest grants,
+package enablement and path/network bounds are not per-action human approval.
+This gate is planned, not implemented or independently approved in this record.
+
+The host, never the guest, must own approval decisions for sensitive writes,
+overwrites and external data transfer. Offer explicit one-action, whole-batch
+and bounded-session approval, with visible scope, expiry and revocation.
+Actions within a current explicit grant should proceed without repeated prompts;
+changed package identity, out-of-scope targets/actions or expired grants require
+new consent. A temporary refusal must not silently become a permanent block.
+Cancellation or missing approval leaves content unchanged, and confirmation must
+not block a native broker indefinitely or bypass guest execution budgets.
+
 ## Independent review status
 
 This document records internal implementation review and automated evidence. It

@@ -541,7 +541,7 @@ fn registered_wasi_formula_bridge_retains_host_output_budget_cancellation_and_in
         failure.message.contains("PLUGIN_WASI_OUTPUT_LIMIT"),
         "{failure}"
     );
-    let (_temporary2, store2) = power_store(|_| {});
+    let (temporary2, store2) = power_store(|_| {});
     let cancellation = latexsnipper_plugin::CancellationToken::default();
     WasiFormulaBackend::importer(
         ActivatedRemoteWasiPlugin::activate(&store2, "fixture.component").unwrap(),
@@ -589,6 +589,13 @@ fn registered_wasi_formula_bridge_retains_host_output_budget_cancellation_and_in
         ))
         .unwrap_err();
     assert!(failure.message.contains("PLUGIN_WASI_TIMEOUT"), "{failure}");
+    // The registry was created before the second temporary store. Close its
+    // retained directory handles first instead of relying on reverse drop order.
+    drop(registry);
+    drop(store2);
+    temporary2
+        .close()
+        .expect("second formula store must be cleaned after host shutdown");
 }
 
 fn patch_payload(result: latexsnipper_plugin_wasi::ComponentInvocationResult) -> Vec<u8> {
