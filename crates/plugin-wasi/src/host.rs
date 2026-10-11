@@ -16,6 +16,7 @@ use crate::bindings::latexsnipper::plugin::{
     system_broker, temporary_storage_broker, types,
 };
 use crate::bindings::Plugin;
+use crate::permissions::CheckedWriteError;
 use crate::{
     ComponentNetworkScheme, ComponentPermissions, FilesystemOperationError, NetworkGrant,
     SensitiveAction, SensitiveActionController, VerifiedComponentPackage, WasiDiagnostic,
@@ -303,7 +304,7 @@ impl WasiComponentHost {
             Ok(UpdateDeadline::Continue(1))
         });
         let execution = self.execute_inner(&mut store, &linker, compiled, invocation);
-        let execution = match store.data_mut().approval_failure.take() {
+        let execution = match store.data_mut().broker_failure.take() {
             Some(error) => Err(error),
             None => execution,
         };
@@ -444,7 +445,7 @@ struct HostState {
     resource_count: usize,
     store_limits: StoreLimits,
     approval: ApprovalExecution,
-    approval_failure: Option<WasiDiagnostic>,
+    broker_failure: Option<WasiDiagnostic>,
 }
 
 impl HostState {
@@ -479,7 +480,7 @@ impl HostState {
             resource_count: 0,
             store_limits,
             approval,
-            approval_failure: None,
+            broker_failure: None,
         }
     }
 
@@ -512,7 +513,7 @@ impl HostState {
             .controller
             .authorize(&self.approval.context, action)
         {
-            self.approval_failure = Some(error);
+            self.broker_failure = Some(error);
             // A trap stops the guest: denial cannot be ignored to keep probing
             // or to disguise a pending sensitive action as a valid candidate.
             return Err(wasmtime::Error::msg("PLUGIN_WASI_APPROVAL_REQUIRED"));
@@ -594,19 +595,29 @@ impl filesystem_broker::Host for HostState {
             grant_id: grant_id.clone(),
             root,
             relative_path: relative_path.clone(),
-            target_sha256,
+            target_sha256: target_sha256.clone(),
             payload_sha256: hex::encode(Sha256::digest(&payload)),
             payload_bytes: payload.len(),
         })?;
-        Ok(self
-            .permissions
-            .write_file(
-                &grant_id,
-                &relative_path,
-                &payload,
-                self.permissions.limits.input_bytes,
-            )
-            .map_err(filesystem_access_error))
+        match self.permissions.write_file_checked(
+            &grant_id,
+            &relative_path,
+            &payload,
+            self.permissions.limits.input_bytes,
+            target_sha256.as_deref(),
+            || self.checkpoint(),
+        ) {
+            Ok(()) => Ok(Ok(())),
+            Err(CheckedWriteError::Interrupted(error)) => Err(error),
+            Err(CheckedWriteError::Filesystem(FilesystemOperationError::Conflict)) => {
+                self.broker_failure = Some(WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiWriteConflict,
+                    "write target changed before publication; no replacement was made",
+                ));
+                Err(wasmtime::Error::msg("PLUGIN_WASI_WRITE_CONFLICT"))
+            }
+            Err(CheckedWriteError::Filesystem(error)) => Ok(Err(filesystem_access_error(error))),
+        }
     }
 }
 
@@ -1377,6 +1388,7 @@ fn broker_plugin_error(error: WasiDiagnostic, limits: &WasiResourceLimits) -> ty
         WasiDiagnosticCode::PluginWasiTrap
         | WasiDiagnosticCode::PluginWasiTimeout
         | WasiDiagnosticCode::PluginWasiMemoryLimit
+        | WasiDiagnosticCode::PluginWasiWriteConflict
         | WasiDiagnosticCode::PluginWasiHostFailure => types::PluginErrorCode::Internal,
     };
     let diagnostic_code = wit_diagnostic_code(error.code);
@@ -1450,7 +1462,9 @@ fn wit_diagnostic_code(code: WasiDiagnosticCode) -> types::DiagnosticCode {
         WasiDiagnosticCode::PluginWasiInvalidInput | WasiDiagnosticCode::PluginWasiInvalidPatch => {
             types::DiagnosticCode::PluginWasiInvalidPatch
         }
-        WasiDiagnosticCode::PluginWasiHostFailure => types::DiagnosticCode::PluginWasiHostFailure,
+        WasiDiagnosticCode::PluginWasiHostFailure | WasiDiagnosticCode::PluginWasiWriteConflict => {
+            types::DiagnosticCode::PluginWasiHostFailure
+        }
         WasiDiagnosticCode::PluginWasiTrap => types::DiagnosticCode::PluginWasiTrap,
     }
 }
@@ -1512,7 +1526,9 @@ fn filesystem_access_error(error: FilesystemOperationError) -> filesystem_broker
         FilesystemOperationError::NotFound => filesystem_broker::AccessError::NotFound,
         FilesystemOperationError::InvalidPath => filesystem_broker::AccessError::InvalidPath,
         FilesystemOperationError::SizeLimit => filesystem_broker::AccessError::SizeLimit,
-        FilesystemOperationError::HostFailure => filesystem_broker::AccessError::HostFailure,
+        FilesystemOperationError::HostFailure | FilesystemOperationError::Conflict => {
+            filesystem_broker::AccessError::HostFailure
+        }
     }
 }
 

@@ -76,11 +76,34 @@ Approval does not broaden manifest permissions, bypass path/output/guest budgets
 or sandbox a trusted native broker. No process/installer/registry/certificate broker
 is added. Temporary in-memory guest files are not external writes.
 
+File writes now stage bounded chunks in an exclusively created random file in the
+target's parent directory, sync and close it, then replace the target only after
+checking its observed hash/absence again. Directory traversal rejects symlink
+parents; regular-file, hardlink and size checks still apply. Cancellation/deadline
+checkpoints run during staging, while waiting for publication and immediately
+before replacement. Clones of one grant share publication ordering; a detected
+content change returns host-only `PLUGIN_WASI_WRITE_CONFLICT`, never an automatic
+retry. Its existing WIT mapping remains `host-failure`; WIT v1 is unchanged.
+Staging is removed on normal error/cancellation paths, not by deleting the original.
+The consumed consent use is not refunded, and a valid session grant remains usable
+for a fresh user-directed operation. Successful publication does not remove a later
+file created at the former staging name.
+
 Approval is per action, not a transaction for a whole invocation. Previously
 approved writes cannot be rolled back by a later denial or revocation. The old
-file digest is an observed precondition, not an atomic filesystem compare-and-swap;
-host transactions and concurrent-edit handling remain separate work. Synchronous
-native network/IO implementations must still enforce their own deadlines. The
+file digest is an observed precondition, not an atomic filesystem compare-and-swap:
+external/native writers can race between the last check and replacement, and
+independently created grant/host instances do not share a global filesystem lock.
+On Windows the pinned capability library's rename ultimately uses native paths;
+this is not a guarantee against hostile native directory moves/reparse changes.
+Replacement preserves ordinary file permission bits (never Unix setuid/setgid),
+not owner identity, platform-specific ACLs, alternate streams or other extended
+metadata. Grants remain package-relative; do not use this implementation as a
+general-purpose editor for external security-sensitive files. Platform metadata
+preservation, multi-file transactions and crash recovery remain separate work.
+An abrupt host exit can leave a random staging file; there is no crash journal or
+power-loss durability guarantee. Cleanup is best-effort if the OS refuses removal.
+Synchronous native network/IO implementations must still enforce their own deadlines. The
 approval check itself never waits for human input or executes external callbacks.
 Network paths reject authority-like `//`, backslashes, fragments and control
 characters. Methods are bounded HTTP tokens, preserving valid case/custom methods.

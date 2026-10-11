@@ -65,6 +65,10 @@ Missing approval prevents that action, but is not a rollback guarantee for earli
 approved actions. Confirmation never waits inside the broker; guest budgets and
 manifest/path bounds remain independent. The API and limitations are documented in
 [the host contract](wasi-component-host.md#host-user-approval).
+Single-file writes stage before publication and recheck observed content, retaining
+original bytes on staging/cancellation/rename failure. This does not provide
+external-writer CAS, whole-invocation rollback, platform ACL preservation or crash
+recovery; those boundaries remain open for independent review.
 
 ## Independent review status
 
