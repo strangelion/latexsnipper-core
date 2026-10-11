@@ -356,6 +356,24 @@ fn registered_wasi_formula_importer_and_exporter_execute_real_ast_projection() {
         assert_eq!(exported.candidate.content, power);
         assert_eq!(exported.mime_type, "application/vnd.fixture.power");
     }
+    // One valid math wrapper is normalized, not treated as a mixed document.
+    for (latex, power) in [
+        (" $x^2$ ", "x:2"),
+        ("$$y^4$$", "y:4"),
+        (r"\(z^7\)", "z:7"),
+        (r"\[a^3\]", "a:3"),
+    ] {
+        let request = formula_request("latex", "fixture:power", "fixture:export", latex);
+        let exported = registry.convert(&request).unwrap();
+        assert_eq!(exported.candidate.content, power);
+        assert_eq!(exported.backend, "fixture:export");
+        assert_eq!(
+            exported.input_sha256,
+            format!("{:x}", Sha256::digest(latex))
+        );
+        assert_eq!(request.content, latex);
+        assert!(!exported.candidate.losses.is_empty());
+    }
     store.set_enabled("fixture.component", false).unwrap();
     assert!(
         !registry
@@ -454,7 +472,14 @@ fn registered_wasi_formula_bridge_refuses_media_shape_utf8_and_undeclared_routes
     for source in [
         "\\documentclass{article}\\begin{document}x^2\\end{document}",
         "x^2\\]\\[y^2",
-        "$x^2$",
+        "$x^2$ $y^3$",
+        "$$x^2$$$$y^3$$",
+        r"\(x^2\)\(y^3\)",
+        r"\[x^2\]\[y^3\]",
+        "$x^2",
+        "x^2$",
+        "Text before $x^2$",
+        r"$\documentclass{article}x^2$",
     ] {
         let failure = registry
             .convert(&formula_request(
