@@ -57,9 +57,9 @@ impl Converter for OmmlConverter {
 
 fn convert_formula_to_omml(f: &Formula) -> String {
     let content = match &f.source {
-        FormulaSource::Latex(s) => latex_to_omml(s),
+        FormulaSource::Latex(s) => latex_to_omml_mode(s, f.display_mode),
         FormulaSource::Omml(s) => s.clone(),
-        FormulaSource::Typst(s) => latex_to_omml(&typst_to_latex(s)),
+        FormulaSource::Typst(s) => latex_to_omml_mode(&typst_to_latex(s), f.display_mode),
         FormulaSource::MathML(s) => format!("<m:oMath>\n{}\n</m:oMath>", s),
     };
     let word_namespace = if content.contains("<w:") {
@@ -82,7 +82,12 @@ fn convert_formula_to_omml(f: &Formula) -> String {
 
 /// Convert a LaTeX string to OMML by parsing to AST first, then walking the AST.
 pub fn latex_to_omml(latex: &str) -> String {
-    let ast = parse_latex(latex);
+    latex_to_omml_mode(latex, true)
+}
+
+fn latex_to_omml_mode(latex: &str, display: bool) -> String {
+    let mut ast = parse_latex(latex);
+    crate::extrema::resolve(&mut ast, display);
     let omml = ast_to_omml(&ast);
     fix_omml(&omml)
 }
@@ -159,6 +164,12 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
             content.iter().collect()
         }
         Command { name, args } => {
+            if matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
+                && args.len() == 1
+                && crate::extrema::head(&args[0]).is_some()
+            {
+                return validate_omml_node(&args[0], depth + 1);
+            }
             let minimum_args = match name.as_str() {
                 "%" | "&" | "#" | "_" | "$" | "{" | "}" | "backslash" | "textasciicircum"
                 | "textasciitilde" => 0,
@@ -180,12 +191,18 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
             args.iter().collect()
         }
         Superscript { base, exp } => {
+            if crate::extrema::head(base).is_some_and(|value| value.upper.is_some()) {
+                return Err("Duplicate extremum superscript".into());
+            }
             if base.is_empty() || exp.is_empty() {
                 return Err("Incomplete OMML superscript".into());
             }
             vec![base, exp]
         }
         Subscript { base, sub } => {
+            if crate::extrema::head(base).is_some_and(|value| value.lower.is_some()) {
+                return Err("Duplicate extremum subscript".into());
+            }
             if base.is_empty() || sub.is_empty() {
                 return Err("Incomplete OMML subscript".into());
             }
@@ -293,6 +310,26 @@ mod strict_selection_tests {
 
 /// Walk the AST and generate OMML XML.
 fn ast_to_omml(node: &LatexNode) -> String {
+    if let Some(extremum) = crate::extrema::head(node) {
+        let mut base = wrap_normal_mtext(extremum.name);
+        let lower = extremum.lower.map(ast_to_omml);
+        let upper = extremum.upper.map(ast_to_omml);
+        if extremum.limits.unwrap_or(true) {
+            if let Some(lower) = lower {
+                base = format!("<m:limLow><m:e>{base}</m:e><m:lim>{lower}</m:lim></m:limLow>");
+            }
+            if let Some(upper) = upper {
+                base = format!("<m:limUpp><m:e>{base}</m:e><m:lim>{upper}</m:lim></m:limUpp>");
+            }
+            return base;
+        }
+        return match (lower, upper) {
+            (Some(lower), Some(upper)) => format!("<m:sSubSup><m:e>{base}</m:e><m:sub>{lower}</m:sub><m:sup>{upper}</m:sup></m:sSubSup>"),
+            (Some(lower), None) => format!("<m:sSub><m:e>{base}</m:e><m:sub>{lower}</m:sub></m:sSub>"),
+            (None, Some(upper)) => format!("<m:sSup><m:e>{base}</m:e><m:sup>{upper}</m:sup></m:sSup>"),
+            _ => base,
+        };
+    }
     if let Some(nary) = normalize_nary_head(node) {
         return nary_to_omml(&nary);
     }

@@ -131,10 +131,10 @@ fn convert_mathml(doc: &Document, mode: MathmlMode) -> Result<String> {
 
 fn convert_formula_to_mathml(f: &Formula, _mode: &MathmlMode) -> String {
     let content = match &f.source {
-        FormulaSource::Latex(s) => latex_to_mathml(s),
+        FormulaSource::Latex(s) => latex_to_mathml_mode(s, f.display_mode),
         FormulaSource::MathML(s) => s.clone(),
         FormulaSource::Omml(s) => format!("<mrow><mi>{}</mi></mrow>", xml_escape(s)),
-        FormulaSource::Typst(s) => latex_to_mathml(&typst_to_latex(s)),
+        FormulaSource::Typst(s) => latex_to_mathml_mode(&typst_to_latex(s), f.display_mode),
     };
     if f.display_mode {
         format!("<mstyle displaystyle=\"true\">\n{}\n</mstyle>", content)
@@ -152,17 +152,22 @@ fn convert_inline_to_mathml(inline: &Inline, mode: &MathmlMode) -> String {
 }
 
 fn latex_to_mathml(latex: &str) -> String {
+    latex_to_mathml_mode(latex, true)
+}
+
+fn latex_to_mathml_mode(latex: &str, display: bool) -> String {
     let latex = latex.trim();
-    // Preserve raw column specifications in array fallbacks before lexical projection.
-    if latex.contains("\\begin") {
-        if let Some(rendered) = render_matrix_node(&crate::latex_parser::parse_latex(latex)) {
-            return rendered;
-        }
-    }
+    let raw_source = latex;
     let lexical_source = crate::latex_utils::without_comments(latex);
     let latex = lexical_source.trim();
-    if let Some(rendered) = render_finite_symbol_expression(latex) {
+    if let Some(rendered) = render_finite_symbol_expression(latex, display) {
         return rendered;
+    }
+    // Preserve raw column specifications when the finite AST route cannot render them.
+    if raw_source.contains("\\begin") {
+        if let Some(rendered) = render_matrix_node(&crate::latex_parser::parse_latex(raw_source)) {
+            return rendered;
+        }
     }
     let chars: Vec<char> = latex.chars().collect();
     if chars.first() == Some(&'{') {
@@ -1232,6 +1237,8 @@ fn mathml_color_name(name: &str) -> String {
 
 fn map_symbol_mathml(latex: &str) -> Option<&str> {
     match latex {
+        "\\min" => Some("<mi mathvariant=\"normal\">min</mi>"),
+        "\\max" => Some("<mi mathvariant=\"normal\">max</mi>"),
         "\\%" => Some("<mo>%</mo>"),
         "\\&" => Some("<mo>&amp;</mo>"),
         "\\#" => Some("<mo>#</mo>"),
@@ -1317,7 +1324,7 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
 
 // Finite AST handling for mixed glyph commands avoids treating an entire
 // expression as one identifier. Unsupported nodes retain the legacy path.
-fn render_finite_symbol_expression(latex: &str) -> Option<String> {
+fn render_finite_symbol_expression(latex: &str, display: bool) -> Option<String> {
     if latex.len() > 65_536
         || !latex.contains('\\')
         || latex.bytes().filter(|byte| *byte == b'\\').count() > 512
@@ -1340,7 +1347,8 @@ fn render_finite_symbol_expression(latex: &str) -> Option<String> {
             depth = depth.saturating_sub(1);
         }
     }
-    let ast = crate::latex_parser::parse_latex(latex);
+    let mut ast = crate::latex_parser::parse_latex(latex);
+    crate::extrema::resolve(&mut ast, display);
     let mut found_symbol = false;
     let xml = render_symbol_ast(&ast, &mut found_symbol, 0)?;
     found_symbol.then_some(xml)
@@ -1358,6 +1366,36 @@ fn render_symbol_ast(
     let row = |node: &LatexNode, found: &mut bool| {
         render_symbol_ast(node, found, depth + 1).map(|xml| format!("<mrow>{xml}</mrow>"))
     };
+    if let Some(extremum) = crate::extrema::head(node) {
+        *found = true;
+        let base = format!("<mi mathvariant=\"normal\">{}</mi>", extremum.name);
+        let lower = if let Some(node) = extremum.lower {
+            Some(row(node, found)?)
+        } else {
+            None
+        };
+        let upper = if let Some(node) = extremum.upper {
+            Some(row(node, found)?)
+        } else {
+            None
+        };
+        let vertical = extremum.limits.unwrap_or(true);
+        return Some(match (lower, upper) {
+            (Some(lower), Some(upper)) => {
+                let tag = if vertical { "munderover" } else { "msubsup" };
+                format!("<{tag}>{base}{lower}{upper}</{tag}>")
+            }
+            (Some(lower), None) => {
+                let tag = if vertical { "munder" } else { "msub" };
+                format!("<{tag}>{base}{lower}</{tag}>")
+            }
+            (None, Some(upper)) => {
+                let tag = if vertical { "mover" } else { "msup" };
+                format!("<{tag}>{base}{upper}</{tag}>")
+            }
+            _ => base,
+        });
+    }
     match node {
         LatexNode::Text(text) => {
             let text = text.trim();
@@ -1372,7 +1410,32 @@ fn render_symbol_ast(
             Some(latex_to_mathml(text))
         }
         // Large operators retain the existing limit-placement path.
-        LatexNode::Operator(_) => None,
+        LatexNode::Operator(name) => {
+            if matches!(
+                name.as_str(),
+                "int"
+                    | "iint"
+                    | "iiint"
+                    | "oint"
+                    | "sum"
+                    | "prod"
+                    | "coprod"
+                    | "bigcup"
+                    | "bigcap"
+                    | "lim"
+                    | "limsup"
+                    | "liminf"
+                    | "sup"
+                    | "inf"
+            ) {
+                None
+            } else {
+                Some(format!(
+                    "<mi mathvariant=\"normal\">{}</mi>",
+                    xml_escape(name)
+                ))
+            }
+        }
         LatexNode::Greek(name) | LatexNode::Relation(name) => {
             let command = format!("\\{name}");
             let xml = map_symbol_mathml(&command)?;
@@ -1401,6 +1464,39 @@ fn render_symbol_ast(
                 .map(|node| render_symbol_ast(node, found, depth + 1))
                 .collect();
             Some(format!("<mrow>{}</mrow>", parts?.concat()))
+        }
+        LatexNode::Math { content, .. } => {
+            let parts: Option<Vec<_>> = content
+                .iter()
+                .map(|node| render_symbol_ast(node, found, depth + 1))
+                .collect();
+            Some(format!("<mrow>{}</mrow>", parts?.concat()))
+        }
+        LatexNode::Command { name, args }
+            if matches!(
+                name.as_str(),
+                "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle"
+            ) =>
+        {
+            Some(math_style_mathml(name, &row(args.first()?, found)?))
+        }
+        LatexNode::Delimited {
+            left,
+            content,
+            right,
+        } => {
+            let left = latexsnipper_syntax::latex::scalable_delimiter_glyph(left)?;
+            let right = latexsnipper_syntax::latex::scalable_delimiter_glyph(right)?;
+            let parts: Option<Vec<_>> = content
+                .iter()
+                .map(|node| render_symbol_ast(node, found, depth + 1))
+                .collect();
+            Some(format!(
+                "<mfenced open=\"{}\" close=\"{}\" separators=\"\"><mrow>{}</mrow></mfenced>",
+                xml_escape(left),
+                xml_escape(right),
+                parts?.concat()
+            ))
         }
         LatexNode::Fraction { num, den } => Some(format!(
             "<mfrac>{}{}</mfrac>",

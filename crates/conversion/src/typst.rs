@@ -49,7 +49,7 @@ fn render_block(block: &Block, assets: &[MediaAsset]) -> String {
             if f.formula.display_mode {
                 format!("$ {} $", content)
             } else {
-                content
+                format!("${}$", content)
             }
         }
         Block::Table(t) => render_table(t, assets),

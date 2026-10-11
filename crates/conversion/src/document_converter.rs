@@ -362,6 +362,11 @@ impl DocumentConverter {
     /// Convert a raw LaTeX string to the target format.
     /// Wraps the LaTeX into a minimal Document AST, then converts.
     pub fn convert_latex_string(latex: &str, format: OutputFormat) -> Result<String> {
+        let standalone = crate::extrema::standalone_math(latex);
+        let (source, display_mode) = standalone
+            .as_ref()
+            .map(|(source, display)| (source.as_str(), *display))
+            .unwrap_or((latex, format != OutputFormat::MarkdownInline));
         let doc = Document {
             metadata: latexsnipper_ast::Metadata::default(),
             pages: vec![Page {
@@ -369,8 +374,8 @@ impl DocumentConverter {
                 height: 0.0,
                 blocks: vec![Block::Formula(FormulaBlock {
                     formula: Formula {
-                        source: FormulaSource::Latex(latex.to_string()),
-                        display_mode: format != OutputFormat::MarkdownInline,
+                        source: FormulaSource::Latex(source.to_string()),
+                        display_mode,
                         confidence: 1.0,
                         source_info: None,
                         layout: None,

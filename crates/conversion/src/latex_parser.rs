@@ -28,6 +28,19 @@ impl LatexParser {
         while self.pos < self.chars.len() {
             if let Some(node) = self.parse_element() {
                 match &node {
+                    LatexNode::Command { name, args }
+                        if args.is_empty()
+                            && matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
+                            && nodes
+                                .last()
+                                .is_some_and(|last| crate::extrema::head(last).is_some()) =>
+                    {
+                        let base = nodes.pop().expect("checked preceding extremum");
+                        nodes.push(LatexNode::Command {
+                            name: name.clone(),
+                            args: vec![base],
+                        });
+                    }
                     LatexNode::Superscript { base, .. } if base.is_empty() => {
                         if let Some(last) = nodes.pop() {
                             nodes.push(LatexNode::Superscript {
@@ -267,6 +280,10 @@ impl LatexParser {
             });
         }
         match cmd.as_str() {
+            "limits" | "nolimits" | "displaylimits" => Some(LatexNode::Command {
+                name: cmd,
+                args: Vec::new(),
+            }),
             // Greek letters
             "alpha" | "beta" | "gamma" | "delta" | "epsilon" | "varepsilon" | "zeta" | "eta"
             | "theta" | "vartheta" | "iota" | "kappa" | "varkappa" | "lambda" | "mu" | "nu"
@@ -1085,6 +1102,19 @@ impl LatexParser {
         let mut result = Vec::with_capacity(nodes.len());
         for node in nodes {
             match &node {
+                LatexNode::Command { name, args }
+                    if args.is_empty()
+                        && matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
+                        && result
+                            .last()
+                            .is_some_and(|last| crate::extrema::head(last).is_some()) =>
+                {
+                    let base = result.pop().expect("checked preceding extremum");
+                    result.push(LatexNode::Command {
+                        name: name.clone(),
+                        args: vec![base],
+                    });
+                }
                 LatexNode::Superscript { base, .. } if base.is_empty() => {
                     if let Some(last) = result.pop() {
                         result.push(LatexNode::Superscript {

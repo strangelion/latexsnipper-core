@@ -191,6 +191,9 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Superscript { base, exp } if base.is_empty() => {
                 write!(f, "^{{{}}}", exp)
             }
+            LatexNode::Superscript { base, exp } if crate::extrema::head(base).is_some() => {
+                write!(f, "{base}^{{{exp}}}")
+            }
             LatexNode::Superscript { base, exp }
                 if matches!(base.as_ref(), LatexNode::Subscript { .. }) =>
             {
@@ -204,6 +207,9 @@ impl std::fmt::Display for LatexNode {
             }
             LatexNode::Subscript { base, sub } if base.is_empty() => {
                 write!(f, "_{{{}}}", sub)
+            }
+            LatexNode::Subscript { base, sub } if crate::extrema::head(base).is_some() => {
+                write!(f, "{base}_{{{sub}}}")
             }
             LatexNode::Subscript { base, sub }
                 if matches!(base.as_ref(), LatexNode::Superscript { .. }) =>
@@ -244,6 +250,13 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Command { name, args } if name == "substack" => {
                 let rows = args.iter().map(ToString::to_string).collect::<Vec<_>>();
                 write!(f, "\\substack{{{}}}", rows.join("\\\\"))
+            }
+            LatexNode::Command { name, args }
+                if matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
+                    && args.len() == 1
+                    && crate::extrema::head(&args[0]).is_some() =>
+            {
+                write!(f, "{}\\{}", args[0], name)
             }
             LatexNode::Command { name, args } if name == "cfrac" && args.len() >= 2 => {
                 write!(f, "\\cfrac")?;

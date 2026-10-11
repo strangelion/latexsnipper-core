@@ -12,6 +12,7 @@ pub mod document_converter;
 #[cfg(feature = "native")]
 pub mod docx_reader;
 pub mod export_format;
+mod extrema;
 pub mod formula_fragment;
 #[cfg(feature = "formula-layout")]
 pub mod formula_layout_adapter;

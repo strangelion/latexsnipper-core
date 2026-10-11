@@ -5,6 +5,24 @@ use crate::latex_ast::LatexNode;
 
 /// Convert a LaTeX AST node to Typst string.
 pub fn latex_ast_to_typst(node: &LatexNode) -> String {
+    if let Some(extremum) = crate::extrema::head(node) {
+        let mut output = if let Some(vertical) = extremum.limits {
+            format!(
+                "{}({})",
+                if vertical { "limits" } else { "scripts" },
+                extremum.name
+            )
+        } else {
+            extremum.name.to_string()
+        };
+        if let Some(lower) = extremum.lower {
+            output.push_str(&format!("_({})", latex_ast_to_typst(lower)));
+        }
+        if let Some(upper) = extremum.upper {
+            output.push_str(&format!("^({})", latex_ast_to_typst(upper)));
+        }
+        return output;
+    }
     match node {
         LatexNode::Text(s) if s.len() > 1 && s.bytes().all(|ch| ch.is_ascii_alphabetic()) => {
             // Bare LaTeX letters are separate math atoms, not Typst identifiers.
