@@ -244,7 +244,8 @@ impl ComponentPermissions {
             return Err(FilesystemOperationError::SizeLimit.into());
         }
         let (parent, target) = write_parent(grant, Path::new(relative))?;
-        let (mut staged, mut file) = StagedWrite::create(&parent)?;
+        let security = crate::write_security::WriteSecurity::read(&parent, &target)?;
+        let (mut staged, mut file) = StagedWrite::create(&parent, &security)?;
         for chunk in payload.chunks(64 * 1024) {
             checkpoint().map_err(CheckedWriteError::Interrupted)?;
             file.write_all(chunk).map_err(map_io_error)?;
@@ -266,7 +267,8 @@ impl ComponentPermissions {
         if target_digest(&parent, &target, limit)?.as_deref() != expected {
             return Err(FilesystemOperationError::Conflict.into());
         }
-        // Preserve ordinary file permissions, not platform-specific ACLs.
+        security.recheck(&parent, &target)?;
+        // Preserve ordinary permissions as well as platform staging security.
         if let Ok(metadata) = parent.symlink_metadata(&target) {
             let mut options = OpenOptions::new();
             options.write(true).follow(FollowSymlinks::No);
@@ -392,22 +394,15 @@ struct StagedWrite<'a> {
 }
 
 impl<'a> StagedWrite<'a> {
-    fn create(parent: &'a Dir) -> Result<(Self, cap_std::fs::File), FilesystemOperationError> {
+    fn create(
+        parent: &'a Dir,
+        security: &crate::write_security::WriteSecurity,
+    ) -> Result<(Self, cap_std::fs::File), FilesystemOperationError> {
         for _ in 0..8 {
             let mut nonce = [0_u8; 32];
             getrandom::fill(&mut nonce).map_err(|_| FilesystemOperationError::HostFailure)?;
             let name = format!(".snipper-write-{}.tmp", hex::encode(nonce));
-            let mut options = OpenOptions::new();
-            options
-                .write(true)
-                .create_new(true)
-                .follow(FollowSymlinks::No);
-            #[cfg(unix)]
-            {
-                use cap_std::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            match parent.open_with(&name, &options) {
+            match security.create(parent, &name) {
                 Ok(file) => {
                     return Ok((
                         Self {
@@ -450,7 +445,7 @@ fn reject_unsafe_relative_path(path: &Path) -> Result<(), FilesystemOperationErr
     Ok(())
 }
 
-fn map_io_error(error: std::io::Error) -> FilesystemOperationError {
+pub(crate) fn map_io_error(error: std::io::Error) -> FilesystemOperationError {
     match error.kind() {
         std::io::ErrorKind::NotFound => FilesystemOperationError::NotFound,
         std::io::ErrorKind::PermissionDenied => FilesystemOperationError::PermissionDenied,

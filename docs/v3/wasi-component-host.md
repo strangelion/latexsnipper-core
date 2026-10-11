@@ -114,11 +114,27 @@ external/native writers can race between the last check and replacement, and
 independently created grant/host instances do not share a global filesystem lock.
 On Windows the pinned capability library's rename ultimately uses native paths;
 this is not a guarantee against hostile native directory moves/reparse changes.
-Replacement preserves ordinary file permission bits (never Unix setuid/setgid),
-not owner identity, platform-specific ACLs, alternate streams or other extended
-metadata. Grants remain package-relative; do not use this implementation as a
+Replacement preserves ordinary file permission bits (never Unix setuid/setgid).
+Windows existing-file staging also reads owner/group/DACL, including inheritance
+protection, from the original file, creates the empty staging file with that
+security descriptor and verifies the resulting identity before writing payload.
+It does not first write sensitive bytes under broader default directory permissions.
+Before publication it rechecks the original security identity; ACL-only changes
+also cause `PLUGIN_WASI_WRITE_CONFLICT`. Descriptor/string/path buffers are bounded,
+and only a security digest is retained, not logged raw SID/SDDL. If preservation
+requires privileges the process lacks, the write fails without altering the target;
+no privilege enabling or ignore-ACL fallback is performed. The staging filename is
+one safe component, and native `CREATE_NEW` never overwrites a collision.
+These checks were exercised on controlled Windows x64 files, not every filesystem
+or enterprise policy. Unix owner identity, Windows SACL/security resource attributes,
+alternate streams, encryption/compression and other extended metadata remain open.
+Grants remain package-relative; do not use this implementation as a
 general-purpose editor for external security-sensitive files. Platform metadata
 preservation, multi-file transactions and crash recovery remain separate work.
+`ReplaceFileW` is not used as a shortcut: Microsoft's documented 1176/1177 failure
+states can remove or rename the original without completing replacement. Its merge
+benefits do not by themselves establish the required failure-safe transaction.
+See [Microsoft's replacement contract](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew).
 An abrupt host exit can leave a random staging file; there is no crash journal or
 power-loss durability guarantee. Cleanup is best-effort if the OS refuses removal.
 Synchronous native network/IO implementations must still enforce their own deadlines. The

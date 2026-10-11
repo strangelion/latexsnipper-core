@@ -70,8 +70,13 @@ original bytes on staging/cancellation/rename failure. Per-use permits recheck
 consent expiry/revocation at staging/publication and pre-network-dispatch checkpoints;
 exhausted started uses remain revocable without re-prompting valid actions. Closing
 or changing a host discards its stale requests/grants. This does not provide
-external-writer CAS, whole-invocation rollback, platform ACL preservation or crash
-recovery; those boundaries remain open for independent review.
+external-writer CAS, whole-invocation rollback or crash recovery. Windows staging
+now preserves and verifies owner/group/DACL before payload writes and rechecks that
+security identity before publication. Unix ownership and other extended metadata,
+Windows SACL/security resource attributes, streams and encryption/compression are
+still open; controlled x64 evidence is not every-filesystem or enterprise-policy
+approval. No process privileges or global machine settings are enabled to bypass
+preservation failures. These boundaries remain open for independent review.
 
 ## Independent review status
 

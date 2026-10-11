@@ -2567,6 +2567,7 @@ dependencies = [
  "thiserror 2.0.18",
  "wasmtime",
  "wat",
+ "windows-sys 0.61.2",
  "wit-component",
  "wit-parser 0.239.0",
  "zip",

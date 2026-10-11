@@ -10,6 +10,7 @@ pub mod host;
 pub mod limits;
 pub mod package;
 pub mod permissions;
+mod write_security;
 
 pub use activation::ActivatedRemoteWasiPlugin;
 pub use approval::{
