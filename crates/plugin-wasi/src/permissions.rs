@@ -221,6 +221,32 @@ impl ComponentPermissions {
         Ok(())
     }
 
+    pub(crate) fn validate_write_target(
+        &self,
+        grant_id: &str,
+        relative: &str,
+    ) -> Result<&FilesystemGrant, FilesystemOperationError> {
+        let grant = self
+            .filesystem
+            .get(grant_id)
+            .filter(|grant| grant.writable)
+            .ok_or(FilesystemOperationError::PermissionDenied)?;
+        let relative = Path::new(relative);
+        reject_unsafe_relative_path(relative)?;
+        match grant.directory.symlink_metadata(relative) {
+            Ok(metadata)
+                if !metadata.is_file() || metadata.is_symlink() || metadata.nlink() > 1 =>
+            {
+                return Err(FilesystemOperationError::InvalidPath)
+            }
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(map_io_error(error))
+            }
+            _ => {}
+        }
+        Ok(grant)
+    }
+
     pub fn permits_network(&self, grant: &NetworkGrant) -> bool {
         self.network.contains(&NetworkGrant {
             scheme: grant.scheme,

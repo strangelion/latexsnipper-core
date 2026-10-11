@@ -629,6 +629,18 @@ fn transform(
 
 struct FixtureNetworkBroker;
 
+#[derive(Default)]
+struct CountingNetworkBroker(std::sync::atomic::AtomicUsize);
+impl NetworkBroker for CountingNetworkBroker {
+    fn send(
+        &self,
+        request: &NetworkRequest,
+    ) -> Result<NetworkResponse, latexsnipper_plugin_wasi::WasiDiagnostic> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        FixtureNetworkBroker.send(request)
+    }
+}
+
 impl NetworkBroker for FixtureNetworkBroker {
     fn send(
         &self,
@@ -964,6 +976,7 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
     write_package(&granted_package, &component, granted_manifest);
 
     let verified = verifier().verify_path(granted_package.path()).unwrap();
+    let network = Arc::new(CountingNetworkBroker::default());
     let host = WasiComponentHost::new(verified)
         .unwrap()
         .with_environment(BTreeMap::from([(
@@ -976,7 +989,7 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
             b"model".to_vec(),
         )]))
         .unwrap()
-        .with_network_broker(Arc::new(FixtureNetworkBroker));
+        .with_network_broker(network.clone());
     let compiled = host.compile().unwrap();
     assert_eq!(
         transform(&host, &compiled, b"broker:environment").unwrap(),
@@ -986,6 +999,25 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
         transform(&host, &compiled, b"broker:filesystem-read").unwrap(),
         b"filesystem"
     );
+    let approvals = host.approval_controller();
+    let error = transform(&host, &compiled, b"broker:filesystem-write").unwrap_err();
+    assert_eq!(error.code, WasiDiagnosticCode::PluginWasiApprovalRequired);
+    assert!(!granted_package.path().join("write/output.txt").exists());
+    let request = approvals.pending().unwrap().pop().unwrap();
+    assert!(matches!(
+        request.action,
+        latexsnipper_plugin_wasi::SensitiveAction::FileWrite { .. }
+    ));
+    approvals
+        .approve(
+            &request.id,
+            latexsnipper_plugin_wasi::ApprovalScope::SameTarget {
+                max_payload_bytes: 7,
+            },
+            2,
+            std::time::Duration::from_secs(60),
+        )
+        .unwrap();
     assert_eq!(
         transform(&host, &compiled, b"broker:filesystem-write").unwrap(),
         b"written"
@@ -994,6 +1026,26 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
         fs::read(granted_package.path().join("write").join("output.txt")).unwrap(),
         b"written"
     );
+    // The already-approved second use proceeds without a new prompt.
+    transform(&host, &compiled, b"broker:filesystem-write").unwrap();
+    assert!(approvals.pending().unwrap().is_empty());
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-write")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
+    approvals.revoke(&request.id).unwrap();
+    // The observed old file content changed after the approved writes, so the
+    // new pending write has a different request identity. Decline it explicitly.
+    for pending in approvals.pending().unwrap() {
+        if matches!(
+            pending.action,
+            latexsnipper_plugin_wasi::SensitiveAction::FileWrite { .. }
+        ) {
+            approvals.revoke(&pending.id).unwrap();
+        }
+    }
     assert_eq!(
         transform(&host, &compiled, b"broker:model").unwrap(),
         b"model"
@@ -1003,9 +1055,47 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
         b"temporary"
     );
     assert_eq!(
+        transform(&host, &compiled, b"broker:network")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
+    assert_eq!(network.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+    let request = approvals.pending().unwrap().pop().unwrap();
+    assert!(matches!(
+        request.action,
+        latexsnipper_plugin_wasi::SensitiveAction::NetworkSend { .. }
+    ));
+    approvals.approve_once(&request.id).unwrap();
+    assert_eq!(
         transform(&host, &compiled, b"broker:network").unwrap(),
         b"network"
     );
+    assert_eq!(network.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        transform(&host, &compiled, b"broker:network")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
+    assert_eq!(network.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    approvals.approve_once(&request.id).unwrap();
+    let host = host
+        .with_configuration(b"updated-host-context".to_vec())
+        .unwrap();
+    assert_eq!(
+        transform(&host, &compiled, b"broker:network")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
+    let fresh = approvals.pending().unwrap().pop().unwrap();
+    assert_ne!(request.host_context_sha256, fresh.host_context_sha256);
+    assert_ne!(request.id, fresh.id);
+    assert_eq!(network.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    approvals.approve_once(&fresh.id).unwrap();
+    transform(&host, &compiled, b"broker:network").unwrap();
+    assert_eq!(network.0.load(std::sync::atomic::Ordering::SeqCst), 2);
     assert_eq!(
         transform(&host, &compiled, b"broker:system").unwrap().len(),
         8
@@ -1028,6 +1118,11 @@ fn broker_failures_preserve_their_original_diagnostic_category() {
         .unwrap()
         .with_network_broker(Arc::new(TimeoutNetworkBroker));
     let compiled = host.compile().unwrap();
+    let pending = transform(&host, &compiled, b"broker:network").unwrap_err();
+    assert_eq!(pending.code, WasiDiagnosticCode::PluginWasiApprovalRequired);
+    let approvals = host.approval_controller();
+    let request = approvals.pending().unwrap().pop().unwrap();
+    approvals.approve_once(&request.id).unwrap();
     let error = transform(&host, &compiled, b"broker:network").unwrap_err();
     assert_eq!(error.code, WasiDiagnosticCode::PluginWasiTrap);
     assert_eq!(error.details[0].code, WasiDiagnosticCode::PluginWasiTimeout);

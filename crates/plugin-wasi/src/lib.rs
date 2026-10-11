@@ -1,6 +1,7 @@
 //! Default-deny host for versioned LaTeXSnipper WebAssembly components.
 
 mod activation;
+pub mod approval;
 pub mod bindings;
 pub mod diagnostic;
 pub mod formula_conversion;
@@ -11,6 +12,10 @@ pub mod package;
 pub mod permissions;
 
 pub use activation::ActivatedRemoteWasiPlugin;
+pub use approval::{
+    ApprovalGrantSnapshot, ApprovalRequest, ApprovalScope, SensitiveAction,
+    SensitiveActionController,
+};
 pub use formula_conversion::{WasiFormulaBackend, WASI_DOCUMENT_JSON_MEDIA_TYPE};
 pub use formula_profile::{PreparedFormulaRegistry, WasiFormulaProfile};
 

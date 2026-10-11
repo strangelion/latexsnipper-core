@@ -12,6 +12,7 @@ pub enum WasiDiagnosticCode {
     PluginWasiOutputLimit,
     PluginWasiResourcePolicy,
     PluginWasiPermissionDenied,
+    PluginWasiApprovalRequired,
     PluginWasiCapabilityMismatch,
     PluginWasiInvocationNotDeclared,
     PluginWasiProtocolMismatch,
@@ -30,6 +31,7 @@ impl WasiDiagnosticCode {
             Self::PluginWasiOutputLimit => "PLUGIN_WASI_OUTPUT_LIMIT",
             Self::PluginWasiResourcePolicy => "PLUGIN_WASI_RESOURCE_POLICY",
             Self::PluginWasiPermissionDenied => "PLUGIN_WASI_PERMISSION_DENIED",
+            Self::PluginWasiApprovalRequired => "PLUGIN_WASI_APPROVAL_REQUIRED",
             Self::PluginWasiCapabilityMismatch => "PLUGIN_WASI_CAPABILITY_MISMATCH",
             Self::PluginWasiInvocationNotDeclared => "PLUGIN_WASI_INVOCATION_NOT_DECLARED",
             Self::PluginWasiProtocolMismatch => "PLUGIN_WASI_PROTOCOL_MISMATCH",
@@ -99,6 +101,10 @@ mod tests {
 
     #[test]
     fn codes_are_stable_machine_values() {
+        assert_eq!(
+            WasiDiagnosticCode::PluginWasiApprovalRequired.as_str(),
+            "PLUGIN_WASI_APPROVAL_REQUIRED"
+        );
         assert_eq!(
             WasiDiagnosticCode::PluginWasiProtocolMismatch.as_str(),
             "PLUGIN_WASI_PROTOCOL_MISMATCH"

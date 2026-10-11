@@ -127,6 +127,8 @@ importer 目标只能是规范内置语义 ID；exporter 源只能是当前实�
 验证器改变即使候选文本相同，路线身份也必须改变。包 identity、限制及每次执行信任复验仍保留。
 Rust 调用方可用 `prepare_with_cancellation` 共享取消 token；激活前已取消则拒绝，
 注册后取消继续由既有 handler/host 检查。CLI 本轮没有新增交互式取消或监督进程恢复。
+`PreparedFormulaRegistry.approval_controller` 暴露宿主审批队列。WASI 写入和外发需要额外的
+明确用户授权；注册/启用 profile 不批准这些动作。详见 [宿主审批](../v3/wasi-component-host.md#host-user-approval)。
 
 CLI 默认没有 WASI profile loader；`--features wasi-formula` 是显式构建开关。
 `formula capabilities` 使用同一能力投影，新 profile 后端默认显示禁用；转换必须显式启用并选择后端，

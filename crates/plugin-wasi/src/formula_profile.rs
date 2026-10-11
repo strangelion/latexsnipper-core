@@ -57,6 +57,7 @@ pub struct PreparedFormulaRegistry {
     pub registry: SemanticConversionRegistry,
     pub backend_id: String,
     pub profile_sha256: String,
+    pub approval_controller: std::sync::Arc<crate::SensitiveActionController>,
 }
 
 impl WasiFormulaProfile {
@@ -109,6 +110,7 @@ impl WasiFormulaProfile {
                     format!("{}: {}", error.code, error.message),
                 )
             })?;
+        let approval_controller = plugin.approval_controller();
         let backend = match &self.operation {
             FormulaProfileOperation::Importer { output } => WasiFormulaBackend::importer(
                 plugin,
@@ -133,6 +135,7 @@ impl WasiFormulaProfile {
             registry,
             backend_id: self.backend_id.clone(),
             profile_sha256,
+            approval_controller,
         })
     }
 

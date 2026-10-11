@@ -31,6 +31,62 @@ hook, and importer/exporter format declaration. Broker calls require both a
 runtime declaration and a concrete manifest permission; only actually granted
 capabilities are included in the initialization context.
 
+## Host user approval
+
+Manifest grants and package enablement no longer suffice for filesystem writes
+or any external network send (including GET/query data). These brokers also
+require the host-owned `SensitiveActionController`. A missing grant stops the
+guest before that action and returns `PLUGIN_WASI_APPROVAL_REQUIRED`; the host
+can read `approval_controller().pending()` without running a UI callback inside
+the guest deadline. It must display the action and obtain a trusted user event
+before calling `approve_once`, `approve_batch`, or `approve`. Never expose these
+approval methods as automatically callable guest/MCP tools.
+Render targets and metadata as escaped plain text, not guest HTML or a plugin's
+generated explanation; bind the confirmation to the controller's actual request ID.
+
+Requests bind plugin ID/version, component SHA-256, verified manifest, the host
+instance/context, operation and target. File actions include the capability root,
+relative path, new payload hash/length and the observed old file hash (or absence).
+Network actions include exact scheme/host/port/method/path/query and body hash/length;
+payload bytes and environment secrets are not copied into the request. Paths and
+URLs themselves may be sensitive: do not log or upload request snapshots by default.
+Changing configuration, injected environment/model artifacts or the network broker
+invalidates the host context. A new activation cannot reuse old consent, even for
+the same package version. Remote activation still rechecks enablement/trust.
+
+`Exact` authorizes that complete action; `SameTarget { max_payload_bytes }` is an
+explicit, broader user choice permitting changed payload/old file content for the
+same file or exact network route. No directory/origin wildcard is supported. Each
+grant is limited to 1..10000 uses and a positive lifetime of at most one hour.
+`approve_once` allows one use for five minutes; `approve_batch` atomically confirms
+a displayed list of pending exact requests, once each. Valid in-scope uses proceed
+without additional prompts. Exhaustion, expiry, target changes or context changes
+require fresh confirmation. `revoke`/`clear` remove future consent and pending
+requests, not a permanent blacklist. Consumption is synchronized across callers;
+unknown IDs and over-budget/invalid batches fail closed.
+Each use is consumed before IO, even if that IO subsequently fails or is cancelled;
+there is no automatic retry or quota refund.
+
+This is an in-memory Rust host interface, not an application dialog or a durable
+user policy store. Controllers are available from `WasiComponentHost`,
+`ActivatedRemoteWasiPlugin` and `PreparedFormulaRegistry`. The formula CLI does not
+auto-approve or add an interactive retry; registered conversion failures remain
+terminal. A user-confirmed fresh invocation is distinct from automatic fallback.
+Approval does not broaden manifest permissions, bypass path/output/guest budgets,
+or sandbox a trusted native broker. No process/installer/registry/certificate broker
+is added. Temporary in-memory guest files are not external writes.
+
+Approval is per action, not a transaction for a whole invocation. Previously
+approved writes cannot be rolled back by a later denial or revocation. The old
+file digest is an observed precondition, not an atomic filesystem compare-and-swap;
+host transactions and concurrent-edit handling remain separate work. Synchronous
+native network/IO implementations must still enforce their own deadlines. The
+approval check itself never waits for human input or executes external callbacks.
+Network paths reject authority-like `//`, backslashes, fragments and control
+characters. Methods are bounded HTTP tokens, preserving valid case/custom methods.
+Native brokers must not follow redirects or reinterpret paths into a different,
+unapproved destination; approval is not a network sandbox for native code.
+
 ## Execution and cleanup
 
 Every invocation receives a fresh Store, ResourceTable, and component instance.
@@ -78,6 +134,7 @@ boundary; remote packages are not enabled or executed during installation. See t
 - `PLUGIN_WASI_OUTPUT_LIMIT`
 - `PLUGIN_WASI_RESOURCE_POLICY`
 - `PLUGIN_WASI_PERMISSION_DENIED`
+- `PLUGIN_WASI_APPROVAL_REQUIRED` (host-only; WIT v1 remains unchanged)
 - `PLUGIN_WASI_CAPABILITY_MISMATCH`
 - `PLUGIN_WASI_INVOCATION_NOT_DECLARED`
 - `PLUGIN_WASI_PROTOCOL_MISMATCH`

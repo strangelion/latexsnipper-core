@@ -18,6 +18,9 @@ pub struct ActivatedRemoteWasiPlugin {
 }
 
 impl ActivatedRemoteWasiPlugin {
+    pub fn approval_controller(&self) -> std::sync::Arc<crate::SensitiveActionController> {
+        self.host.approval_controller()
+    }
     pub fn activate(store: &RemotePluginStore, id: &str) -> Result<Self, WasiDiagnostic> {
         Self::activate_with_policy(store, id, WasiHostPolicy::default())
     }
