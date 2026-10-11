@@ -14,7 +14,7 @@
 | 浏览器/支持 WASM 的 WebView | WASM v3 与官方 JS Worker | 公式转换可使用 conversion-only 构建；不依赖原生子进程 |
 | CLI | 单次命令内会话 | 多次启动不自动共享引擎，不等于 daemon |
 | Android / JVM | `android-jni` + `NativeSessionBridge` | 真正 JNI 参数，复用 opaque C 会话；历史 `NativeBridge` C 签名不变，不能冒充 JNI；桌面 JVM 通过不代表 ART/设备推理通过 |
-| iOS 专用桥接 | Generic C session ABI / 旧平台 API | 新调用者可用有界独立句柄；旧全局引擎仍未迁移，其 StubRuntime 不是真实识别后端 |
+| iOS 专用桥接 | Generic C session ABI / 旧平台 API | 新调用者使用独立句柄；旧无句柄 ABI 已迁到一个串行默认 `RecognitionSession`，不再使用 StubRuntime；Apple SDK/设备与真实推理仍待验收 |
 
 ## 公式转换
 
@@ -62,6 +62,9 @@ JS runtime 当前是 private 包，正式分发必须固定匹配的胶水、WAS
 进程或 Worker 终止后必须显式恢复所需会话/模型；只允许复用已校验的
 模型文件、合格 provider 记录和身份匹配的缓存。
 关闭或失效的句柄不能继续工作，独立会话的失败不能污染其他会话。
+旧 RGB C ABI 因签名不含句柄，仍只有一个兼容默认会话；初始化、识别和释放串行。
+参数或会话构建失败不替换已有默认会话，普通识别错误不丢弃缓存，内部 panic 后须重新初始化。
+其释放不关闭 Generic C/JNI 的独立会话；不能把兼容默认会话当成多文档句柄方案。
 宿主必须在写入文档前重新确认文档、范围和输入身份；取消、超时、崩溃恢复
 不能隐式重放修改操作。真实模型准确性和真实宿主写回是独立验收范围。
 
@@ -70,6 +73,7 @@ JS runtime 当前是 private 包，正式分发必须固定匹配的胶水、WAS
 - [原生应用 API](application-integration.md)
 - [JSONL 动作及错误](../crates/worker/README.md)
 - [C session ABI](../crates/ffi/include/latexsnipper_session.h)
+- [旧 RGB C 兼容 ABI](../crates/ffi/include/latexsnipper_legacy.h)
 - [JNI 会话接口与迁移边界](../crates/ffi/java/README.md)
 - [Python 绑定](../crates/python)
 - [JS runtime](../crates/wasm/js/README.md)

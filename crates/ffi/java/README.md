@@ -41,8 +41,9 @@ a JVM-owned String; Java callers must not pass it to a native free-string method
 
 Historical `Java_*NativeBridge*` exports are raw C compatibility shims, not valid
 JNI signatures. They remain unchanged; use the new class instead of calling
-those functions as JVM native methods. The old iOS global-engine API also remains
-separate; new C integrations can use [the opaque session header](../include/latexsnipper_session.h).
+those functions as JVM native methods. The old iOS no-handle API retains one
+serialized compatibility slot backed by the shared persistent RecognitionSession.
+New C integrations can use [the opaque session header](../include/latexsnipper_session.h).
 
 ```console
 cargo build --locked -p latexsnipper-ffi --features android-jni --release

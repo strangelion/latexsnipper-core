@@ -61,7 +61,13 @@
       "id": "mobile-native-core-inference",
       "status": "missing",
       "evidence": ["crates/ffi/src/android/jni_bridge.rs", "crates/ffi/src/ios/c_ffi.rs"],
-      "nextMilestone": "Replace StubRuntime bridges with a supported mobile runtime while preserving the working Android Java ONNX route until parity is proven."
+      "nextMilestone": "Validate Apple SDK/device and Android ABI/ART with real supported mobile runtimes/models; the legacy iOS C shim now uses RecognitionSession, while the old Android C shim still uses StubRuntime. Preserve the Java ONNX route until device parity is proven."
+    },
+    {
+      "id": "legacy-rgb-c-session-compatibility",
+      "status": "implemented",
+      "evidence": ["crates/ffi/src/ios/c_ffi.rs", "crates/ffi/include/latexsnipper_legacy.h", "crates/ffi/examples/legacy_session_smoke.py", "docs/ffi.md"],
+      "nextMilestone": "Keep actual desktop C ABI lifecycle/ownership checks blocking, then validate Apple linking and device inference independently; the old signature still has one serialized default session."
     },
     {
       "id": "persistent-rust-application-session",
