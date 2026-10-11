@@ -1103,11 +1103,12 @@ impl RecognitionIntegrationApi for RecognitionSession {
 
     fn reload_models(&mut self) -> Result<ModelReloadReport, ApplicationError> {
         self.ensure_open()?;
+        // Reload invalidates runtime resources even when the subsequent scan fails.
+        self.warmups.clear();
         let report = self
             .engine
             .reload_all_models()
             .map_err(ApplicationError::from)?;
-        self.warmups.clear();
         Ok(ModelReloadReport {
             loaded_models: report.loaded,
             diagnostics: report

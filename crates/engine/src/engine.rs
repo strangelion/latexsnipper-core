@@ -1686,19 +1686,13 @@ impl SnipperEngine {
     ///
     /// This clears the model cache and re-registers everything from the
     /// configured models directory. Built-in adapters are preserved.
+    /// Cached packages and observations are invalidated even if scanning fails.
+    /// Runtime sessions are only cleared by the full reload API.
     ///
     /// Returns a scan report describing what was loaded and any issues.
     pub fn rescan_models(&mut self) -> Result<ModelScanReport> {
         self.provider_validation_store.clear_ephemeral();
-        self.model_registry.clear_models();
-
-        let report = self
-            .model_registry
-            .register_models_root(&self.config.models_dir)?;
-        self.model_scan_issues = report.issues.clone();
-        self.model_quality_registry = load_model_quality_registry(&self.config);
-
-        // Clear the package cache so stale packages are not reused
+        // Invalidate before filesystem access: a failed scan cannot keep old packages.
         self.model_packages
             .write()
             .map_err(|_| SnipperError::Model("Model package cache poisoned".into()))?
@@ -1706,6 +1700,24 @@ impl SnipperEngine {
         if let Ok(mut states) = self.model_technical_state.write() {
             states.clear();
         }
+        self.model_registry.clear_models();
+        self.model_scan_issues.clear();
+        self.model_quality_registry = load_model_quality_registry(&self.config);
+
+        let report = match self
+            .model_registry
+            .register_models_root(&self.config.models_dir)
+        {
+            Ok(report) => report,
+            Err(error) => {
+                self.model_scan_issues.push(ModelScanIssue {
+                    path: self.config.models_dir.clone(),
+                    message: error.to_string(),
+                });
+                return Err(error);
+            }
+        };
+        self.model_scan_issues = report.issues.clone();
 
         Ok(report)
     }
@@ -1715,8 +1727,7 @@ impl SnipperEngine {
     /// Use this when models have been added, removed, or updated on disk.
     /// After calling this, the next recognition will use the updated models.
     pub fn reload_all_models(&mut self) -> Result<ModelScanReport> {
-        self.runtime_registry.clear_sessions();
-        self.provider_validation_store.clear_ephemeral();
+        self.clear_runtime_sessions();
         self.rescan_models()
     }
 

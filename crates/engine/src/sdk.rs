@@ -331,21 +331,19 @@ mod tests {
 
     #[test]
     fn file_api_no_longer_assumes_non_image_inputs_are_images() {
-        let path =
-            std::env::temp_dir().join(format!("latexsnipper-sdk-import-{}.md", std::process::id()));
+        let run = tempfile::tempdir().unwrap();
+        let path = run.path().join("sdk-import.md");
         std::fs::write(&path, "# Imported\n\nText").unwrap();
         let snipper = Snipper::from_file(&path).unwrap();
-        std::fs::remove_file(path).ok();
         assert!(snipper.document().block_count() >= 2);
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     #[tokio::test(flavor = "current_thread")]
     async fn synchronous_ocr_api_is_safe_inside_tokio_runtime() {
+        let run = tempfile::tempdir().unwrap();
         let image = SnipperImage::new(1, 1, PixelFormat::Rgb, vec![255, 255, 255]);
-        let config = EngineConfig::with_models_dir(
-            std::env::temp_dir().join(format!("latexsnipper-no-models-{}", std::process::id())),
-        );
+        let config = EngineConfig::with_models_dir(run.path().join("no-models"));
 
         let snipper = Snipper::from_image_with_config(image, config, RecognizeMode::Formula)
             .expect(

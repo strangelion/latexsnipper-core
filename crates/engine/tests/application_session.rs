@@ -5,7 +5,7 @@ use latexsnipper_ast::{ImportOptions, InputFormat};
 use latexsnipper_engine::application::{
     ApplicationErrorCode, CancellationToken, PartialRecognitionSnapshot, PartialResultSink,
     ProgressEvent, ProgressSink, ProgressStage, ProgressiveRecognitionControl, RecognitionControl,
-    RecognitionProfile, RecognitionRequest, RecognitionSession,
+    RecognitionIntegrationApi, RecognitionProfile, RecognitionRequest, RecognitionSession,
 };
 use latexsnipper_engine::{EngineConfig, SnipperEngine};
 use latexsnipper_image::color::PixelFormat;
@@ -261,6 +261,118 @@ fn warmup_success_reports_resources_that_were_actually_prepared() {
     assert!(report.ready, "{:?}", report.diagnostics);
     assert_eq!(report.loaded_models.len(), 2);
     assert!(report.missing_models.is_empty());
+}
+
+#[test]
+fn failed_reload_invalidates_warmup_and_model_packages_before_recovery() {
+    let run = tempfile::tempdir().unwrap();
+    let root = run.path().join("models");
+    let saved = run.path().join("saved-models");
+    write_stub_formula_models(&root);
+    let engine = SnipperEngine::new(
+        EngineConfig {
+            models_dir: root.clone(),
+            formula_det_model: Some("formula-detection/stub-det".to_string()),
+            formula_rec_model: Some("formula-recognition/stub-rec".to_string()),
+            ..EngineConfig::default()
+        },
+        Box::new(StubRuntime::new()),
+    );
+    let old_package = engine
+        .get_or_create_model_package("formula-detection/stub-det")
+        .unwrap();
+    let mut session = RecognitionSession::from_engine(engine).unwrap();
+    assert!(session.warmup(RecognitionProfile::Formula).unwrap().ready);
+    assert!(
+        session
+            .warmup(RecognitionProfile::Formula)
+            .unwrap()
+            .already_warm
+    );
+    session.warmup(RecognitionProfile::Text).unwrap();
+
+    // Only mutate this test's temporary root; preserve the model fixtures.
+    std::fs::rename(&root, &saved).unwrap();
+    std::fs::write(&root, b"not a model directory").unwrap();
+    assert!(session.reload_models().is_err());
+    let report = session.warmup(RecognitionProfile::Formula).unwrap();
+    assert!(!report.already_warm);
+    assert!(!report.ready);
+    assert!(session
+        .engine()
+        .get_model_package_by_id("formula-detection/stub-det")
+        .is_none());
+    assert!(session
+        .engine()
+        .get_or_create_model_package("formula-detection/stub-det")
+        .is_err());
+    assert!(
+        !session
+            .warmup(RecognitionProfile::Text)
+            .unwrap()
+            .already_warm
+    );
+    assert!(session
+        .engine()
+        .readiness()
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic
+            .message
+            .contains("Models root is not a directory")));
+
+    std::fs::remove_file(&root).unwrap();
+    std::fs::rename(&saved, &root).unwrap();
+    assert_eq!(session.reload_models().unwrap().loaded_models.len(), 2);
+    let report = session.warmup(RecognitionProfile::Formula).unwrap();
+    assert!(!report.already_warm);
+    assert!(report.ready, "{:?}", report.diagnostics);
+    assert!(!session
+        .engine()
+        .readiness()
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic
+            .message
+            .contains("Models root is not a directory")));
+    let new_package = session
+        .engine()
+        .get_or_create_model_package("formula-detection/stub-det")
+        .unwrap();
+    assert!(!Arc::ptr_eq(&old_package, &new_package));
+    assert!(
+        session
+            .warmup(RecognitionProfile::Formula)
+            .unwrap()
+            .already_warm
+    );
+}
+
+#[test]
+fn failed_engine_rescan_does_not_reuse_a_cached_package() {
+    let run = tempfile::tempdir().unwrap();
+    let root = run.path().join("models");
+    let saved = run.path().join("saved-models");
+    write_stub_formula_models(&root);
+    let mut engine = SnipperEngine::new(
+        EngineConfig {
+            models_dir: root.clone(),
+            ..EngineConfig::default()
+        },
+        Box::new(StubRuntime::new()),
+    );
+    engine
+        .get_or_create_model_package("formula-detection/stub-det")
+        .unwrap();
+    std::fs::rename(&root, &saved).unwrap();
+    std::fs::write(&root, b"not a model directory").unwrap();
+    assert!(engine.rescan_models().is_err());
+    assert!(engine
+        .get_model_package_by_id("formula-detection/stub-det")
+        .is_none());
+    assert!(engine
+        .get_or_create_model_package("formula-detection/stub-det")
+        .is_err());
 }
 
 #[derive(Default)]

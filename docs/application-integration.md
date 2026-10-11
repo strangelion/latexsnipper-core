@@ -119,6 +119,15 @@ loaded models, missing requirements, diagnostics, and elapsed time. Repeating
 the same profile returns the cached report with `already_warm = true`; warming
 another profile does not clear previous runtime caches.
 
+`reload_models()` invalidates all profile warmup reports and runtime sessions
+before rescanning the model root. Package caches and technical observations are
+also invalidated before filesystem access; a failed scan does not restore old
+packages or report them as warm. Its failure is included in readiness diagnostics.
+Repair the model root, explicitly reload again, and warm the required profiles.
+Direct engine `rescan_models()` invalidates packages and scan observations but
+does not clear runtime sessions; use `reload_all_models()` for updated model bytes.
+This is explicit invalidation, not automatic detection of files changed on disk.
+
 Status methods are:
 
 - `health_check()` for a real runtime/model/readiness snapshot;
