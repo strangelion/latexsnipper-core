@@ -69,6 +69,33 @@ oversized payloads and other plugin/host identities stay pending. Dismissing the
 descriptions neither executes queued work nor consumes grant uses; the host must
 explicitly resume the intended operation. Persistent remembered consent and its
 application UI are not implemented here.
+
+### Consent experience required of integrating hosts
+
+These are host integration requirements, not additional implemented Core APIs:
+
+- Offer distinct choices for this action, the displayed batch, and this same
+  target for a stated session budget. Do not reduce an explicit batch/session
+  choice to repeated `approve_once` calls with a new dialog for each use.
+- After a trusted confirmation, dismiss covered prompts and resume only the
+  intended work. Pending descriptions are not a replay queue: do not rerun a
+  whole invocation that may already have published other effects. No permission
+  dialog may block the broker thread or consume a guest's execution deadline.
+- A valid grant is a fast path. Show remaining scope/expiry unobtrusively, with
+  an accessible revoke action; repeated matching calls must not reopen a dialog.
+  Explain the specific changed target, identity, byte limit, expiry or exhausted
+  budget when fresh consent is needed. Rejecting or closing a prompt does not
+  disable unrelated read-only features or create a permanent plugin blacklist.
+- If the host later offers "remember this choice", make it a separate explicit,
+  revocable opt-in. Store a narrowly scoped host policy, not serialized Core
+  grants or pending IDs. Revalidate the verified package, permissions and host
+  configuration before issuing a fresh bounded grant; a changed identity or
+  broader target/action requires new consent. Within that remembered scope,
+  routine runtime-grant renewal must not ask the same question again. The host
+  must never infer remembered permission from a manifest or guest output.
+
+### Core grant lifecycle and enforcement
+
 Consumption is synchronized across callers;
 unknown IDs and over-budget/invalid batches fail closed.
 Each use is consumed before IO, even if that IO subsequently fails or is cancelled;
