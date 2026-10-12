@@ -22,6 +22,7 @@ CONTRACT_FILES = (
     "crates/cli/src/main.rs",
     "crates/cli/src/formula.rs",
     "crates/wasm/js/src/types.ts",
+    "crates/wasm/js/src/formula.ts",
     "crates/wasm/js/src/registry.ts",
     "crates/wasm/js/src/worker-registry.ts",
     "crates/ffi/include/latexsnipper_session.h",

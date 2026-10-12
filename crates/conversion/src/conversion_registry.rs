@@ -18,7 +18,7 @@ pub use fallback::{
 
 use crate::{
     CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
-    FormulaInputFormat, OutputFormat,
+    FormulaInputFormat, FormulaOutputTarget,
 };
 
 pub const CONVERSION_REGISTRY_VERSION: u16 = 1;
@@ -459,8 +459,12 @@ impl SemanticConversionRegistry {
                     "built-in backend does not handle extension outputs",
                 )
             })?;
-            let capability =
-                CapabilityRegistry::formula_conversion(input, output, request.mode, self.target);
+            let capability = CapabilityRegistry::formula_conversion_target(
+                input,
+                output,
+                request.mode,
+                self.target,
+            );
             if !capability.available {
                 return Err(error(
                     ConversionRegistryErrorCode::RouteUnavailable,
@@ -469,7 +473,7 @@ impl SemanticConversionRegistry {
                         .unwrap_or("built-in route unavailable"),
                 ));
             }
-            let content = DocumentConverter::convert_formula_string(
+            let content = DocumentConverter::convert_formula_to_target(
                 &request.content,
                 input,
                 output,
@@ -603,10 +607,10 @@ impl SemanticConversionRegistry {
                 .get(&request.output)
                 .map(|format| format.descriptor.mime_type.clone())
                 .unwrap_or_else(|| {
-                    crate::semantic_mime_type(
-                        builtin_output(&request.output).expect("validated built-in output"),
-                    )
-                    .into()
+                    builtin_output(&request.output)
+                        .expect("validated built-in output")
+                        .mime_type()
+                        .into()
                 }),
             limitations,
             candidate,
@@ -644,6 +648,10 @@ impl SemanticConversionRegistry {
             validate_math_xml(content, id)
                 .map_err(|failure| error(failure_code, failure.message))?;
         }
+        if matches!(id, "unicode-math" | "ascii-math") {
+            crate::formula_target::linear_ast(content, builtin_input(id).expect("linear format"))
+                .map_err(|failure| error(failure_code, failure.to_string()))?;
+        }
         Ok(())
     }
 }
@@ -664,10 +672,9 @@ fn builtin_input(id: &str) -> Option<FormulaInputFormat> {
         .copied()
         .find(|format| format.name() == id)
 }
-fn builtin_output(id: &str) -> Option<OutputFormat> {
-    OutputFormat::all()
-        .iter()
-        .copied()
+fn builtin_output(id: &str) -> Option<FormulaOutputTarget> {
+    FormulaOutputTarget::all()
+        .into_iter()
         .find(|format| format.name() == id)
 }
 fn extension_id(id: &str) -> bool {

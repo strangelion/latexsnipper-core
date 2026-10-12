@@ -38,7 +38,7 @@ if (
 
 function formulaSmoke(api) {
   const envelope = api.formula_capabilities_v3();
-  if (!envelope.ok || envelope.versions.apiEnvelopeVersion !== 3 || envelope.data.length !== 144) {
+  if (!envelope.ok || envelope.versions.apiEnvelopeVersion !== 3 || envelope.data.length !== 176) {
     throw new Error("Formula capability projection is invalid");
   }
   const samples = {
@@ -48,7 +48,9 @@ function formulaSmoke(api) {
       + '<m:f><m:num><m:r><m:t>a</m:t></m:r></m:num>'
       + '<m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>',
     typst: "frac(a, b)",
-    markdown: String.raw`A fraction $\frac{a}{b}$`,
+    markdown: String.raw`$\frac{a}{b}$`,
+    "unicode-math": "a/b",
+    "ascii-math": "a/b",
   };
   let converted = 0;
   let rejected = 0;
@@ -69,7 +71,7 @@ function formulaSmoke(api) {
       rejected += 1;
     }
   }
-  if (converted !== 46 || rejected !== 98) throw new Error("Unexpected formula route counts");
+  if (converted !== 78 || rejected !== 98) throw new Error("Unexpected formula route counts");
   if (!api.convert_formula_v3(samples.latex, "latex", "omml").ok) throw new Error("Default strict route failed");
   for (const [source, input, output, mode, code] of [
     ["x", "ole", "omml", undefined, "INVALID_ARGUMENT"],

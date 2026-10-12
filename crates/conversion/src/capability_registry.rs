@@ -1,7 +1,7 @@
 use latexsnipper_ast::{ExportFormat, FidelityLevel};
 use serde::{Deserialize, Serialize};
 
-use crate::OutputFormat;
+use crate::{FormulaOutputTarget, OutputFormat};
 
 pub const REGISTERED_EXPORT_FORMATS: &[ExportFormat] = &[
     ExportFormat::AstJson,
@@ -117,50 +117,78 @@ impl CapabilityRegistry {
         mode: FormulaConversionMode,
         target: CapabilityTarget,
     ) -> FormulaConversionCapability {
-        let export = Self::for_target(target)
-            .into_iter()
-            .find(|entry| entry.format == output.name())
-            .expect("all semantic formats are registered");
+        Self::formula_conversion_target(input, FormulaOutputTarget::Semantic(output), mode, target)
+    }
+
+    pub fn formula_conversion_target(
+        input: FormulaInputFormat,
+        output: FormulaOutputTarget,
+        mode: FormulaConversionMode,
+        target: CapabilityTarget,
+    ) -> FormulaConversionCapability {
+        let export = if let FormulaOutputTarget::Semantic(format) = output {
+            Some(
+                Self::for_target(target)
+                    .into_iter()
+                    .find(|entry| entry.format == format.name())
+                    .expect("all semantic formats are registered"),
+            )
+        } else {
+            None
+        };
         let path = match input {
             FormulaInputFormat::Latex => "source-first",
             FormulaInputFormat::Mathml | FormulaInputFormat::Omml | FormulaInputFormat::Typst => {
                 "reconstructed-latex"
             }
             FormulaInputFormat::Markdown => "document-ast",
+            FormulaInputFormat::AsciiMath | FormulaInputFormat::UnicodeMath => "bounded-linear-ast",
             _ => "unsupported",
         };
-        let unavailable_reason = if input == FormulaInputFormat::AsciiMath {
-            Some("AsciiMath pilot parser is experimental and not exposed by the registered conversion API")
-        } else if input == FormulaInputFormat::UnicodeMath {
-            Some("UnicodeMath pilot parser is experimental and not exposed by the registered conversion API")
-        } else if input == FormulaInputFormat::Mtef {
+        let unavailable_reason = if input == FormulaInputFormat::Mtef {
             Some("MTEF v5 has an experimental raw-byte read-only inspector, not a registered semantic converter or host OLE implementation")
         } else if path == "unsupported" {
             Some("input parser is not implemented; host OLE objects are not string inputs")
         } else if mode == FormulaConversionMode::Strict
-            && !(input == FormulaInputFormat::Latex && output == OutputFormat::OMML)
+            && !(input == FormulaInputFormat::Latex
+                && output == FormulaOutputTarget::Semantic(OutputFormat::OMML))
         {
             Some("strict validation is currently implemented only for LaTeX to OMML")
         } else {
-            export.unavailable_reason
+            export.as_ref().and_then(|entry| entry.unavailable_reason)
         };
         FormulaConversionCapability {
             input,
-            output: export.format,
+            output: output.name(),
             mode,
             target,
-            available: export.available && unavailable_reason.is_none(),
+            available: export.as_ref().is_none_or(|entry| entry.available)
+                && unavailable_reason.is_none(),
             path,
-            limitations: match mode {
-                FormulaConversionMode::Strict => &[
-                    "source-validation-is-not-a-lossless-or-visual-parity-guarantee",
-                    "custom-macros-and-unsupported-environments-are-rejected",
-                ],
-                FormulaConversionMode::BestEffort => &[
-                    "accepted-input-may-lose-unsupported-syntax-or-style",
-                    "reconstructed-latex-is-not-the-original-author-source",
+            limitations: if matches!(
+                input,
+                FormulaInputFormat::AsciiMath | FormulaInputFormat::UnicodeMath
+            ) || !matches!(output, FormulaOutputTarget::Semantic(_))
+            {
+                &[
+                    "finite-linear-grammar-only-unrepresentable-ast-is-rejected",
+                    "source-reconstruction-may-lose-syntax-or-style",
+                    "canonical-syntax-and-token-boundaries-not-original-source",
+                    "no-rich-text-font-spacing-or-word-buildup-parity",
                     "no-complete-round-trip-guarantee",
-                ],
+                ]
+            } else {
+                match mode {
+                    FormulaConversionMode::Strict => &[
+                        "source-validation-is-not-a-lossless-or-visual-parity-guarantee",
+                        "custom-macros-and-unsupported-environments-are-rejected",
+                    ],
+                    FormulaConversionMode::BestEffort => &[
+                        "accepted-input-may-lose-unsupported-syntax-or-style",
+                        "reconstructed-latex-is-not-the-original-author-source",
+                        "no-complete-round-trip-guarantee",
+                    ],
+                }
             },
             unavailable_reason,
         }
@@ -170,14 +198,18 @@ impl CapabilityRegistry {
         FormulaInputFormat::all()
             .iter()
             .flat_map(|&input| {
-                OutputFormat::all().iter().flat_map(move |&output| {
-                    [
-                        FormulaConversionMode::Strict,
-                        FormulaConversionMode::BestEffort,
-                    ]
+                FormulaOutputTarget::all()
                     .into_iter()
-                    .map(move |mode| Self::formula_conversion(input, output, mode, target))
-                })
+                    .flat_map(move |output| {
+                        [
+                            FormulaConversionMode::Strict,
+                            FormulaConversionMode::BestEffort,
+                        ]
+                        .into_iter()
+                        .map(move |mode| {
+                            Self::formula_conversion_target(input, output, mode, target)
+                        })
+                    })
             })
             .collect()
     }

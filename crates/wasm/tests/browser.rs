@@ -31,7 +31,7 @@ fn formula_string_routes_and_errors_are_model_free_and_versioned() {
     let routes: serde_json::Value =
         serde_json::from_str(&json(&field(&capabilities, "data"))).unwrap();
     let routes = routes.as_array().unwrap();
-    assert_eq!(routes.len(), 144);
+    assert_eq!(routes.len(), 176);
     let mut success = 0;
     for route in routes {
         let input = route["input"].as_str().unwrap();
@@ -39,7 +39,8 @@ fn formula_string_routes_and_errors_are_model_free_and_versioned() {
             "mathml" => "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
             "omml" => "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>",
             "typst" => "frac(a, b)",
-            "markdown" => r"A fraction $\frac{a}{b}$",
+            "markdown" => r"$\frac{a}{b}$",
+            "unicode-math" | "ascii-math" => "a/b",
             _ => r"\frac{a}{b}",
         };
         let result = convert_formula_v3(
@@ -62,7 +63,7 @@ fn formula_string_routes_and_errors_are_model_free_and_versioned() {
             assert_eq!(error_code(&result), "UNSUPPORTED_FORMAT");
         }
     }
-    assert_eq!(success, 46);
+    assert_eq!(success, 78);
     assert!(field(
         &convert_formula_v3(r"\frac{a}{b}", "latex", "omml", None),
         "ok"

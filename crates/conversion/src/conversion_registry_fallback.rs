@@ -196,7 +196,7 @@ impl SemanticConversionRegistry {
         if id == BUILTIN_CONVERSION_BACKEND {
             return match (builtin_input(&route.input), builtin_output(&route.output)) {
                 (Some(input), Some(output)) => {
-                    let capability = CapabilityRegistry::formula_conversion(
+                    let capability = CapabilityRegistry::formula_conversion_target(
                         input,
                         output,
                         route.mode,

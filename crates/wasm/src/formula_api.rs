@@ -1,9 +1,11 @@
 //! Shared model-free formula bindings used by full and conversion-only builds.
 use crate::api;
 use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3};
+#[cfg(feature = "recognition")]
+use latexsnipper_conversion::OutputFormat;
 use latexsnipper_conversion::{
     CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
-    FormulaInputFormat, OutputFormat,
+    FormulaInputFormat, FormulaOutputTarget,
 };
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -59,7 +61,7 @@ fn convert_formula_value(
         .to_ascii_lowercase()
         .replace('_', "-")))
     .map_err(|_| failure("INVALID_ARGUMENT", "Unknown formula input format.", None))?;
-    let output = output_format(&target_format.trim().replace('-', "_"))
+    let output = FormulaOutputTarget::parse(target_format)
         .ok_or_else(|| failure("INVALID_ARGUMENT", "Unknown formula output format.", None))?;
     let mode: FormulaConversionMode = serde_json::from_value(serde_json::json!(mode
         .unwrap_or("strict")
@@ -73,7 +75,7 @@ fn convert_formula_value(
             None,
         )
     })?;
-    let capability = CapabilityRegistry::formula_conversion(
+    let capability = CapabilityRegistry::formula_conversion_target(
         input,
         output,
         mode,
@@ -86,8 +88,8 @@ fn convert_formula_value(
             capability.unavailable_reason.map(str::to_owned),
         ));
     }
-    let content = DocumentConverter::convert_formula_string(content, input, output, mode).map_err(
-        |error| {
+    let content = DocumentConverter::convert_formula_to_target(content, input, output, mode)
+        .map_err(|error| {
             let code = if matches!(
                 error,
                 latexsnipper_foundation::SnipperError::LimitExceeded(_)
@@ -97,8 +99,7 @@ fn convert_formula_value(
                 "CONVERSION_FAILED"
             };
             failure(code, "Formula conversion failed.", Some(error.to_string()))
-        },
-    )?;
+        })?;
     Ok(serde_json::json!({ "content": content, "capability": capability }))
 }
 
@@ -147,6 +148,7 @@ fn convert_formula_fragment_value(
     Ok(data)
 }
 
+#[cfg(feature = "recognition")]
 pub(crate) fn output_format(name: &str) -> Option<OutputFormat> {
     OutputFormat::all()
         .iter()

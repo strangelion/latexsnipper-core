@@ -14,8 +14,8 @@ from latexsnipper_core import (
 
 def formula_smoke() -> None:
     routes = formula_conversion_capabilities()
-    assert len(routes) == 144
-    assert len({(r["input"], r["output"], r["mode"]) for r in routes}) == 144
+    assert len(routes) == 176
+    assert len({(r["input"], r["output"], r["mode"]) for r in routes}) == 176
     samples = {
         "latex": r"\frac{a}{b}",
         "mathml": "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
@@ -23,7 +23,9 @@ def formula_smoke() -> None:
                 '<m:f><m:num><m:r><m:t>a</m:t></m:r></m:num>'
                 '<m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>',
         "typst": "frac(a, b)",
-        "markdown": r"A fraction $\frac{a}{b}$",
+        "markdown": r"$\frac{a}{b}$",
+        "unicode-math": "a/b",
+        "ascii-math": "a/b",
     }
     executed = 0
     for route in routes:
@@ -44,7 +46,7 @@ def formula_smoke() -> None:
                 assert error.retryable is False
             else:
                 raise AssertionError(f"unavailable route succeeded: {route}")
-    assert executed == 46
+    assert executed == 78
     for input_format in ("latex", "typst", "mathml", "omml"):
         bare = convert_formula(
             samples[input_format], input_format=input_format,

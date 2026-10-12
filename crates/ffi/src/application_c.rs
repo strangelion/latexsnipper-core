@@ -15,7 +15,7 @@ use latexsnipper_api_types::{
 };
 use latexsnipper_conversion::{
     CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
-    FormulaInputFormat, OutputFormat,
+    FormulaInputFormat, FormulaOutputTarget,
 };
 use latexsnipper_engine::application::{ApplicationError, RecognitionOptions, RuntimePreference};
 use latexsnipper_engine::{
@@ -215,14 +215,10 @@ impl FormulaConvertRequest {
             .replace('-', "_");
         let fragment = label == "latex_fragment";
         let output_label = if fragment { "latex_display" } else { &label };
-        let output = OutputFormat::all()
-            .iter()
-            .copied()
-            .find(|format| format.name() == output_label)
-            .ok_or_else(|| {
-                AdapterError::new("INVALID_ARGUMENT", "Unknown formula output format.", false)
-            })?;
-        let capability = CapabilityRegistry::formula_conversion(
+        let output = FormulaOutputTarget::parse(output_label).ok_or_else(|| {
+            AdapterError::new("INVALID_ARGUMENT", "Unknown formula output format.", false)
+        })?;
+        let capability = CapabilityRegistry::formula_conversion_target(
             self.input_format,
             output,
             self.mode,
@@ -239,7 +235,7 @@ impl FormulaConvertRequest {
         let content = if fragment {
             DocumentConverter::convert_formula_fragment(&self.content, self.input_format, self.mode)
         } else {
-            DocumentConverter::convert_formula_string(
+            DocumentConverter::convert_formula_to_target(
                 &self.content,
                 self.input_format,
                 output,
@@ -661,13 +657,14 @@ mod tests {
         let capabilities = unsafe { take_json(latexsnipper_formula_capabilities()) };
         assert_eq!(capabilities["ok"], true);
         let routes = capabilities["data"].as_array().unwrap();
-        assert_eq!(routes.len(), 144);
+        assert_eq!(routes.len(), 176);
         for route in routes {
             let content = match route["input"].as_str().unwrap() {
                 "mathml" => "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
                 "omml" => "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>",
                 "typst" => "frac(a, b)",
-                "markdown" => r"A fraction $\frac{a}{b}$",
+                "markdown" => r"$\frac{a}{b}$",
+                "ascii-math" | "unicode-math" => "a/b",
                 _ => r"\frac{a}{b}",
             };
             let request = json!({

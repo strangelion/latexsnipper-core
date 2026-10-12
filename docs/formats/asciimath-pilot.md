@@ -1,7 +1,8 @@
 # AsciiMath bounded parser/AST pilot
 
-Status: experimental Rust module, 2026-10-04. This is not a registered semantic
-conversion target, a full AsciiMath implementation, or a visual fidelity claim.
+Status: finite Rust grammar with formal formula-only routes, 2026-10-12.
+The pilot module name remains compatible; see [the registered binding contract](linear-formula-conversion.md).
+This is not a full AsciiMath implementation or a visual fidelity claim.
 UnicodeMath has a different grammar and is not implemented by this module.
 
 The grammar reference is [the AsciiMath project's syntax documentation](https://asciimath.org/#syntax).
@@ -83,11 +84,11 @@ nodes. This does not validate every pilot token in every exporter or in Word.
 UnicodeMath now has a separate [bounded pilot](unicodemath-pilot.md), not this
 module's grammar. Still open: expanded valid/invalid real corpus;
 external renderer/host comparisons; typography, whitespace visual fidelity and
-source spans on AST nodes; selected-target loss reporting; registered input/output
-directions; Rust/C/Python/WASM-JS API and Office UI exposure with corresponding
-acceptance. FMT-05 is not closed by this pilot. The registry keeps `ascii-math`
-unavailable and states that its parser is experimental; OutputFormat and existing
-binding envelopes/ABI are unchanged.
+source spans on AST nodes, richer selected-target loss reporting, Office UI and
+external host acceptance. Registered directions and Rust/C/Python/WASM-JS bindings
+are covered by the formal formula-only contract. FMT-05 is not closed by the finite routes. The registry now exposes
+`ascii-math` in best-effort formula conversion; legacy document OutputFormat and
+existing binding envelopes/ABI are unchanged. Office UI and full grammar remain open.
 
 Reproduce without native runtime dependencies:
 

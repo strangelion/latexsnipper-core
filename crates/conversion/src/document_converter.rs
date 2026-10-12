@@ -106,7 +106,7 @@ impl OutputFormat {
         ]
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &'static str {
         match self {
             OutputFormat::Latex => "latex",
             OutputFormat::LatexDisplay => "latex_display",
@@ -218,6 +218,11 @@ impl DocumentConverter {
                 Self::convert_latex_string(&latex, output)
             }
             FormulaInputFormat::Markdown => Self::convert_markdown_string(content, output),
+            FormulaInputFormat::AsciiMath | FormulaInputFormat::UnicodeMath => {
+                let latex = crate::formula_target::linear_ast(content, input)?.to_string();
+                guard_formula_input(&latex, false)?;
+                Self::convert_latex_string(&latex, output)
+            }
             _ => Err(latexsnipper_foundation::SnipperError::Conversion(
                 "input parser is not implemented".to_string(),
             )),

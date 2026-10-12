@@ -17,6 +17,7 @@ pub mod formula_fragment;
 #[cfg(feature = "formula-layout")]
 pub mod formula_layout_adapter;
 pub mod formula_source_probe;
+pub mod formula_target;
 pub mod html;
 pub mod html_parser;
 #[cfg(feature = "native")]
@@ -82,6 +83,7 @@ pub use document_converter::{DocumentConverter, OutputFormat};
 pub use docx_reader::{read_docx, read_docx_bytes};
 #[cfg(feature = "formula-layout")]
 pub use formula_layout_adapter::parse_formula_source_to_layout;
+pub use formula_target::FormulaOutputTarget;
 pub use html::HtmlConverter;
 pub use html_parser::parse_html_to_document;
 #[cfg(feature = "native")]

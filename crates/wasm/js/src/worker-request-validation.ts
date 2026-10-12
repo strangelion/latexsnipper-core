@@ -159,7 +159,7 @@ function validateFormula(value: Record<string, unknown>): WorkerRequestValidatio
   if (typeof input.inputFormat !== "string" || !["latex", "typst", "mathml", "omml", "markdown", "unicode-math", "ascii-math", "mtef"].includes(input.inputFormat)) {
     return invalid(value, "Unknown formula input format");
   }
-  if (typeof input.outputFormat !== "string" || !["latex", "latex_display", "latex_equation", "typst", "markdown_inline", "markdown_block", "mathml", "omml", "html", "latex-fragment"].includes(input.outputFormat)) {
+  if (typeof input.outputFormat !== "string" || !["latex", "latex_display", "latex_equation", "typst", "markdown_inline", "markdown_block", "mathml", "omml", "html", "latex-fragment", "unicode-math", "ascii-math"].includes(input.outputFormat)) {
     return invalid(value, "Unknown formula output format");
   }
   if (input.mode !== undefined && input.mode !== "strict" && input.mode !== "best-effort") {

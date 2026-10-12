@@ -341,7 +341,7 @@ fn input_ast_padding_depth_and_output_budgets_are_enforced() {
 }
 
 #[test]
-fn pilot_is_not_advertised_as_a_registered_native_or_wasm_conversion() {
+fn finite_input_routes_preserve_strict_and_platform_boundaries() {
     for target in [
         CapabilityTarget::Native,
         CapabilityTarget::Wasm32UnknownUnknown,
@@ -356,12 +356,17 @@ fn pilot_is_not_advertised_as_a_registered_native_or_wasm_conversion() {
                 mode,
                 target,
             );
-            assert!(!capability.available);
-            assert_eq!(capability.path, "unsupported");
-            assert!(capability
-                .unavailable_reason
-                .unwrap()
-                .contains("pilot parser"));
+            assert_eq!(
+                capability.available,
+                mode == FormulaConversionMode::BestEffort
+            );
+            assert_eq!(capability.path, "bounded-linear-ast");
+            if mode == FormulaConversionMode::Strict {
+                assert!(capability
+                    .unavailable_reason
+                    .unwrap()
+                    .contains("strict validation"));
+            }
         }
     }
 }

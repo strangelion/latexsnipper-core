@@ -2,6 +2,8 @@
 import initialize, * as api from "/wasm/latexsnipper_wasm.js";
 export default () => initialize({ module_or_path: "/wasm/latexsnipper_wasm_bg.wasm" });
 export const init = api.init;
+export const convert_formula_v3 = api.convert_formula_v3;
+export const convert_formula_fragment_v3 = api.convert_formula_fragment_v3;
 export function create_formula_registry_v1(key) {
   if (key === undefined) return api.create_formula_registry_v1();
   if (key !== "fixture:power" && key !== "fixture:loop") throw new Error("Unknown app-owned configuration key");

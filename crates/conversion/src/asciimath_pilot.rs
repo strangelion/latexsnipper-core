@@ -1,6 +1,6 @@
-//! Bounded experimental AsciiMath grammar and AST mapping.
+//! Bounded AsciiMath grammar and AST mapping; pilot module name retained.
 //!
-//! This module is not a registered conversion route. See
+//! Formula-only registration uses this finite grammar. See
 //! `docs/formats/asciimath-pilot.md` for the accepted grammar and limitations.
 
 use crate::latex_ast::LatexNode;

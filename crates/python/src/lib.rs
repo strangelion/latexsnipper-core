@@ -12,7 +12,7 @@ use latexsnipper_api_types::RecognitionProfile;
 use latexsnipper_ast::InputFormat;
 use latexsnipper_conversion::{
     CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
-    FormulaInputFormat, OutputFormat,
+    FormulaInputFormat, FormulaOutputTarget, OutputFormat,
 };
 use latexsnipper_engine::application::{ApplicationError, RecognitionOptions, RuntimePreference};
 use latexsnipper_engine::application::{
@@ -209,7 +209,14 @@ fn formula_arguments(
     input: &str,
     output: &str,
     mode: &str,
-) -> Result<(FormulaInputFormat, OutputFormat, FormulaConversionMode), BindingError> {
+) -> Result<
+    (
+        FormulaInputFormat,
+        FormulaOutputTarget,
+        FormulaConversionMode,
+    ),
+    BindingError,
+> {
     let input_label = input.trim().to_ascii_lowercase().replace('_', "-");
     let input = FormulaInputFormat::all()
         .iter()
@@ -217,17 +224,23 @@ fn formula_arguments(
         .find(|format| format.name() == input_label)
         .ok_or_else(|| BindingError::invalid(format!("unknown formula input format: {input}")))?;
     let output = if is_formula_fragment(output) {
-        OutputFormat::LatexDisplay
+        FormulaOutputTarget::Semantic(OutputFormat::LatexDisplay)
+    } else if let Some(target) = FormulaOutputTarget::parse(output) {
+        target
     } else {
-        parse_output_formats(Some(vec![output.to_owned()]))?[0].1
+        FormulaOutputTarget::Semantic(parse_output_formats(Some(vec![output.to_owned()]))?[0].1)
     };
     let mode = match mode.trim().to_ascii_lowercase().replace('_', "-").as_str() {
         "strict" => FormulaConversionMode::Strict,
         "best-effort" => FormulaConversionMode::BestEffort,
         _ => return Err(BindingError::invalid("mode must be strict or best-effort.")),
     };
-    let capability =
-        CapabilityRegistry::formula_conversion(input, output, mode, CapabilityTarget::Native);
+    let capability = CapabilityRegistry::formula_conversion_target(
+        input,
+        output,
+        mode,
+        CapabilityTarget::Native,
+    );
     if !capability.available {
         return Err(BindingError {
             code: "UNSUPPORTED_FORMAT".into(),
@@ -263,14 +276,14 @@ fn is_formula_fragment(output: &str) -> bool {
 fn convert_formula_content(
     content: &str,
     input: FormulaInputFormat,
-    output: OutputFormat,
+    output: FormulaOutputTarget,
     mode: FormulaConversionMode,
     fragment: bool,
 ) -> Result<String, BindingError> {
     let content = if fragment {
         DocumentConverter::convert_formula_fragment(content, input, mode)
     } else {
-        DocumentConverter::convert_formula_string(content, input, output, mode)
+        DocumentConverter::convert_formula_to_target(content, input, output, mode)
     }
     .map_err(|error| BindingError::from(ApplicationError::from(error)))?;
     if serialize_json(&content)?.len() > MAX_FORMULA_RESULT_BYTES {
@@ -671,12 +684,12 @@ mod tests {
     #[test]
     fn formula_arguments_match_the_shared_registry() {
         for &input in FormulaInputFormat::all() {
-            for &output in OutputFormat::all() {
+            for output in FormulaOutputTarget::all() {
                 for (label, mode) in [
                     ("strict", FormulaConversionMode::Strict),
                     ("best-effort", FormulaConversionMode::BestEffort),
                 ] {
-                    let route = CapabilityRegistry::formula_conversion(
+                    let route = CapabilityRegistry::formula_conversion_target(
                         input,
                         output,
                         mode,
@@ -722,7 +735,10 @@ mod tests {
     fn formula_fragment_arguments_and_content_preserve_budgets_and_strict_gate() {
         for label in ["latex-fragment", " LATEX_FRAGMENT "] {
             let (input, output, mode) = formula_arguments("typst", label, "best-effort").unwrap();
-            assert_eq!(output, OutputFormat::LatexDisplay);
+            assert_eq!(
+                output,
+                FormulaOutputTarget::Semantic(OutputFormat::LatexDisplay)
+            );
             let result = convert_formula_content("frac(a,b)", input, output, mode, true).unwrap();
             assert_eq!(result, r"\frac{a}{b}");
         }
@@ -735,7 +751,7 @@ mod tests {
         let result = convert_formula_content(
             r"\documentclass{article}x",
             FormulaInputFormat::Latex,
-            OutputFormat::LatexDisplay,
+            FormulaOutputTarget::Semantic(OutputFormat::LatexDisplay),
             FormulaConversionMode::BestEffort,
             true,
         );
@@ -743,7 +759,7 @@ mod tests {
         let result = convert_formula_content(
             &format!("{}x", "x+".repeat(6000)),
             FormulaInputFormat::Latex,
-            OutputFormat::OMML,
+            FormulaOutputTarget::Semantic(OutputFormat::OMML),
             FormulaConversionMode::Strict,
             false,
         );

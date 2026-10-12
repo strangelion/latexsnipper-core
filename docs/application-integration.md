@@ -311,7 +311,7 @@ non-extension caller must preserve.
 
 ### Model-free C formula conversion
 
-The additive `latexsnipper_formula_capabilities()` returns 144 native
+The additive `latexsnipper_formula_capabilities()` returns 176 native
 input/output/mode rows in the unchanged v3 envelope. The additive
 `latexsnipper_formula_convert(request_json, request_json_len)` accepts:
 
@@ -321,7 +321,9 @@ input/output/mode rows in the unchanged v3 envelope. The additive
 
 `mode` defaults to `strict`; only the supported LaTeX-to-OMML source subset is
 currently available in that mode. Select `best-effort` explicitly for other
-available routes. Output labels are the canonical semantic names in the rows.
+available routes. Output labels are the canonical formula target names in the rows.
+UnicodeMath/AsciiMath are finite formula-only routes, not document exporters;
+see [the linear conversion contract](formats/linear-formula-conversion.md).
 Successful `data` contains `content` and the executed `capability` row, including
 its reconstruction path and limitations. Unknown JSON fields, input labels or
 modes fail with `INVALID_JSON`; unknown output labels fail with `INVALID_ARGUMENT`;
@@ -358,7 +360,7 @@ cargo build --locked -p latexsnipper-ffi --release
 python crates/ffi/examples/formula_smoke.py --library-dir target/release
 ```
 
-The smoke uses the built dynamic library, checks all 144 routes, errors, lengths,
+The smoke uses the built dynamic library, checks the current projected routes, errors, lengths,
 string ownership and persistent-session compatibility. The existing three-platform
 Python adapter CI job runs it after the wheel smoke. Host visual fidelity is not
 measured by these tests.

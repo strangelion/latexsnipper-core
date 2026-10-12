@@ -1,6 +1,6 @@
 use latexsnipper_conversion::{
     CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
-    FormulaInputFormat, OutputFormat,
+    FormulaInputFormat, FormulaOutputTarget, OutputFormat,
 };
 
 #[test]
@@ -12,12 +12,15 @@ fn all_directions_and_modes_are_projected_for_both_targets() {
         let routes = CapabilityRegistry::formula_conversions(target);
         assert_eq!(
             routes.len(),
-            FormulaInputFormat::all().len() * OutputFormat::all().len() * 2
+            FormulaInputFormat::all().len() * FormulaOutputTarget::all().len() * 2
         );
         let exports = CapabilityRegistry::for_target(target);
         for route in routes {
             assert_eq!(route.target, target);
-            assert!(exports.iter().any(|entry| entry.format == route.output));
+            assert!(
+                exports.iter().any(|entry| entry.format == route.output)
+                    || matches!(route.output, "unicode-math" | "ascii-math")
+            );
             assert_eq!(route.available, route.unavailable_reason.is_none());
             assert!(!route.limitations.is_empty());
             if route.mode == FormulaConversionMode::Strict && route.available {

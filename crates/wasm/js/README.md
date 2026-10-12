@@ -55,6 +55,11 @@ After initializing a generated WASM module, its additive exports are
 existing v3 envelope without requiring or changing recognition models. Omitted
 mode defaults to `strict`; only the supported LaTeX-to-OMML source subset currently
 supports strict conversion. Other available routes require explicit `best-effort`.
+`ascii-math` and `unicode-math` now have finite formula-only input/output routes;
+they are separate grammars, not full Word buildup or document exporters. See
+[the linear conversion contract](../../../docs/formats/linear-formula-conversion.md)
+for supported syntax, normalization and rejection boundaries. An available route
+does not mean every expression or style in that language is representable.
 
 The wrapper also exports typed helpers and format/mode types:
 
@@ -69,10 +74,10 @@ if (result.ok) console.log(result.data.content, result.data.capability.limitatio
 else console.error(result.error.code, result.error.details);
 ```
 
-Capabilities contain 144 WASM input/output/mode rows from the shared Core registry.
+Capabilities contain 176 WASM input/output/mode rows from the shared Core registry.
 Successful data contains the converted `content` and executed `capability`, including
-the reconstruction path and limitations. UnicodeMath, AsciiMath and MTEF remain
-unsupported; OLE is a host object, not a string format. Reconstruction does not
+the reconstruction path and limitations. UnicodeMath/AsciiMath have finite
+formula-only routes; MTEF remains unsupported. OLE is a host object, not a string format. Reconstruction does not
 recover the author's original source, and best-effort can lose syntax/style.
 LaTeX output uses the existing document exporter, not a promise of bare-source identity.
 

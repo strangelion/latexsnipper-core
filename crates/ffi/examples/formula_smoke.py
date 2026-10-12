@@ -21,8 +21,8 @@ def main() -> None:
     }.get(sys.platform, "liblatexsnipper_ffi.so")
     library = Library(args.library_dir / filename)
     routes = library.formula_capabilities()
-    assert len(routes) == 144
-    assert len({(r["input"], r["output"], r["mode"]) for r in routes}) == 144
+    assert len(routes) == 176
+    assert len({(r["input"], r["output"], r["mode"]) for r in routes}) == 176
     samples = {
         "latex": r"\frac{a}{b}",
         "mathml": "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
@@ -30,7 +30,9 @@ def main() -> None:
                 '<m:f><m:num><m:r><m:t>a</m:t></m:r></m:num>'
                 '<m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>',
         "typst": "frac(a, b)",
-        "markdown": r"A fraction $\frac{a}{b}$",
+        "markdown": r"$\frac{a}{b}$",
+        "unicode-math": "a/b",
+        "ascii-math": "a/b",
     }
     successful = 0
     rejected = 0
@@ -50,7 +52,7 @@ def main() -> None:
             assert isinstance(result["content"], str) and result["content"]
             assert result["capability"] == route
             successful += 1
-    assert (successful, rejected) == (46, 98)
+    assert (successful, rejected) == (78, 98)
     for input_format in ("latex", "typst", "mathml", "omml"):
         bare = library.convert_formula(
             samples[input_format], input_format=input_format,

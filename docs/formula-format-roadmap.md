@@ -1,6 +1,6 @@
 # 公式格式与 LaTeX 补全计划
 
-更新：2026-10-10。仅记录能力边界与剩余工作。
+更新：2026-10-12。仅记录能力边界与剩余工作。
 
 ## 分层
 
@@ -16,7 +16,7 @@ VSTO 不是公式格式；本应用 OLE 不等于 MathType 对象。
 | FMT-02 | 进行中：常用 array、注释/源保护及常用嵌套/命名/不可见定界符已有 | 补 middle/固定大小定界符、复杂命令、星号多行环境及高级列修饰；不执行宏或动态 catcode |
 | FMT-03 | 进行中：array 常用列布局与定界符/组合上下标归属已有 | 继续多行、样式与真实宿主验证；高级 array 和共享图像布局不由有限导出代表 |
 | FMT-04 | 进行中：常用数组/定界符和 XML 字面字符可重建，Word 三入口保存/重开源码、文字、布局及脚本结构已验证 | 补安装版与其他 XML/字体/布局；SVG 文本位置与裁切单独处理 |
-| FMT-05 | UnicodeMath/AsciiMath 各有独立有限 experimental parser | 扩大语法与损失范围，接入正式输入/输出注册表、各绑定与 Office UI |
+| FMT-05 | UnicodeMath/AsciiMath 已有独立有限语法、正式单公式输入/输出与 Rust/C/Python/WASM-JS/CLI 注册路线 | 扩大语法与损失范围，接 Office UI、WASI profile 新目标及真实 Word buildup/字体验收；见 [线性转换](formats/linear-formula-conversion.md) |
 | FMT-06 | raw 检查、精确去重/结构分组、有限诊断、独立 experimental AST/LaTeX 读取及有界语义批次复用已有 | 补显式字体/更多模板和有界容器提取，再接 Office；真实/旧版样例与正式注册仍需独立验收 |
 | FMT-07 | 随新增能力持续收尾 | 同步生成矩阵、公共契约冻结、说明文档和 Office pin；不放宽已有门禁 |
 | FMT-08 | Word 身份门禁、Core 源码探测/PNG/SVG 提取、Word 单 PNG 候选及本应用 SVG 源绑定/行内更新已有 | 安装版待验收；补显示/编号及跨格式图片更新、第三方 SVG/XMP、受限 CFB/MTEF、通用读取和其他宿主；见 [读取计划](formats/foreign-formula-read-plan.md) |
@@ -31,7 +31,7 @@ VSTO 不是公式格式；本应用 OLE 不等于 MathType 对象。
 
 ## 必须保留的边界
 
-- UnicodeMath/AsciiMath 当前不在正式 OutputFormat/API/UI 中，pilot 不代表已正式支持。
+- UnicodeMath/AsciiMath 正式支持仍是有限单公式路线；旧文档 OutputFormat 不变，Office UI 和完整语法未完成。
 - MTEF 检查完成仅表示字节边界可读，不代表语义转换、MathType 排版或写入兼容。
 - 无元数据的原生 Office 公式导出 LaTeX 必须标注为重建；不保证原源码完全恢复。
 - TikZ/PGFPlots、化学式与普通公式分开说明；Core 的 OLE 路线不能代替宿主创建对象。

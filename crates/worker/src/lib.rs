@@ -14,7 +14,7 @@ use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3, RecognitionProfile};
 use latexsnipper_ast::{Diagnostic, ImportOptions};
 use latexsnipper_conversion::{
     CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
-    FormulaInputFormat, OutputFormat,
+    FormulaInputFormat, FormulaOutputTarget, OutputFormat,
 };
 use latexsnipper_engine::application::{ApplicationError, RecognitionOptions, RuntimePreference};
 use latexsnipper_engine::{
@@ -329,12 +329,18 @@ impl Worker {
         let output_name = params.output_format.trim().to_ascii_lowercase();
         let fragment = output_name.replace('_', "-") == "latex-fragment";
         let output = if fragment {
-            OutputFormat::LatexDisplay
+            FormulaOutputTarget::Semantic(OutputFormat::LatexDisplay)
+        } else if let Some(target) = FormulaOutputTarget::parse(&output_name) {
+            target
         } else {
-            parse_output_formats(vec![output_name])?[0].1
+            FormulaOutputTarget::Semantic(parse_output_formats(vec![output_name])?[0].1)
         };
-        let capability =
-            CapabilityRegistry::formula_conversion(input, output, mode, CapabilityTarget::Native);
+        let capability = CapabilityRegistry::formula_conversion_target(
+            input,
+            output,
+            mode,
+            CapabilityTarget::Native,
+        );
         if !capability.available {
             return Err(WorkerError::protocol(
                 "UNSUPPORTED_FORMAT",
@@ -345,7 +351,7 @@ impl Worker {
         let content = if fragment {
             DocumentConverter::convert_formula_fragment(&params.content, input, mode)
         } else {
-            DocumentConverter::convert_formula_string(&params.content, input, output, mode)
+            DocumentConverter::convert_formula_to_target(&params.content, input, output, mode)
         }
         .map_err(|error| {
             let code = if matches!(error, SnipperError::LimitExceeded(_)) {

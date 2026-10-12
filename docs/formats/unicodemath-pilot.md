@@ -1,7 +1,8 @@
 # UnicodeMath bounded parser/AST pilot
 
-Status: experimental Rust module, 2026-10-04. Not a registered conversion input
-or output, full UnicodeMath/Word implementation, or visual-fidelity claim.
+Status: finite Rust grammar with formal formula-only routes, 2026-10-12.
+The pilot module name remains compatible; see [the registered binding contract](linear-formula-conversion.md).
+This is not a full UnicodeMath/Word implementation or visual-fidelity claim.
 
 Reference: [Unicode Technical Note 28, version 3.3](https://www.unicode.org/notes/tn28/UTN28-PlainTextMath-v3.3.pdf),
 sections 2.1–2.3, 3.6, 3.9 and 3.18. The implementation and fixtures are
@@ -79,10 +80,11 @@ exporter or any actual Word rendering. AsciiMath's 12 regressions also pass afte
 extracting the unchanged private comparison into `pilot_ast.rs`.
 
 Still open: real corpus, external/host comparison, style and spacing loss,
-original-source spans, broader syntax, target-specific diagnostics, registered
-input/output directions and Rust/C/Python/WASM-JS/Office exposure. Both pilots
-remain unavailable in the production registry. OutputFormat, C ABI, binding
-envelopes, dependency versions and lockfile are unchanged. FMT-05 remains partial.
+original-source spans, broader syntax, richer target-specific diagnostics and Office
+exposure. Registered input/output directions and Rust/C/Python/WASM-JS formula bindings
+now have finite best-effort formula routes in the registry. Legacy document OutputFormat,
+C ABI, binding envelopes, dependency versions and lockfile are unchanged. FMT-05 remains partial;
+Office UI, full grammar and true Word buildup comparisons remain open.
 
 Reproduce:
 

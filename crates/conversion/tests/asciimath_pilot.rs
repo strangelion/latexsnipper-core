@@ -217,11 +217,12 @@ fn unsupported_output_ast_cannot_be_mislabeled_as_asciimath() {
             FormulaConversionMode::BestEffort,
             target,
         );
-        assert!(!capability.available);
+        assert!(capability.available);
+        assert_eq!(capability.path, "bounded-linear-ast");
         assert!(capability
-            .unavailable_reason
-            .unwrap()
-            .contains("pilot parser"));
+            .limitations
+            .iter()
+            .any(|limit| limit.contains("finite-linear")));
     }
 }
 

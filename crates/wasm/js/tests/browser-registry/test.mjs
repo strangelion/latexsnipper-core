@@ -38,9 +38,19 @@ try {
   const fresh = await client.createFormulaRegistry();
   const builtin = await fresh.convert({ ...request("x^2"), input: "latex", backend: null, mode: "strict" });
   check(builtin.data.outcome.kind === "converted", "Explicit fresh registry failed after recovery");
+  const linear = await client.convertFormula({ content: "(a+b)/c", inputFormat: "ascii-math",
+    outputFormat: "unicode-math", mode: "best-effort" });
+  check(linear.ok && linear.data.content === "(a + b)/(c)", "Typed Worker linear target failed");
+  const registeredLinear = await fresh.convert({ ...request("(a+b)/c"), input: "ascii-math",
+    output: "unicode-math", backend: null });
+  check(registeredLinear.data.outcome.result.candidate.content === "(a + b)/(c)", "Registered Worker linear target failed");
+  const rejectedLinear = await client.convertFormula({ content: "body $x$", inputFormat: "markdown",
+    outputFormat: "ascii-math", mode: "best-effort" });
+  check(!rejectedLinear.ok && rejectedLinear.error.code === "CONVERSION_FAILED", "Mixed prose was silently discarded");
   await fresh.close();
   globalThis.registryTestResult = { state: "passed", dynamicOutput: true, defaultDisabled: true,
-    hardAbort: true, timeout: true, staleInvalidation: true, noRegistryReplay: true, freshRecovery: true };
+    hardAbort: true, timeout: true, staleInvalidation: true, noRegistryReplay: true, freshRecovery: true,
+    linearTargets: true, mixedSourceRefusal: true };
 } catch (error) {
   globalThis.registryTestResult = { state: "failed", message: error instanceof Error ? error.message : String(error) };
 } finally {

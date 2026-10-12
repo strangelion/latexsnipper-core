@@ -21,7 +21,9 @@ const sample = {
   mathml: "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
   omml: '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:oMath>',
   typst: "frac(a,b)",
-  markdown: String.raw`A fraction $\frac{a}{b}$`,
+  markdown: String.raw`$\frac{a}{b}$`,
+  "unicode-math": "a/b",
+  "ascii-math": "a/b",
 };
 assert.equal(full.api_info_v3().data.v2CompatibilityExports, true);
 assert.equal(conversion.api_info_v3().data.v2CompatibilityExports, false);

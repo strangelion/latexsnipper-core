@@ -121,6 +121,20 @@ fn formula_rpc_reuses_real_process_after_error_and_flushes_before_shutdown() {
         "content": "frac(a,b)", "inputFormat": "typst", "outputFormat": "markdown_inline", "mode": "best-effort"
     }));
     assert_eq!(converted["data"]["content"], r"$\frac{a}{b}$");
+    let linear = worker.call(json!("linear"), "formula.convert", json!({
+        "content": "(a+b)/c", "inputFormat": "ascii-math", "outputFormat": "unicode-math", "mode": "best-effort"
+    }));
+    assert_eq!(linear["ok"], true);
+    assert_eq!(linear["data"]["content"], "(a + b)/(c)");
+    let mixed = worker.call(json!("mixed-linear"), "formula.convert", json!({
+        "content": "body $x$", "inputFormat": "markdown", "outputFormat": "ascii-math", "mode": "best-effort"
+    }));
+    assert_eq!(mixed["error"]["code"], "CONVERSION_FAILED");
+    let recovered = worker.call(json!("recovered-linear"), "formula.convert", json!({
+        "content": "a/b", "inputFormat": "unicode-math", "outputFormat": "ascii-math", "mode": "best-effort"
+    }));
+    assert_eq!(recovered["ok"], true);
+    assert_eq!(recovered["data"]["content"], "frac(a)(b)");
     let shutdown = worker.call(json!(7), "worker.shutdown", json!({}));
     assert_eq!(shutdown["data"]["closed"], true);
     worker.successful_exit();

@@ -1,4 +1,4 @@
-//! Independent, bounded UnicodeMath pilot. Not a registered conversion route.
+//! Independent, bounded UnicodeMath grammar; pilot module name retained.
 //! See docs/formats/unicodemath-pilot.md for the finite grammar and gates.
 use crate::latex_ast::LatexNode;
 use std::fmt;

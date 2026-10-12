@@ -77,7 +77,14 @@ included in the freeze manifest. This does not close Office, binary/document
 routes, browser untrusted WASI, persistent consent or mobile-host acceptance.
 
 GA hardening freezes Rust exports, serialized examples, TypeScript
-declarations, CLI behavior/exit codes, package contents, compatibility adapters,
+declarations, including `formula.ts` and its additive linear target union. The
+formula-only `FormulaOutputTarget`/`convert_formula_to_target` API leaves the
+legacy document `OutputFormat` enum and nine-output document conversion intact.
+Formula capability rows add finite UnicodeMath/AsciiMath best-effort routes;
+their canonical input/output labels are unchanged from the reserved input IDs.
+No WIT or C function signature is replaced.
+
+GA hardening also freezes CLI behavior/exit codes, package contents, compatibility adapters,
 WIT, and this inventory together. `contracts/v3-contract-freeze.json` is checked
 in CI and covers exact contract files plus aggregate hashes for the public Rust
 source trees. An intentional change requires an explicit manifest refresh and

@@ -39,7 +39,7 @@ observes it at safe pipeline boundaries, and the owning session remains usable.
 ```python
 from latexsnipper_core import convert_formula, formula_conversion_capabilities
 
-routes = formula_conversion_capabilities()  # 144 native direction/mode rows
+routes = formula_conversion_capabilities()  # 176 native direction/mode rows
 omml = convert_formula(r"\frac{a}{b}", input_format="latex", output_format="omml")
 bare_latex = convert_formula(
     "frac(a, b)", input_format="typst", output_format="latex-fragment", mode="best-effort",
@@ -51,7 +51,10 @@ is accepted. All other strict routes fail explicitly. Select `best-effort` to us
 the existing LaTeX, MathML, OMML, Typst or Markdown parsers and nine semantic
 outputs. Reconstruction is not the author's original source, and unsupported
 syntax or style may be lost. Consult each row's `available`, `limitations` and
-`unavailableReason`; UnicodeMath, AsciiMath and MTEF remain unsupported. OLE is a
+`unavailableReason`; UnicodeMath/AsciiMath have finite formula-only input/output
+routes in explicit best-effort mode; MTEF remains unsupported here. See the
+[linear grammar and binding contract](../../docs/formats/linear-formula-conversion.md).
+OLE is a
 host object, not a string format; this does not implement MathType conversion.
 
 Each new conversion call bounds its source and reconstructed LaTeX to 64 KiB,
@@ -76,7 +79,7 @@ including JSON string escaping and quotes. Exceeding the limit raises
 peak memory usage or a hard execution deadline. The Python API continues to
 return a plain string, not a transport envelope.
 
-The installed-wheel smoke test covers all 144 advertised routes (46 successful
+The extracted-wheel smoke test covers all 176 advertised routes (78 successful
 conversions, including the strict route), invalid arguments, failure isolation
 and resource limits, alongside the existing persistent-session tests. It does
 not measure visual fidelity or real Office host compatibility.

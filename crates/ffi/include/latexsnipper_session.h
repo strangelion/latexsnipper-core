@@ -27,7 +27,8 @@ LATEXSNIPPER_API uint32_t latexsnipper_session_abi_version(void);
  * Conversion request example (mode defaults to strict):
  * {"content":"x","inputFormat":"latex","outputFormat":"omml"}
  * Only LaTeX-to-OMML currently supports strict. Select "best-effort" explicitly
- * for other available routes; UnicodeMath/AsciiMath/MTEF remain unsupported.
+ * for other available routes. UnicodeMath/AsciiMath have finite formula-only
+ * input/output routes; MTEF is not supported by this string API.
  * Conversion data contains content and the executed capability row.
  * Explicit outputFormat "latex-fragment" returns one bare formula plus
  * contentKind "latex-fragment"; capability describes the latex_display route.
