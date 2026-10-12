@@ -916,7 +916,7 @@ fn generate_full_body(
             ),
             _ => GeneratedFormulaBody::valid(
                 format!(
-                    r"\left\lfloor\frac{{{n}{symbol}_{{{index}}}+{m}}}{{{p}}}\right\rfloor\le\left\lceil{other}_{{{index}}}\right\rceil"
+                    r"\left\lfloor\frac{{{n}{symbol}_{{{index}}}+{m}}}{{{p}}}\right\rfloor\le\left\lceil {other}_{{{index}}}\right\rceil"
                 ),
                 "floor-ceiling",
                 vec!["floor", "ceiling", "relation"],
@@ -1745,6 +1745,32 @@ mod tests {
         assert_eq!(first.records.len(), plan.target_formula_count);
         assert_eq!(first.tier, FormulaCorpusTier::Full);
         validate_formula_corpus(&plan, &first).expect("full corpus should validate");
+    }
+
+    #[test]
+    fn full_ceiling_templates_keep_the_named_delimiter_boundary() {
+        let plan = checked_in_plan();
+        let quota = plan
+            .category_quotas
+            .iter()
+            .find(|quota| quota.category == FormulaCategory::BasicStructure)
+            .unwrap();
+        let mut count = 0;
+        for index in 0..quota.count {
+            let generated = generate_full_body(quota.category, index, quota.count, plan.seed);
+            if generated.family != "floor-ceiling" {
+                continue;
+            }
+            count += 1;
+            assert!(generated.body.contains(r"\lceil "), "{}", generated.body);
+            latexsnipper_conversion::omml::validate_omml_latex(&generated.body)
+                .unwrap_or_else(|error| panic!("{}: {error}", generated.body));
+        }
+        assert_eq!(count, 175);
+        assert!(latexsnipper_conversion::omml::validate_omml_latex(
+            r"\left\lceilu_{2}\right\rceil"
+        )
+        .is_err());
     }
 
     #[test]
