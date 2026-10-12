@@ -72,6 +72,8 @@ jobs:
         run: cargo build --locked -p latexsnipper-ffi --features android-jni --release
       - name: Validate exported C formula symbols and session compatibility
         run: python crates/ffi/examples/formula_smoke.py --library-dir target/release
+      - name: Validate registered conversion C ABI against the native library
+        run: python crates/ffi/examples/formula_registry_smoke.py --library-dir target/release
       - name: Validate legacy RGB C ABI against the actual native library
         run: python crates/ffi/examples/legacy_session_smoke.py --library-dir target/release
       - uses: actions/setup-java@v6

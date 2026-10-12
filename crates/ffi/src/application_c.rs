@@ -100,7 +100,7 @@ impl SessionRegistry {
 }
 
 #[derive(Debug)]
-struct AdapterError {
+pub(crate) struct AdapterError {
     code: String,
     message: String,
     recoverable: bool,
@@ -108,7 +108,11 @@ struct AdapterError {
 }
 
 impl AdapterError {
-    fn new(code: impl Into<String>, message: impl Into<String>, recoverable: bool) -> Self {
+    pub(crate) fn new(
+        code: impl Into<String>,
+        message: impl Into<String>,
+        recoverable: bool,
+    ) -> Self {
         Self {
             code: code.into(),
             message: message.into(),
@@ -380,7 +384,7 @@ fn with_session<T>(
     operation(&mut session)
 }
 
-unsafe fn parse_request<T: DeserializeOwned>(
+pub(crate) unsafe fn parse_request<T: DeserializeOwned>(
     request_json: *const u8,
     request_json_len: usize,
 ) -> Result<T, AdapterError> {
@@ -422,7 +426,9 @@ fn response_json<T: Serialize>(result: Result<T, AdapterError>) -> *mut c_char {
     string_to_cstr(&json).unwrap_or(std::ptr::null_mut())
 }
 
-fn ffi_response<T: Serialize>(operation: impl FnOnce() -> Result<T, AdapterError>) -> *mut c_char {
+pub(crate) fn ffi_response<T: Serialize>(
+    operation: impl FnOnce() -> Result<T, AdapterError>,
+) -> *mut c_char {
     let result = catch_unwind(AssertUnwindSafe(operation)).unwrap_or_else(|_| {
         Err(AdapterError::internal(
             "The application session operation panicked.",

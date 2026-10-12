@@ -2375,14 +2375,19 @@ dependencies = [
  "latexsnipper-engine",
  "latexsnipper-foundation",
  "latexsnipper-image",
+ "latexsnipper-plugin",
+ "latexsnipper-plugin-wasi",
  "latexsnipper-runtime",
  "log",
  "once_cell",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "wit-component",
+ "zip",
 ]
 
 [[package]]

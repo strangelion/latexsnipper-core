@@ -53,8 +53,9 @@ Rust 调用者可明确调用 `convert_with_fallback(request, policy)`，指定�
 缓存必须使用决策摘要并重新检查实际 Core build、定义、字体、样式及宿主身份，不能只看
 备用列表或最终后端名称。拒绝报告不能作为候选写入。
 
-贡献者示例和 `snipper formula` 已有实际新格式 fallback；C/Python/WASM/Office 尚未接入此策略，不据此宣称
-它们已支持动态后端或自动恢复。WASI 后端仍保留既有启用和每次执行信任门禁。
+贡献者示例、`snipper formula` 与独立 [C 注册转换 ABI](conversion-registry-c.md) 已有显式 fallback；
+正式 Python/WASM/Office 尚未接入此策略，不据此宣称它们已支持动态后端或自动恢复。
+WASI 后端仍保留既有启用和每次执行信任门禁。
 
 ## 本轮发现的内置输出问题
 
@@ -140,7 +141,7 @@ CLI 默认没有 WASI profile loader；`--features wasi-formula` 是显式构建
 注册器自身不是加载器或沙箱，可信同步 Rust handler 不具备任意线程强制超时、内存限额或取消。
 响应预算是返回后观察预算，不是 handler 分配的峰值内存限制；格式验证器也属于可信代码。
 不可信第三方必须走既有受限 WASI host；签名安装/启用/每次执行信任复验不能以一个 `check_ready = Ok` 示例代替。
-WASI/WIT 单公式适配、声明式 profile、CLI 和 Rust 的预执行可用性 fallback 已有；其他公开绑定/Office 的扩展选择、
+WASI/WIT 单公式适配、声明式 profile、CLI、Rust 和独立 C ABI 的预执行可用性 fallback 已有；其他公开绑定/Office 的扩展选择、
 二进制格式/容器及其他 fallback 范围继续推进，不能借此重试执行失败。
 LaTeX/Typst/Markdown/HTML 字符串候选不会在此执行；展示、TeX 编译或宿主插入仍必须经过对应安全管线。
 

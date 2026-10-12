@@ -37,10 +37,16 @@ JSONL 的 `formula.capabilities` 和 `formula.convert` 复用原生 Core 门禁�
 不创建、加载或清空识别会话；普通转换错误后可处理下一条请求。
 输入最多 64 KiB UTF-8，序列化结果 `data` 最多 256 KiB；
 协议外壳、回显 ID 和错误信息不包含在结果数据预算内。
-Generic C 采用同样的 256 KiB 序列化 `data` 预算；Python 返回纯字符串，
+旧无句柄 C 公式转换采用同样的 256 KiB 序列化 `data` 预算；Python 返回纯字符串，
 其 256 KiB 预算按该字符串的 UTF-8 JSON 序列化大小计算，而非进程内字符数。
 原生转换同步执行，不接受伪装成硬取消的 timeout 参数。
 进程监督者负责路径授权、OS 隔离、强制终止、重启和过期响应丢弃。
+
+新增 [C 注册转换 ABI](formats/conversion-registry-c.md) 使用独立句柄，复用 registry 与
+已验证的 WASI profile，默认禁用扩展并显式选择。其报告 `data` 预算为 2 MiB，
+公式候选仍受 256 KiB 限制；不能与旧入口的预算或结果形状混用。
+取消/关闭可从另一宿主线程发起；WASI 保留已有中断检查，内置/native 调用不能强制撤销，
+观察到取消后不交出候选。宿主审批接口不等于插件自批或应用确认 UI。
 
 官方 JS `WasmWorkerClient.convertFormula` 提供有限队列、输入与结果预算、
 AbortSignal、活动执行超时和 Worker 重建。默认 64 KiB 输入、256 KiB
