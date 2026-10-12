@@ -85,6 +85,15 @@ explicit session grants. No stored scope/deadline is automatically extended.
 Crash-safe host persistence, trusted UI events and independent security approval
 remain required for application-level reuse. See the [host contract](wasi-component-host.md#opt-in-remembered-execution-and-live-revocation).
 
+Live authoritative-owner guard hooks now bind complete per-policy identities at
+issuance/publication/dispatch checkpoints. Native checks run outside Core mutexes;
+their deadline is clipped to the earlier guest/use deadline and a 50 ms check
+budget, with late success rejected and cancellation rechecked before effects.
+These hooks do not implement a protected owner service, OS key store, atomic
+durable publication or real multi-process coordination. A native provider remains
+trusted code and must not wait for UI or block without its own timeout. See the
+[guard integration contract](wasi-component-host.md#live-authoritative-policy-guard).
+
 The host, never the guest, must own approval decisions for sensitive writes,
 overwrites and external data transfer. Offer explicit one-action, whole-batch
 and bounded-session approval, with visible scope, expiry and revocation.

@@ -2,6 +2,7 @@
 
 mod activation;
 pub mod approval;
+pub mod approval_authority;
 pub mod bindings;
 pub mod diagnostic;
 pub mod formula_conversion;
@@ -22,6 +23,7 @@ pub use approval::{
     ApprovalGrantSnapshot, ApprovalRequest, ApprovalScope, RememberedUseSnapshot, SensitiveAction,
     SensitiveActionController,
 };
+pub use approval_authority::{RememberedApprovalAuthorityGuard, RememberedPolicyIdentity};
 pub use formula_conversion::{WasiFormulaBackend, WASI_DOCUMENT_JSON_MEDIA_TYPE};
 pub use formula_profile::{PreparedFormulaRegistry, WasiFormulaProfile};
 pub use remembered_approval::{

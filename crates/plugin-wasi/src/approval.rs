@@ -158,35 +158,44 @@ impl std::fmt::Debug for RememberedUsePermit {
 }
 
 impl ActionPermit {
+    #[cfg(test)]
     pub(crate) fn check(&self) -> Result<(), WasiDiagnostic> {
         self.check_at(Instant::now())
     }
 
-    fn check_at(&self, now: Instant) -> Result<(), WasiDiagnostic> {
-        if self.lease.revoked.load(Ordering::Acquire) {
+    pub(crate) fn check_before(&self, deadline: Instant) -> Result<(), WasiDiagnostic> {
+        self.check_local(Instant::now())?;
+        if let Some(remembered) = &self.remembered {
+            remembered.policy.check_before(deadline)?;
+        }
+        self.check_local(Instant::now())
+    }
+
+    fn check_local(&self, now: Instant) -> Result<(), WasiDiagnostic> {
+        if self.lease.revoked.load(Ordering::Acquire)
+            || self
+                .remembered
+                .as_ref()
+                .is_some_and(|entry| entry.session.revoked.load(Ordering::Acquire))
+        {
             return Err(WasiDiagnostic::new(
                 WasiDiagnosticCode::PluginWasiApprovalRevoked,
-                "sensitive action consent was revoked before publication or dispatch",
+                "sensitive action approval was suspended",
             ));
         }
         if now >= self.lease.expires {
             return Err(WasiDiagnostic::new(
                 WasiDiagnosticCode::PluginWasiApprovalExpired,
-                "sensitive action consent expired before publication or dispatch",
+                "sensitive action approval expired",
             ));
         }
-        if let Some(remembered) = &self.remembered {
-            remembered.policy.check()?;
-            if remembered.session.revoked.load(Ordering::Acquire)
-                || self.lease.revoked.load(Ordering::Acquire)
-            {
-                return Err(WasiDiagnostic::new(
-                    WasiDiagnosticCode::PluginWasiApprovalRevoked,
-                    "remembered approval session was suspended before publication or dispatch",
-                ));
-            }
-        }
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn check_at(&self, now: Instant) -> Result<(), WasiDiagnostic> {
+        self.check_local(now)?;
+        self.check_before(self.lease.expires)
     }
 }
 
@@ -489,10 +498,20 @@ impl SensitiveActionController {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn authorize(
         &self,
         context: &ApprovalContext,
         action: SensitiveAction,
+    ) -> Result<ActionPermit, WasiDiagnostic> {
+        self.authorize_before(context, action, Instant::now() + MAX_TTL)
+    }
+
+    pub(crate) fn authorize_before(
+        &self,
+        context: &ApprovalContext,
+        action: SensitiveAction,
+        deadline: Instant,
     ) -> Result<ActionPermit, WasiDiagnostic> {
         let action_bytes =
             serde_json::to_vec(&action).map_err(|_| invalid("action serialization failed"))?;
@@ -545,7 +564,22 @@ impl SensitiveActionController {
             return Ok(permit);
         }
         if let Some(session) = state.sessions.get(&context.context_sha256).cloned() {
-            match session.policies.authorize(&request) {
+            // Native authority callbacks must not run under either Core mutex.
+            drop(state);
+            let result = session.policies.authorize_before(&request, deadline);
+            state = self.lock()?;
+            if session.revoked.load(Ordering::Acquire)
+                || !state
+                    .sessions
+                    .get(&context.context_sha256)
+                    .is_some_and(|current| Arc::ptr_eq(current, &session))
+            {
+                return Err(WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                    "remembered session changed during authority validation",
+                ));
+            }
+            match result {
                 Ok(Some(policy)) => {
                     if !state.remembered_uses.contains_key(&id)
                         && state.remembered_uses.len() >= MAX_ENTRIES
@@ -751,6 +785,64 @@ mod tests {
     }
 
     #[test]
+    fn authority_callback_can_observe_or_suspend_controller_without_deadlock_or_grant() {
+        struct Observer {
+            controller: Weak<SensitiveActionController>,
+            suspend: AtomicBool,
+        }
+        impl crate::RememberedApprovalAuthorityGuard for Observer {
+            fn check_current(
+                &self,
+                _: &crate::RememberedPolicyIdentity,
+                _: Instant,
+            ) -> Result<(), WasiDiagnostic> {
+                let controller = self.controller.upgrade().unwrap();
+                controller.pending()?;
+                if self.suspend.load(Ordering::Acquire) {
+                    controller.clear()?;
+                }
+                Ok(())
+            }
+        }
+        let controller = Arc::new(SensitiveActionController::default());
+        let guard = Arc::new(Observer {
+            controller: Arc::downgrade(&controller),
+            suspend: AtomicBool::new(false),
+        });
+        let policies = Arc::new(
+            crate::RememberedApprovalPolicies::new(crate::ApprovalPolicyKey::generate().unwrap())
+                .unwrap()
+                .with_authority_guard(guard.clone()),
+        );
+        let mut context = context();
+        context.remembered_binding_sha256 = Some("c".repeat(64));
+        controller.authorize(&context, action("x")).unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::Exact,
+                Duration::from_secs(3600),
+            )
+            .unwrap();
+        controller.attach_remembered(&context, policies).unwrap();
+        assert!(controller
+            .authorize(&context, action("x"))
+            .unwrap()
+            .check()
+            .is_ok());
+        guard.suspend.store(true, Ordering::Release);
+        assert_eq!(
+            controller
+                .authorize(&context, action("x"))
+                .unwrap_err()
+                .code,
+            WasiDiagnosticCode::PluginWasiApprovalRevoked
+        );
+    }
+
+    #[test]
     fn remembered_clock_failure_still_offers_an_independent_fresh_confirmation() {
         let time = Arc::new(std::sync::atomic::AtomicU64::new(1000));
         let policies = Arc::new(crate::RememberedApprovalPolicies::test_with_time(
@@ -812,56 +904,96 @@ mod tests {
             payload_sha256: format!("{:x}", Sha256::digest(&payload)),
             payload_bytes: payload.len(),
         };
-        let controller = SensitiveActionController::default();
-        let policies = Arc::new(
-            crate::RememberedApprovalPolicies::new(crate::ApprovalPolicyKey::generate().unwrap())
-                .unwrap(),
-        );
-        let mut context = context();
-        context.remembered_binding_sha256 = Some("c".repeat(64));
-        controller
-            .authorize(&context, operation.clone())
-            .unwrap_err();
-        let request = controller.pending().unwrap().remove(0);
-        let id = controller
-            .remember(
-                &request.id,
-                &policies,
-                ApprovalScope::SameTarget {
-                    max_payload_bytes: payload.len(),
-                },
-                Duration::from_secs(3600),
-            )
-            .unwrap();
-        controller
-            .attach_remembered(&context, Arc::clone(&policies))
-            .unwrap();
-        let permit = controller.authorize(&context, operation.clone()).unwrap();
-        let mut checkpoints = 0;
-        let result = permissions.write_file_checked(
-            "path-0",
-            "output.txt",
-            &payload,
-            payload.len(),
-            Some(&expected),
-            || {
-                checkpoints += 1;
-                if checkpoints == 3 {
-                    assert!(policies.revoke(&id).unwrap());
+        struct Owner {
+            valid: AtomicBool,
+        }
+        impl crate::RememberedApprovalAuthorityGuard for Owner {
+            fn check_current(
+                &self,
+                _: &crate::RememberedPolicyIdentity,
+                _: Instant,
+            ) -> Result<(), WasiDiagnostic> {
+                if self.valid.load(Ordering::Acquire) {
+                    Ok(())
+                } else {
+                    Err(WasiDiagnostic::new(
+                        WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                        "fixture authoritative owner revoked this policy",
+                    ))
                 }
-                permit.check()
-            },
-        );
-        assert!(matches!(
-            result,
-            Err(CheckedWriteError::Interrupted(WasiDiagnostic {
-                code: WasiDiagnosticCode::PluginWasiApprovalRevoked,
-                ..
-            }))
-        ));
-        assert_eq!(std::fs::read(root.join("output.txt")).unwrap(), b"original");
-        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
-        assert!(controller.authorize(&context, operation).is_err());
+            }
+        }
+        for stop in 0..2 {
+            let controller = SensitiveActionController::default();
+            let owner = Arc::new(Owner {
+                valid: AtomicBool::new(true),
+            });
+            let policies = Arc::new(
+                crate::RememberedApprovalPolicies::new(
+                    crate::ApprovalPolicyKey::generate().unwrap(),
+                )
+                .unwrap()
+                .with_authority_guard(owner.clone()),
+            );
+            let mut context = context();
+            context.remembered_binding_sha256 = Some("c".repeat(64));
+            controller
+                .authorize(&context, operation.clone())
+                .unwrap_err();
+            let request = controller.pending().unwrap().remove(0);
+            let id = controller
+                .remember(
+                    &request.id,
+                    &policies,
+                    ApprovalScope::SameTarget {
+                        max_payload_bytes: payload.len(),
+                    },
+                    Duration::from_secs(3600),
+                )
+                .unwrap();
+            controller
+                .attach_remembered(&context, Arc::clone(&policies))
+                .unwrap();
+            let permit = controller.authorize(&context, operation.clone()).unwrap();
+            let mut checkpoints = 0;
+            let result = permissions.write_file_checked(
+                "path-0",
+                "output.txt",
+                &payload,
+                payload.len(),
+                Some(&expected),
+                || {
+                    checkpoints += 1;
+                    if checkpoints == 3 {
+                        if stop == 0 {
+                            assert!(policies.revoke(&id).unwrap());
+                        } else {
+                            // Simulate another owner's publication, not a local-store revoke.
+                            owner.valid.store(false, Ordering::Release);
+                        }
+                    }
+                    permit.check()
+                },
+            );
+            assert!(matches!(
+                result,
+                Err(CheckedWriteError::Interrupted(WasiDiagnostic {
+                    code: WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                    ..
+                }))
+            ));
+            assert_eq!(std::fs::read(root.join("output.txt")).unwrap(), b"original");
+            assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+            assert_eq!(
+                policies
+                    .policies()
+                    .unwrap()
+                    .iter()
+                    .any(|entry| entry.id == id),
+                stop == 1
+            );
+            assert!(controller.authorize(&context, operation.clone()).is_err());
+        }
         drop(permissions);
         temporary.close().unwrap();
     }

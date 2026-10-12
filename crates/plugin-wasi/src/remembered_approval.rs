@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::approval::{payload_bytes, same_target};
+use crate::approval_authority::AuthorityBinding;
 use crate::{ApprovalRequest, ApprovalScope, SensitiveAction, WasiDiagnostic, WasiDiagnosticCode};
 
 const MAGIC: &[u8; 5] = b"LSAP\x01";
@@ -116,6 +117,7 @@ pub(crate) struct RememberedPolicyPermit {
     state: Arc<Mutex<State>>,
     clock: Clock,
     description: RememberedApprovalPolicy,
+    authority: Option<AuthorityBinding>,
 }
 
 impl fmt::Debug for RememberedPolicyPermit {
@@ -132,7 +134,12 @@ impl RememberedPolicyPermit {
             self.description.approved_at_unix_secs,
         )
     }
+    #[cfg(test)]
     pub(crate) fn check(&self) -> Result<(), WasiDiagnostic> {
+        self.check_before(self.expires)
+    }
+
+    pub(crate) fn check_before(&self, deadline: Instant) -> Result<(), WasiDiagnostic> {
         if self.revoked.load(Ordering::Acquire) {
             return Err(WasiDiagnostic::new(
                 WasiDiagnosticCode::PluginWasiApprovalRevoked,
@@ -153,6 +160,16 @@ impl RememberedPolicyPermit {
                 "remembered consent expired before publication or dispatch",
             ));
         }
+        drop(state);
+        if let Some(authority) = &self.authority {
+            authority.check(deadline.min(self.expires))?;
+        }
+        if self.revoked.load(Ordering::Acquire) {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                "remembered consent changed during live authority validation",
+            ));
+        }
         Ok(())
     }
 }
@@ -163,9 +180,19 @@ pub struct RememberedApprovalPolicies {
     key: ApprovalPolicyKey,
     state: Arc<Mutex<State>>,
     clock: Clock,
+    authority_guard: Option<Arc<dyn crate::RememberedApprovalAuthorityGuard>>,
 }
 
 impl RememberedApprovalPolicies {
+    /// Attach before sharing/activation. The host is responsible for using a
+    /// protected, fresh authoritative source. Core never infers this from JSON.
+    pub fn with_authority_guard(
+        mut self,
+        guard: Arc<dyn crate::RememberedApprovalAuthorityGuard>,
+    ) -> Self {
+        self.authority_guard = Some(guard);
+        self
+    }
     #[cfg(test)]
     pub(crate) fn test_with_time(time: Arc<std::sync::atomic::AtomicU64>) -> Self {
         Self::new_with_clock(
@@ -193,6 +220,7 @@ impl RememberedApprovalPolicies {
                 authorities: BTreeMap::new(),
             })),
             clock,
+            authority_guard: None,
         })
     }
 
@@ -266,6 +294,7 @@ impl RememberedApprovalPolicies {
                 policies,
             })),
             clock,
+            authority_guard: None,
         })
     }
 
@@ -334,9 +363,18 @@ impl RememberedApprovalPolicies {
             .cloned())
     }
 
+    #[cfg(test)]
     pub(crate) fn authorize(
         &self,
         request: &ApprovalRequest,
+    ) -> Result<Option<RememberedPolicyPermit>, WasiDiagnostic> {
+        self.authorize_before(request, Instant::now() + Duration::from_secs(300))
+    }
+
+    pub(crate) fn authorize_before(
+        &self,
+        request: &ApprovalRequest,
+        deadline: Instant,
     ) -> Result<Option<RememberedPolicyPermit>, WasiDiagnostic> {
         let mut state = self.lock()?;
         let now = self.observe(&mut state)?;
@@ -359,7 +397,12 @@ impl RememberedApprovalPolicies {
                 (policy.expires_at_unix_secs - now).min(300),
             ))
             .ok_or_else(|| failed("remembered use deadline overflow"))?;
-        Ok(Some(RememberedPolicyPermit {
+        let authority = self
+            .authority_guard
+            .as_ref()
+            .map(|guard| AuthorityBinding::new(Arc::clone(guard), &state.store_id, policy))
+            .transpose()?;
+        let permit = RememberedPolicyPermit {
             policy_id: policy.id.clone(),
             expires,
             expires_unix_secs: policy.expires_at_unix_secs,
@@ -367,7 +410,12 @@ impl RememberedApprovalPolicies {
             state: Arc::clone(&self.state),
             clock: Arc::clone(&self.clock),
             description: policy.clone(),
-        }))
+            authority,
+        };
+        // Never invoke native authority code while holding the policy mutex.
+        drop(state);
+        permit.check_before(deadline)?;
+        Ok(Some(permit))
     }
 
     pub fn revoke(&self, policy_id: &str) -> Result<bool, WasiDiagnostic> {
@@ -667,6 +715,131 @@ mod tests {
             &sealed.checkpoint,
             clock,
         )
+    }
+
+    #[test]
+    fn authoritative_guard_vetoes_independently_restored_stale_clients_and_unpublished_changes() {
+        struct Owner {
+            published: Mutex<Option<crate::RememberedPolicyIdentity>>,
+        }
+        impl crate::RememberedApprovalAuthorityGuard for Owner {
+            fn check_current(
+                &self,
+                identity: &crate::RememberedPolicyIdentity,
+                _deadline: Instant,
+            ) -> Result<(), WasiDiagnostic> {
+                if self.published.lock().unwrap().as_ref() == Some(identity) {
+                    Ok(())
+                } else {
+                    Err(WasiDiagnostic::new(
+                        WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                        "fixture owner does not authorize this policy version",
+                    ))
+                }
+            }
+        }
+        let (store, _, clock) = fixture();
+        let id = remember(&store);
+        let sealed = store.seal().unwrap();
+        let owner = Arc::new(Owner {
+            published: Mutex::new(Some(
+                crate::RememberedPolicyIdentity::for_policy(
+                    &sealed.checkpoint.store_id,
+                    &store.policies().unwrap()[0],
+                )
+                .unwrap(),
+            )),
+        });
+        let first = restore(&sealed, clock.clone())
+            .unwrap()
+            .with_authority_guard(owner.clone());
+        let second = restore(&sealed, clock)
+            .unwrap()
+            .with_authority_guard(owner.clone());
+        let first_use = first.authorize(&request()).unwrap().unwrap();
+        let second_use = second.authorize(&request()).unwrap().unwrap();
+        assert!(first_use.check().is_ok());
+        assert!(second_use.check().is_ok());
+        *owner.published.lock().unwrap() = None;
+        assert!(first_use.check().is_err());
+        assert!(second_use.check().is_err());
+        assert!(first.authorize(&request()).is_err());
+        assert!(second.authorize(&request()).is_err());
+        // The old MAC remains valid; the separate live owner prevents its reuse.
+        assert!(first.matching_policy(&request()).unwrap().is_some());
+        *owner.published.lock().unwrap() = Some(
+            crate::RememberedPolicyIdentity::for_policy(
+                &sealed.checkpoint.store_id,
+                &first.policies().unwrap()[0],
+            )
+            .unwrap(),
+        );
+        first
+            .remember_request(
+                &request(),
+                ApprovalScope::SameTarget {
+                    max_payload_bytes: 2,
+                },
+                Duration::from_secs(100),
+            )
+            .unwrap();
+        assert!(first.authorize(&request()).is_err());
+        assert!(first_use.check().is_err());
+        let changed = first.policies().unwrap().remove(0);
+        assert_eq!(changed.id, id);
+        *owner.published.lock().unwrap() = Some(
+            crate::RememberedPolicyIdentity::for_policy(&sealed.checkpoint.store_id, &changed)
+                .unwrap(),
+        );
+        assert!(first
+            .authorize(&request())
+            .unwrap()
+            .unwrap()
+            .check()
+            .is_ok());
+        assert!(second_use.check().is_err());
+    }
+
+    #[test]
+    fn authority_failure_timeout_and_reentrant_store_observation_are_fail_closed() {
+        struct Reentrant {
+            store: Mutex<std::sync::Weak<RememberedApprovalPolicies>>,
+            fail: AtomicBool,
+        }
+        impl crate::RememberedApprovalAuthorityGuard for Reentrant {
+            fn check_current(
+                &self,
+                _: &crate::RememberedPolicyIdentity,
+                _: Instant,
+            ) -> Result<(), WasiDiagnostic> {
+                self.store.lock().unwrap().upgrade().unwrap().policies()?;
+                if self.fail.load(Ordering::Acquire) {
+                    Err(failed("fixture owner unavailable"))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+        let (store, _, _) = fixture();
+        remember(&store);
+        // Set up a weak observer of this exact store to prove no mutex is held.
+        let guard = Arc::new(Reentrant {
+            store: Mutex::new(std::sync::Weak::new()),
+            fail: AtomicBool::new(false),
+        });
+        let store = Arc::new(store.with_authority_guard(guard.clone()));
+        *guard.store.lock().unwrap() = Arc::downgrade(&store);
+        let permit = store.authorize(&request()).unwrap().unwrap();
+        assert!(permit.check().is_ok());
+        guard.fail.store(true, Ordering::Release);
+        assert!(permit.check().is_err());
+        assert_eq!(
+            store
+                .authorize_before(&request(), Instant::now())
+                .unwrap_err()
+                .code,
+            WasiDiagnosticCode::PluginWasiTimeout
+        );
     }
 
     #[test]

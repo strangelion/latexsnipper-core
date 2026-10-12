@@ -623,11 +623,11 @@ impl HostState {
 
     fn require_approval(&mut self, action: SensitiveAction) -> wasmtime::Result<ActionPermit> {
         self.checkpoint()?;
-        let permit = match self
-            .approval
-            .controller
-            .authorize(&self.approval.context, action)
-        {
+        let permit = match self.approval.controller.authorize_before(
+            &self.approval.context,
+            action,
+            self.deadline,
+        ) {
             Ok(permit) => permit,
             Err(error) => {
                 self.broker_failure = Some(error);
@@ -637,7 +637,7 @@ impl HostState {
             }
         };
         self.checkpoint()?;
-        if let Err(error) = permit.check() {
+        if let Err(error) = self.approved_checkpoint(&permit) {
             return self.stop_approved_action(error);
         }
         Ok(permit)
@@ -656,7 +656,21 @@ impl HostState {
                 "component execution deadline elapsed",
             ));
         }
-        permit.check()
+        permit.check_before(self.deadline)?;
+        // Recheck after the trusted native callback, before publication/dispatch.
+        if self.cancellation.is_cancelled() {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiCancelled,
+                "component execution cancelled during approval validation",
+            ));
+        }
+        if Instant::now() >= self.deadline {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiTimeout,
+                "component execution deadline elapsed during approval validation",
+            ));
+        }
+        Ok(())
     }
 
     fn stop_approved_action<T>(&mut self, error: WasiDiagnostic) -> wasmtime::Result<T> {

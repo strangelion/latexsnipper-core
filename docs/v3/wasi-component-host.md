@@ -226,6 +226,41 @@ do not synchronize revocation: use one authoritative shared store per owner. Cor
 does not atomically coordinate multiple host processes or perform protected disk IO,
 and already-published files/native network effects cannot be undone.
 
+### Live authoritative policy guard
+
+`RememberedApprovalPolicies::with_authority_guard` is a trusted-host opt-in for
+an external authoritative owner. `RememberedApprovalAuthorityGuard::check_current`
+receives a v1 `RememberedPolicyIdentity` (store ID, policy ID and complete policy
+SHA-256), not an execution token. Owners can derive the same identity with
+`for_policy` from already authenticated policy metadata. It neither verifies an
+untrusted snapshot nor proves consent. Never learn the authoritative record from
+the first client request or consult a replayable adjacent checkpoint file.
+
+The guard runs when issuing remembered authority and at each execution checkpoint.
+The complete policy hash includes its scope/ceiling, target and approval/expiry
+times, so an uncommitted replacement cannot inherit the owner's old approval.
+Independent restored clients can be vetoed by one current owner even while their
+old snapshot MACs still verify. Unrelated policy changes need not invalidate a
+different policy's unchanged identity. A guard can only veto an already matched
+local policy; it cannot create consent, broaden manifest limits or approve a new
+scope. Ordinary single-owner stores remain unguarded unless explicitly configured.
+
+Callbacks run without the Core controller or policy mutex, must never show UI,
+and must honor their deadline. Each check is bounded to 50 ms or the earlier guest
+execution/use deadline; late success is rejected. Cancellation and execution time
+are rechecked after the callback, before publication or network dispatch. This
+does not preempt a blocked/hostile native callback: trusted native code is not a
+sandbox, so the provider must use bounded nonblocking/timeout-aware operations.
+Failure creates no remembered authority; the actual pending request remains
+available for an independent fresh user confirmation.
+
+The interface is implemented, not a production protected-storage/IPC provider.
+In-memory fixtures cover independent restored clients and staged-write vetoes,
+not real OS-process coordination or OS key-store durability. A production host must
+authenticate the owner, serialize protected publications, and provide fresh
+per-policy checks before enabling cross-process remembered reuse. Restart/crash
+recovery, confidential snapshot storage and a real backend remain pending.
+
 ### Core grant lifecycle and enforcement
 
 Consumption is synchronized across callers;
