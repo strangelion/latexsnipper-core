@@ -18,7 +18,7 @@
     "crates/api-types/src/v3.rs": "c9ad460a6d7fd6d3de86145cd575ca9b3fb1d74fb5f2016113b4f26853f62ffb",
     "crates/cli/src/formula.rs": "56dd3c8ae0851a1f0407363920c6693efd5b2633591beb044efa09d98fec78b9",
     "crates/cli/src/main.rs": "52e9825a8155d92395c3170b786a842d54ed08fdda7d2f360bc83fea57af60df",
-    "crates/conversion/src/capability_registry.rs": "e9279d2f023a3545369300f1d1b2841353c573cbf001043deae6ffa8577e12ec",
+    "crates/conversion/src/capability_registry.rs": "44121aec9657114644f4abf5bc65ecbae00c33879217cbd753fff99538df525f",
     "crates/evaluation/src/failure_corpus.rs": "ab4e6012a2ae8c25786cdd616a4c711b996c73bd5a804940173e2d576ba4a80e",
     "crates/evaluation/src/int8.rs": "db9a4d1a6e6c60e7e5a3e431da8150b7d292fc1de719a4f9721d2923b4903d23",
     "crates/evaluation/src/schema.rs": "2dd3abc6ec391c5886035917f4cea1c16e8e95046293c8fa386568c1869d9e67",
@@ -29,7 +29,9 @@
     "crates/model/src/manifest_v3.rs": "7a7d2f15532978d732b633557ec1227713b633fdfe0b977aee5bc714236d9213",
     "crates/plugin/src/manifest_v3.rs": "4fb41389e3956a849dbe4d59c3c1d3e388f2fd0a5a8a80424c10338356f5ccbb",
     "crates/plugin/src/signed_registry.rs": "3ab061a24eeb038469170a8d7ec7ffbc9c9ddae5f4748cd70adf1dd62ea09464",
-    "crates/wasm/js/src/types.ts": "ab61c8ba223484ef1b7698279d6d7c6d74d1e751901bca6edd2a300756446539",
+    "crates/wasm/js/src/registry.ts": "d9b57bae79fc13dc5916095c5504d6652fcca0a35c4ef49b5c1cf4662e772362",
+    "crates/wasm/js/src/types.ts": "8a7c0fee2d9497c69d43943aeeb7edf464202e80eafacd846f87eea1dbd91b14",
+    "crates/wasm/js/src/worker-registry.ts": "9415a59458c48974ddd47a4333a6f96f1a937b808390f55765357bc713e0d012",
     "quality/failure-corpus/candidate.schema.json": "c5a2f6bd1c4098f02fe1faf90f10772a45c61eabbb071b96a42887928e9423ec",
     "quality/int8/thresholds.v1.json": "2dbde09e4e91f13738d237e4467aff20aba82e9f4b13789afaa889ee1b7e3140",
     "wit/plugin-v1/plugin.wit": "48b4879e822ec0f055074af9421746ecaf3412c2363960c72f7f7ce846ea3471"
@@ -38,7 +40,7 @@
   "publicRustSourceTrees": {
     "crates/api-types/src": "1a5a24f4dfdb1d665d7a7c2457e6459683a1e54c34d3714822c430c905c57878",
     "crates/ast/src": "a6a0fa052df124abbdee8f633f309db0b3d57218a03bd06e7524199bf05338ad",
-    "crates/conversion/src": "749f1fc4c38bca14e0f8c1b2504a4beedc81804a1fab8032299bc409f69529be",
+    "crates/conversion/src": "633601f87786bc2eb85b5ec369cb605e51b65e952f0dd65a6492c141a2796640",
     "crates/custom-symbols/src": "42654e79bcf161ad17eefad1c191af8c7bd730123dfd265441d0bc41c77cd55b",
     "crates/drawing/src": "05ff157df6e4d011d3008741e6117ce11a795e13e709015b19928194659821db",
     "crates/engine/src": "ffee9d48ac52d6f34d3c4b11b633b030d95f4f957293f53fdb7187cdb2bd2606",
@@ -55,7 +57,7 @@
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
     "crates/syntax/src": "ffeda08867b0660bfbc9e38a895c0f8e31e3e33ca928b2c28e18c6319ed31e32",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
-    "crates/wasm/src": "6bce1b802dec76d3a64cec2c54646ec92527f4ac053a14958554f033a7554abf",
+    "crates/wasm/src": "e2b28c2a2075ce5c345bd5715ce55af55dd73a4a60b9a2facb70ad6cfb7a4b2e",
     "crates/worker/src": "922016f069c35f8722cbbdbd0f360e0d6f0930c5be9cd6c5f05e2a20a6596ed9"
   },
   "schemaVersion": 1

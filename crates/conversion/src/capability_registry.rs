@@ -20,7 +20,7 @@ pub const REGISTERED_EXPORT_FORMATS: &[ExportFormat] = &[
     ExportFormat::Xlsx,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CapabilityTarget {
     Native,

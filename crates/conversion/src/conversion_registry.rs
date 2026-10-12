@@ -73,8 +73,8 @@ impl std::fmt::Display for ConversionRegistryError {
 impl std::error::Error for ConversionRegistryError {}
 type RegistryResult<T> = Result<T, ConversionRegistryError>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversionFormatDescriptor {
     pub schema_version: u16,
     pub id: String,
@@ -82,8 +82,8 @@ pub struct ConversionFormatDescriptor {
     pub description: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversionBackendRoute {
     pub input: String,
     pub output: String,
@@ -91,8 +91,8 @@ pub struct ConversionBackendRoute {
     pub target: CapabilityTarget,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversionBackendDescriptor {
     pub schema_version: u16,
     pub id: String,
@@ -106,8 +106,8 @@ pub struct ConversionBackendDescriptor {
     pub max_output_bytes: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RegisteredConversionRequest {
     pub schema_version: u16,
     pub input: String,

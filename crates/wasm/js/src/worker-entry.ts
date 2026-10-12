@@ -5,8 +5,10 @@ import {
 } from "./types.js";
 import { validateWorkerRequest } from "./worker-request-validation.js";
 import type { WasmFormulaApi, WasmFormulaFragmentApi } from "./formula.js";
+import { registryJson, type NativeFormulaRegistry, type WasmFormulaRegistryApi } from "./registry.js";
 
 interface WasmApi {
+  create_formula_registry_v1?: WasmFormulaRegistryApi["create_formula_registry_v1"];
   convert_formula_v3?: WasmFormulaApi["convert_formula_v3"];
   convert_formula_fragment_v3?: WasmFormulaFragmentApi["convert_formula_fragment_v3"];
   default?: (wasmUrl?: string) => Promise<unknown>;
@@ -31,6 +33,8 @@ type WorkerScope = typeof globalThis & {
 const scope = globalThis as WorkerScope;
 let api: WasmApi | undefined;
 let queue = Promise.resolve();
+const registries = new Map<string, NativeFormulaRegistry>();
+let registrySequence = 0;
 
 function respond(message: WorkerResponse): void {
   scope.postMessage(message);
@@ -52,6 +56,15 @@ async function handle(request: WorkerRequest): Promise<void> {
       return;
     }
     if (request.type === "initialize") {
+      api = undefined;
+      const previous = [...registries.values()];
+      registries.clear();
+      let cleanupFailed = false;
+      for (const registry of previous) {
+        try { try { registry.close(); } finally { registry.free(); } }
+        catch { cleanupFailed = true; }
+      }
+      if (cleanupFailed) throw new Error("Previous registry cleanup failed; worker must be restarted");
       const loaded = (await import(request.options.moduleUrl)) as WasmApi;
       if (loaded.default) await loaded.default(request.options.wasmUrl);
       loaded.init?.();
@@ -62,6 +75,31 @@ async function handle(request: WorkerRequest): Promise<void> {
     if (!api) {
       error(request.requestId, "WORKER_NOT_INITIALIZED", "Initialize the worker before use");
       return;
+    }
+    if (request.type === "formula-registry-create") {
+      if (!api.create_formula_registry_v1) { error(request.requestId, "WORKER_REGISTRY_UNAVAILABLE", "Loaded package lacks a registry factory"); return; }
+      if (registries.size >= 64) { error(request.requestId, "WORKER_REGISTRY_LIMIT", "At most 64 registries are allowed"); return; }
+      if (!Number.isSafeInteger(registrySequence + 1)) { error(request.requestId, "WORKER_REGISTRY_LIMIT", "Registry identifier space exhausted"); return; }
+      const registry = api.create_formula_registry_v1(request.configurationKey);
+      const registryId = `registry:${++registrySequence}`;
+      registries.set(registryId, registry);
+      respond({ protocolVersion: 1, type: "result", requestId: request.requestId, data: { registryId } }); return;
+    }
+    if (request.type === "formula-registry-command") {
+      const registry = registries.get(request.registryId);
+      if (!registry) { error(request.requestId, "WORKER_REGISTRY_STALE", "Registry is unknown or was lost on restart"); return; }
+      const command = request.command;
+      let data: unknown;
+      if (command.kind === "close") {
+        registries.delete(request.registryId);
+        try { data = registry.close(); } finally { registry.free(); }
+      } else if (command.kind === "capabilities") data = registry.capabilities();
+      else if (command.kind === "set-enabled") data = registry.set_enabled(command.backend, command.enabled);
+      else data = registry.convert(registryJson(command.request), registryJson(command.policy, 4096));
+      if (new TextEncoder().encode(JSON.stringify(data)).byteLength > 2 * 1024 * 1024 + 64 * 1024) {
+        error(request.requestId, "WORKER_RESULT_LIMIT", "Registry envelope exceeds its result budget"); return;
+      }
+      respond({ protocolVersion: 1, type: "result", requestId: request.requestId, data }); return;
     }
     if (request.type === "convert-formula") {
       const input = request.input;

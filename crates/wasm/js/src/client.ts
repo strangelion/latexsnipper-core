@@ -12,6 +12,7 @@ import {
   type WorkerResponse,
 } from "./types.js";
 import { validateWorkerRequest } from "./worker-request-validation.js";
+import { WorkerFormulaRegistry, type RegistryWorkerCommand } from "./worker-registry.js";
 
 interface PendingCall {
   resolve(value: unknown): void;
@@ -21,7 +22,7 @@ interface PendingCall {
 interface WorkerTask extends PendingCall {
   requestId: string;
   wireRequestId: string;
-  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" }>;
+  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" | "formula-registry-create" | "formula-registry-command" }>;
   durationMillis: number;
   resultBytes: number;
   onProgress?: (event: ProgressEvent) => void;
@@ -199,6 +200,44 @@ export class WasmWorkerClient {
       });
       signal?.addEventListener("abort", abort, { once: true });
       if (signal?.aborted) abort();
+      void this.pump();
+    });
+  }
+
+  /** Uses only an explicitly loaded app-owned factory, never a request-supplied URL. */
+  async createFormulaRegistry(configurationKey?: string, callOptions: WorkerCallOptions = {}): Promise<WorkerFormulaRegistry> {
+    const generation = this.generation;
+    const created = await this.registryTask({ protocolVersion: 1, type: "formula-registry-create",
+      requestId: this.nextId("registry"), configurationKey }, generation, callOptions);
+    if (generation !== this.generation || typeof created !== "object" || created === null ||
+        typeof (created as { registryId?: unknown }).registryId !== "string" ||
+        !/^registry:[1-9][0-9]{0,15}$/.test((created as { registryId: string }).registryId)) {
+      throw this.runtimeError("WORKER_REGISTRY_STALE", "Registry creation did not produce a current handle");
+    }
+    const registryId = (created as { registryId: string }).registryId;
+    return new WorkerFormulaRegistry((command, options) => this.registryTask({ protocolVersion: 1,
+      type: "formula-registry-command", requestId: this.nextId("registry"), registryId, command }, generation, options));
+  }
+
+  private registryTask(request: Extract<WorkerRequest, { type: "formula-registry-create" | "formula-registry-command" }>,
+    generation: number, options: WorkerCallOptions): Promise<unknown> {
+    if (this.terminated) return Promise.reject(this.runtimeError("WORKER_TERMINATED", "Worker client is terminated"));
+    if (generation !== this.generation) return Promise.reject(this.runtimeError("WORKER_REGISTRY_STALE", "Registry was invalidated by a worker restart"));
+    if (options.signal?.aborted) return Promise.reject(this.runtimeError("CANCELLED", "Registry request was aborted"));
+    const validation = validateWorkerRequest(request);
+    if (!validation.ok) return Promise.reject(this.runtimeError(validation.code, validation.message));
+    if (this.queue.length >= this.maxQueueLength) return Promise.reject(this.runtimeError("WORKER_QUEUE_FULL", "Worker task queue is full"));
+    const durationMillis = options.timeoutMillis ?? this.maxFormulaDurationMillis;
+    if (!Number.isSafeInteger(durationMillis) || durationMillis <= 0) return Promise.reject(this.runtimeError("WORKER_RPC_INVALID_TIMEOUT", "Invalid registry duration"));
+    const owned = structuredClone(request);
+    return new Promise((resolve, reject) => {
+      const abort = (): void => { this.cancel(owned.requestId); };
+      const cleanup = (): void => { options.signal?.removeEventListener("abort", abort); };
+      this.queue.push({ requestId: owned.requestId, wireRequestId: owned.requestId, request: owned,
+        generation, durationMillis, resultBytes: 2 * 1024 * 1024 + 64 * 1024,
+        resolve: (value) => { cleanup(); resolve(value); }, reject: (error) => { cleanup(); reject(error); } });
+      options.signal?.addEventListener("abort", abort, { once: true });
+      if (options.signal?.aborted) abort();
       void this.pump();
     });
   }
@@ -400,6 +439,13 @@ export class WasmWorkerClient {
     this.active = undefined;
     if (active?.timeout) clearTimeout(active.timeout);
     this.generation += 1;
+    // Registry instances and queued commands cannot be recreated/replayed after
+    // termination. Existing pure legacy tasks retain their recovery behavior.
+    for (let index = this.queue.length - 1; index >= 0; index -= 1) {
+      if (this.queue[index]!.request.type.startsWith("formula-registry-")) {
+        this.queue.splice(index, 1)[0]!.reject(this.runtimeError("WORKER_REGISTRY_STALE", "Worker restart invalidated the registry", { workerRestarted: true }));
+      }
+    }
     this.worker.terminate();
     this.rejectAllCalls(code, message);
     active?.reject(activeError ?? this.runtimeError(code, message, { workerRestarted: true }));

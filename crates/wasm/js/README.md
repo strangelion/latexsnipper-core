@@ -153,6 +153,39 @@ compares generated Node package output for every capability row and records web
 package bytes, initialization wall time and the initialized linear memory size;
 the latter is not whole-process or peak memory.
 
+## Registered formula conversion
+
+`FormulaRegistry` wraps the additive `create_formula_registry_v1` export and exposes
+trusted synchronous JS format/backend registration, explicit enablement, capabilities,
+conversion reports and deterministic close/free. Registered backends start disabled.
+This is not a browser WASI sandbox or a third-party code loader. Synchronous callbacks
+must not return Promises or start unmanaged asynchronous work.
+
+The official Worker supports the same registry via an app-owned factory:
+
+```ts
+const registry = await client.createFormulaRegistry(); // Built-in routes only.
+try {
+  const report = await registry.convert({
+    schemaVersion: 1, input: "latex", output: "omml", mode: "strict",
+    backend: null, content: "x^2", contextSha256: actualHostContextSha256,
+  }, { schemaVersion: 1, backends: [] }, { signal: controller.signal });
+  if (report.ok && report.data?.outcome.kind === "converted") {
+    const candidate = report.data.outcome.result.candidate;
+    // Continue through the host's own preview/write validation.
+  }
+} finally { await registry.close(); }
+```
+
+For extensions, explicitly load a trusted same-origin bridge at client initialization;
+its factory maps a finite configuration key to app-owned callbacks. The built-in factory
+rejects supplied keys. Requests cannot supply module URLs, callbacks or permissions.
+Active abort/timeout terminates the Worker and invalidates all old registry handles and
+queued registry operations without replay. Create a new registry explicitly after recovery;
+an old handle's `close()` may reject as stale. Direct synchronous calls cannot forcibly
+interrupt callbacks. See [the contract and runnable fixtures](../../../docs/formats/conversion-registry-wasm.md)
+for budgets, lifecycle and remaining browser/WASI boundaries.
+
 The wasm-pack `bundler` target uses the Wasm ESM integration proposal. Vite consumers must add
 `vite-plugin-wasm` and target `esnext`; the checked-in `vite.config.ts` is the canonical example.
 Run `npm run smoke:packages` after generating the web, bundler, and nodejs packages under

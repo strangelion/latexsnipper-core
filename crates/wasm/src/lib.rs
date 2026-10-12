@@ -2,6 +2,8 @@
 use wasm_bindgen::prelude::*;
 mod api;
 mod formula_api;
+mod formula_registry;
+pub use formula_registry::{create_formula_registry_v1, FormulaRegistryWasm};
 
 pub use formula_api::{
     api_info_v3, convert_formula_fragment_v3, convert_formula_v3, formula_capabilities_v3,

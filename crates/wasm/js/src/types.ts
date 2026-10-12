@@ -129,6 +129,19 @@ export interface ProgressEvent {
 export type WorkerRequest =
   | {
       protocolVersion: typeof WORKER_PROTOCOL_VERSION;
+      type: "formula-registry-create";
+      requestId: string;
+      configurationKey?: string;
+    }
+  | {
+      protocolVersion: typeof WORKER_PROTOCOL_VERSION;
+      type: "formula-registry-command";
+      requestId: string;
+      registryId: string;
+      command: import("./registry.js").RegistryWorkerCommand;
+    }
+  | {
+      protocolVersion: typeof WORKER_PROTOCOL_VERSION;
       type: "convert-formula";
       requestId: string;
       input: Omit<FormulaWorkerInput, "requestId">;

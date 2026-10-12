@@ -56,6 +56,26 @@ integration state.
 
 ## Review obligations for later PRs
 
+### Additive registered formula bindings (2026-10-12)
+
+The semantic registry is shared by Rust, explicit CLI selection, the independent
+C registry ABI, the formal Python `FormulaRegistry`, and the WASM/JS registry.
+The native WASI profile path retains verified activation and host-only sensitive
+action approval. WASM/JS supports trusted synchronous callbacks, not a browser
+WASI loader or permission sandbox; its contract is in
+[`conversion-registry-wasm.md`](../formats/conversion-registry-wasm.md).
+Existing enum formats and serialized layouts are retained. Registry JSON ingestion
+is closed/versioned; `CapabilityTarget` and registry declarations now deserialize
+without changing their serialized shape.
+
+`create_formula_registry_v1`/`FormulaRegistryWasm` are additive exports, and
+`FormulaRegistry`/`WorkerFormulaRegistry` are additive SDK classes. Worker protocol
+v1 adds closed `formula-registry-create` and `formula-registry-command` actions.
+Worker termination invalidates old instances and queued registry work without
+replay; an explicit new instance is required. The new SDK contract files are
+included in the freeze manifest. This does not close Office, binary/document
+routes, browser untrusted WASI, persistent consent or mobile-host acceptance.
+
 GA hardening freezes Rust exports, serialized examples, TypeScript
 declarations, CLI behavior/exit codes, package contents, compatibility adapters,
 WIT, and this inventory together. `contracts/v3-contract-freeze.json` is checked

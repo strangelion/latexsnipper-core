@@ -19,7 +19,7 @@ recognition = [
     "latexsnipper-api-types/image-input",
     "dep:latexsnipper-image", "dep:latexsnipper-model", "dep:latexsnipper-runtime",
     "dep:latexsnipper-tensor", "dep:latexsnipper-engine", "dep:latexsnipper-tract",
-    "dep:latexsnipper-inference", "dep:latexsnipper-syntax", "dep:js-sys",
+    "dep:latexsnipper-inference", "dep:latexsnipper-syntax",
     "dep:web-sys", "dep:wasm-bindgen-futures", "dep:once_cell", "dep:sha2",
 ]
 
@@ -40,7 +40,7 @@ latexsnipper-inference = { workspace = true, features = ["wasm"], optional = tru
 serde_json.workspace = true
 log.workspace = true
 wasm-bindgen = "0.2"
-js-sys = { version = "0.3", optional = true }
+js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console"], optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
 serde = { version = "1", features = ["derive"] }
