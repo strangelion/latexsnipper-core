@@ -678,7 +678,14 @@ fn common_formula_format_integrity_suite() {
             "left_right_fraction",
             r"\left(\frac{a}{b}\right)",
             &["<m:d>", "<m:f>"][..],
-            &["<mfenced", "<mfrac>"][..],
+            &[
+                "fence=\"true\" stretchy=\"true\"",
+                "form=\"prefix\"",
+                ">(</mo>",
+                "<mfrac>",
+                "form=\"postfix\"",
+                ")</mo>",
+            ][..],
             &["frac("][..],
             &["(", "\\frac", "a", "b", ")"][..],
         ),
@@ -695,6 +702,15 @@ fn common_formula_format_integrity_suite() {
         assert_contains_all(&format!("{} OMML", name), &omml, omml_needles);
         assert_contains_all(&format!("{} MathML", name), &mathml, mathml_needles);
         assert_contains_all(&format!("{} Typst", name), &typst, typst_needles);
+        if name == "left_right_fraction" {
+            assert!(!mathml.contains("<mfenced"));
+            let readback =
+                DocumentConverter::convert_mathml_string(&mathml, OutputFormat::OMML).unwrap();
+            assert_eq!(
+                readback, omml,
+                "modern fences must retain fraction ownership"
+            );
+        }
         assert_contains_all(
             &format!("{} OMML->LaTeX roundtrip", name),
             &roundtrip,
