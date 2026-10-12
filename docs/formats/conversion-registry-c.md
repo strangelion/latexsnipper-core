@@ -82,5 +82,7 @@ failure without fallback. It is not general AsciiMath/UnicodeMath/MTEF support o
 signed remote service test. `formula_registry_smoke.py` also loads an actual native
 shared library to verify exported symbols, ownership, reports and lifecycle.
 CI runs it alongside legacy formula/session/JNI checks. The script is a ctypes
-reference client; the formal PyO3 and WASM/JS registered-conversion APIs, application
-UI, binary/document routes and real Office writeback remain separate work.
+reference client. The formal [PyO3 FormulaRegistry](../../crates/python/README.md#explicit-registered-conversion)
+now uses this linked native registry rather than a second permission implementation.
+WASM/JS registration, application UI, binary/document routes and real Office writeback
+remain separate work.

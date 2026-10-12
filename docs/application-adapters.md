@@ -48,6 +48,10 @@ JSONL 的 `formula.capabilities` 和 `formula.convert` 复用原生 Core 门禁�
 取消/关闭可从另一宿主线程发起；WASI 保留已有中断检查，内置/native 调用不能强制撤销，
 观察到取消后不交出候选。宿主审批接口不等于插件自批或应用确认 UI。
 
+正式 Python `FormulaRegistry` 复用这套原生实例，保留旧字符串方法，返回有审计信息的转换/拒绝报告。
+Core 调用释放 GIL；取消/关闭、有限授权与撤销不另设一套权限实现。
+WASI profile 需要显式特性 wheel；公开 ABI、各平台包及应用写回的边界见 [Python 说明](../crates/python/README.md#explicit-registered-conversion)。
+
 官方 JS `WasmWorkerClient.convertFormula` 提供有限队列、输入与结果预算、
 AbortSignal、活动执行超时和 Worker 重建。默认 64 KiB 输入、256 KiB
 序列化 envelope、30 秒活动执行；排队时间不属于活动执行超时。

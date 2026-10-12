@@ -1,5 +1,8 @@
 //! Persistent PyO3 adapter for the application-facing recognition session.
 
+mod formula_registry;
+pub use formula_registry::FormulaRegistry;
+
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
@@ -96,6 +99,7 @@ fn python_error(py: Python<'_>, error: BindingError) -> PyErr {
     let _ = value.setattr("code", error.code);
     let _ = value.setattr("detail", error.detail);
     let _ = value.setattr("retryable", error.retryable);
+    let _ = value.setattr("details", py.None());
     exception
 }
 
@@ -653,6 +657,7 @@ fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(convert_formula, module)?)?;
     module.add_function(wrap_pyfunction!(formula_conversion_capabilities, module)?)?;
     module.add_class::<Session>()?;
+    module.add_class::<FormulaRegistry>()?;
     module.add_class::<CancellationToken>()?;
     module.add("LaTeXSnipperError", py.get_type::<LaTeXSnipperError>())?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;

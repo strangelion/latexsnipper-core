@@ -2586,10 +2586,15 @@ dependencies = [
  "latexsnipper-ast",
  "latexsnipper-conversion",
  "latexsnipper-engine",
+ "latexsnipper-ffi",
+ "latexsnipper-plugin",
  "pyo3",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
+ "wit-component",
+ "zip",
 ]
 
 [[package]]

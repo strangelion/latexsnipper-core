@@ -68,6 +68,22 @@ jobs:
       - name: Validate persistent session semantics
         working-directory: crates/python
         run: python tests/smoke.py
+      - name: Validate formal Python registry class and report ownership
+        working-directory: crates/python
+        run: python tests/registry_smoke.py
+      - name: Build the explicit WASI-profile Python wheel
+        if: runner.os == 'Linux'
+        working-directory: crates/python
+        run: python -m maturin build --release --features wasi-formula --out dist-wasi
+      - name: Install only the WASI-profile wheel
+        if: runner.os == 'Linux'
+        working-directory: crates/python
+        run: python -m pip install --force-reinstall --no-index --find-links dist-wasi latexsnipper-core
+      - name: Verify installed Python import/export against a real local Component
+        if: runner.os == 'Linux'
+        env:
+          SNIPPER_PYTHON_REGISTRY_SMOKE: python
+        run: cargo test --release --locked -p latexsnipper-python --features wasi-formula --lib raw_profile_keeps_duplicate_fields_and_real_wasi_route_is_explicit
       - name: Build the C formula shared library
         run: cargo build --locked -p latexsnipper-ffi --features android-jni --release
       - name: Validate exported C formula symbols and session compatibility

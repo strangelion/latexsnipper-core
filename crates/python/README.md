@@ -81,6 +81,72 @@ conversions, including the strict route), invalid arguments, failure isolation
 and resource limits, alongside the existing persistent-session tests. It does
 not measure visual fidelity or real Office host compatibility.
 
+## Explicit registered conversion
+
+`FormulaRegistry` is the formal PyO3 interface to the same native registry used by
+the additive C ABI. It retains one registry/compiled host per object, independently
+of recognition `Session` objects. It does not load models, install packages or
+implicitly choose a plugin.
+
+```python
+from latexsnipper_core import FormulaRegistry
+
+with FormulaRegistry() as registry:
+    report = registry.convert(
+        r"\frac{1}{2}", input_format="latex", output_format="omml",
+        context_sha256="a" * 64,
+    )
+    if report["outcome"]["kind"] == "converted":
+        candidate = report["outcome"]["result"]["candidate"]["content"]
+```
+
+The digest above is a placeholder: bind the actual native binary/build, definitions,
+fonts, styles and host dependencies. A report is not document write authority or
+proof of mathematical/visual fidelity. Unlike legacy `convert_formula`, this method
+returns an audited `converted`/`rejected` dictionary, not a plain string. Valid
+registry refusals stay in the report; transport/argument/pre-marshalling failures
+raise `LaTeXSnipperError`. Native codes are preserved, with structured `.details`
+and a JSON string `.detail` when details are present. Legacy errors retain their
+existing `.detail` and additionally have `.details = None`.
+
+Capabilities, backend enablement and explicit availability-only `fallback` use the
+[registered route contract](../../docs/formats/conversion-registry.md). A handler's
+failure never retries. Source arguments are capped at 64 KiB before marshalling;
+native report data retains its 2 MiB serialized limit and 256 KiB candidate limit.
+Operations release the GIL. `cancel()` and `close()` are callable from another Python
+thread, without waiting for the conversion mutex; native work already entered cannot
+be undone. Cancellation is terminal for that instance, not a package blacklist.
+`close()` is idempotent and context-manager exit/garbage collection close the handle.
+`info()` does not expose transferable native handle numbers.
+
+WASI profiles require an explicit wheel build with `--features wasi-formula`:
+
+```console
+python -m maturin build --release --features wasi-formula --out dist-wasi
+```
+
+Supply both `plugin_store` (an existing verified/enabled store) and `profile_json`
+(the closed v1 JSON string). Raw nested fields are retained for validation, including
+duplicate-key rejection; parsing a profile to a dict first can erase such defects.
+Preparation leaves the profile route disabled. Call `set_enabled(backend_id, True)`
+and select that backend explicitly. It does not enable the underlying package or
+approve sensitive effects. Default wheels reject profiles with `FEATURE_NOT_COMPILED`.
+
+`approvals()` returns owned pending/grant snapshots. Only trusted application code
+may call `approval(command_json)` after explicit human consent; never expose it
+directly as a guest/MCP/plugin endpoint. Existing finite grants do not re-prompt per
+action. Do not automatically log/upload snapshots, which can contain sensitive paths
+and destinations. Application dialogs, durable human policy and Office writes are not
+implemented by this binding. Scope, quota, TTL and revocation remain those of the
+[native host contract](../../docs/formats/conversion-registry-c.md#trusted-host-approval).
+
+The finite power fixture verifies real importer/exporter behavior, not generic new
+format support. The wheel smoke loads the extracted native binary in subprocesses,
+checks its origin/feature identity, and removes the extraction directory afterward
+without modifying the active environment. CI verifies default wheels on its native
+matrix and additionally exercises an explicit WASI wheel on Linux; other feature-wheel
+distribution/host combinations still need their own verification.
+
 Build and install an editable development extension from this directory with:
 
 Use an existing non-base Conda/virtual environment and verify the active Python

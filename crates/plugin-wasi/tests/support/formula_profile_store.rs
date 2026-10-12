@@ -18,6 +18,10 @@ pub fn profile(exporter: bool) -> Value {
 }
 
 pub fn store() -> (tempfile::TempDir, RemotePluginStore) {
+    store_with_fuel(1_000_000)
+}
+
+pub fn store_with_fuel(fuel: u64) -> (tempfile::TempDir, RemotePluginStore) {
     let component = ComponentEncoder::default()
         .module(include_bytes!("../fixtures/success-component.core.wasm"))
         .unwrap()
@@ -44,7 +48,7 @@ pub fn store() -> (tempfile::TempDir, RemotePluginStore) {
             "registrations":{"capabilities":true,"importers":true,"exporters":true,"runtimes":false},
             "limits":{"timeoutMillis":1000,"memoryBytes":4194304,"inputBytes":1048576,"outputBytes":1048576,
                 "diagnosticCount":16,"diagnosticBytes":16384,"modelArtifactBytes":1048576,
-                "temporaryStorageBytes":1048576,"tableElements":256,"resources":8,"fuel":1000000,"maxConcurrentExecutions":1}
+                "temporaryStorageBytes":1048576,"tableElements":256,"resources":8,"fuel":fuel,"maxConcurrentExecutions":1}
         },"platforms":[],"architectures":[],"license":"AGPL-3.0",
         "artifact":{"path":"plugin.wasm","kind":"wasi_component","sha256":format!("{:x}",Sha256::digest(&component)),"sizeBytes":component.len()},
         "signature":null,"provenance":{"source":"fixture","revision":"test","statementSha256":null},
