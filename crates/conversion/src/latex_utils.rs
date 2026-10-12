@@ -107,6 +107,56 @@ pub(crate) fn literal_command_symbol(command: &str) -> Option<&'static str> {
     }
 }
 
+// Recognize a delimiter marker without changing the public AST variants.
+pub(crate) fn middle_glyph(node: &crate::latex_ast::LatexNode) -> Option<&str> {
+    use crate::latex_ast::LatexNode;
+    match node {
+        LatexNode::Command { name, args } if name == "middle" && args.len() == 1 => {
+            let LatexNode::Text(token) = &args[0] else {
+                return None;
+            };
+            latexsnipper_syntax::latex::scalable_delimiter_glyph(token)
+        }
+        _ => None,
+    }
+}
+
+// OMML has one separator character shared by every base argument.
+pub(crate) fn delimiter_segments(
+    nodes: &[crate::latex_ast::LatexNode],
+) -> Result<(Option<&str>, Vec<&[crate::latex_ast::LatexNode]>), &'static str> {
+    let mut separator = None;
+    let mut parts = Vec::new();
+    let mut start = 0;
+    for (index, node) in nodes.iter().enumerate() {
+        if let crate::latex_ast::LatexNode::Command { name, .. } = node {
+            if name == "middle" {
+                let glyph = middle_glyph(node).ok_or("Unsupported middle delimiter")?;
+                if separator.is_some_and(|previous| previous != glyph) {
+                    return Err("Mixed middle delimiters require a separate layout mapping");
+                }
+                separator = Some(glyph);
+                parts.push(&nodes[start..index]);
+                start = index + 1;
+            }
+        }
+    }
+    parts.push(&nodes[start..]);
+    Ok((separator, parts))
+}
+
+pub(crate) fn join_middle_source(parts: &[String], glyph: &str) -> String {
+    let marker = format!("\\middle{}", delimiter_source_token(glyph));
+    let mut fragments = Vec::new();
+    for (index, part) in parts.iter().enumerate() {
+        if index > 0 {
+            fragments.push(marker.clone());
+        }
+        fragments.push(part.clone());
+    }
+    latexsnipper_ast::formula_layout::join_latex_fragments(fragments)
+}
+
 /// Rebuild scalable source without interpreting XML braces/backslashes as syntax.
 pub(crate) fn delimited_source(left: &str, body: &str, right: &str) -> String {
     latexsnipper_ast::formula_layout::join_latex_fragments([

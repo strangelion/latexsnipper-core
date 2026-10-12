@@ -361,6 +361,36 @@ fn convert_delimiter(s: &str) -> &str {
 /// Convert LaTeX command to Typst.
 fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String {
     match name {
+        "middle" => match args.first().and_then(|arg| match arg {
+            LatexNode::Text(token) if args.len() == 1 => {
+                latexsnipper_syntax::latex::scalable_delimiter_glyph(token)
+            }
+            _ => None,
+        }) {
+            Some("") => String::new(),
+            Some(glyph) => {
+                let symbol = match glyph {
+                    "(" => "paren.l",
+                    ")" => "paren.r",
+                    "[" => "bracket.l",
+                    "]" => "bracket.r",
+                    "{" => "brace.l",
+                    "}" => "brace.r",
+                    "/" => "slash",
+                    "\\" => "backslash",
+                    _ => convert_delimiter(glyph),
+                };
+                format!("mid({symbol})")
+            }
+            None => format!(
+                "#raw({}, lang: \"latex\")",
+                serde_json::to_string(&format!(
+                    "\\middle{}",
+                    args.first().map(ToString::to_string).unwrap_or_default()
+                ))
+                .unwrap_or_default()
+            ),
+        },
         _ if name.starts_with("begin{") || name == "invalid-scalable-delimiter" => format!(
             "#raw({}, lang: \"latex\")",
             serde_json::to_string(&args.first().map(ToString::to_string).unwrap_or_default())

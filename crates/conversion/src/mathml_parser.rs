@@ -232,9 +232,16 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             };
             let left = attribute("open=").unwrap_or("(");
             let right = attribute("close=").unwrap_or(")");
-            let separator =
-                crate::latex_utils::escape_text_symbols(attribute("separators=").unwrap_or(","));
-            crate::latex_utils::delimited_source(left, &children.join(&separator), right)
+            let separator = attribute("separators=").unwrap_or(",");
+            let token = crate::latex_utils::delimiter_source_token(separator);
+            let body = if children.len() > 1
+                && latexsnipper_syntax::latex::scalable_delimiter_glyph(&token) == Some(separator)
+            {
+                crate::latex_utils::join_middle_source(children, separator)
+            } else {
+                children.join(&crate::latex_utils::escape_text_symbols(separator))
+            };
+            crate::latex_utils::delimited_source(left, &body, right)
         }
         "math" | "mrow" | "style" | "semantics" | "annotation-xml" | "none" => {
             if children.is_empty() {

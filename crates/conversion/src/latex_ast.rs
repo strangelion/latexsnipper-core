@@ -238,6 +238,13 @@ impl std::fmt::Display for LatexNode {
                 write!(f, "\\{s}")
             }
             LatexNode::Symbol(s) => write!(f, "{}", s),
+            LatexNode::Command { name, args } if name == "middle" => {
+                write!(
+                    f,
+                    "\\middle{}",
+                    args.first().map(ToString::to_string).unwrap_or_default()
+                )
+            }
             LatexNode::Command { name, args }
                 if name.starts_with("begin{") || name == "invalid-scalable-delimiter" =>
             {

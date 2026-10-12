@@ -648,6 +648,14 @@ impl LatexParser {
             "begin" => self.parse_environment(start - 1),
             // \left ... \right
             "left" => self.parse_delimited(start - 1),
+            "middle" => {
+                let token = self.delimiter_token().unwrap_or_default();
+                self.skip_whitespace();
+                Some(LatexNode::Command {
+                    name: cmd,
+                    args: vec![LatexNode::Text(token)],
+                })
+            }
             // Standalone commands
             "tableofcontents" => Some(LatexNode::TableOfContents),
             // Unknown command — store as Command node

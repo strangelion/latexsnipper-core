@@ -117,7 +117,9 @@ fn malformed_or_cross_scope_delimiters_are_not_strictly_replaceable() {
         r"{\left(x}{y\right)}",
         r"$\left(x$\right)",
         r"\middle|x",
-        r"\left(x\middle|y\right)",
+        r"\left(x\middle\unknown y\right)",
+        r"\left(x{\middle|y}\right)",
+        r"\left(x\middle|y\middle\Vert z\right)",
     ] {
         assert!(validate_omml_latex(source).is_err(), "Accepted: {source}");
     }
@@ -128,6 +130,111 @@ fn malformed_or_cross_scope_delimiters_are_not_strictly_replaceable() {
     let source = format!("{}x{}", r"\left(".repeat(130), r"\right)".repeat(130));
     assert!(validate_omml_latex(&source).is_err());
     assert_eq!(parse_latex(&source).to_string(), source);
+}
+
+#[test]
+fn middle_delimiters_split_bases_without_owning_the_next_operand() {
+    for marker in [
+        "|",
+        r"\Vert",
+        r"\langle",
+        r"\{",
+        r"\backslash",
+        r"\uparrow",
+        ".",
+    ] {
+        let source =
+            format!("\\left(x\\middle{marker}\\frac{{a}}{{b}}\\middle{marker} z\\right)_i^2+t");
+        validate_omml_latex(&source).unwrap();
+        let canonical = parse_latex(&source).to_string();
+        assert_eq!(canonical.matches(r"\middle").count(), 2, "{canonical}");
+        validate_omml_latex(&canonical).unwrap();
+        let expected = latex_to_omml(&source);
+        assert_eq!(latex_to_omml(&canonical), expected, "{canonical}");
+        let glyph = scalable_delimiter_glyph(marker).unwrap();
+        let escaped = glyph
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        assert!(
+            expected.contains(&format!("<m:sepChr m:val=\"{escaped}\"/>")),
+            "{expected}"
+        );
+        assert!(expected.contains("<m:sSubSup><m:e><m:d>"), "{expected}");
+        assert!(expected.contains("<m:e><m:f>"), "{expected}");
+        let mathml = render(&source, OutputFormat::MathML);
+        assert!(
+            mathml.contains(&format!("separators=\"{escaped}\"")),
+            "{mathml}"
+        );
+        for restored in [
+            parse_omml_to_latex(&expected).unwrap(),
+            parse_mathml_to_latex(&mathml).unwrap(),
+        ] {
+            validate_omml_latex(&restored).unwrap();
+            assert_eq!(latex_to_omml(&restored), expected, "{source} -> {restored}");
+        }
+    }
+}
+
+#[test]
+fn middle_nested_empty_and_commented_sections_keep_their_scope() {
+    for source in [
+        r"\left(\middle|\middle|x\middle|\right)",
+        r"\left(x\middle|\left[y\middle\Vert z\right]\middle|t\right)",
+        "\\left(x\\middle% fake \\right)\n\\Vert y\\right)",
+        r"\left(\begin{matrix}a&b\\c&d\end{matrix}\middle|\begin{matrix}e&f\\g&h\end{matrix}\right)",
+    ] {
+        validate_omml_latex(source).unwrap();
+        let expected = latex_to_omml(source);
+        for restored in [
+            parse_omml_to_latex(&expected).unwrap(),
+            parse_mathml_to_latex(&render(source, OutputFormat::MathML)).unwrap(),
+        ] {
+            validate_omml_latex(&restored).unwrap_or_else(|error| panic!("{restored}: {error}"));
+            assert_eq!(latex_to_omml(&restored), expected, "{source} -> {restored}");
+        }
+    }
+    let typst = render(r"\left\{x\middle|\frac{a}{b}\right\}", OutputFormat::Typst);
+    assert!(typst.contains("mid(|)"), "{typst}");
+    assert!(!typst.contains("middle"), "{typst}");
+}
+
+#[test]
+fn omml_multiple_arguments_reconstruct_a_separator_not_matrix_rows() {
+    let source = r#"<oMath><d><dPr><begChr val="["/><endChr val="]"/><sepChr val="‖"></sepChr></dPr><e><r><t>x</t></r></e><e><r><t>y</t></r></e></d></oMath>"#;
+    assert_eq!(
+        parse_omml_to_latex(source).unwrap(),
+        r"\left[x\middle\Vert y\right]"
+    );
+    let default = r#"<oMath><d><e><r><t>x</t></r></e><e><r><t>y</t></r></e></d></oMath>"#;
+    assert_eq!(
+        parse_omml_to_latex(default).unwrap(),
+        r"\left(x\middle|y\right)"
+    );
+    let unknown = source.replace("‖", "not-a-delimiter");
+    assert!(parse_omml_to_latex(&unknown).is_err());
+    assert!(parse_omml_to_latex("<r><t>x</t></r><r>").is_err());
+    assert_eq!(
+        parse_omml_to_latex("<r><t>x</t></r><r><t>y</t></r>").unwrap(),
+        "xy"
+    );
+}
+
+#[test]
+fn unsupported_middle_shapes_retain_source_instead_of_becoming_text_operators() {
+    for source in [
+        r"\left(x\middle|y\middle\Vert z\right)",
+        r"\left(x\middle\unknown y\right)",
+    ] {
+        assert!(validate_omml_latex(source).is_err());
+        let canonical = parse_latex(source).to_string();
+        assert!(latex_to_omml(source).contains(&canonical), "{source}");
+        assert!(
+            render(source, OutputFormat::MathML).contains(&canonical),
+            "{source}"
+        );
+    }
 }
 
 #[test]

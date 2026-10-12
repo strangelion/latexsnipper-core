@@ -126,12 +126,16 @@ fn parse_inner(xml: &str) -> Result<String, String> {
     let mut buf = Vec::new();
     let mut stack: Vec<(String, Vec<(String, String)>)> = Vec::new();
     let mut text_buf = String::new();
+    let mut roots = Vec::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
                 let tag = local(e.name().as_ref());
-                let children = if matches!(tag.as_str(), "count" | "mcJc") {
+                let children = if matches!(
+                    tag.as_str(),
+                    "count" | "mcJc" | "begChr" | "endChr" | "sepChr"
+                ) {
                     attribute_value(&e, reader.decoder())?
                         .map(|value| vec![("$val".into(), value)])
                         .unwrap_or_default()
@@ -176,6 +180,8 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                 };
                 if let Some((_, ref mut parent)) = stack.last_mut() {
                     parent.push((tag, val));
+                } else {
+                    roots.push(build_latex(&tag, &[], &val));
                 }
             }
             Ok(Event::End(_)) => {
@@ -228,6 +234,20 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                             return Err("Unsupported OMML matrix column alignment".into());
                         }
                     }
+                    if tag == "dPr" {
+                        for (name, glyph) in &tagged_children {
+                            if matches!(name.as_str(), "begChr" | "endChr" | "sepChr")
+                                && latexsnipper_syntax::latex::scalable_delimiter_glyph(
+                                    &crate::latex_utils::delimiter_source_token(glyph),
+                                ) != Some(glyph.as_str())
+                            {
+                                return Err(
+                                    "Unsupported OMML delimiter glyph; retain the original XML"
+                                        .into(),
+                                );
+                            }
+                        }
+                    }
                     let text = text_buf.clone();
                     text_buf.clear();
 
@@ -236,7 +256,7 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                     if let Some((_, ref mut parent)) = stack.last_mut() {
                         parent.push((tag, result));
                     } else {
-                        return Ok(result);
+                        roots.push(result);
                     }
                 }
             }
@@ -249,7 +269,16 @@ fn parse_inner(xml: &str) -> Result<String, String> {
         }
         buf.clear();
     }
-    Err("Empty OMML document".to_string())
+    if !stack.is_empty() {
+        return Err("Unclosed OMML element; retain the original XML".into());
+    }
+    if roots.is_empty() {
+        Err("Empty OMML document".to_string())
+    } else {
+        Ok(latexsnipper_ast::formula_layout::join_latex_fragments(
+            roots,
+        ))
+    }
 }
 
 fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String {
@@ -419,6 +448,15 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 .filter(|(t, _)| t == "e")
                 .map(|(_, v)| v.clone())
                 .collect();
+            if content.len() > 1 {
+                let properties = get_child(children, "dPr");
+                let separator = properties
+                    .split_once(",sep=")
+                    .map(|(_, value)| value)
+                    .unwrap_or("|");
+                let joined = crate::latex_utils::join_middle_source(&content, separator);
+                return crate::latex_utils::delimited_source(&beg, &joined, &end);
+            }
             let joined = content.join(" \\\\ ");
             if let Some(body) = whole_matrix_body(&joined) {
                 if beg == "{" && end.is_empty() {
@@ -570,11 +608,12 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             .map(|(_, v)| v.clone())
             .collect::<Vec<_>>()
             .join(""),
-        "begChr" | "endChr" | "pos" | "chr" => children
+        "pos" | "chr" => children
             .iter()
             .map(|(_, v)| v.clone())
             .collect::<Vec<_>>()
             .join(""),
+        "begChr" | "endChr" | "sepChr" => get_child(children, "$val"),
         "dPr" => {
             let beg = children
                 .iter()
@@ -586,7 +625,12 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 .find(|(tag, _)| tag == "endChr")
                 .map(|(_, value)| value.clone())
                 .unwrap_or_else(|| ")".into());
-            format!("beg={},end={}", beg, end)
+            let separator = children
+                .iter()
+                .find(|(tag, _)| tag == "sepChr")
+                .map(|(_, value)| format!(",sep={value}"))
+                .unwrap_or_default();
+            format!("beg={},end={}{}", beg, end, separator)
         }
         // Run properties: extract color/bold/italic/style for parent <m:r>
         "rPr" | "w:rPr" => {
@@ -694,7 +738,13 @@ fn get_delimiter_chars(children: &[(String, String)]) -> (String, String) {
     let dpr = get_child(children, "dPr");
     if let Some(rest) = dpr.strip_prefix("beg=") {
         if let Some((beg, end_part)) = rest.split_once(",end=") {
-            return (beg.to_string(), end_part.to_string());
+            return (
+                beg.to_string(),
+                end_part
+                    .split_once(",sep=")
+                    .map_or(end_part, |(end, _)| end)
+                    .to_string(),
+            );
         }
     }
     let mut chars = dpr.chars();

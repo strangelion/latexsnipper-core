@@ -161,7 +161,8 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
             {
                 return Err("Unsupported OMML scalable delimiter".into());
             }
-            content.iter().collect()
+            let (_, sections) = crate::latex_utils::delimiter_segments(content)?;
+            sections.into_iter().flatten().collect()
         }
         Command { name, args } => {
             if matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
@@ -562,11 +563,17 @@ fn ast_to_omml(node: &LatexNode) -> String {
             let Some(right) = latexsnipper_syntax::latex::scalable_delimiter_glyph(right) else {
                 return wrap_normal_mtext(&node.to_string());
             };
+            let Ok((separator, sections)) = crate::latex_utils::delimiter_segments(content) else {
+                return wrap_normal_mtext(&node.to_string());
+            };
+            let separator = separator.map(|glyph| format!("<m:sepChr m:val=\"{}\"/>", xml_escape(glyph))).unwrap_or_default();
+            let body: String = sections.into_iter().map(|section| format!("<m:e>{}</m:e>", sequence_to_omml(section))).collect();
             format!(
-                "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/></m:dPr>\n  <m:e>{}</m:e>\n</m:d>",
+                "<m:d>\n  <m:dPr><m:begChr m:val=\"{}\"/><m:endChr m:val=\"{}\"/>{}</m:dPr>\n  {}\n</m:d>",
                 xml_escape(left),
                 xml_escape(right),
-                sequence_to_omml(content)
+                separator,
+                body
             )
         }
 

@@ -41,7 +41,7 @@
   "publicRustSourceTrees": {
     "crates/api-types/src": "1a5a24f4dfdb1d665d7a7c2457e6459683a1e54c34d3714822c430c905c57878",
     "crates/ast/src": "a6a0fa052df124abbdee8f633f309db0b3d57218a03bd06e7524199bf05338ad",
-    "crates/conversion/src": "a9adbf3c3280cf02cbef2bd3141a1fac309ffde7fd2626df1d298741194ae75d",
+    "crates/conversion/src": "2ba76730fc53de988cb4fe46f22f9d722dd8bd319d88f981962996d45c4c8344",
     "crates/custom-symbols/src": "42654e79bcf161ad17eefad1c191af8c7bd730123dfd265441d0bc41c77cd55b",
     "crates/drawing/src": "05ff157df6e4d011d3008741e6117ce11a795e13e709015b19928194659821db",
     "crates/engine/src": "ffee9d48ac52d6f34d3c4b11b633b030d95f4f957293f53fdb7187cdb2bd2606",

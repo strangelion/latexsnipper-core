@@ -661,11 +661,23 @@ fn render_delimited_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
             ) else {
                 return Some(format!("<mtext>{}</mtext>", xml_escape(&node.to_string())));
             };
-            let inner: String = content.iter().map(child).collect();
+            let Ok((separator, sections)) = crate::latex_utils::delimiter_segments(content) else {
+                return Some(format!("<mtext>{}</mtext>", xml_escape(&node.to_string())));
+            };
+            let inner: String = sections
+                .into_iter()
+                .map(|section| {
+                    format!(
+                        "<mrow>{}</mrow>",
+                        section.iter().map(child).collect::<String>()
+                    )
+                })
+                .collect();
             format!(
-                "<mfenced open=\"{}\" close=\"{}\" separators=\"\"><mrow>{inner}</mrow></mfenced>",
+                "<mfenced open=\"{}\" close=\"{}\" separators=\"{}\">{inner}</mfenced>",
                 xml_escape(left),
-                xml_escape(right)
+                xml_escape(right),
+                xml_escape(separator.unwrap_or(""))
             )
         }
         LatexNode::Command { name, args } if name == "invalid-scalable-delimiter" => {
@@ -1487,14 +1499,22 @@ fn render_symbol_ast(
         } => {
             let left = latexsnipper_syntax::latex::scalable_delimiter_glyph(left)?;
             let right = latexsnipper_syntax::latex::scalable_delimiter_glyph(right)?;
-            let parts: Option<Vec<_>> = content
-                .iter()
-                .map(|node| render_symbol_ast(node, found, depth + 1))
+            let (separator, sections) = crate::latex_utils::delimiter_segments(content).ok()?;
+            let parts: Option<Vec<_>> = sections
+                .into_iter()
+                .map(|section| {
+                    let nodes: Option<Vec<_>> = section
+                        .iter()
+                        .map(|node| render_symbol_ast(node, found, depth + 1))
+                        .collect();
+                    Some(format!("<mrow>{}</mrow>", nodes?.concat()))
+                })
                 .collect();
             Some(format!(
-                "<mfenced open=\"{}\" close=\"{}\" separators=\"\"><mrow>{}</mrow></mfenced>",
+                "<mfenced open=\"{}\" close=\"{}\" separators=\"{}\">{}</mfenced>",
                 xml_escape(left),
                 xml_escape(right),
+                xml_escape(separator.unwrap_or("")),
                 parts?.concat()
             ))
         }

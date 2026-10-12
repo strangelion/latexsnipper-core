@@ -190,6 +190,18 @@ fn exported_arrays_compile_with_local_typst() {
         r"\left\uparrow x\right\Downarrow",
         r"{x_i}^2+x_i^2+\left(x\,y\right)",
         r"\langle x\rangle+\lVert y\rVert+\lvert z\rvert",
+        r"\left\{x\middle|\frac{a}{b}\middle|z\right\}_i^2+t",
+        r"\left(x\middle\Vert\left[y\middle|z\right]\middle\Vert t\right)",
+        r"\left(x\middle(\frac{a}{b}\right)",
+        r"\left(x\middle[\frac{a}{b}\right)",
+        r"\left(x\middle\{\frac{a}{b}\right)",
+        r"\left(x\middle\langle\frac{a}{b}\right)",
+        r"\left(x\middle\lfloor\frac{a}{b}\right)",
+        r"\left(x\middle\lceil\frac{a}{b}\right)",
+        r"\left(x\middle/\frac{a}{b}\right)",
+        r"\left(x\middle\backslash\frac{a}{b}\right)",
+        r"\left(x\middle\uparrow\frac{a}{b}\right)",
+        r"\left(x\middle.\frac{a}{b}\right)",
     ];
     let output = sources
         .iter()
