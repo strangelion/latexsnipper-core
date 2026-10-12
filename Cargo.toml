@@ -172,5 +172,6 @@ name = "table_e2e"
 path = "tests/table_e2e.rs"
 
 [patch.crates-io]
+liquid-core = { path = "vendor/liquid-core-0.26.8-anymap3" }
 tract-hir = { path = "vendor/tract-hir-0.21.10" }
 tract-nnef = { path = "vendor/tract-nnef-0.21.16-security-backport" }

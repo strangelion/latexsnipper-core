@@ -25,8 +25,9 @@ filesystem/network sandbox.
 
 ## Dependency audit exceptions
 
-`cargo audit --deny warnings` is enforced with the following reviewed
-unmaintained-only exceptions. None is a known vulnerability at this review.
+`cargo audit --deny warnings` is enforced with the following exact reviewed
+exceptions: three maintenance warnings and one build-only parser advisory.
+The latter is not a general exception for vulnerable runtime dependencies.
 
 | Advisory | Dependency path | Rationale and disposition |
 |---|---|---|
@@ -46,6 +47,15 @@ that rejects overflowing attacker-controlled tensor dimensions. The remaining
 tract packages are pinned to 0.21.10 because the upstream 0.21.16 graph
 translator rejects the frozen production decoder model; the exact production
 profile is exercised in CI.
+
+The WASI host pins Wasmtime 36.0.16 for RUSTSEC-2026-0316. Liquid's private
+register backend uses the compatible `anymap3` maintenance backport documented
+in `vendor/liquid-core-0.26.8-anymap3/BACKPORT.md`, removing `anymap2` and
+RUSTSEC-2026-0319 without changing the production Tract graph versions.
+Neither change broadens the audit exceptions. The deprecated pipeline YAML path
+still brings `unsafe-libyaml` (RUSTSEC-2024-0449); migration remains open and
+`cargo audit --deny warnings` must not be described as passing until it is removed
+and the normal audit, including yanked-package checks, succeeds.
 
 ## Host approval gate and remaining integration
 

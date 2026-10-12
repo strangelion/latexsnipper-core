@@ -25,3 +25,5 @@ prost = "0.11"
 
 [dev-dependencies]
 tract-nnef = "=0.21.16"
+# Exercise the private register backend used by the production kernel generator.
+liquid-core = "=0.26.8"

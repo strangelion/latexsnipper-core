@@ -19,7 +19,7 @@ hex = "0.4"
 regex = "1"
 cap-std.workspace = true
 cap-fs-ext.workspace = true
-wasmtime = { version = "=36.0.14", default-features = false, features = [
+wasmtime = { version = "=36.0.16", default-features = false, features = [
     "component-model",
     "cranelift",
     "runtime",
