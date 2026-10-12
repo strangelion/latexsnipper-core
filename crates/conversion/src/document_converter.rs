@@ -212,7 +212,8 @@ impl DocumentConverter {
                     }
                     FormulaInputFormat::Omml => crate::omml_parser::parse_omml_to_latex(content)
                         .map_err(latexsnipper_foundation::SnipperError::Conversion)?,
-                    _ => crate::typst_parser::parse_typst_to_latex(content),
+                    _ => crate::typst_math::parse_checked(content)
+                        .map_err(latexsnipper_foundation::SnipperError::Conversion)?,
                 };
                 guard_formula_input(&latex, false)?;
                 Self::convert_latex_string(&latex, output)
@@ -423,7 +424,8 @@ impl DocumentConverter {
 
     /// Parse a Typst math string, convert to LaTeX, then to the target format.
     pub fn convert_typst_string(typst: &str, format: OutputFormat) -> Result<String> {
-        let latex = crate::typst_parser::parse_typst_to_latex(typst);
+        let latex = crate::typst_math::parse_checked(typst)
+            .map_err(latexsnipper_foundation::SnipperError::Conversion)?;
         Self::convert_latex_string(&latex, format)
     }
 

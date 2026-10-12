@@ -14,8 +14,7 @@ use quick_xml::events::Event;
 
 use crate::{
     extract_pdf_text_bytes, parse_html_to_document, parse_markdown_to_document,
-    parse_mathml_to_latex, parse_omml_to_latex, parse_typst_to_latex, read_docx_bytes,
-    read_pptx_bytes, read_xlsx_bytes,
+    parse_mathml_to_latex, parse_omml_to_latex, read_docx_bytes, read_pptx_bytes, read_xlsx_bytes,
 };
 
 /// Unified, signature-first document importer for file paths and memory buffers.
@@ -91,7 +90,10 @@ impl DocumentImporter {
                 let text = utf8_text(bytes)?;
                 LatexParser.parse(text)?
             }
-            InputFormat::Typst => document_with_formula(parse_typst_to_latex(utf8_text(bytes)?)),
+            InputFormat::Typst => document_with_formula(
+                crate::typst_math::parse_checked(utf8_text(bytes)?)
+                    .map_err(|e| SnipperError::InvalidFormat(format!("Invalid Typst math: {e}")))?,
+            ),
             InputFormat::MathML => document_with_formula(
                 parse_mathml_to_latex(utf8_text(bytes)?)
                     .map_err(|e| SnipperError::InvalidFormat(format!("Invalid MathML: {e}")))?,

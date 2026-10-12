@@ -56,6 +56,7 @@ pub mod svg_parser;
 pub mod table_export;
 pub mod table_parser;
 pub mod typst;
+mod typst_math;
 pub mod typst_parser;
 pub mod unicodemath_pilot;
 pub mod word_ooxml_table_parser;

@@ -15,7 +15,7 @@ VSTO 不是公式格式；本应用 OLE 不等于 MathType 对象。
 | FMT-01 | 基础完成：Rust/C/Python/WASM-JS 已有内置方向和模式能力投影 | 随新格式同步注册表/绑定，第三方统一路由按 EXT-01 至 EXT-04 接通；严格支持仍是有限 LaTeX→OMML 子集 |
 | FMT-02 | 进行中：常用 array、注释/源保护、常用定界符/middle、混合 middle 的 MathML 及有限固定尺寸目标/共享解析已有 | 补混合 middle 的 OMML、固定尺寸 OMML/SVG、复杂命令、星号多行环境及高级列修饰；不执行宏或动态 catcode |
 | FMT-03 | 进行中：现代浏览器围栏、行内/前缀命名空间、常用列布局/脚本归属和有限固定尺寸目标已有 | 补字体伸缩、多行/样式、Typst cases 间距与真实宿主；有限导出不代表共享图像布局完成 |
-| FMT-04 | 进行中：常用数组/定界符、有限现代/固定尺寸 MathML、混合 middle 与 XML 字面字符可回读，既有数组 Word 三入口已验证 | 补固定尺寸 Typst 回读及新增围栏/尺寸的真实宿主；安装版、其他 XML/字体/布局和 SVG 裁切另行验收 |
+| FMT-04 | 进行中：常用数组/定界符、有限现代/固定尺寸 MathML 与 Typst、混合 middle 与 XML 字面字符可回读，既有数组 Word 三入口已验证 | 补更广 Typst 语法及新增围栏/尺寸的真实宿主；安装版、其他 XML/字体/布局和 SVG 裁切另行验收 |
 | FMT-05 | UnicodeMath/AsciiMath 已有独立有限语法、正式单公式绑定及原生 WASI profile 路线 | 扩大语法与损失范围，接 Office UI 与真实 Word buildup/字体验收；见 [线性转换](formats/linear-formula-conversion.md) |
 | FMT-06 | raw 检查、精确去重/结构分组、有限诊断、独立 experimental AST/LaTeX 读取及有界语义批次复用已有 | 补显式字体/更多模板和有界容器提取，再接 Office；真实/旧版样例与正式注册仍需独立验收 |
 | FMT-07 | 随新增能力持续收尾 | 同步生成矩阵、公共契约冻结、说明文档和 Office pin；不放宽已有门禁 |

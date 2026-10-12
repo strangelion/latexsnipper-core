@@ -163,6 +163,9 @@ fn shared_layout_keeps_fixed_sizes_classes_and_named_token_boundaries() {
         for input in [
             FormulaSource::Latex(source.clone()),
             FormulaSource::MathML(mathml(&source)),
+            FormulaSource::Typst(
+                DocumentConverter::convert_latex_string(&source, OutputFormat::Typst).unwrap(),
+            ),
         ] {
             let canonical = parse_formula_source_to_layout(&input)
                 .unwrap_or_else(|error| panic!("{command}: {input:?}: {error}"))
@@ -200,7 +203,7 @@ fn typst_fixed_dimensions_and_spacing_classes_are_explicit() {
     let invisible =
         DocumentConverter::convert_latex_string(r"\Bigg._i^2+x", OutputFormat::Typst).unwrap();
     assert!(
-        invisible.contains("class(\"normal\", #box())_(i)^(2)"),
+        invisible.contains("class(\"normal\", lr(size: #3em, #box()))_(i)^(2)"),
         "{invisible}"
     );
 }

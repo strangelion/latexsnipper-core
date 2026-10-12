@@ -3,6 +3,15 @@
   "name": "Conversion and Office output contract",
   "rules": [
     {
+      "id": "CORE-TYPST-MATH-PROJECTION-001",
+      "description": "Finite Typst math readback retains fixed delimiter tiers/classes, mixed operands, script ownership and call tails; unsupported code, options and malformed shapes fail closed in adapters.",
+      "severity": "blocking",
+      "suite": "conversion",
+      "scope": ["conversion"],
+      "evidence": {"kind": "command", "command": ["cargo", "test", "--locked", "-p", "latexsnipper-conversion", "--no-default-features", "--test", "typst_math_projection"]},
+      "failureMessage": "Typst math projection boundaries, fixed size readback or unsupported-shape refusal regressed."
+    },
+    {
       "id": "CORE-FORMULA-NATIVE-BINDINGS-001",
       "description": "C and Python formula adapters keep native capability/strict gates, distinguish bare/display/document/inline outputs and refuse oversized serialized results without partial fallback.",
       "severity": "blocking",

@@ -18,7 +18,9 @@ pub fn parse_formula_source_to_layout(source: &FormulaSource) -> Result<FormulaL
         FormulaSource::MathML(value) => {
             crate::parse_mathml_to_latex(value).map_err(SnipperError::Conversion)?
         }
-        FormulaSource::Typst(value) => crate::parse_typst_to_latex(value),
+        FormulaSource::Typst(value) => {
+            crate::typst_math::parse_checked(value).map_err(SnipperError::Conversion)?
+        }
     };
     parse_formula_latex(&latex).map_err(|error| SnipperError::Conversion(error.to_string()))
 }

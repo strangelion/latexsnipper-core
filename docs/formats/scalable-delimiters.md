@@ -38,6 +38,13 @@
   依据：[MathML Core operator 尺寸约束](https://www.w3.org/TR/mathml-core/)、[Typst class](https://typst.app/docs/reference/math/class/)。
   OMML 尚未实现相对字号固定尺寸映射：严格替换拒绝，best-effort 保留完整 command/token 文本；未替换为自动增长括号。
   这些分档是有限目标投影，不承诺所有 TeX 字体、math style 或目标字体 glyph 变体的高度/间距完全相等。
+- Typst 固定尺寸回读接受上述四档、四类别和有限符号集合的 `class(..., lr(size: #...em, ...))`。
+  新导出的不可见符号也通过 `lr(size: ..., #box())` 携带尺寸；旧的无尺寸 `class(..., #box())` 无法恢复原档位，明确保留/拒绝而不猜测。
+  混合表达式按完整调用、字符串和脚本操作数划分，分式后续内容、命名控制词边界、组合脚本与显式分组不会被前缀调用吞入。
+  有限 `lr/mid` 回读保留嵌套、非对称/不可见侧和混合 middle；中线不跨分式或脚本操作数。
+  错误/截断、未知调用/尺寸/类别/选项、代码表达式和超限输入在 fallible 转换、导入及共享布局入口报告错误。
+  旧的 String 解析入口保留原文，不代表输出一定是有效 LaTeX；不能将原文保留当作成功转换。
+  不执行 Typst 宏或代码；公式输入限 64 KiB、有界嵌套。常用矩阵/cases 回读保留行/操作数，但 cases 已丢失的条件列信息不被猜测恢复。
 
 ## 验证与证据
 
@@ -74,11 +81,14 @@
   同轮本机 Typst 0.15.1 编译 15 个导出实例，忽略目录 `target/fixed-delimiter-runtime-1791792243219178800/`，
   PNG SHA-256：`4e3d3445a66a9062bb7eb7bd8f1d00dffc01643eb8d3dc7f81095c0995843a16`。
   Typst 的 cases 条件间距尚不与 TeX 等价；上述浏览器/编译证据不替代新增真实 Word、全部字体或完整 MathML schema 验收。
+- Typst 回读专项覆盖 16 个命令 × 19 个 token，以及混合分式、嵌套、脚本归属、调用尾部、字符串分隔符及未知形状拒绝。
+  本机 Typst 0.15.1 编译并检查更新后的 15 个导出实例；不可见符号的新尺寸包装与此前 PNG 的 SHA-256 相同：
+  `4e3d3445a66a9062bb7eb7bd8f1d00dffc01643eb8d3dc7f81095c0995843a16`。
 
 ## 仍需推进
 
 同层混合 glyph 的 OMML 映射、固定尺寸的 OMML/SVG 相对字号与字体保真、任意宏、动态 catcode、完整文本/未分组参数语义、
-高级 array、有限集合外的 separator/字体伸缩、fixed Typst 回读和 cases 间距及完整 MathML 围栏布局仍需独立补齐。
+高级 array、有限集合外的 separator/字体伸缩、更广 Typst 回读和 cases 间距及完整 MathML 围栏布局仍需独立补齐。
 共享布局接口目前保留有限命令表示，不声称已有全部定界符语义树。
 上述证据不证明所有旧版 Typst、TeX 字体/间距等价或 10000 条真实文档保真。
 

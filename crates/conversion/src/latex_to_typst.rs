@@ -377,7 +377,9 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
     match name {
         name if latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name).is_some() => {
             match crate::latex_utils::fixed_delimiter_parts(name, args) {
-                Some((_, class, "")) => format!("class(\"{class}\", #box())"),
+                Some((size, class, "")) => {
+                    format!("class(\"{class}\", lr(size: #{size}, #box()))")
+                }
                 Some((size, class, glyph)) => format!(
                     "class(\"{class}\", lr(size: #{size}, {}))",
                     delimiter_atom(glyph)

@@ -76,13 +76,16 @@ fn whitespace_unicode_and_one_row_stack_keep_operands() {
 
 #[test]
 fn typst_stack_reconstruction_does_not_consume_trailing_or_incomplete_source() {
-    for source in [
-        "vec(delim: none, a, b)+z",
-        "vec(delim: none, a, b",
-        "vec(delim: none, a, b)^(2)",
-    ] {
-        assert_eq!(parse_typst_to_latex(source), source);
-    }
+    assert_eq!(
+        parse_typst_to_latex("vec(delim: none, a, b)+z"),
+        r"\substack{a\\b}+z"
+    );
+    assert_eq!(
+        parse_typst_to_latex("vec(delim: none, a, b)^(2)"),
+        r"\substack{a\\b}^{2}"
+    );
+    let incomplete = "vec(delim: none, a, b";
+    assert_eq!(parse_typst_to_latex(incomplete), incomplete);
 }
 
 #[test]
