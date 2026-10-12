@@ -35,6 +35,16 @@ impl ActivatedRemoteWasiPlugin {
         self.host.remembered_approval_binding()
     }
 
+    /// Trusted-host opt-in. Bind the archive scope before attaching a policy store.
+    pub fn with_remembered_policies(
+        mut self,
+        policies: std::sync::Arc<crate::RememberedApprovalPolicies>,
+    ) -> Result<Self, WasiDiagnostic> {
+        self.ensure_still_enabled()?;
+        self.host = self.host.with_remembered_policies(policies)?;
+        Ok(self)
+    }
+
     pub(crate) fn bind_remembered_profile(
         mut self,
         trusted_domain: &str,

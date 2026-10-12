@@ -19,7 +19,7 @@ mod write_streams;
 
 pub use activation::ActivatedRemoteWasiPlugin;
 pub use approval::{
-    ApprovalGrantSnapshot, ApprovalRequest, ApprovalScope, SensitiveAction,
+    ApprovalGrantSnapshot, ApprovalRequest, ApprovalScope, RememberedUseSnapshot, SensitiveAction,
     SensitiveActionController,
 };
 pub use formula_conversion::{WasiFormulaBackend, WASI_DOCUMENT_JSON_MEDIA_TYPE};

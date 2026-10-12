@@ -2,7 +2,7 @@
 //! Requests are descriptions, not capabilities. No guest interface grants consent.
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -52,7 +52,7 @@ pub struct ApprovalRequest {
     pub plugin_version: String,
     pub component_sha256: String,
     pub host_context_sha256: String,
-    /// Stable identity for a future trusted-host remembered policy, not a grant.
+    /// Stable identity for a trusted-host remembered policy, not a grant.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remembered_binding_sha256: Option<String>,
     pub action: SensitiveAction,
@@ -83,10 +83,33 @@ pub struct ApprovalGrantSnapshot {
     pub expires_in_millis: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RememberedUseSnapshot {
+    pub request: ApprovalRequest,
+    pub policy_ids: Vec<String>,
+    pub in_flight_uses: usize,
+}
+
 #[derive(Default)]
 struct State {
     pending: BTreeMap<String, ApprovalRequest>,
     grants: BTreeMap<String, Grant>,
+    sessions: BTreeMap<String, Arc<RememberedSession>>,
+    remembered_uses: BTreeMap<String, RememberedUseState>,
+}
+struct RememberedSession {
+    policies: Arc<crate::RememberedApprovalPolicies>,
+    revoked: AtomicBool,
+}
+struct RememberedUseState {
+    request: ApprovalRequest,
+    uses: Vec<RememberedLiveUse>,
+}
+struct RememberedLiveUse {
+    policy_id: String,
+    session: Weak<RememberedSession>,
+    lease: Weak<ApprovalLease>,
 }
 struct Grant {
     request: ApprovalRequest,
@@ -122,6 +145,16 @@ struct ApprovalLease {
 #[derive(Debug)]
 pub(crate) struct ActionPermit {
     lease: Arc<ApprovalLease>,
+    remembered: Option<RememberedUsePermit>,
+}
+struct RememberedUsePermit {
+    session: Arc<RememberedSession>,
+    policy: crate::remembered_approval::RememberedPolicyPermit,
+}
+impl std::fmt::Debug for RememberedUsePermit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RememberedUsePermit([PRIVATE])")
+    }
 }
 
 impl ActionPermit {
@@ -142,6 +175,17 @@ impl ActionPermit {
                 "sensitive action consent expired before publication or dispatch",
             ));
         }
+        if let Some(remembered) = &self.remembered {
+            remembered.policy.check()?;
+            if remembered.session.revoked.load(Ordering::Acquire)
+                || self.lease.revoked.load(Ordering::Acquire)
+            {
+                return Err(WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                    "remembered approval session was suspended before publication or dispatch",
+                ));
+            }
+        }
         Ok(())
     }
 }
@@ -154,13 +198,65 @@ fn lease(expires: Instant) -> Arc<ApprovalLease> {
 }
 
 /// In-memory authority, usable only by trusted host code after user consent.
-/// Never auto-approves, calls a UI callback, waits for a dialog or persists grants.
+/// Never invents consent, waits for a dialog or persists grants. Explicitly attached
+/// remembered policies can issue bounded private per-use authority without a prompt.
 #[derive(Default)]
 pub struct SensitiveActionController {
     state: Mutex<State>,
 }
 
 impl SensitiveActionController {
+    pub(crate) fn attach_remembered(
+        &self,
+        context: &ApprovalContext,
+        policies: Arc<crate::RememberedApprovalPolicies>,
+    ) -> Result<(), WasiDiagnostic> {
+        if context.remembered_binding_sha256.is_none() {
+            return Err(invalid(
+                "remembered execution requires a stable trusted host binding",
+            ));
+        }
+        let mut state = self.lock()?;
+        if let Some(old) = state.sessions.get(&context.context_sha256) {
+            if Arc::ptr_eq(&old.policies, &policies) && !old.revoked.load(Ordering::Acquire) {
+                return Ok(());
+            }
+        } else if state.sessions.len() >= MAX_ENTRIES {
+            return Err(invalid("remembered approval session capacity reached"));
+        }
+        let session = Arc::new(RememberedSession {
+            policies,
+            revoked: AtomicBool::new(false),
+        });
+        if let Some(old) = state
+            .sessions
+            .insert(context.context_sha256.clone(), session)
+        {
+            old.revoked.store(true, Ordering::Release);
+        }
+        Ok(())
+    }
+
+    /// Active remembered uses, not persisted grants. Scope metadata is sensitive.
+    pub fn remembered_uses(&self) -> Result<Vec<RememberedUseSnapshot>, WasiDiagnostic> {
+        let mut state = self.lock()?;
+        prune(&mut state, Instant::now());
+        Ok(state
+            .remembered_uses
+            .values()
+            .map(|row| RememberedUseSnapshot {
+                request: row.request.clone(),
+                policy_ids: row
+                    .uses
+                    .iter()
+                    .map(|entry| entry.policy_id.clone())
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
+                in_flight_uses: row.uses.len(),
+            })
+            .collect())
+    }
     /// Only trusted host code may call this after a distinct remember-choice confirmation.
     /// Stores a policy, not an execution grant; pending work is not replayed or approved.
     pub fn remember(
@@ -324,14 +420,31 @@ impl SensitiveActionController {
         if let Some(grant) = &grant {
             grant.lease.revoked.store(true, Ordering::Release);
         }
-        Ok(grant.is_some() || pending)
+        let remembered = state.remembered_uses.remove(request_id);
+        if let Some(row) = &remembered {
+            for entry in &row.uses {
+                if let Some(lease) = entry.lease.upgrade() {
+                    lease.revoked.store(true, Ordering::Release);
+                }
+            }
+            let mut failure = None;
+            for entry in &row.uses {
+                if let Some(session) = entry.session.upgrade() {
+                    if let Err(error) = session.policies.revoke(&entry.policy_id) {
+                        failure.get_or_insert(error);
+                    }
+                }
+            }
+            if let Some(error) = failure {
+                return Err(error);
+            }
+        }
+        Ok(grant.is_some() || pending || remembered.is_some())
     }
 
     pub fn clear(&self) -> Result<(), WasiDiagnostic> {
         let mut state = self.lock()?;
-        for grant in state.grants.values() {
-            grant.lease.revoked.store(true, Ordering::Release);
-        }
+        revoke_state(&state);
         *state = State::default();
         Ok(())
     }
@@ -339,6 +452,20 @@ impl SensitiveActionController {
     pub(crate) fn invalidate_context(&self, context: &ApprovalContext) {
         // A poisoned controller already rejects every future authorization.
         if let Ok(mut state) = self.lock() {
+            if let Some(session) = state.sessions.remove(&context.context_sha256) {
+                session.revoked.store(true, Ordering::Release);
+            }
+            state.remembered_uses.retain(|_, row| {
+                let keep = row.request.host_context_sha256 != context.context_sha256;
+                if !keep {
+                    for entry in &row.uses {
+                        if let Some(lease) = entry.lease.upgrade() {
+                            lease.revoked.store(true, Ordering::Release);
+                        }
+                    }
+                }
+                keep
+            });
             state
                 .pending
                 .retain(|_, request| request.host_context_sha256 != context.context_sha256);
@@ -354,9 +481,7 @@ impl SensitiveActionController {
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, State>, WasiDiagnostic> {
         self.state.lock().map_err(|poisoned| {
-            for grant in poisoned.get_ref().grants.values() {
-                grant.lease.revoked.store(true, Ordering::Release);
-            }
+            revoke_state(poisoned.get_ref());
             WasiDiagnostic::new(
                 WasiDiagnosticCode::PluginWasiHostFailure,
                 "approval controller lock poisoned",
@@ -414,18 +539,90 @@ impl SensitiveActionController {
             grant.remaining -= 1;
             let permit = ActionPermit {
                 lease: Arc::clone(&grant.lease),
+                remembered: None,
             };
             state.pending.remove(&id);
             return Ok(permit);
         }
-        if !state.pending.contains_key(&id) && state.pending.len() >= MAX_ENTRIES {
-            return Err(invalid("pending approval capacity reached"));
+        if let Some(session) = state.sessions.get(&context.context_sha256).cloned() {
+            match session.policies.authorize(&request) {
+                Ok(Some(policy)) => {
+                    if !state.remembered_uses.contains_key(&id)
+                        && state.remembered_uses.len() >= MAX_ENTRIES
+                    {
+                        return Err(invalid("remembered use capacity reached"));
+                    }
+                    let row = state.remembered_uses.entry(id.clone()).or_insert_with(|| {
+                        RememberedUseState {
+                            request: request.clone(),
+                            uses: Vec::new(),
+                        }
+                    });
+                    if row.uses.len() >= MAX_USES as usize {
+                        return Err(invalid("remembered in-flight use capacity reached"));
+                    }
+                    let runtime = lease(policy.expires);
+                    row.uses.push(RememberedLiveUse {
+                        policy_id: policy.policy_id.clone(),
+                        session: Arc::downgrade(&session),
+                        lease: Arc::downgrade(&runtime),
+                    });
+                    state.pending.retain(|_, pending| {
+                        pending.host_context_sha256 != request.host_context_sha256
+                            || !policy.covers_description(pending)
+                    });
+                    return Ok(ActionPermit {
+                        lease: runtime,
+                        remembered: Some(RememberedUsePermit { session, policy }),
+                    });
+                }
+                Err(error) => {
+                    // A broken remembered-policy clock/store must not prevent
+                    // an independent fresh human confirmation for this action.
+                    enqueue(&mut state, request)?;
+                    return Err(error);
+                }
+                Ok(None) => {}
+            }
         }
-        state.pending.entry(id.clone()).or_insert(request);
+        enqueue(&mut state, request)?;
         Err(WasiDiagnostic::new(
             WasiDiagnosticCode::PluginWasiApprovalRequired,
             format!("host user approval required: {id}"),
         ))
+    }
+}
+
+impl Drop for SensitiveActionController {
+    fn drop(&mut self) {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        revoke_state(&state);
+    }
+}
+
+fn enqueue(state: &mut State, request: ApprovalRequest) -> Result<(), WasiDiagnostic> {
+    if !state.pending.contains_key(&request.id) && state.pending.len() >= MAX_ENTRIES {
+        return Err(invalid("pending approval capacity reached"));
+    }
+    state.pending.entry(request.id.clone()).or_insert(request);
+    Ok(())
+}
+fn revoke_state(state: &State) {
+    for grant in state.grants.values() {
+        grant.lease.revoked.store(true, Ordering::Release);
+    }
+    for session in state.sessions.values() {
+        session.revoked.store(true, Ordering::Release);
+    }
+    for row in state.remembered_uses.values() {
+        for entry in &row.uses {
+            if let Some(lease) = entry.lease.upgrade() {
+                lease.revoked.store(true, Ordering::Release);
+            }
+        }
     }
 }
 
@@ -518,6 +715,10 @@ fn validate_options(uses: u32, ttl: Duration) -> Result<(), WasiDiagnostic> {
     Ok(())
 }
 fn prune(state: &mut State, now: Instant) {
+    state.remembered_uses.retain(|_, row| {
+        row.uses.retain(|entry| entry.lease.strong_count() > 0);
+        !row.uses.is_empty()
+    });
     state.grants.retain(|_, grant| {
         (grant.remaining > 0 || Arc::strong_count(&grant.lease) > 1) && grant.lease.expires > now
     });
@@ -547,6 +748,306 @@ mod tests {
             payload_sha256: format!("{:x}", Sha256::digest(payload)),
             payload_bytes: payload.len(),
         }
+    }
+
+    #[test]
+    fn remembered_clock_failure_still_offers_an_independent_fresh_confirmation() {
+        let time = Arc::new(std::sync::atomic::AtomicU64::new(1000));
+        let policies = Arc::new(crate::RememberedApprovalPolicies::test_with_time(
+            Arc::clone(&time),
+        ));
+        let controller = SensitiveActionController::default();
+        let mut context = context();
+        context.remembered_binding_sha256 = Some("c".repeat(64));
+        controller.authorize(&context, action("x")).unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::Exact,
+                Duration::from_secs(3600),
+            )
+            .unwrap();
+        controller.attach_remembered(&context, policies).unwrap();
+        time.store(999, Ordering::SeqCst);
+        assert_eq!(
+            controller
+                .authorize(&context, action("x"))
+                .unwrap_err()
+                .code,
+            WasiDiagnosticCode::PluginWasiHostFailure
+        );
+        assert_eq!(controller.pending().unwrap()[0].id, request.id);
+        controller.approve_once(&request.id).unwrap();
+        assert!(controller
+            .authorize(&context, action("x"))
+            .unwrap()
+            .check()
+            .is_ok());
+    }
+
+    #[test]
+    fn remembered_revocation_during_staging_preserves_original_and_cleans_up() {
+        use crate::permissions::CheckedWriteError;
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("write");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("output.txt"), b"original").unwrap();
+        let definition: latexsnipper_plugin::PluginPermissionsV3 = serde_json::from_value(serde_json::json!({
+            "paths":[{"path":"write","access":"write"}], "temporaryDirectory":false,
+            "clocks":false,"randomness":false,
+            "registrations":{"capabilities":false,"importers":false,"exporters":false,"runtimes":false},
+            "limits":{"maxConcurrentExecutions":1}
+        })).unwrap();
+        let permissions =
+            crate::ComponentPermissions::from_manifest(&definition, temporary.path()).unwrap();
+        let payload = vec![b'x'; 128 * 1024];
+        let expected = format!("{:x}", Sha256::digest(b"original"));
+        let operation = SensitiveAction::FileWrite {
+            grant_id: "path-0".into(),
+            root: root.to_str().unwrap().into(),
+            relative_path: "output.txt".into(),
+            target_sha256: Some(expected.clone()),
+            payload_sha256: format!("{:x}", Sha256::digest(&payload)),
+            payload_bytes: payload.len(),
+        };
+        let controller = SensitiveActionController::default();
+        let policies = Arc::new(
+            crate::RememberedApprovalPolicies::new(crate::ApprovalPolicyKey::generate().unwrap())
+                .unwrap(),
+        );
+        let mut context = context();
+        context.remembered_binding_sha256 = Some("c".repeat(64));
+        controller
+            .authorize(&context, operation.clone())
+            .unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        let id = controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::SameTarget {
+                    max_payload_bytes: payload.len(),
+                },
+                Duration::from_secs(3600),
+            )
+            .unwrap();
+        controller
+            .attach_remembered(&context, Arc::clone(&policies))
+            .unwrap();
+        let permit = controller.authorize(&context, operation.clone()).unwrap();
+        let mut checkpoints = 0;
+        let result = permissions.write_file_checked(
+            "path-0",
+            "output.txt",
+            &payload,
+            payload.len(),
+            Some(&expected),
+            || {
+                checkpoints += 1;
+                if checkpoints == 3 {
+                    assert!(policies.revoke(&id).unwrap());
+                }
+                permit.check()
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(CheckedWriteError::Interrupted(WasiDiagnostic {
+                code: WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                ..
+            }))
+        ));
+        assert_eq!(std::fs::read(root.join("output.txt")).unwrap(), b"original");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+        assert!(controller.authorize(&context, operation).is_err());
+        drop(permissions);
+        temporary.close().unwrap();
+    }
+
+    #[test]
+    fn remembered_scope_dismisses_covered_descriptions_not_unrelated_or_oversized_work() {
+        let controller = SensitiveActionController::default();
+        let policies = Arc::new(
+            crate::RememberedApprovalPolicies::new(crate::ApprovalPolicyKey::generate().unwrap())
+                .unwrap(),
+        );
+        let mut context = context();
+        context.remembered_binding_sha256 = Some("c".repeat(64));
+        for text in ["x", "xx", "xxxxx"] {
+            controller.authorize(&context, action(text)).unwrap_err();
+        }
+        let request = controller
+            .pending()
+            .unwrap()
+            .into_iter()
+            .find(|row| row.action == action("x"))
+            .unwrap();
+        controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::SameTarget {
+                    max_payload_bytes: 4,
+                },
+                Duration::from_secs(3600),
+            )
+            .unwrap();
+        controller.attach_remembered(&context, policies).unwrap();
+        let permit = controller.authorize(&context, action("x")).unwrap();
+        assert!(permit.check().is_ok());
+        assert_eq!(controller.pending().unwrap().len(), 1);
+        assert_eq!(controller.pending().unwrap()[0].action, action("xxxxx"));
+        assert_eq!(controller.remembered_uses().unwrap()[0].in_flight_uses, 1);
+    }
+
+    #[test]
+    fn remembered_fast_path_is_opt_in_renews_each_use_and_shared_revocation_stops_both_hosts() {
+        let controller = SensitiveActionController::default();
+        let policies = Arc::new(
+            crate::RememberedApprovalPolicies::new(crate::ApprovalPolicyKey::generate().unwrap())
+                .unwrap(),
+        );
+        let mut first = context();
+        first.remembered_binding_sha256 = Some("c".repeat(64));
+        controller.authorize(&first, action("x")).unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        let policy_id = controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::SameTarget {
+                    max_payload_bytes: 4,
+                },
+                Duration::from_secs(3600),
+            )
+            .unwrap();
+        assert!(controller.authorize(&first, action("x")).is_err());
+        controller
+            .attach_remembered(&first, Arc::clone(&policies))
+            .unwrap();
+        let first_use = controller.authorize(&first, action("x")).unwrap();
+        let next_use = controller.authorize(&first, action("xx")).unwrap();
+        assert!(first_use.check().is_ok());
+        assert!(next_use.check().is_ok());
+        assert!(controller.pending().unwrap().is_empty());
+        assert!(controller.grants().unwrap().is_empty());
+        let mut second = first.clone();
+        second.context_sha256 = "f".repeat(64);
+        assert!(controller.authorize(&second, action("x")).is_err());
+        controller
+            .attach_remembered(&second, Arc::clone(&policies))
+            .unwrap();
+        let second_use = controller.authorize(&second, action("x")).unwrap();
+        assert_eq!(
+            controller
+                .remembered_uses()
+                .unwrap()
+                .iter()
+                .map(|row| row.in_flight_uses)
+                .sum::<usize>(),
+            3
+        );
+        assert!(policies.revoke(&policy_id).unwrap());
+        for permit in [first_use, next_use, second_use] {
+            assert_eq!(
+                permit.check().unwrap_err().code,
+                WasiDiagnosticCode::PluginWasiApprovalRevoked
+            );
+        }
+        assert!(controller.authorize(&first, action("x")).is_err());
+        assert!(controller.authorize(&second, action("x")).is_err());
+    }
+
+    #[test]
+    fn remembered_context_clear_replace_and_request_revoke_do_not_create_a_blacklist() {
+        let controller = SensitiveActionController::default();
+        let policies = Arc::new(
+            crate::RememberedApprovalPolicies::new(crate::ApprovalPolicyKey::generate().unwrap())
+                .unwrap(),
+        );
+        let mut context = context();
+        context.remembered_binding_sha256 = Some("c".repeat(64));
+        controller.authorize(&context, action("x")).unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        let id = controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::SameTarget {
+                    max_payload_bytes: 4,
+                },
+                Duration::from_secs(3600),
+            )
+            .unwrap();
+        controller
+            .attach_remembered(&context, Arc::clone(&policies))
+            .unwrap();
+        let current = controller.authorize(&context, action("x")).unwrap();
+        controller
+            .attach_remembered(&context, Arc::clone(&policies))
+            .unwrap();
+        assert!(current.check().is_ok());
+        controller.invalidate_context(&context);
+        assert!(current.check().is_err());
+        assert_eq!(policies.policies().unwrap()[0].id, id);
+        controller
+            .attach_remembered(&context, Arc::clone(&policies))
+            .unwrap();
+        let current = controller.authorize(&context, action("x")).unwrap();
+        controller.clear().unwrap();
+        assert!(current.check().is_err());
+        assert!(controller.authorize(&context, action("x")).is_err());
+        controller
+            .attach_remembered(&context, Arc::clone(&policies))
+            .unwrap();
+        let current = controller.authorize(&context, action("x")).unwrap();
+        assert!(controller.revoke(&request.id).unwrap());
+        assert!(current.check().is_err());
+        assert!(policies.policies().unwrap().is_empty());
+        assert!(controller.authorize(&context, action("x")).is_err());
+        controller.approve_once(&request.id).unwrap();
+        assert!(controller
+            .authorize(&context, action("x"))
+            .unwrap()
+            .check()
+            .is_ok());
+    }
+
+    #[test]
+    fn remembered_use_expiry_and_dropped_controller_revoke_without_affecting_new_use() {
+        let controller = SensitiveActionController::default();
+        let policies = Arc::new(
+            crate::RememberedApprovalPolicies::new(crate::ApprovalPolicyKey::generate().unwrap())
+                .unwrap(),
+        );
+        let mut context = context();
+        context.remembered_binding_sha256 = Some("c".repeat(64));
+        controller.authorize(&context, action("x")).unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::Exact,
+                Duration::from_secs(3600),
+            )
+            .unwrap();
+        controller.attach_remembered(&context, policies).unwrap();
+        let first = controller.authorize(&context, action("x")).unwrap();
+        assert!(
+            first
+                .lease
+                .expires
+                .saturating_duration_since(Instant::now())
+                <= Duration::from_secs(300)
+        );
+        assert!(first.check_at(first.lease.expires).is_err());
+        let next = controller.authorize(&context, action("x")).unwrap();
+        assert!(next.check().is_ok());
+        drop(controller);
+        assert!(next.check().is_err());
     }
 
     #[test]

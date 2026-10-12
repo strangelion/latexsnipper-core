@@ -429,7 +429,25 @@ fn remembered_binding_does_not_approve_or_make_session_grants_portable() {
             .id,
         policy_id
     );
+    let restored = Arc::new(restored);
+    let fresh = fresh
+        .with_remembered_policies(Arc::clone(&restored))
+        .unwrap();
+    for _ in 0..3 {
+        assert_eq!(
+            transform(&fresh, &fresh_compiled, b"broker:filesystem-write").unwrap(),
+            b"written"
+        );
+        assert!(approvals.pending().unwrap().is_empty());
+    }
+    assert!(approvals.remembered_uses().unwrap().is_empty());
     assert!(restored.revoke(&policy_id).unwrap());
+    assert_eq!(
+        transform(&fresh, &fresh_compiled, b"broker:filesystem-write")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
     assert!(restored.matching_policy(&fresh_request).unwrap().is_none());
     let revoked = restored.seal().unwrap();
     assert!(

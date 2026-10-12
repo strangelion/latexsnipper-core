@@ -243,7 +243,7 @@ impl WasiComponentHost {
         Arc::clone(&self.approvals)
     }
 
-    /// Bind a future remembered policy to trusted host scope and current settings.
+    /// Bind a remembered policy to trusted host scope and current settings.
     /// This does not approve actions, restore grants or expose authority to guests.
     /// The host must version the broker identity when its implementation or policy changes.
     pub fn with_remembered_approval_binding(
@@ -332,6 +332,17 @@ impl WasiComponentHost {
     /// Fingerprint only. It is never evidence of user consent or an execution permit.
     pub fn remembered_approval_binding(&self) -> Option<&str> {
         self.approval_context.remembered_binding_sha256.as_deref()
+    }
+
+    /// Explicit trusted-host opt-in to a shared validated policy store.
+    /// Bind scope first. This does not persist policies or replay pending work.
+    pub fn with_remembered_policies(
+        self,
+        policies: Arc<crate::RememberedApprovalPolicies>,
+    ) -> Result<Self, WasiDiagnostic> {
+        self.approvals
+            .attach_remembered(&self.approval_context, policies)?;
+        Ok(self)
     }
 
     pub fn with_approval_controller(mut self, controller: Arc<SensitiveActionController>) -> Self {

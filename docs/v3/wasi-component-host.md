@@ -67,8 +67,8 @@ Approving a same-target scope also removes pending descriptions already covered 
 that consent, so hosts do not keep showing obsolete prompts. Unrelated targets,
 oversized payloads and other plugin/host identities stay pending. Dismissing these
 descriptions neither executes queued work nor consumes grant uses; the host must
-explicitly resume the intended operation. Persistent remembered consent and its
-application UI are not implemented here.
+explicitly resume the intended operation. Authenticated remembered policies have
+an opt-in execution route below; crash-safe application persistence and UI remain pending.
 
 ### Consent experience required of integrating hosts
 
@@ -138,17 +138,18 @@ snapshots, not execution grants. The trusted host must obtain a separate explici
 remember-choice event before calling `SensitiveActionController::remember` with
 a current owned pending request. Missing stable bindings or stale/unknown request
 IDs refuse the operation. Remembering does not dismiss or replay pending work,
-approve a grant, attach a policy store to the broker, or enable any backend.
+approve a session grant, attach a policy store to the broker, or enable any backend.
 
 A policy uses `Exact` or `SameTarget` with the existing exact file/network target
 rules. Its duration is positive whole seconds, at most 30 days, with at most
 128 policies, 8 KiB action metadata and a 16 MiB payload ceiling. This duration
-describes a future reusable consent window, not a restored session-use quota.
+describes a reusable consent window, not a restored session-use quota.
 Updating a same-target policy replaces its previous ceiling/deadline; it does not
 silently retain a broader older row. `policies` exposes display metadata;
 `matching_policy` returns metadata only and cannot grant authority. Expired rows
-may remain visible but cannot match. `revoke` and `clear` remove policy metadata,
-not independently issued in-memory session grants or native effects.
+may remain visible but cannot match. `revoke` and `clear` remove policy metadata
+and revoke that store's private per-use authority, not independently issued
+in-memory session grants or native effects.
 
 Use a dedicated generated `ApprovalPolicyKey`, protect its exported bytes with
 the host's key store, and never log it. Its `Debug` is redacted and its owned
@@ -178,9 +179,52 @@ checkpoint or use an independently protected clock before enabling reuse.
 These snapshots are not encrypted: paths, routes and digests can be sensitive.
 Protect snapshot confidentiality and do not upload them. Core performs no disk IO
 or OS key-store integration. Independent restored instances do not synchronize
-revocation. Shared per-use revocable authority, bounded grant renewal from a
-validated policy, crash-safe host persistence and application UI remain pending.
-Restoring or matching a snapshot does not remove `PLUGIN_WASI_APPROVAL_REQUIRED`.
+revocation. Restoring or matching a snapshot alone does not remove
+`PLUGIN_WASI_APPROVAL_REQUIRED`. Crash-safe host persistence and application UI
+remain pending; never treat an unprotected file as a remembered permission source.
+
+### Opt-in remembered execution and live revocation
+
+After binding the scope, a trusted host can attach one shared validated store using
+`WasiComponentHost::with_remembered_policies(Arc<RememberedApprovalPolicies>)`.
+`ActivatedRemoteWasiPlugin` exposes the same opt-in; profiles use
+`prepare_with_remembered_policies(store, cancellation, trusted_domain, policies)`.
+The profile backend still starts disabled. Ordinary hosts/preparation/CLI routes
+remain default-deny and do not attach a store or infer human confirmation.
+
+On a matching live policy the broker issues a fresh private one-action permit,
+valid at most five minutes and never beyond the policy deadline. There is no
+restored session quota, automatic policy-expiry extension, dialog or invocation
+retry. Repeated in-scope calls renew their per-use permit without prompting;
+issuing a new permit neither extends nor invalidates an earlier started use.
+Covered pending descriptions for that host are dismissed, but are not an execution
+queue. Other hosts/targets and oversized payloads remain pending. Explicit session
+grants are checked first and retain their independent monotonic-clock semantics.
+
+Every staged-write/publication and pre-network-dispatch checkpoint rechecks the
+private permit, host attachment and shared policy authority. Store revocation,
+clearing or policy replacement invalidate older permits across hosts sharing that
+same store. A backwards/unavailable policy clock refuses remembered authority;
+the controller keeps the actual pending request so a fresh independent explicit
+confirmation remains possible. Nothing silently widens or renews the stored scope.
+
+Host/configuration/controller changes and host destruction suspend that host's
+attachment and started uses without deleting other hosts' remembered choices.
+`SensitiveActionController::clear` also suspends all its current attachments: it
+does not delete the shared durable policy records. The host must not silently
+reattach after a user's session suspension. UI must distinguish stopping current
+sessions from forgetting stored choices; forgetting requires store revocation and
+publication of the new protected checkpoint. `remembered_uses` exposes currently
+held permits separately from regular `grants`. Revoking a displayed active request
+cancels its held uses and revokes their corresponding stored policies. After uses
+finish, use the policy ID from the store for persistent revocation.
+
+Authority is bounded to 128 attached host contexts and 128 active request identities
+per controller, with at most 10000 held permits per identity. Completed permits are
+pruned; capacity refusal is not a permanent blacklist. Restored independent stores
+do not synchronize revocation: use one authoritative shared store per owner. Core
+does not atomically coordinate multiple host processes or perform protected disk IO,
+and already-published files/native network effects cannot be undone.
 
 ### Core grant lifecycle and enforcement
 

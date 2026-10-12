@@ -40,12 +40,19 @@ fn remembered_remote_binding_includes_archive_and_profile_without_enabling() {
 
     let definition = fixture::profile(false);
     let profile = WasiFormulaProfile::from_json(&serde_json::to_vec(&definition).unwrap()).unwrap();
+    let policies = std::sync::Arc::new(
+        latexsnipper_plugin_wasi::RememberedApprovalPolicies::new(
+            latexsnipper_plugin_wasi::ApprovalPolicyKey::generate().unwrap(),
+        )
+        .unwrap(),
+    );
     let prepare = |profile: &WasiFormulaProfile, store: &latexsnipper_plugin::RemotePluginStore| {
         profile
-            .prepare_with_remembered_approval_binding(
+            .prepare_with_remembered_policies(
                 store,
                 CancellationToken::default(),
                 "fixture:trusted-document",
+                std::sync::Arc::clone(&policies),
             )
             .unwrap()
     };
@@ -236,6 +243,17 @@ fn malformed_profile_does_not_create_a_store_or_mutate_caller_registry() {
     cancellation.cancel();
     assert!(profile
         .prepare_with_cancellation(&store, cancellation)
+        .is_err());
+    let policies = std::sync::Arc::new(
+        latexsnipper_plugin_wasi::RememberedApprovalPolicies::new(
+            latexsnipper_plugin_wasi::ApprovalPolicyKey::generate().unwrap(),
+        )
+        .unwrap(),
+    );
+    let cancellation = latexsnipper_plugin::CancellationToken::default();
+    cancellation.cancel();
+    assert!(profile
+        .prepare_with_remembered_policies(&store, cancellation, "fixture:document", policies)
         .is_err());
     assert!(!root.exists());
 }

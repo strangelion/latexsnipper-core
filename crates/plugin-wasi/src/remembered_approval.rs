@@ -2,8 +2,9 @@
 //! Protected key/checkpoint storage and atomic publication belong to the host.
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -103,17 +104,77 @@ struct State {
     revision: u64,
     observed_unix_secs: u64,
     policies: BTreeMap<String, RememberedApprovalPolicy>,
+    authorities: BTreeMap<String, Arc<AtomicBool>>,
 }
 
-/// Bounded, explicit host policies. No disk IO, guest consent interface, automatic
-/// grant restoration, policy renewal or OS secret-store integration is provided.
+/// Private, one-action authority issued only against the live shared store.
+pub(crate) struct RememberedPolicyPermit {
+    pub(crate) policy_id: String,
+    pub(crate) expires: Instant,
+    expires_unix_secs: u64,
+    revoked: Arc<AtomicBool>,
+    state: Arc<Mutex<State>>,
+    clock: Clock,
+    description: RememberedApprovalPolicy,
+}
+
+impl fmt::Debug for RememberedPolicyPermit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("RememberedPolicyPermit([PRIVATE])")
+    }
+}
+
+impl RememberedPolicyPermit {
+    pub(crate) fn covers_description(&self, request: &ApprovalRequest) -> bool {
+        covers(
+            &self.description,
+            request,
+            self.description.approved_at_unix_secs,
+        )
+    }
+    pub(crate) fn check(&self) -> Result<(), WasiDiagnostic> {
+        if self.revoked.load(Ordering::Acquire) {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                "remembered consent was revoked before publication or dispatch",
+            ));
+        }
+        let mut state = lock_state(&self.state)?;
+        let now = observe_time(&self.clock, &mut state)?;
+        if self.revoked.load(Ordering::Acquire) {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiApprovalRevoked,
+                "remembered consent was revoked before publication or dispatch",
+            ));
+        }
+        if now >= self.expires_unix_secs || Instant::now() >= self.expires {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiApprovalExpired,
+                "remembered consent expired before publication or dispatch",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Bounded, explicit host policies. Trusted opt-in hosts can issue private per-use
+/// authority. No disk IO, guest consent interface or OS key-store integration is provided.
 pub struct RememberedApprovalPolicies {
     key: ApprovalPolicyKey,
-    state: Mutex<State>,
+    state: Arc<Mutex<State>>,
     clock: Clock,
 }
 
 impl RememberedApprovalPolicies {
+    #[cfg(test)]
+    pub(crate) fn test_with_time(time: Arc<std::sync::atomic::AtomicU64>) -> Self {
+        Self::new_with_clock(
+            ApprovalPolicyKey::generate().unwrap(),
+            Arc::new(move || Ok(time.load(Ordering::SeqCst))),
+        )
+        .unwrap()
+    }
+
     pub fn new(key: ApprovalPolicyKey) -> Result<Self, WasiDiagnostic> {
         Self::new_with_clock(key, Arc::new(system_time))
     }
@@ -124,12 +185,13 @@ impl RememberedApprovalPolicies {
             .map_err(|_| failed("cannot generate remembered policy store identity"))?;
         Ok(Self {
             key,
-            state: Mutex::new(State {
+            state: Arc::new(Mutex::new(State {
                 store_id: hex::encode(identity),
                 revision: 0,
                 observed_unix_secs: clock()?,
                 policies: BTreeMap::new(),
-            }),
+                authorities: BTreeMap::new(),
+            })),
             clock,
         })
     }
@@ -167,6 +229,7 @@ impl RememberedApprovalPolicies {
         let snapshot: Snapshot = serde_json::from_slice(&bytes[HEADER_BYTES..tag_offset])
             .map_err(|_| invalid("invalid remembered policy snapshot declaration"))?;
         if snapshot.schema_version != 1
+            || snapshot.revision == u64::MAX
             || !hex_digest(&snapshot.store_id, 32)
             || snapshot.store_id != checkpoint.store_id
             || snapshot.revision != checkpoint.revision
@@ -192,12 +255,16 @@ impl RememberedApprovalPolicies {
         }
         Ok(Self {
             key,
-            state: Mutex::new(State {
+            state: Arc::new(Mutex::new(State {
                 store_id: snapshot.store_id,
                 revision: snapshot.revision,
                 observed_unix_secs: now,
+                authorities: policies
+                    .keys()
+                    .map(|id| (id.clone(), Arc::new(AtomicBool::new(false))))
+                    .collect(),
                 policies,
-            }),
+            })),
             clock,
         })
     }
@@ -267,13 +334,53 @@ impl RememberedApprovalPolicies {
             .cloned())
     }
 
+    pub(crate) fn authorize(
+        &self,
+        request: &ApprovalRequest,
+    ) -> Result<Option<RememberedPolicyPermit>, WasiDiagnostic> {
+        let mut state = self.lock()?;
+        let now = self.observe(&mut state)?;
+        let Some(policy) = state
+            .policies
+            .values()
+            .find(|policy| covers(policy, request, now))
+        else {
+            return Ok(None);
+        };
+        let revoked = state
+            .authorities
+            .get(&policy.id)
+            .ok_or_else(|| failed("remembered policy authority is missing"))?;
+        if revoked.load(Ordering::Acquire) {
+            return Ok(None);
+        }
+        let expires = Instant::now()
+            .checked_add(Duration::from_secs(
+                (policy.expires_at_unix_secs - now).min(300),
+            ))
+            .ok_or_else(|| failed("remembered use deadline overflow"))?;
+        Ok(Some(RememberedPolicyPermit {
+            policy_id: policy.id.clone(),
+            expires,
+            expires_unix_secs: policy.expires_at_unix_secs,
+            revoked: Arc::clone(revoked),
+            state: Arc::clone(&self.state),
+            clock: Arc::clone(&self.clock),
+            description: policy.clone(),
+        }))
+    }
+
     pub fn revoke(&self, policy_id: &str) -> Result<bool, WasiDiagnostic> {
         let mut state = self.lock()?;
         // Reducing consent must remain possible even if the wall clock is wrong.
         if !state.policies.contains_key(policy_id) {
             return Ok(false);
         }
+        if let Some(authority) = state.authorities.get(policy_id) {
+            authority.store(true, Ordering::Release);
+        }
         let revision = next_revision(&state)?;
+        state.authorities.remove(policy_id);
         state.policies.remove(policy_id);
         state.revision = revision;
         Ok(true)
@@ -282,7 +389,11 @@ impl RememberedApprovalPolicies {
     pub fn clear(&self) -> Result<(), WasiDiagnostic> {
         let mut state = self.lock()?;
         if !state.policies.is_empty() {
+            for authority in state.authorities.values() {
+                authority.store(true, Ordering::Release);
+            }
             let revision = next_revision(&state)?;
+            state.authorities.clear();
             state.policies.clear();
             state.revision = revision;
         }
@@ -331,26 +442,76 @@ impl RememberedApprovalPolicies {
         state
             .policies
             .retain(|_, entry| now < entry.expires_at_unix_secs);
+        let expired: Vec<_> = state
+            .authorities
+            .keys()
+            .filter(|id| !state.policies.contains_key(*id))
+            .cloned()
+            .collect();
+        for id in expired {
+            if let Some(authority) = state.authorities.remove(&id) {
+                authority.store(true, Ordering::Release);
+            }
+        }
         let id = policy.id.clone();
+        if let Some(old) = state
+            .authorities
+            .insert(id.clone(), Arc::new(AtomicBool::new(false)))
+        {
+            old.store(true, Ordering::Release);
+        }
         state.policies.insert(id.clone(), policy);
         state.revision = revision;
         Ok(id)
     }
 
     fn observe(&self, state: &mut State) -> Result<u64, WasiDiagnostic> {
-        let now = (self.clock)()?;
-        if now < state.observed_unix_secs {
-            return Err(failed("remembered policy clock moved backwards"));
-        }
-        state.observed_unix_secs = now;
-        Ok(now)
+        observe_time(&self.clock, state)
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, State>, WasiDiagnostic> {
-        self.state
-            .lock()
-            .map_err(|_| failed("remembered policy lock poisoned"))
+        lock_state(&self.state)
     }
+}
+
+impl Drop for RememberedApprovalPolicies {
+    fn drop(&mut self) {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for authority in state.authorities.values() {
+            authority.store(true, Ordering::Release);
+        }
+    }
+}
+
+fn lock_state(state: &Mutex<State>) -> Result<std::sync::MutexGuard<'_, State>, WasiDiagnostic> {
+    state.lock().map_err(|poisoned| {
+        for authority in poisoned.get_ref().authorities.values() {
+            authority.store(true, Ordering::Release);
+        }
+        failed("remembered policy lock poisoned")
+    })
+}
+fn observe_time(clock: &Clock, state: &mut State) -> Result<u64, WasiDiagnostic> {
+    let now = clock()?;
+    if now < state.observed_unix_secs {
+        return Err(failed("remembered policy clock moved backwards"));
+    }
+    state.observed_unix_secs = now;
+    Ok(now)
+}
+fn covers(policy: &RememberedApprovalPolicy, request: &ApprovalRequest, now: u64) -> bool {
+    request.remembered_binding_sha256.as_deref() == Some(policy.binding_sha256.as_str())
+        && now < policy.expires_at_unix_secs
+        && match policy.scope {
+            ApprovalScope::Exact => policy.action == request.action,
+            ApprovalScope::SameTarget { max_payload_bytes } => {
+                same_target(&policy.action, &request.action)
+                    && payload_bytes(&request.action) <= max_payload_bytes
+            }
+        }
 }
 
 fn validate_policy(policy: &RememberedApprovalPolicy, observed: u64) -> Result<(), WasiDiagnostic> {
@@ -506,6 +667,29 @@ mod tests {
             &sealed.checkpoint,
             clock,
         )
+    }
+
+    #[test]
+    fn private_permits_recheck_clock_expiry_replacement_and_revocation() {
+        let (store, time, _) = fixture();
+        let id = remember(&store);
+        let first = store.authorize(&request()).unwrap().unwrap();
+        let second = store.authorize(&request()).unwrap().unwrap();
+        assert!(first.check().is_ok());
+        assert!(second.check().is_ok());
+        time.store(999, Ordering::SeqCst);
+        assert!(first.check().is_err());
+        time.store(1000, Ordering::SeqCst);
+        assert!(first.check().is_ok());
+        remember(&store);
+        assert!(first.check().is_err());
+        assert!(second.check().is_err());
+        let renewed = store.authorize(&request()).unwrap().unwrap();
+        assert!(renewed.check().is_ok());
+        time.store(1100, Ordering::SeqCst);
+        assert!(renewed.check().is_err());
+        assert!(store.authorize(&request()).unwrap().is_none());
+        assert!(store.revoke(&id).unwrap());
     }
 
     #[test]
@@ -842,7 +1026,7 @@ mod tests {
         let source: serde_json::Value =
             serde_json::from_slice(&sealed.bytes[HEADER_BYTES..sealed.bytes.len() - TAG_BYTES])
                 .unwrap();
-        for variant in 0..7 {
+        for variant in 0..8 {
             let mut value = source.clone();
             match variant {
                 0 => value["unexpected"] = true.into(),
@@ -854,13 +1038,14 @@ mod tests {
                     value["policies"].as_array_mut().unwrap().push(copy);
                 }
                 5 => value["policies"][0]["scope"]["unexpected"] = true.into(),
-                _ => value["policies"][0]["action"]["unexpected"] = true.into(),
+                6 => value["policies"][0]["action"]["unexpected"] = true.into(),
+                _ => value["revision"] = u64::MAX.into(),
             }
-            assert!(restore(
-                &reseal(&store, serde_json::to_vec(&value).unwrap()),
-                clock.clone()
-            )
-            .is_err());
+            let mut malformed = reseal(&store, serde_json::to_vec(&value).unwrap());
+            if variant == 7 {
+                malformed.checkpoint.revision = u64::MAX;
+            }
+            assert!(restore(&malformed, clock.clone()).is_err());
         }
         assert!(restore(&reseal(&store, b"not json".to_vec()), clock.clone()).is_err());
         let oversized = vec![0; MAX_SNAPSHOT_BYTES + 1];
