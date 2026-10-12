@@ -733,7 +733,15 @@ mod tests {
             Case {
                 latex: "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
                 omml: &["<m:d>", "<m:m>", "<m:mr>", "<m:e>"],
-                mathml: &["<mtable>", "<mtr>", "<mtd>", "<mo>(</mo>", "<mo>)</mo>"],
+                mathml: &[
+                    "<mtable>",
+                    "<mtr>",
+                    "<mtd>",
+                    "form=\"prefix\"",
+                    ">(</mo>",
+                    "form=\"postfix\"",
+                    ">)</mo>",
+                ],
                 typst: &["mat(", "a", "b", "c", "d"],
             },
             Case {
@@ -861,7 +869,13 @@ mod tests {
             Case {
                 latex: "\\left(\\frac{a}{b}\\right)^{\\vec v}",
                 omml: &["<m:sSup>", "<m:d>", "<m:f>", "<m:acc>", "<m:t>v</m:t>"],
-                mathml: &["<msup>", "<mfenced", "<mfrac>", "<mover>", "<mi>v</mi>"],
+                mathml: &[
+                    "<msup>",
+                    "form=\"prefix\"",
+                    "<mfrac>",
+                    "<mover>",
+                    "<mi>v</mi>",
+                ],
                 typst: &["lr(", "frac(a, b)", "arrow(v)"],
             },
             Case {

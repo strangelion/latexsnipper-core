@@ -12,6 +12,11 @@ fn render(source: &str, target: OutputFormat) -> String {
     DocumentConverter::convert_latex_string(source, target).unwrap()
 }
 
+fn scalable_operator(glyph: &str, form: &str) -> String {
+    let separator = if form == "infix" { "true" } else { "false" };
+    format!("<mo fence=\"true\" stretchy=\"true\" symmetric=\"true\" form=\"{form}\" separator=\"{separator}\" lspace=\"0em\" rspace=\"0em\">{glyph}</mo>")
+}
+
 #[test]
 fn common_named_delimiters_are_tokens_not_body_text() {
     for (left, right, open, close) in [
@@ -56,7 +61,8 @@ fn common_named_delimiters_are_tokens_not_body_text() {
         );
         let mathml = render(&source, OutputFormat::MathML);
         assert!(
-            mathml.contains(&format!("<mfenced open=\"{open}\" close=\"{close}\"")),
+            mathml.contains(&scalable_operator(open, "prefix"))
+                && mathml.contains(&scalable_operator(close, "postfix")),
             "{mathml}"
         );
     }
@@ -72,7 +78,14 @@ fn nested_delimiters_and_outer_scripts_keep_ownership_and_tail() {
     assert!(omml.contains("<m:den><m:d>"), "{omml}");
     assert!(omml.contains("<m:t>z</m:t>"), "{omml}");
     let mathml = render(source, OutputFormat::MathML);
-    assert_eq!(mathml.matches("<mfenced ").count(), 2, "{mathml}");
+    assert_eq!(
+        mathml
+            .matches("form=\"prefix\" separator=\"false\"")
+            .count(),
+        2,
+        "{mathml}"
+    );
+    assert!(!mathml.contains("mfenced"), "{mathml}");
     assert!(mathml.contains("<msubsup>"), "{mathml}");
     assert!(mathml.contains("<mi>z</mi>"), "{mathml}");
     let typst = render(source, OutputFormat::Typst);
@@ -164,7 +177,7 @@ fn middle_delimiters_split_bases_without_owning_the_next_operand() {
         assert!(expected.contains("<m:e><m:f>"), "{expected}");
         let mathml = render(&source, OutputFormat::MathML);
         assert!(
-            mathml.contains(&format!("separators=\"{escaped}\"")),
+            mathml.contains(&scalable_operator(&escaped, "infix")),
             "{mathml}"
         );
         for restored in [
@@ -222,7 +235,7 @@ fn omml_multiple_arguments_reconstruct_a_separator_not_matrix_rows() {
 }
 
 #[test]
-fn unsupported_middle_shapes_retain_source_instead_of_becoming_text_operators() {
+fn mixed_middle_requires_omml_fallback_while_unknown_tokens_fallback_in_both() {
     for source in [
         r"\left(x\middle|y\middle\Vert z\right)",
         r"\left(x\middle\unknown y\right)",
@@ -230,10 +243,14 @@ fn unsupported_middle_shapes_retain_source_instead_of_becoming_text_operators() 
         assert!(validate_omml_latex(source).is_err());
         let canonical = parse_latex(source).to_string();
         assert!(latex_to_omml(source).contains(&canonical), "{source}");
-        assert!(
-            render(source, OutputFormat::MathML).contains(&canonical),
-            "{source}"
-        );
+        let mathml = render(source, OutputFormat::MathML);
+        if source.contains(r"\unknown") {
+            assert!(mathml.contains(&canonical), "{source}");
+        } else {
+            assert!(!mathml.contains("\\middle"), "{mathml}");
+            let restored = parse_mathml_to_latex(&mathml).unwrap();
+            assert_eq!(parse_latex(&restored).to_string(), canonical);
+        }
     }
 }
 

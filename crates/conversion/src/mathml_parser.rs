@@ -1,14 +1,114 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
+#[derive(Clone, Copy)]
+enum FenceRole {
+    Left,
+    Middle,
+    Right,
+}
+
+struct FenceMarker {
+    role: FenceRole,
+    glyph: String,
+}
+
+#[derive(Default)]
+struct MathmlFrame {
+    tag: String,
+    attrs: String,
+    children: Vec<String>,
+    fences: Vec<Option<FenceMarker>>,
+    text: String,
+}
+
+impl MathmlFrame {
+    fn push(&mut self, source: String, fence: Option<FenceMarker>) {
+        self.children.push(source);
+        self.fences.push(fence);
+    }
+
+    fn finish(mut self) -> Result<(String, Option<FenceMarker>), String> {
+        if self.fences.iter().any(Option::is_some) {
+            if !matches!(
+                self.tag.as_str(),
+                "math" | "mrow" | "mstyle" | "style" | "semantics" | "annotation-xml"
+            ) || !self.text.trim().is_empty()
+            {
+                return Err("MathML scalable fence crosses an operand or mixed-text scope; retain the original XML".into());
+            }
+            let mut depth = 0usize;
+            let mut fragments = Vec::new();
+            for (source, fence) in self.children.iter().zip(&self.fences) {
+                if let Some(marker) = fence {
+                    let command = match marker.role {
+                        FenceRole::Left => { depth += 1; "left" },
+                        FenceRole::Middle if depth > 0 => "middle",
+                        FenceRole::Right if depth > 0 => { depth -= 1; "right" },
+                        _ => return Err("MathML scalable fence has no opener in this row; retain the original XML".into()),
+                    };
+                    fragments.push(format!(
+                        "\\{command}{}",
+                        crate::latex_utils::delimiter_source_token(&marker.glyph)
+                    ));
+                } else {
+                    fragments.push(source.clone());
+                }
+            }
+            if depth != 0 {
+                return Err(
+                    "MathML scalable fence has no closer in this row; retain the original XML"
+                        .into(),
+                );
+            }
+            self.children = vec![latexsnipper_ast::formula_layout::join_latex_fragments(
+                fragments,
+            )];
+        }
+        let text = if self.children.is_empty() {
+            self.text.clone()
+        } else {
+            collect_text(&self.children)
+        };
+        let text = if matches!(self.tag.as_str(), "mtext" | "ms") {
+            text.as_str()
+        } else {
+            text.trim()
+        };
+        let fence = if self.tag == "mo" {
+            let role = scalable_operator_role(&self.attrs)?;
+            if (role.is_some() || fixed_operator_command(&self.attrs)?.is_some())
+                && (!self.children.is_empty()
+                    || latexsnipper_syntax::latex::scalable_delimiter_glyph(
+                        &crate::latex_utils::delimiter_source_token(text),
+                    ) != Some(text))
+            {
+                return Err("Unsupported MathML delimiter glyph; retain the original XML".into());
+            }
+            role.map(|role| FenceMarker {
+                role,
+                glyph: text.into(),
+            })
+        } else {
+            None
+        };
+        Ok((
+            build_mathml_node(&self.tag, text, &self.children, &self.attrs),
+            fence,
+        ))
+    }
+}
+
 /// Parse MathML XML string into a LaTeX string.
 pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
     let cleaned = strip_xml_declaration(xml);
     let mut reader = Reader::from_str(&cleaned);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
-    let mut stack: Vec<(String, Vec<String>, String)> = Vec::new();
-    let mut current_text = String::new();
+    let mut stack = vec![MathmlFrame {
+        tag: "math".into(),
+        ..MathmlFrame::default()
+    }];
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -31,6 +131,7 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                                     | "symmetric"
                                     | "form"
                                     | "fence"
+                                    | "separator"
                                     | "lspace"
                                     | "rspace"
                             ))
@@ -55,6 +156,7 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                             | "symmetric"
                             | "form"
                             | "fence"
+                            | "separator"
                             | "lspace"
                             | "rspace"
                     ) {
@@ -76,6 +178,7 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                                 | "symmetric"
                                 | "form"
                                 | "fence"
+                                | "separator"
                                 | "lspace"
                                 | "rspace"
                         )
@@ -111,38 +214,50 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                 }
                 if tag == "mo" {
                     fixed_operator_command(&attrs)?;
+                    scalable_operator_role(&attrs)?;
                 }
-                stack.push((tag, Vec::new(), attrs));
-                current_text.clear();
+                stack.push(MathmlFrame {
+                    tag,
+                    attrs,
+                    ..MathmlFrame::default()
+                });
             }
             Ok(Event::Text(e)) => {
                 let t = e.decode().map_err(|error| error.to_string())?;
-                if stack.last().is_some_and(|(tag, _, _)| tag == "mfenced") && !t.trim().is_empty()
+                if stack.last().is_some_and(|frame| frame.tag == "mfenced") && !t.trim().is_empty()
                 {
                     return Err(
                         "MathML fence content must use token elements; retain the original XML"
                             .into(),
                     );
                 }
-                current_text.push_str(&t);
+                stack.last_mut().expect("synthetic root").text.push_str(&t);
             }
             Ok(Event::GeneralRef(e)) => {
-                if stack.last().is_some_and(|(tag, _, _)| tag == "mfenced") {
+                if stack.last().is_some_and(|frame| frame.tag == "mfenced") {
                     return Err(
                         "MathML fence content must use token elements; retain the original XML"
                             .into(),
                     );
                 }
-                current_text.push_str(&crate::xml_util::decode_xml_reference(&e)?);
+                stack
+                    .last_mut()
+                    .expect("synthetic root")
+                    .text
+                    .push_str(&crate::xml_util::decode_xml_reference(&e)?);
             }
             Ok(Event::CData(e)) => {
-                if stack.last().is_some_and(|(tag, _, _)| tag == "mfenced") {
+                if stack.last().is_some_and(|frame| frame.tag == "mfenced") {
                     return Err(
                         "MathML fence content must use token elements; retain the original XML"
                             .into(),
                     );
                 }
-                current_text.push_str(&e.decode().map_err(|error| error.to_string())?);
+                stack
+                    .last_mut()
+                    .expect("synthetic root")
+                    .text
+                    .push_str(&e.decode().map_err(|error| error.to_string())?);
             }
             Ok(Event::Empty(e)) => {
                 let tag = local_tag(e.name().as_ref());
@@ -158,17 +273,34 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                     }
                 }
                 let text = extract_text_attrs(&e);
-                let attrs = if tag == "mfenced" {
+                let attrs = if matches!(tag.as_str(), "mfenced" | "mo") {
                     let mut fields = Vec::new();
                     for attr in e.attributes() {
                         let attr = attr.map_err(|error| error.to_string())?;
+                        if attr.key.as_ref() == b"xmlns" || attr.key.as_ref().starts_with(b"xmlns:")
+                        {
+                            continue;
+                        }
                         let key = local_tag(attr.key.as_ref());
-                        if matches!(key.as_str(), "open" | "close" | "separators")
-                            && attr.key.as_ref().contains(&b':')
+                        if matches!(
+                            key.as_str(),
+                            "open"
+                                | "close"
+                                | "separators"
+                                | "stretchy"
+                                | "symmetric"
+                                | "form"
+                                | "fence"
+                                | "separator"
+                                | "lspace"
+                                | "rspace"
+                        ) && attr.key.as_ref().contains(&b':')
                         {
                             return Err("Qualified MathML fence attributes are not supported; retain the original XML".into());
                         }
-                        if !matches!(key.as_str(), "open" | "close" | "separators") {
+                        if tag == "mfenced"
+                            && !matches!(key.as_str(), "open" | "close" | "separators")
+                        {
                             continue;
                         }
                         let value = attr
@@ -177,7 +309,14 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                                 reader.decoder(),
                             )
                             .map_err(|error| error.to_string())?;
-                        if matches!(key.as_str(), "open" | "close")
+                        if tag == "mo" && value.chars().any(char::is_whitespace) {
+                            return Err(
+                                "Noncanonical MathML fence properties; retain the original XML"
+                                    .into(),
+                            );
+                        }
+                        if tag == "mfenced"
+                            && matches!(key.as_str(), "open" | "close")
                             && latexsnipper_syntax::latex::scalable_delimiter_glyph(
                                 &crate::latex_utils::delimiter_source_token(&value),
                             ) != Some(value.as_ref())
@@ -186,7 +325,7 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                                 "Unsupported MathML fence glyph; retain the original XML".into()
                             );
                         }
-                        if key == "separators" && value.chars().count() > 1 {
+                        if tag == "mfenced" && key == "separators" && value.chars().count() > 1 {
                             return Err("Multiple MathML fence separators are not supported; retain the original XML".into());
                         }
                         fields.push(format!("{key}={value}"));
@@ -195,45 +334,21 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                 } else {
                     String::new()
                 };
-                let node = build_mathml_node(&tag, &text, &[], &attrs);
-                if let Some((_, ref mut parent, _)) = stack.last_mut() {
-                    parent.push(node);
-                } else {
-                    return Ok(node);
+                let (node, fence) = MathmlFrame {
+                    tag,
+                    attrs,
+                    text,
+                    ..MathmlFrame::default()
                 }
+                .finish()?;
+                stack.last_mut().expect("synthetic root").push(node, fence);
             }
             Ok(Event::End(_)) => {
-                if let Some((tag, children, attrs)) = stack.pop() {
-                    let text = if !children.is_empty() {
-                        collect_text(&children)
-                    } else {
-                        current_text.clone()
-                    };
-                    let text = if matches!(tag.as_str(), "mtext" | "ms") {
-                        text.as_str()
-                    } else {
-                        text.trim()
-                    };
-                    if tag == "mo"
-                        && fixed_operator_command(&attrs)?.is_some()
-                        && (!children.is_empty()
-                            || latexsnipper_syntax::latex::scalable_delimiter_glyph(
-                                &crate::latex_utils::delimiter_source_token(text),
-                            ) != Some(text))
-                    {
-                        return Err(
-                            "Unsupported sized MathML operator glyph; retain the original XML"
-                                .into(),
-                        );
-                    }
-                    let node = build_mathml_node(&tag, text, &children, &attrs);
-                    current_text.clear();
-                    if let Some((_, ref mut parent, _)) = stack.last_mut() {
-                        parent.push(node);
-                    } else {
-                        return Ok(node);
-                    }
+                if stack.len() <= 1 {
+                    return Err("Unexpected MathML closing element".into());
                 }
+                let (node, fence) = stack.pop().expect("checked child frame").finish()?;
+                stack.last_mut().expect("synthetic root").push(node, fence);
             }
             Ok(Event::Eof) => break,
             Err(e) => return Err(format!("MathML parse error: {}", e)),
@@ -242,12 +357,14 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
         buf.clear();
     }
 
-    if let Some((tag, children, attrs)) = stack.pop() {
-        let text = collect_text(&children);
-        Ok(build_mathml_node(&tag, &text, &children, &attrs))
-    } else {
-        Err("Empty MathML document".to_string())
+    if stack.len() != 1 {
+        return Err("Unclosed MathML element; retain the original XML".into());
     }
+    let root = stack.pop().expect("synthetic root");
+    if root.children.is_empty() || !root.text.trim().is_empty() {
+        return Err("Empty MathML document or text outside its elements".into());
+    }
+    Ok(root.finish()?.0)
 }
 
 fn strip_xml_declaration(xml: &str) -> String {
@@ -285,6 +402,50 @@ fn collect_text(children: &[String]) -> String {
 
 fn join_math_children(children: &[String]) -> String {
     latexsnipper_ast::formula_layout::join_latex_fragments(children.iter().cloned())
+}
+
+// Only explicit, bounded scalable operators become source pairing markers.
+// Ordinary dictionary operators and fixed-size operators remain independent atoms.
+fn scalable_operator_role(attrs: &str) -> Result<Option<FenceRole>, String> {
+    let fields: Vec<_> = attrs
+        .split_whitespace()
+        .filter_map(|field| field.split_once('='))
+        .collect();
+    let value = |name| {
+        fields
+            .iter()
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| *value)
+    };
+    if value("minsize").is_some()
+        || value("maxsize").is_some()
+        || value("fence") != Some("true")
+        || value("stretchy") != Some("true")
+    {
+        return Ok(None);
+    }
+    let invalid =
+        || "Unsupported scalable MathML operator properties; retain the original XML".to_string();
+    let role = match (value("form"), value("separator")) {
+        (Some("prefix"), Some("false")) => FenceRole::Left,
+        (Some("postfix"), Some("false")) => FenceRole::Right,
+        (Some("infix"), Some("true")) => FenceRole::Middle,
+        (None, _) | (Some("infix"), None | Some("false")) => return Ok(None),
+        _ => return Err(invalid()),
+    };
+    if value("symmetric") != Some("true")
+        || value("lspace") != Some("0em")
+        || value("rspace") != Some("0em")
+        || fields.iter().any(|(key, _)| {
+            !matches!(
+                *key,
+                "stretchy" | "symmetric" | "form" | "fence" | "separator" | "lspace" | "rspace"
+            )
+        })
+    {
+        return Err(invalid());
+    }
+    Ok(Some(role))
 }
 
 // Recognize the bounded fixed-fence output, not arbitrary MathML sizing/CSS.

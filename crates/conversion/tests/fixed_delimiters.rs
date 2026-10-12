@@ -219,6 +219,11 @@ fn fixed_delimiter_exports_compile_and_emit_browser_evidence() {
         r"\Bigg\langle x+\Bigg\lfloor x+\Bigg\lceil x+\Bigg\backslash x",
         r"\Bigg\uparrow x+\Bigg\Downarrow x+\Bigg\Vert x+\Bigg.x",
         r"\Bigg._i^2+x",
+        r"\left\{x\middle|\frac{a}{b}\right\}_i^2+z",
+        r"\left(x\middle|\frac{a}{b}\middle\Vert z\right)",
+        r"\left.\frac{a}{b}\right|",
+        r"\begin{pmatrix}a&b\\c&d\end{pmatrix}",
+        r"\begin{cases}x^2&x>0\\0&x\leq0\end{cases}",
     ];
     let id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -269,6 +274,25 @@ fn fixed_delimiter_exports_compile_and_emit_browser_evidence() {
         .collect::<String>();
     let html_file = directory.join("fixed.html");
     std::fs::write(&html_file, format!("<!doctype html><meta charset=\"utf-8\"><link rel=\"icon\" href=\"data:,\"><title>Fixed delimiter Core output</title><style>body{{margin:24px;background:white;color:#172033}}section{{padding:16px 0;border-bottom:1px solid #dbe5f4}}code{{display:block;margin-bottom:14px;font:13px monospace}}math{{font-size:24px}}</style>{rows}")).unwrap();
+    use latexsnipper_conversion::{
+        mathml::{MathmlAttrConverter, MathmlConverter, MathmlMConverter, MathmlMmlConverter},
+        Converter,
+    };
+    use latexsnipper_syntax::{latex::LatexParser, Parser};
+    let inline = LatexParser
+        .parse(r"$\left(x\middle|\frac{a}{b}\right)$")
+        .unwrap();
+    let aliases = [
+        ("standard", MathmlConverter.convert(&inline).unwrap()),
+        ("m", MathmlMConverter.convert(&inline).unwrap()),
+        ("mml", MathmlMmlConverter.convert(&inline).unwrap()),
+        ("attr", MathmlAttrConverter.convert(&inline).unwrap()),
+    ];
+    std::fs::write(
+        directory.join("aliases.json"),
+        serde_json::to_string(&aliases).unwrap(),
+    )
+    .unwrap();
     println!(
         "Typst evidence: {}\nBrowser evidence: {}",
         png.display(),

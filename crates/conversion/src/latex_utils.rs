@@ -143,28 +143,47 @@ pub(crate) fn middle_glyph(node: &crate::latex_ast::LatexNode) -> Option<&str> {
     }
 }
 
-// OMML has one separator character shared by every base argument.
-pub(crate) fn delimiter_segments(
+pub(crate) struct DelimiterParts<'a> {
+    pub sections: Vec<&'a [crate::latex_ast::LatexNode]>,
+    pub separators: Vec<&'a str>,
+}
+
+pub(crate) fn delimiter_parts(
     nodes: &[crate::latex_ast::LatexNode],
-) -> Result<(Option<&str>, Vec<&[crate::latex_ast::LatexNode]>), &'static str> {
-    let mut separator = None;
-    let mut parts = Vec::new();
+) -> Result<DelimiterParts<'_>, &'static str> {
+    let mut sections = Vec::new();
+    let mut separators = Vec::new();
     let mut start = 0;
     for (index, node) in nodes.iter().enumerate() {
         if let crate::latex_ast::LatexNode::Command { name, .. } = node {
             if name == "middle" {
-                let glyph = middle_glyph(node).ok_or("Unsupported middle delimiter")?;
-                if separator.is_some_and(|previous| previous != glyph) {
-                    return Err("Mixed middle delimiters require a separate layout mapping");
-                }
-                separator = Some(glyph);
-                parts.push(&nodes[start..index]);
+                separators.push(middle_glyph(node).ok_or("Unsupported middle delimiter")?);
+                sections.push(&nodes[start..index]);
                 start = index + 1;
             }
         }
     }
-    parts.push(&nodes[start..]);
-    Ok((separator, parts))
+    sections.push(&nodes[start..]);
+    Ok(DelimiterParts {
+        sections,
+        separators,
+    })
+}
+
+// OMML has one separator character shared by every base argument.
+pub(crate) fn delimiter_segments(
+    nodes: &[crate::latex_ast::LatexNode],
+) -> Result<(Option<&str>, Vec<&[crate::latex_ast::LatexNode]>), &'static str> {
+    let parts = delimiter_parts(nodes)?;
+    let separator = parts.separators.first().copied();
+    if parts
+        .separators
+        .iter()
+        .any(|glyph| Some(*glyph) != separator)
+    {
+        return Err("Mixed middle delimiters require a separate layout mapping");
+    }
+    Ok((separator, parts.sections))
 }
 
 pub(crate) fn join_middle_source(parts: &[String], glyph: &str) -> String {

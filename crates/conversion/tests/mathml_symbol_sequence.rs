@@ -92,8 +92,10 @@ fn mixed_symbol_matrices_and_cases_keep_their_visible_fences() {
     ] {
         let result = xml(&format!("\\begin{{{env}}}\\alpha x&\\beta y\\end{{{env}}}"));
         assert!(
-            result.contains(&format!("<mo>{open}</mo>"))
-                && result.contains(&format!("<mo>{close}</mo>")),
+            result.contains(&format!("rspace=\"0em\">{open}</mo>"))
+                && result.contains(&format!("rspace=\"0em\">{close}</mo>"))
+                && result.contains("form=\"prefix\"")
+                && result.contains("form=\"postfix\""),
             "{result}"
         );
         assert_eq!(result.matches("<mtd>").count(), 2);
@@ -107,7 +109,7 @@ fn mixed_symbol_matrices_and_cases_keep_their_visible_fences() {
     }
     let cases = xml("\\begin{cases}\\alpha x&x>0\\\\\\beta y&x<0\\end{cases}");
     assert!(
-        cases.contains("<mo>{</mo>") && !cases.contains("<mo>}</mo>"),
+        cases.contains("rspace=\"0em\">{</mo>") && !cases.contains("rspace=\"0em\">}</mo>"),
         "{cases}"
     );
     assert_eq!(cases.matches("<mtr>").count(), 2);

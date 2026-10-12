@@ -115,11 +115,11 @@ fn convert_mathml(doc: &Document, mode: MathmlMode) -> Result<String> {
             content
         )),
         MathmlMode::Mml => Ok(format!(
-            "<mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\">\n{}\n</mml:math>",
+            "<mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\" xmlns=\"http://www.w3.org/1998/Math/MathML\">\n{}\n</mml:math>",
             content
         )),
         MathmlMode::M => Ok(format!(
-            "<m:math xmlns:m=\"http://www.w3.org/1998/Math/MathML\">\n{}\n</m:math>",
+            "<m:math xmlns:m=\"http://www.w3.org/1998/Math/MathML\" xmlns=\"http://www.w3.org/1998/Math/MathML\">\n{}\n</m:math>",
             content
         )),
         MathmlMode::Attr => Ok(format!(
@@ -139,7 +139,7 @@ fn convert_formula_to_mathml(f: &Formula, _mode: &MathmlMode) -> String {
     if f.display_mode {
         format!("<mstyle displaystyle=\"true\">\n{}\n</mstyle>", content)
     } else {
-        format!("<inlinemath>\n{}\n</inlinemath>", content)
+        format!("<mstyle displaystyle=\"false\">\n{}\n</mstyle>", content)
     }
 }
 
@@ -665,6 +665,28 @@ fn render_fixed_delimiter_node(node: &crate::latex_ast::LatexNode) -> Option<Str
     Some(format!("<mo stretchy=\"true\" symmetric=\"true\" minsize=\"{size}\" maxsize=\"{size}\" form=\"{form}\" fence=\"{fence}\" lspace=\"{space}\" rspace=\"{space}\">{}</mo>", xml_escape(glyph)))
 }
 
+fn scalable_operator_mathml(glyph: &str, form: &str) -> String {
+    let separator = if form == "infix" { "true" } else { "false" };
+    format!("<mo fence=\"true\" stretchy=\"true\" symmetric=\"true\" form=\"{form}\" separator=\"{separator}\" lspace=\"0em\" rspace=\"0em\">{}</mo>", xml_escape(glyph))
+}
+
+fn scalable_fence_mathml(
+    left: &str,
+    sections: &[String],
+    separators: &[&str],
+    right: &str,
+) -> String {
+    let mut body = scalable_operator_mathml(left, "prefix");
+    for (index, section) in sections.iter().enumerate() {
+        if index > 0 {
+            body.push_str(&scalable_operator_mathml(separators[index - 1], "infix"));
+        }
+        body.push_str(section);
+    }
+    body.push_str(&scalable_operator_mathml(right, "postfix"));
+    format!("<mrow>{body}</mrow>")
+}
+
 fn render_delimited_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
     use crate::latex_ast::LatexNode;
     let child = |node: &LatexNode| {
@@ -687,10 +709,11 @@ fn render_delimited_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
             ) else {
                 return Some(format!("<mtext>{}</mtext>", xml_escape(&node.to_string())));
             };
-            let Ok((separator, sections)) = crate::latex_utils::delimiter_segments(content) else {
+            let Ok(parts) = crate::latex_utils::delimiter_parts(content) else {
                 return Some(format!("<mtext>{}</mtext>", xml_escape(&node.to_string())));
             };
-            let inner: String = sections
+            let inner: Vec<String> = parts
+                .sections
                 .into_iter()
                 .map(|section| {
                     format!(
@@ -699,12 +722,7 @@ fn render_delimited_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
                     )
                 })
                 .collect();
-            format!(
-                "<mfenced open=\"{}\" close=\"{}\" separators=\"{}\">{inner}</mfenced>",
-                xml_escape(left),
-                xml_escape(right),
-                xml_escape(separator.unwrap_or(""))
-            )
+            scalable_fence_mathml(left, &inner, &parts.separators, right)
         }
         LatexNode::Command { name, args } if name == "invalid-scalable-delimiter" => {
             format!(
@@ -1223,9 +1241,7 @@ fn flush_mathml_plain(output: &mut String, plain: &mut String) {
 }
 
 fn delimiter_mathml(open: &str, close: &str, inner: &str) -> String {
-    format!(
-        "<mo lspace=\"0em\" rspace=\"0em\">{open}</mo><mrow>{inner}</mrow><mo lspace=\"0em\" rspace=\"0em\">{close}</mo>"
-    )
+    scalable_fence_mathml(open, &[format!("<mrow>{inner}</mrow>")], &[], close)
 }
 
 fn math_style_mathml(style: &str, inner: &str) -> String {
@@ -1531,8 +1547,9 @@ fn render_symbol_ast(
         } => {
             let left = latexsnipper_syntax::latex::scalable_delimiter_glyph(left)?;
             let right = latexsnipper_syntax::latex::scalable_delimiter_glyph(right)?;
-            let (separator, sections) = crate::latex_utils::delimiter_segments(content).ok()?;
-            let parts: Option<Vec<_>> = sections
+            let segments = crate::latex_utils::delimiter_parts(content).ok()?;
+            let parts: Option<Vec<_>> = segments
+                .sections
                 .into_iter()
                 .map(|section| {
                     let nodes: Option<Vec<_>> = section
@@ -1542,12 +1559,11 @@ fn render_symbol_ast(
                     Some(format!("<mrow>{}</mrow>", nodes?.concat()))
                 })
                 .collect();
-            Some(format!(
-                "<mfenced open=\"{}\" close=\"{}\" separators=\"{}\">{}</mfenced>",
-                xml_escape(left),
-                xml_escape(right),
-                xml_escape(separator.unwrap_or("")),
-                parts?.concat()
+            Some(scalable_fence_mathml(
+                left,
+                &parts?,
+                &segments.separators,
+                right,
             ))
         }
         LatexNode::Fraction { num, den } => Some(format!(
@@ -1602,12 +1618,14 @@ fn render_symbol_ast(
             Some(if open.is_empty() {
                 table
             } else {
-                format!("<mrow><mo>{open}</mo>{table}<mo>{close}</mo></mrow>")
+                scalable_fence_mathml(open, &[table], &[], close)
             })
         }
-        LatexNode::Cases(rows) => Some(format!(
-            "<mrow><mo>{{</mo>{}</mrow>",
-            render_symbol_table(rows, found, depth + 1)?
+        LatexNode::Cases(rows) => Some(scalable_fence_mathml(
+            "{",
+            &[render_symbol_table(rows, found, depth + 1)?],
+            &[],
+            "",
         )),
         _ => None,
     }
@@ -1649,7 +1667,7 @@ fn matrix_to_mathml(content: &str, delimiters: Option<(&str, &str)>) -> String {
     }
     let table = format!("<mtable>\n{}\n</mtable>", rows_xml.join("\n"));
     match delimiters {
-        Some((open, close)) => format!("<mrow><mo>{}</mo>{}</mrow><mo>{}</mo>", open, table, close),
+        Some((open, close)) => scalable_fence_mathml(open, &[table], &[], close),
         None => table,
     }
 }
@@ -1729,14 +1747,14 @@ fn render_matrix_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
             if open.is_empty() {
                 Some(table)
             } else {
-                Some(format!(
-                    "<mrow><mo>{open}</mo>{table}<mo>{close}</mo></mrow>"
-                ))
+                Some(scalable_fence_mathml(open, &[table], &[], close))
             }
         }
-        LatexNode::Cases(rows) => Some(format!(
-            "<mrow><mo>{{</mo>{}</mrow>",
-            ast_table_to_mathml(rows)
+        LatexNode::Cases(rows) => Some(scalable_fence_mathml(
+            "{",
+            &[ast_table_to_mathml(rows)],
+            &[],
+            "",
         )),
         LatexNode::Fraction { num, den } => {
             let numerator = render_matrix_node(num);

@@ -4,6 +4,10 @@ fn xml(source: &str) -> String {
     DocumentConverter::convert_latex_string(source, OutputFormat::MathML).unwrap()
 }
 
+fn fence(glyph: &str, form: &str) -> String {
+    format!("<mo fence=\"true\" stretchy=\"true\" symmetric=\"true\" form=\"{form}\" separator=\"false\" lspace=\"0em\" rspace=\"0em\">{glyph}</mo>")
+}
+
 #[test]
 fn mathml_matrix_export_keeps_prefix_and_suffix_expressions() {
     let result = xml(r"x+\begin{matrix}1&2\\3&4\end{matrix}+y");
@@ -20,7 +24,7 @@ fn nested_mathml_matrices_keep_both_tables_and_outer_cells() {
     assert_eq!(result.matches("<mtr>").count(), 3, "{result}");
     assert_eq!(result.matches("<mtd>").count(), 6, "{result}");
     assert!(result.contains("<mn>5</mn>"));
-    assert!(result.contains("<mo>(</mo>") && result.contains("<mo>)</mo>"));
+    assert!(result.contains(&fence("(", "prefix")) && result.contains(&fence(")", "postfix")));
 }
 
 #[test]
@@ -44,10 +48,10 @@ fn all_matrix_fences_are_inside_the_same_mathml_row() {
         ("Vmatrix", "‖", "‖"),
     ] {
         let result = xml(&format!("\\begin{{{env}}}1\\end{{{env}}}"));
-        let row = format!("<mrow><mo>{open}</mo><mtable>");
+        let row = format!("<mrow>{}<mtable>", fence(open, "prefix"));
         assert!(result.contains(&row), "{result}");
         assert!(
-            result.contains(&format!("</mtable><mo>{close}</mo></mrow>")),
+            result.contains(&format!("</mtable>{}</mrow>", fence(close, "postfix"))),
             "{result}"
         );
     }
@@ -57,8 +61,9 @@ fn all_matrix_fences_are_inside_the_same_mathml_row() {
 fn cases_have_only_a_left_brace_and_retain_surrounding_content() {
     let result = xml(r"f=\begin{cases}1&x>0\\0&x\leq0\end{cases}+z");
     assert_eq!(result.matches("<mtr>").count(), 2);
-    assert_eq!(result.matches("<mo>{</mo>").count(), 1);
-    assert_eq!(result.matches("<mo>}</mo>").count(), 0);
+    assert_eq!(result.matches(&fence("{", "prefix")).count(), 1);
+    assert_eq!(result.matches(&fence("}", "postfix")).count(), 0);
+    assert!(result.contains(&fence("", "postfix")));
     assert!(
         result.contains("<mi>f</mi>") && result.contains("<mi>z</mi>"),
         "{result}"

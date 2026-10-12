@@ -11,18 +11,25 @@
 - OMML、MathML 和 Typst 输出保留定界符内分式、嵌套括号、外层上下标及后续表达式。
   普通同时上下标 `x_i^2` 使用组合脚本结构，与显式分组 `{x_i}^2` 区分；既有大型算子 limits 和样式范围继续保留。
 - canonical LaTeX 保留控制词分隔和 `\,` 等间距命令；常用 OMML/MathML 围栏重建保留默认侧与显式不可见侧。
-  MathML `mfenced` 支持单个/default separator，未知围栏、多个 separator、限定命名空间的围栏属性及裸混合文本明确拒绝。
+  旧 MathML `mfenced` 输入仍支持单个/default separator，未知围栏、多个 separator、限定命名空间的围栏属性及裸混合文本明确拒绝。
   OMML 重复围栏属性明确拒绝，不把嵌套或相邻矩阵冒充一个外层矩阵。
 - Typst 尖括号和双竖线按当前官方符号名输出 `chevron.l/r`、`bar.v.double`，避免旧符号名导致编译失败。
 - `\middle` 消耗单个定界符 token，不吞入后续操作数。在同一个 `\left...\right` 内支持一个或多个相同 glyph 的中间定界符，
   包括不可见点号、空分段、嵌套定界符、矩阵和外层同时上下标。
-  OMML 使用一个 `sepChr` 与多个 `e`；MathML 使用独立 `mrow` 分段与单一 `mfenced` separator。
+  OMML 使用一个 `sepChr` 与多个 `e`；MathML 使用独立 `mrow` 分段和显式 `mo`，有限常用集合内的同层混合 glyph 也可保留。
   回读 OMML 多个基底时不再将它们误作矩阵行；裸 OMML 多个顶层结构不会丢掉后续表达式，截断 XML 明确拒绝。
   Typst 使用周围 `lr` 的 `mid` 伸缩，不把 `middle` 输出成普通文本。
   映射依据：[Open XML delimiter](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.math.delimiter?view=openxml-3.0.1)、
   [Typst lr/mid](https://typst.app/docs/reference/math/lr/)。
-  未增加公共 AST variant、WIT 或序列化字段；严格替换仍拒绝同层混合 glyph、跨分组/环境/数学围栏或未知 token。
-  混合 glyph 的 OMML/MathML best-effort 导出保留 canonical 原文，不伪装成已支持的普通运算符。
+  未增加公共 AST variant、WIT 或序列化字段；OMML 严格替换仍拒绝同层混合 glyph，所有严格源检查仍拒绝跨分组/环境/数学围栏或未知 token。
+  混合 glyph 的 OMML best-effort 导出保留 canonical 原文，不伪装成已支持的普通运算符；MathML 可结构化导出和回读。
+- 现代 MathML 围栏输出不再使用 `mfenced`：左右与中间 `mo` 处于同一 `mrow`，带明确的伸缩、对称、form、separator 和间距属性。
+  矩阵、cases 和 abs/norm/floor/ceil 的围栏复用同一结构；不可见侧使用零 glyph 的显式 operator，保持源配对信息。
+  回读在行内核对 opener/middle/closer，不跨分式/脚本基底配对；未知 glyph/属性、混合裸文本、截断 XML 与尾部非 XML 明确拒绝。
+  普通无明确属性的 dictionary operator 不被猜测为可伸缩源配对；旧 `mfenced` 保持兼容读取。
+  行内输出使用标准 `mstyle displaystyle="false"`，前缀 XML 变体提供子节点的默认 MathML 命名空间。
+  依据：[MathML 3 围栏展开形式](https://www.w3.org/TR/MathML3/chapter3.html)、
+  [Microsoft 对 Web mfenced 的说明](https://devblogs.microsoft.com/math-in-office/mathml-element-deprecated-on-web/)。
 - 固定尺寸的 `big/Big/bigg/Bigg` 及每档的 `l/m/r` 形式，共 16 个命令按单 token 解析。
   四档分别投影到 `1.2em/1.8em/2.4em/3em`，类别保持 normal/opening/relation/closing，不把一对固定符号合成自动增长围栏。
   MathML 使用 `mo` 的相等 `minsize/maxsize`、明确 form/fence/spacing；有限回读只接受已支持的尺寸和类别形状，
@@ -58,13 +65,20 @@
   实际 Chromium 154 检查四档括号逻辑高度依次为 40、47.33、61.33、89.33 CSS px；小档括号 40 px，邻接嵌套分式 75.875 px。
   不可见基底的组合脚本宽度 10.70 px、无横向溢出，console/network 无错误。浏览器截图 SHA-256：
   `b8aa6a5a6d180bec9742705d903141fe89359566513c35286ffdebc23de31272`。
-  截图同时显示当前 legacy `mfenced` 的围栏在 Chromium 中缺失，反斜线没有取得与其他 glyph 相同的伸缩效果；
-  这是未完成的现代 MathML/字体适配，不以“无报错”或 finite XML 回读通过作为视觉验收。
+  该轮截图暴露 legacy `mfenced` 围栏在 Chromium 中缺失，后续已按下项修复；反斜线的字体伸缩差异仍未完成。
+- 现代围栏专项 7 项覆盖嵌套/非对称/空侧/脚本、混合 middle、旧输入、跨作用域与截断拒绝、矩阵/宏、行内及前缀命名空间。
+  两种 feature 配置转换全套及 all-targets Clippy 通过。实际 Chromium 154 检查 15 个显示样例及 4 个行内 XML 变体：
+  嵌套围栏/中线共享父行，矩阵两侧高度均为 61.33 px、矩阵内容 55.71 px；不可见侧宽度为零，混合竖线均可见。
+  四个行内变体通过 DOMParser 命名空间检查并渲染为相同 69.25 × 40 CSS px；无横向溢出和 console/network 错误。
+  截图 SHA-256：`3ada1a3deca8cf20c0c20b8563e4b5df57216c5fbc12a56915dfeb652d2e5b6a`。
+  同轮本机 Typst 0.15.1 编译 15 个导出实例，忽略目录 `target/fixed-delimiter-runtime-1791792243219178800/`，
+  PNG SHA-256：`4e3d3445a66a9062bb7eb7bd8f1d00dffc01643eb8d3dc7f81095c0995843a16`。
+  Typst 的 cases 条件间距尚不与 TeX 等价；上述浏览器/编译证据不替代新增真实 Word、全部字体或完整 MathML schema 验收。
 
 ## 仍需推进
 
-同层混合 glyph 的 `\middle`、固定尺寸的 OMML/SVG 相对字号与字体保真、任意宏、动态 catcode、完整文本/未分组参数语义、
-高级 array、有限集合外的 OMML separator、固定尺寸 Typst 回读与完整 MathML 围栏布局仍需独立补齐；现代浏览器围栏输出优先于进一步扩大语法。
+同层混合 glyph 的 OMML 映射、固定尺寸的 OMML/SVG 相对字号与字体保真、任意宏、动态 catcode、完整文本/未分组参数语义、
+高级 array、有限集合外的 separator/字体伸缩、fixed Typst 回读和 cases 间距及完整 MathML 围栏布局仍需独立补齐。
 共享布局接口目前保留有限命令表示，不声称已有全部定界符语义树。
 上述证据不证明所有旧版 Typst、TeX 字体/间距等价或 10000 条真实文档保真。
 
