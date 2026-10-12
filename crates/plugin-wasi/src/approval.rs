@@ -51,6 +51,9 @@ pub struct ApprovalRequest {
     pub plugin_version: String,
     pub component_sha256: String,
     pub host_context_sha256: String,
+    /// Stable identity for a future trusted-host remembered policy, not a grant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remembered_binding_sha256: Option<String>,
     pub action: SensitiveAction,
 }
 
@@ -93,6 +96,7 @@ struct Grant {
 impl Grant {
     fn covers(&self, request: &ApprovalRequest) -> bool {
         self.request.host_context_sha256 == request.host_context_sha256
+            && self.request.remembered_binding_sha256 == request.remembered_binding_sha256
             && self.request.plugin_id == request.plugin_id
             && self.request.plugin_version == request.plugin_version
             && self.request.component_sha256 == request.component_sha256
@@ -358,6 +362,7 @@ impl SensitiveActionController {
             &context.plugin_id,
             &context.plugin_version,
             &context.component_sha256,
+            &context.remembered_binding_sha256,
             &action,
         ))
         .map_err(|_| invalid("approval identity serialization failed"))?;
@@ -369,6 +374,7 @@ impl SensitiveActionController {
             plugin_version: context.plugin_version.clone(),
             component_sha256: context.component_sha256.clone(),
             host_context_sha256: context.context_sha256.clone(),
+            remembered_binding_sha256: context.remembered_binding_sha256.clone(),
             action,
         };
         let mut state = self.lock()?;
@@ -411,6 +417,7 @@ pub(crate) struct ApprovalContext {
     plugin_version: String,
     component_sha256: String,
     context_sha256: String,
+    pub(crate) remembered_binding_sha256: Option<String>,
 }
 impl ApprovalContext {
     pub(crate) fn new(package: &VerifiedComponentPackage) -> Result<Self, WasiDiagnostic> {
@@ -429,9 +436,11 @@ impl ApprovalContext {
             plugin_version: package.manifest.version.clone(),
             component_sha256: package.component_sha256.clone(),
             context_sha256: format!("{:x}", Sha256::digest(identity)),
+            remembered_binding_sha256: None,
         })
     }
     pub(crate) fn invalidate(&mut self) {
+        self.remembered_binding_sha256 = None;
         self.context_sha256 = format!(
             "{:x}",
             Sha256::digest(format!("approval-context-change:{}", self.context_sha256))
@@ -508,6 +517,7 @@ mod tests {
             plugin_version: "1.0.0".into(),
             component_sha256: "a".repeat(64),
             context_sha256: "b".repeat(64),
+            remembered_binding_sha256: None,
         }
     }
     fn action(payload: &str) -> SensitiveAction {
@@ -519,6 +529,23 @@ mod tests {
             payload_sha256: format!("{:x}", Sha256::digest(payload)),
             payload_bytes: payload.len(),
         }
+    }
+
+    #[test]
+    fn remembered_binding_metadata_is_not_authority_and_cannot_reuse_a_grant() {
+        let controller = SensitiveActionController::default();
+        let mut context = context();
+        context.remembered_binding_sha256 = Some("c".repeat(64));
+        controller.authorize(&context, action("x")).unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        controller.approve_once(&request.id).unwrap();
+        let mut changed = context.clone();
+        changed.remembered_binding_sha256 = Some("d".repeat(64));
+        assert!(controller.authorize(&changed, action("x")).is_err());
+        let changed_request = controller.pending().unwrap().remove(0);
+        assert_ne!(changed_request.id, request.id);
+        assert_eq!(controller.grants().unwrap()[0].remaining_uses, 1);
+        assert!(controller.authorize(&context, action("x")).is_ok());
     }
 
     #[test]

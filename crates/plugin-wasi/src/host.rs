@@ -243,6 +243,97 @@ impl WasiComponentHost {
         Arc::clone(&self.approvals)
     }
 
+    /// Bind a future remembered policy to trusted host scope and current settings.
+    /// This does not approve actions, restore grants or expose authority to guests.
+    /// The host must version the broker identity when its implementation or policy changes.
+    pub fn with_remembered_approval_binding(
+        mut self,
+        trusted_domain: &str,
+        network_policy_identity: &[u8],
+    ) -> Result<Self, WasiDiagnostic> {
+        if trusted_domain.is_empty()
+            || trusted_domain.len() > 4096
+            || network_policy_identity.is_empty()
+            || network_policy_identity.len() > 4096
+        {
+            return Err(invalid_input(
+                "remembered approval host identity exceeds bounds",
+            ));
+        }
+        let filesystem = self
+            .package
+            .permissions
+            .filesystem
+            .iter()
+            .map(|(id, grant)| {
+                let root = grant.root.to_str().ok_or_else(|| {
+                    invalid_input("remembered approval binding requires UTF-8 roots")
+                })?;
+                Ok((id, &grant.id, root, grant.writable))
+            })
+            .collect::<Result<Vec<_>, WasiDiagnostic>>()?;
+        let network = self
+            .package
+            .permissions
+            .network
+            .iter()
+            .map(|grant| {
+                let scheme = match grant.scheme {
+                    ComponentNetworkScheme::Https => "https",
+                    ComponentNetworkScheme::Http => "http",
+                    ComponentNetworkScheme::Tcp => "tcp",
+                };
+                (scheme, &grant.host, grant.port)
+            })
+            .collect::<Vec<_>>();
+        let environment = self
+            .environment
+            .iter()
+            .map(|(name, value)| (name, hex::encode(Sha256::digest(value.as_bytes()))))
+            .collect::<Vec<_>>();
+        let artifacts = self
+            .model_artifacts
+            .iter()
+            .map(|(name, bytes)| (name, hex::encode(Sha256::digest(bytes.as_slice()))))
+            .collect::<Vec<_>>();
+        let permissions = &self.package.permissions;
+        let identity = serde_json::to_vec(&(
+            "core-wasi-remembered-binding-v1",
+            env!("CARGO_PKG_VERSION"),
+            (std::env::consts::OS, std::env::consts::ARCH),
+            &self.package.manifest,
+            &self.package.component_sha256,
+            hex::encode(Sha256::digest(trusted_domain.as_bytes())),
+            hex::encode(Sha256::digest(network_policy_identity)),
+            hex::encode(Sha256::digest(&self.configuration)),
+            environment,
+            artifacts,
+            (
+                filesystem,
+                network,
+                &permissions.environment,
+                &permissions.model_artifacts,
+                permissions.temporary_storage,
+                permissions.clocks,
+                permissions.randomness,
+                &permissions.limits,
+            ),
+        ))
+        .map_err(|_| host_failure("cannot compute remembered approval binding"))?;
+        let binding = hex::encode(Sha256::digest(identity));
+        if self.approval_context.remembered_binding_sha256.as_ref() != Some(&binding) {
+            self.approvals.invalidate_context(&self.approval_context);
+            self.approval_context.invalidate();
+            self.approval_context.remembered_binding_sha256 = Some(binding);
+        }
+        Ok(self)
+    }
+
+    /// Fingerprint only. It is never evidence of user consent or an execution permit.
+    pub fn remembered_approval_binding(&self) -> Option<&str> {
+        self.approval_context.remembered_binding_sha256.as_deref()
+    }
+
     pub fn with_approval_controller(mut self, controller: Arc<SensitiveActionController>) -> Self {
         if !Arc::ptr_eq(&self.approvals, &controller) {
             self.approvals.invalidate_context(&self.approval_context);

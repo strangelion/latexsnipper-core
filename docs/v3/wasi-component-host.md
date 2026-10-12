@@ -94,6 +94,35 @@ These are host integration requirements, not additional implemented Core APIs:
   routine runtime-grant renewal must not ask the same question again. The host
   must never infer remembered permission from a manifest or guest output.
 
+### Stable binding for remembered-policy integration
+
+`WasiComponentHost::with_remembered_approval_binding(trusted_domain,
+network_policy_identity)` is an opt-in identity foundation, not a consent decision.
+Call it after configuring the host. Both opaque inputs must be nonempty and at
+most 4 KiB. They must come from trusted host state, never a guest instruction.
+The domain should identify the intended application/profile/document scope.
+The broker identity must version its implementation and security-relevant settings;
+Core cannot introspect an arbitrary trusted native broker's behavior.
+
+The fingerprint covers Core version/platform, verified manifest/component identity,
+resolved filesystem/network permissions, effective limits, injected configuration,
+environment values and model contents. Config/environment/model values are hashed
+before inclusion. Only the digest is exposed by `remembered_approval_binding()`
+and the optional pending-request `rememberedBindingSha256` field. These digests
+remain privacy-sensitive metadata and should not be logged or uploaded by default.
+
+Changing injected settings or replacing a broker clears this binding and revokes
+the previous context's grants. Rebinding requires recomputing it from the effective
+settings. Repeating an unchanged binding does not revoke valid grants. Identical
+fresh hosts can have equal stable fingerprints, but their random execution contexts
+and request IDs remain distinct: a session grant cannot be restored or replayed
+merely by knowing the fingerprint.
+
+Authenticated policy storage, revocation/rollback checkpoints, policy-driven renewal
+and application UI are still pending. Remote-package/profile binding adapters must
+also bind their verified archive and profile identities before enabling that route.
+This method neither persists anything nor removes `PLUGIN_WASI_APPROVAL_REQUIRED`.
+
 ### Core grant lifecycle and enforcement
 
 Consumption is synchronized across callers;

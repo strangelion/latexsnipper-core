@@ -157,6 +157,240 @@ fn verifier() -> WasiComponentPackageVerifier {
     WasiComponentPackageVerifier::new(Version::parse("3.0.0").unwrap())
 }
 
+fn remembered_binding_fixture() -> (
+    tempfile::TempDir,
+    latexsnipper_plugin_wasi::VerifiedComponentPackage,
+) {
+    let component = typed_success_component();
+    let directory = package(&component);
+    for name in ["read", "write"] {
+        fs::create_dir(directory.path().join(name)).unwrap();
+    }
+    let mut definition = manifest(&component);
+    definition["permissions"]["paths"] = json!([
+        {"path": "read", "access": "read"},
+        {"path": "write", "access": "write"}
+    ]);
+    definition["permissions"]["environmentVariables"] = json!(["FIXTURE_ENV"]);
+    definition["permissions"]["modelArtifacts"] = json!(["fixture-model"]);
+    write_package(&directory, &component, definition);
+    let verified = verifier().verify_path(directory.path()).unwrap();
+    (directory, verified)
+}
+
+#[test]
+fn remembered_binding_is_stable_across_hosts_and_bound_to_effective_settings() {
+    let (_directory, verified) = remembered_binding_fixture();
+    let bind = |package| {
+        WasiComponentHost::new(package)
+            .unwrap()
+            .with_remembered_approval_binding("fixture-document", b"deny-network-v1")
+            .unwrap()
+    };
+    let first = bind(verified.clone());
+    let binding = first.remembered_approval_binding().unwrap().to_string();
+    assert_eq!(binding.len(), 64);
+    assert_eq!(
+        bind(verified.clone()).remembered_approval_binding(),
+        Some(binding.as_str())
+    );
+    let changed = WasiComponentHost::new(verified.clone())
+        .unwrap()
+        .with_remembered_approval_binding("other-document", b"deny-network-v1")
+        .unwrap();
+    assert_ne!(
+        changed.remembered_approval_binding(),
+        Some(binding.as_str())
+    );
+    for field in 0..7 {
+        let mut package = verified.clone();
+        match field {
+            0 => package.manifest.version = "1.0.1".into(),
+            1 => package.component_sha256 = "f".repeat(64),
+            2 => package.permissions.limits.input_bytes -= 1,
+            3 => {
+                package
+                    .permissions
+                    .filesystem
+                    .get_mut("path-1")
+                    .unwrap()
+                    .writable = false
+            }
+            4 => package.permissions.randomness = !package.permissions.randomness,
+            5 => {
+                assert!(package.permissions.network.insert(
+                    latexsnipper_plugin_wasi::NetworkGrant {
+                        scheme: ComponentNetworkScheme::Https,
+                        host: "fixture.example.invalid".into(),
+                        port: 443,
+                    }
+                ));
+            }
+            _ => {
+                package
+                    .permissions
+                    .filesystem
+                    .get_mut("path-1")
+                    .unwrap()
+                    .root = package.root.join("read")
+            }
+        }
+        assert_ne!(
+            bind(package).remembered_approval_binding(),
+            Some(binding.as_str())
+        );
+    }
+}
+
+#[test]
+fn remembered_binding_is_cleared_by_changes_and_same_settings_do_not_revoke() {
+    let (_directory, verified) = remembered_binding_fixture();
+    let configure = || {
+        WasiComponentHost::new(verified.clone())
+            .unwrap()
+            .with_configuration(b"config-v1".to_vec())
+            .unwrap()
+            .with_environment([("FIXTURE_ENV".into(), "private-env-v1".into())])
+            .unwrap()
+            .with_model_artifacts([("fixture-model".into(), b"private-model-v1".to_vec())])
+            .unwrap()
+            .with_remembered_approval_binding("fixture-document", b"deny-network-v1")
+            .unwrap()
+    };
+    let binding = configure()
+        .remembered_approval_binding()
+        .unwrap()
+        .to_string();
+    let unchanged = configure()
+        .with_configuration(b"config-v1".to_vec())
+        .unwrap()
+        .with_environment([("FIXTURE_ENV".into(), "private-env-v1".into())])
+        .unwrap()
+        .with_model_artifacts([("fixture-model".into(), b"private-model-v1".to_vec())])
+        .unwrap();
+    assert_eq!(
+        unchanged.remembered_approval_binding(),
+        Some(binding.as_str())
+    );
+    for field in 0..4 {
+        let changed = match field {
+            0 => configure()
+                .with_configuration(b"config-v2".to_vec())
+                .unwrap(),
+            1 => configure()
+                .with_environment([("FIXTURE_ENV".into(), "private-env-v2".into())])
+                .unwrap(),
+            2 => configure()
+                .with_model_artifacts([("fixture-model".into(), b"private-model-v2".to_vec())])
+                .unwrap(),
+            _ => configure().with_network_broker(Arc::new(CountingNetworkBroker::default())),
+        };
+        assert_eq!(changed.remembered_approval_binding(), None);
+        let rebound = changed
+            .with_remembered_approval_binding(
+                "fixture-document",
+                if field == 3 {
+                    b"broker-v2"
+                } else {
+                    b"deny-network-v1"
+                },
+            )
+            .unwrap();
+        assert_ne!(
+            rebound.remembered_approval_binding(),
+            Some(binding.as_str())
+        );
+    }
+    for (domain, broker) in [("", b"v1".as_slice()), ("fixture", b"".as_slice())] {
+        assert!(WasiComponentHost::new(verified.clone())
+            .unwrap()
+            .with_remembered_approval_binding(domain, broker)
+            .is_err());
+    }
+    assert!(WasiComponentHost::new(verified)
+        .unwrap()
+        .with_remembered_approval_binding(&"x".repeat(4097), b"v1")
+        .is_err());
+}
+
+#[test]
+fn remembered_binding_does_not_approve_or_make_session_grants_portable() {
+    let (directory, verified) = remembered_binding_fixture();
+    let mut host = WasiComponentHost::new(verified.clone())
+        .unwrap()
+        .with_environment([("FIXTURE_ENV".into(), "private-env-v1".into())])
+        .unwrap()
+        .with_model_artifacts([("fixture-model".into(), b"private-model-v1".to_vec())])
+        .unwrap()
+        .with_remembered_approval_binding("private-domain", b"private-broker")
+        .unwrap();
+    let binding = host.remembered_approval_binding().unwrap().to_string();
+    let compiled = host.compile().unwrap();
+    let error = transform(&host, &compiled, b"broker:filesystem-write").unwrap_err();
+    assert_eq!(
+        error.code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired,
+        "{error:?}"
+    );
+    assert!(!directory.path().join("write/output.txt").exists());
+    let approvals = host.approval_controller();
+    let request = approvals.pending().unwrap().remove(0);
+    assert_eq!(request.remembered_binding_sha256, Some(binding));
+    let serialized = serde_json::to_string(&request).unwrap();
+    for private in [
+        "private-env-v1",
+        "private-model-v1",
+        "private-domain",
+        "private-broker",
+    ] {
+        assert!(!serialized.contains(private));
+    }
+    approvals
+        .approve(
+            &request.id,
+            latexsnipper_plugin_wasi::ApprovalScope::SameTarget {
+                max_payload_bytes: 16,
+            },
+            3,
+            std::time::Duration::from_secs(60),
+        )
+        .unwrap();
+    host = host
+        .with_remembered_approval_binding("private-domain", b"private-broker")
+        .unwrap();
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-write").unwrap(),
+        b"written"
+    );
+    let fresh = WasiComponentHost::new(verified)
+        .unwrap()
+        .with_environment([("FIXTURE_ENV".into(), "private-env-v1".into())])
+        .unwrap()
+        .with_model_artifacts([("fixture-model".into(), b"private-model-v1".to_vec())])
+        .unwrap()
+        .with_approval_controller(Arc::clone(&approvals))
+        .with_remembered_approval_binding("private-domain", b"private-broker")
+        .unwrap();
+    assert_eq!(
+        fresh.remembered_approval_binding(),
+        host.remembered_approval_binding()
+    );
+    // Compiled components belong to their host's Wasmtime engine.
+    let fresh_compiled = fresh.compile().unwrap();
+    assert_eq!(
+        transform(&fresh, &fresh_compiled, b"broker:filesystem-write")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
+    let fresh_request = approvals.pending().unwrap().remove(0);
+    assert_ne!(
+        fresh_request.host_context_sha256,
+        request.host_context_sha256
+    );
+    assert_ne!(fresh_request.id, request.id);
+}
+
 fn typed_trap_component() -> Vec<u8> {
     let wit = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../wit/plugin-v1");
     let mut resolve = Resolve::new();
