@@ -63,6 +63,12 @@ a displayed list of pending exact requests, once each. Valid in-scope uses proce
 without additional prompts. Exhaustion, expiry, target changes or context changes
 require fresh confirmation. `revoke`/`clear` remove future consent and pending
 requests and invalidate live per-use permits, not a permanent blacklist.
+Approving a same-target scope also removes pending descriptions already covered by
+that consent, so hosts do not keep showing obsolete prompts. Unrelated targets,
+oversized payloads and other plugin/host identities stay pending. Dismissing these
+descriptions neither executes queued work nor consumes grant uses; the host must
+explicitly resume the intended operation. Persistent remembered consent and its
+application UI are not implemented here.
 Consumption is synchronized across callers;
 unknown IDs and over-budget/invalid batches fail closed.
 Each use is consumed before IO, even if that IO subsequently fails or is cancelled;

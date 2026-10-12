@@ -90,6 +90,22 @@ struct Grant {
     lease: Arc<ApprovalLease>,
 }
 
+impl Grant {
+    fn covers(&self, request: &ApprovalRequest) -> bool {
+        self.request.host_context_sha256 == request.host_context_sha256
+            && self.request.plugin_id == request.plugin_id
+            && self.request.plugin_version == request.plugin_version
+            && self.request.component_sha256 == request.component_sha256
+            && match self.scope {
+                ApprovalScope::Exact => self.request.action == request.action,
+                ApprovalScope::SameTarget { max_payload_bytes } => {
+                    same_target(&self.request.action, &request.action)
+                        && payload_bytes(&request.action) <= max_payload_bytes
+                }
+            }
+    }
+}
+
 #[derive(Debug)]
 struct ApprovalLease {
     revoked: AtomicBool,
@@ -210,16 +226,15 @@ impl SensitiveActionController {
         if !state.grants.contains_key(request_id) && state.grants.len() >= MAX_ENTRIES {
             return Err(invalid("approval grant capacity reached"));
         }
-        state.pending.remove(request_id);
-        if let Some(old) = state.grants.insert(
-            request_id.into(),
-            Grant {
-                request,
-                scope,
-                remaining: uses,
-                lease: lease(expires),
-            },
-        ) {
+        let grant = Grant {
+            request,
+            scope,
+            remaining: uses,
+            lease: lease(expires),
+        };
+        // Covered requests are descriptions, not an execution queue.
+        state.pending.retain(|_, pending| !grant.covers(pending));
+        if let Some(old) = state.grants.insert(request_id.into(), grant) {
             old.lease.revoked.store(true, Ordering::Release);
         }
         Ok(())
@@ -347,22 +362,18 @@ impl SensitiveActionController {
         ))
         .map_err(|_| invalid("approval identity serialization failed"))?;
         let id = format!("{:x}", Sha256::digest(identity));
+        let request = ApprovalRequest {
+            schema_version: 1,
+            id: id.clone(),
+            plugin_id: context.plugin_id.clone(),
+            plugin_version: context.plugin_version.clone(),
+            component_sha256: context.component_sha256.clone(),
+            host_context_sha256: context.context_sha256.clone(),
+            action,
+        };
         let mut state = self.lock()?;
         prune(&mut state, Instant::now());
-        let matching = |grant: &Grant| {
-            grant.remaining > 0
-                && grant.request.host_context_sha256 == context.context_sha256
-                && grant.request.plugin_id == context.plugin_id
-                && grant.request.plugin_version == context.plugin_version
-                && grant.request.component_sha256 == context.component_sha256
-                && match grant.scope {
-                    ApprovalScope::Exact => grant.request.action == action,
-                    ApprovalScope::SameTarget { max_payload_bytes } => {
-                        same_target(&grant.request.action, &action)
-                            && payload_bytes(&action) <= max_payload_bytes
-                    }
-                }
-        };
+        let matching = |grant: &Grant| grant.remaining > 0 && grant.covers(&request);
         let selected = state
             .grants
             .get(&id)
@@ -386,18 +397,7 @@ impl SensitiveActionController {
         if !state.pending.contains_key(&id) && state.pending.len() >= MAX_ENTRIES {
             return Err(invalid("pending approval capacity reached"));
         }
-        state
-            .pending
-            .entry(id.clone())
-            .or_insert_with(|| ApprovalRequest {
-                schema_version: 1,
-                id: id.clone(),
-                plugin_id: context.plugin_id.clone(),
-                plugin_version: context.plugin_version.clone(),
-                component_sha256: context.component_sha256.clone(),
-                host_context_sha256: context.context_sha256.clone(),
-                action,
-            });
+        state.pending.entry(id.clone()).or_insert(request);
         Err(WasiDiagnostic::new(
             WasiDiagnosticCode::PluginWasiApprovalRequired,
             format!("host user approval required: {id}"),
@@ -872,6 +872,112 @@ mod tests {
         controller.revoke(&id).unwrap();
         assert!(controller.grants().unwrap().is_empty());
     }
+
+    #[test]
+    fn same_target_consent_dismisses_only_covered_pending_descriptions() {
+        let network = SensitiveAction::NetworkSend {
+            scheme: "https".into(),
+            host: "fixture.example.invalid".into(),
+            port: 443,
+            method: "POST".into(),
+            path_and_query: "/formula?purpose=test".into(),
+            payload_sha256: "a".repeat(64),
+            payload_bytes: 1,
+        };
+        for initial in [action("x"), network] {
+            let controller = SensitiveActionController::default();
+            let context = context();
+            controller.authorize(&context, initial.clone()).unwrap_err();
+            let id = controller.pending().unwrap()[0].id.clone();
+            let mut changed = initial.clone();
+            let mut oversized = initial.clone();
+            let mut other_target = initial.clone();
+            match &mut changed {
+                SensitiveAction::FileWrite {
+                    payload_sha256,
+                    payload_bytes,
+                    target_sha256,
+                    ..
+                } => {
+                    *payload_sha256 = "c".repeat(64);
+                    *payload_bytes = 2;
+                    *target_sha256 = Some("d".repeat(64));
+                }
+                SensitiveAction::NetworkSend {
+                    payload_sha256,
+                    payload_bytes,
+                    ..
+                } => {
+                    *payload_sha256 = "c".repeat(64);
+                    *payload_bytes = 2;
+                }
+            }
+            match &mut oversized {
+                SensitiveAction::FileWrite { payload_bytes, .. }
+                | SensitiveAction::NetworkSend { payload_bytes, .. } => *payload_bytes = 5,
+            }
+            match &mut other_target {
+                SensitiveAction::FileWrite { relative_path, .. } => {
+                    *relative_path = "other.txt".into();
+                }
+                SensitiveAction::NetworkSend { path_and_query, .. } => {
+                    *path_and_query = "/formula?purpose=other".into();
+                }
+            }
+            for candidate in [&changed, &oversized, &other_target] {
+                controller
+                    .authorize(&context, candidate.clone())
+                    .unwrap_err();
+            }
+            for field in 0..4 {
+                let mut other = context.clone();
+                match field {
+                    0 => other.plugin_id = "other.component".into(),
+                    1 => other.plugin_version = "2.0.0".into(),
+                    2 => other.component_sha256 = "e".repeat(64),
+                    _ => other.context_sha256 = "f".repeat(64),
+                }
+                controller.authorize(&other, initial.clone()).unwrap_err();
+            }
+            assert_eq!(controller.pending().unwrap().len(), 8);
+            controller
+                .approve(
+                    &id,
+                    ApprovalScope::SameTarget {
+                        max_payload_bytes: 4,
+                    },
+                    2,
+                    Duration::from_secs(60),
+                )
+                .unwrap();
+            assert_eq!(controller.pending().unwrap().len(), 6);
+            assert_eq!(controller.grants().unwrap()[0].remaining_uses, 2);
+            assert!(controller.authorize(&context, changed).is_ok());
+            assert!(controller.authorize(&context, initial.clone()).is_ok());
+            assert_eq!(controller.pending().unwrap().len(), 6);
+            assert_eq!(
+                controller.authorize(&context, initial).unwrap_err().code,
+                WasiDiagnosticCode::PluginWasiApprovalRequired
+            );
+            assert_eq!(controller.pending().unwrap().len(), 7);
+        }
+    }
+
+    #[test]
+    fn exact_consent_does_not_dismiss_pending_payload_variants() {
+        let controller = SensitiveActionController::default();
+        let context = context();
+        controller.authorize(&context, action("x")).unwrap_err();
+        let id = controller.pending().unwrap()[0].id.clone();
+        controller.authorize(&context, action("y")).unwrap_err();
+        controller.approve_once(&id).unwrap();
+        let pending = controller.pending().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].action, action("y"));
+        assert!(controller.authorize(&context, action("x")).is_ok());
+        assert!(controller.authorize(&context, action("y")).is_err());
+    }
+
     #[test]
     fn batch_confirmation_is_closed_atomic_and_expiry_is_enforced() {
         let controller = SensitiveActionController::default();
