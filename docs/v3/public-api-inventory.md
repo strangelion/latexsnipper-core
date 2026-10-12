@@ -83,6 +83,12 @@ legacy document `OutputFormat` enum and nine-output document conversion intact.
 Formula capability rows add finite UnicodeMath/AsciiMath best-effort routes;
 their canonical input/output labels are unchanged from the reserved input IDs.
 No WIT or C function signature is replaced.
+Native WASI profiles accept the two canonical linear format IDs as finite
+importer targets/exporter sources. `WasiFormulaBackend::importer_to_target`
+is additive; `importer(OutputFormat)` remains callable. Guest data still travels
+as the existing single-formula Document JSON/LaTeX projection, with the same
+verified activation, explicit enablement, candidate validation and execution
+budgets. These routes do not grant filesystem/network consent or browser WASI.
 
 GA hardening also freezes CLI behavior/exit codes, package contents, compatibility adapters,
 WIT, and this inventory together. `contracts/v3-contract-freeze.json` is checked

@@ -4,7 +4,7 @@ use latexsnipper_conversion::{
         ConversionFormatDescriptor, ConversionRegistryError, ConversionRegistryErrorCode,
         SemanticConversionRegistry, CONVERSION_REGISTRY_VERSION,
     },
-    CapabilityTarget, FormulaInputFormat, OutputFormat,
+    CapabilityTarget, FormulaInputFormat, FormulaOutputTarget,
 };
 use latexsnipper_plugin::{CancellationToken, RemotePluginStore};
 use regex::{Regex, RegexBuilder};
@@ -112,7 +112,7 @@ impl WasiFormulaProfile {
             })?;
         let approval_controller = plugin.approval_controller();
         let backend = match &self.operation {
-            FormulaProfileOperation::Importer { output } => WasiFormulaBackend::importer(
+            FormulaProfileOperation::Importer { output } => WasiFormulaBackend::importer_to_target(
                 plugin,
                 &self.backend_id,
                 &self.format.id,
@@ -216,12 +216,11 @@ fn compile_validation(
         .map_err(|_| invalid("invalid or over-budget profile regex"))
 }
 
-fn builtin_output(id: &str) -> Result<OutputFormat, ConversionRegistryError> {
-    OutputFormat::all()
-        .iter()
-        .copied()
+fn builtin_output(id: &str) -> Result<FormulaOutputTarget, ConversionRegistryError> {
+    FormulaOutputTarget::all()
+        .into_iter()
         .find(|format| format.name() == id)
-        .ok_or_else(|| invalid("importer output must be a canonical built-in semantic format"))
+        .ok_or_else(|| invalid("importer output must be a canonical built-in formula target"))
 }
 fn builtin_input(id: &str) -> Result<FormulaInputFormat, ConversionRegistryError> {
     [
@@ -229,6 +228,8 @@ fn builtin_input(id: &str) -> Result<FormulaInputFormat, ConversionRegistryError
         FormulaInputFormat::Mathml,
         FormulaInputFormat::Omml,
         FormulaInputFormat::Typst,
+        FormulaInputFormat::AsciiMath,
+        FormulaInputFormat::UnicodeMath,
     ]
     .into_iter()
     .find(|format| format.name() == id)
@@ -343,6 +344,42 @@ mod tests {
             let mut altered = value.clone();
             altered["operation"] = serde_json::json!({"kind":"exporter", "input":input});
             assert!(WasiFormulaProfile::from_json(&serde_json::to_vec(&altered).unwrap()).is_err());
+        }
+    }
+
+    #[test]
+    fn linear_profiles_require_canonical_ids_and_bind_each_direction() {
+        let mut identities = std::collections::BTreeSet::new();
+        for format in ["ascii-math", "unicode-math"] {
+            for operation in [
+                serde_json::json!({"kind":"importer", "output":format}),
+                serde_json::json!({"kind":"exporter", "input":format}),
+            ] {
+                let mut value = definition();
+                value["operation"] = operation;
+                let profile =
+                    WasiFormulaProfile::from_json(&serde_json::to_vec(&value).unwrap()).unwrap();
+                assert!(identities.insert(profile.sha256().unwrap()));
+            }
+        }
+        for format in [
+            "ascii_math",
+            "Unicode-Math",
+            "mtef",
+            "ole",
+            "svg",
+            "custom:unknown",
+        ] {
+            for operation in [
+                serde_json::json!({"kind":"importer", "output":format}),
+                serde_json::json!({"kind":"exporter", "input":format}),
+            ] {
+                let mut value = definition();
+                value["operation"] = operation;
+                assert!(
+                    WasiFormulaProfile::from_json(&serde_json::to_vec(&value).unwrap()).is_err()
+                );
+            }
         }
     }
 }

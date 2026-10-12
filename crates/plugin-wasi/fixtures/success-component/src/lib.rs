@@ -227,8 +227,14 @@ impl exporter::Guest for Fixture {
                     diagnostics: Vec::new(),
                 });
             }
-            let [variable, b'^', exponent] = source.as_bytes() else {
-                return Err(fixture_error("unsupported power"));
+            let (variable, exponent) = match source.as_bytes() {
+                [variable, b'^', exponent]
+                | [variable, b'^', b'{', exponent, b'}']
+                | [b'{', variable, b'}', b'^', b'{', exponent, b'}']
+                | [b'{', b'{', variable, b'}', b'}', b'^', b'{', exponent, b'}'] => {
+                    (variable, exponent)
+                }
+                _ => return Err(fixture_error("unsupported power")),
             };
             if !variable.is_ascii_lowercase() || !exponent.is_ascii_digit() {
                 return Err(fixture_error("unsupported power operands"));

@@ -90,6 +90,23 @@ def wasi_smoke(root: Path) -> None:
                     assert "m:sSup" in content
             expect("PLUGIN_WASI_RESOURCE_POLICY", lambda: registry.approval('{"kind":"once","requestId":"unknown"}'))
             assert registry.approvals()["grants"] == []
+    for exporter, linear_format, source, expected in (
+        (False, "unicode-math", "y:4", "〖y〗^(4)"),
+        (True, "ascii-math", "{:x:}^(2)", "x:2"),
+    ):
+        definition = profile(exporter)
+        definition["operation"] = {"kind": "exporter", "input": linear_format} if exporter else {
+            "kind": "importer", "output": linear_format}
+        with FormulaRegistry(plugin_store=root, profile_json=json.dumps(definition)) as registry:
+            arguments = dict(input_format=linear_format if exporter else "fixture:power",
+                             output_format="fixture:power" if exporter else linear_format,
+                             context_sha256="a" * 64, mode="best-effort", backend="fixture:profile")
+            assert registry.convert(source, **arguments)["outcome"]["error"]["code"] == "BACKEND_DISABLED"
+            registry.set_enabled("fixture:profile", True)
+            report = registry.convert(source, **arguments)
+            assert report["outcome"]["kind"] == "converted", report
+            assert report["outcome"]["result"]["candidate"]["content"] == expected
+            assert registry.approvals()["grants"] == []
     loop_profile = profile(False)
     loop_profile["format"]["validation"]["pattern"] = "[a-z]:[0-9]|control:infinite"
     with FormulaRegistry(plugin_store=root, profile_json=json.dumps(loop_profile)) as registry:

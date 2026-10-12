@@ -211,3 +211,50 @@ fn real_c_profile_reuses_guest_checks_default_deny_revocation_and_export_shape()
     drop(store);
     temporary.close().unwrap();
 }
+
+#[cfg(feature = "wasi-formula")]
+#[test]
+fn real_c_linear_profiles_use_the_same_canonical_projection_and_ownership() {
+    let (temporary, store) = fixture::store();
+    let root = temporary.path().join("store");
+    for (exporter, format, source, expected) in [
+        (false, "ascii-math", "y:4", "y^(4)"),
+        (true, "unicode-math", "〖x〗^(2)", "x:2"),
+    ] {
+        let mut profile = fixture::profile(exporter);
+        profile["operation"] = if exporter {
+            json!({"kind":"exporter","input":format})
+        } else {
+            json!({"kind":"importer","output":format})
+        };
+        let created = create(json!({"schemaVersion":1,"pluginStore":root,"profile":profile}));
+        assert_eq!(created["ok"], true, "{created}");
+        let handle = created["data"]["handle"].as_u64().unwrap();
+        let mut value = request(source);
+        value["input"] = json!(if exporter { format } else { "fixture:power" });
+        value["output"] = json!(if exporter { "fixture:power" } else { format });
+        value["mode"] = json!("best-effort");
+        value["backend"] = json!("fixture:profile");
+        assert_eq!(
+            convert(handle, value.clone())["data"]["outcome"]["error"]["code"],
+            "BACKEND_DISABLED"
+        );
+        assert_eq!(enable(handle, "fixture:profile", true)["ok"], true);
+        let result = convert(handle, value);
+        assert_eq!(result["data"]["outcome"]["kind"], "converted", "{result}");
+        assert_eq!(
+            result["data"]["outcome"]["result"]["candidate"]["content"],
+            expected
+        );
+        assert_eq!(
+            take(latexsnipper_formula_registry_approvals(handle))["data"]["grants"],
+            json!([])
+        );
+        assert_eq!(
+            take(latexsnipper_formula_registry_close(handle))["ok"],
+            true
+        );
+    }
+    drop(store);
+    temporary.close().unwrap();
+}

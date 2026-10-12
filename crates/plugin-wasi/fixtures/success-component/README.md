@@ -18,3 +18,6 @@ The fixture lockfile is tracked; it is separate from the workspace lockfile.
 The finite `application/vnd.fixture.power` importer/exporter exercises the
 registered formula bridge with real Document JSON and refusal controls. It is
 not a full formula-format converter or a production plugin.
+The finite exporter accepts a single lowercase ASCII variable and one digit,
+including the bounded `x^2`, `x^{2}`, `{x}^{2}` and `{{x}}^{2}` spellings produced
+by the host's canonical projection. Other expressions are still refused.

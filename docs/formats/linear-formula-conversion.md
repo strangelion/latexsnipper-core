@@ -54,5 +54,10 @@ Core 不执行 TeX、宏、JavaScript 或 Office 操作来完成这些字符串�
 固定合成语料验证规范输出及原语义目标，专项回归验证两种语法的差异、拒绝范围、
 原文身份、旧文档 API 和模式/预算；它们不是独立真实分布准确率。
 公开能力矩阵由注册表生成，包级 smoke 遍历每条路线。
-Office UI、Word 原生 buildup 对比、移动设备、真实字体/视觉、扩展 WASI profile 的新目标及
+Office UI、Word 原生 buildup 对比、移动设备、真实字体/视觉及
 更广语法仍须分别接入和验收。MTEF 字节/宿主对象不由本接口顺带开放。
+
+原生 WASI profile 也接通有限线性 importer 目标/exporter 来源，仍须先有已验证且启用的包，
+再明确启用并选择 profile 后端；这不开放浏览器 WASI 或新的 filesystem/network 权限。
+贡献者的 importer 可使用新增 `WasiFormulaBackend::importer_to_target`，旧接口保留。
+见 [WASI/profile 边界](conversion-registry.md#受限-wasi-公式适配)。

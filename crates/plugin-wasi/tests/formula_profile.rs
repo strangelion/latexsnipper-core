@@ -120,3 +120,163 @@ fn malformed_profile_does_not_create_a_store_or_mutate_caller_registry() {
         .is_err());
     assert!(!root.exists());
 }
+
+#[test]
+fn linear_profiles_execute_real_components_without_widening_trust_or_retry() {
+    let (temporary, store) = fixture::store();
+    let mut identities = std::collections::BTreeSet::new();
+    for format in ["ascii-math", "unicode-math"] {
+        for exporter in [false, true] {
+            let mut definition = fixture::profile(exporter);
+            definition["operation"] = if exporter {
+                serde_json::json!({"kind":"exporter", "input":format})
+            } else {
+                serde_json::json!({"kind":"importer", "output":format})
+            };
+            let profile =
+                WasiFormulaProfile::from_json(&serde_json::to_vec(&definition).unwrap()).unwrap();
+            let cancellation = latexsnipper_plugin::CancellationToken::default();
+            let mut prepared = profile
+                .prepare_with_cancellation(&store, cancellation.clone())
+                .unwrap();
+            let make_request = |source: &str| {
+                let mut value = request(exporter, source);
+                if exporter {
+                    value.input = format.into();
+                } else {
+                    value.output = format.into();
+                }
+                value
+            };
+            let first_source = if exporter { "x^2" } else { "x:2" };
+            assert_eq!(
+                prepared
+                    .registry
+                    .convert(&make_request(first_source))
+                    .unwrap_err()
+                    .code,
+                ConversionRegistryErrorCode::BackendDisabled
+            );
+            prepared
+                .registry
+                .set_backend_enabled(&prepared.backend_id, true)
+                .unwrap();
+            let route = prepared
+                .registry
+                .capabilities()
+                .into_iter()
+                .find(|route| route.backend == "fixture:profile")
+                .unwrap();
+            assert!(route.available);
+            assert!(route
+                .limitations
+                .iter()
+                .any(|note| note.contains("finite linear")));
+            let mut outputs = Vec::new();
+            for (variable, exponent) in [("x", "2"), ("y", "4")] {
+                let source = if exporter {
+                    format!("{variable}^{exponent}")
+                } else {
+                    format!("{variable}:{exponent}")
+                };
+                let result = prepared.registry.convert(&make_request(&source)).unwrap();
+                if outputs.is_empty() {
+                    assert!(identities.insert(result.configuration_sha256.clone()));
+                }
+                let expected = if exporter {
+                    format!("{variable}:{exponent}")
+                } else if format == "ascii-math" {
+                    format!("{variable}^({exponent})")
+                } else {
+                    format!("〖{variable}〗^({exponent})")
+                };
+                assert_eq!(result.candidate.content, expected);
+                assert_eq!(
+                    result.input,
+                    if exporter { format } else { "fixture:power" }
+                );
+                assert_eq!(
+                    result.output,
+                    if exporter { "fixture:power" } else { format }
+                );
+                assert!(!result.candidate.losses.is_empty());
+                assert_eq!(result.input_sha256, {
+                    use sha2::{Digest, Sha256};
+                    format!("{:x}", Sha256::digest(source.as_bytes()))
+                });
+                outputs.push(result.candidate.content);
+            }
+            assert_ne!(outputs[0], outputs[1]);
+            if exporter {
+                let canonical = if format == "ascii-math" {
+                    "{:x:}^(2)"
+                } else {
+                    "〖x〗^(2)"
+                };
+                let projected = prepared.registry.convert(&make_request(canonical)).unwrap();
+                assert_eq!(projected.candidate.content, "x:2");
+                let invalid = if format == "ascii-math" {
+                    "color(red)(x)"
+                } else {
+                    "∫_0^1 x"
+                };
+                assert_eq!(
+                    prepared
+                        .registry
+                        .convert(&make_request(invalid))
+                        .unwrap_err()
+                        .code,
+                    ConversionRegistryErrorCode::InputRejected
+                );
+                let report = prepared.registry.convert_with_fallback(
+                    &make_request("a/b"),
+                    &ConversionFallbackPolicy {
+                        schema_version: 1,
+                        backends: vec!["core:builtin".into()],
+                    },
+                );
+                assert!(matches!(
+                    report.outcome,
+                    ConversionFallbackOutcome::Rejected { .. }
+                ));
+                assert_eq!(report.attempts.len(), 1);
+                assert!(prepared
+                    .registry
+                    .convert(&make_request(first_source))
+                    .is_ok());
+            }
+            cancellation.cancel();
+            let cancelled = prepared.registry.convert_with_fallback(
+                &make_request(first_source),
+                &ConversionFallbackPolicy {
+                    schema_version: 1,
+                    backends: vec!["core:builtin".into()],
+                },
+            );
+            assert_eq!(cancelled.attempts.len(), 1);
+            assert!(matches!(
+                cancelled.outcome,
+                ConversionFallbackOutcome::Rejected { .. }
+            ));
+            assert!(prepared.approval_controller.grants().unwrap().is_empty());
+            let mut fresh = profile.prepare(&store).unwrap();
+            fresh
+                .registry
+                .set_backend_enabled(&fresh.backend_id, true)
+                .unwrap();
+            store.set_enabled("fixture.component", false).unwrap();
+            assert_eq!(
+                fresh
+                    .registry
+                    .convert(&make_request(first_source))
+                    .unwrap_err()
+                    .code,
+                ConversionRegistryErrorCode::BackendFailed
+            );
+            assert!(profile.prepare(&store).is_err());
+            store.set_enabled("fixture.component", true).unwrap();
+        }
+    }
+    drop(store);
+    temporary.close().unwrap();
+}

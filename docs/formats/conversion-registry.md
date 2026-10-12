@@ -73,6 +73,8 @@ MathML 显示公式由非标准 `displaymath` 改为 `mstyle displaystyle="true"
 `latexsnipper_plugin_wasi::WasiFormulaBackend` 接收已经校验、显式启用的
 `ActivatedRemoteWasiPlugin`，不会从请求中的路径或 URL 加载代码。用 `importer` 或
 `exporter` 建立明确的一条 best-effort 路线，再注册和显式启用；WIT v1 不变。
+新增 `importer_to_target(FormulaOutputTarget)` 支持有限 UnicodeMath/AsciiMath 目标，
+原 `importer(OutputFormat)` 签名及旧语义输出不变。
 
 - importer 必须声明 transport→AST 的可用公式能力、钩子与 importer grant。
   返回 `application/vnd.latexsnipper.document+json`、当前 schema 的真实 Document JSON；
@@ -84,6 +86,9 @@ MathML 显示公式由非标准 `displaymath` 改为 `mstyle displaystyle="true"
   LaTeX 来源可以包含一个合法的 `$…$`、`$$…$$`、`\(…\)` 或 `\[…\]` 包装，
   交共享形状检查后得到裸公式；多个公式、混合正文、损坏包装和文档命令仍拒绝。
   来源摘要保留原始输入，不用去包装后的文本冒充原文身份。
+  UnicodeMath/AsciiMath 来源先经过各自有限 parser 和 Core 单公式 LaTeX 投影；
+  不更改 Document schema/FormulaSource 类型，不把线性字符串冒充 LaTeX。
+  未知语法、不可表达 AST、输入/投影预算或 guest 拒绝均为终态，不执行另一后端重试。
 - 保留现有每次执行信任复验、fuel/epoch、内存/表/资源、并发、输入/输出及诊断预算。
   配置身份包含组件摘要、manifest、路线和实际宿主限额；禁用/撤销、取消或超时不会隐式 fallback。
 - 裸公式、AST 投影和 best-effort 是有限重建，不保留完整文档样式/元数据，也不保证视觉或可编辑保真。
@@ -94,7 +99,8 @@ MathML 显示公式由非标准 `displaymath` 改为 `mstyle displaystyle="true"
 并检查错误 MIME、非法 JSON、多块、非法 UTF-8、超预算、取消和无限循环中止。
 这是本地受控包及 target/provenance 的宿主回归，不代替真实远程 registry 签名服务验收。
 fixture 独立锁文件已固定；重建的 core WASM SHA-256 为
-`cd51c67716a727b85a75dbfe03a7bed93db1a4c407bc9ceec6ba967f05bc1eef`，已扫描无本机路径标记。
+`a6bd1d60088c2afce792b0f1480cb10d953a78d0360b1c2269c669a91fd99e5d`，已扫描无本机路径标记。
+有限 power exporter 接受 Core 的单字母/单数字规范分组，仍不当作通用 LaTeX 转换器。
 
 ## 声明式 WASI profile 与 CLI
 
@@ -120,7 +126,10 @@ fixture 独立锁文件已固定；重建的 core WASM SHA-256 为
 ```
 
 `operation` 可改为 `{"kind":"exporter","input":"latex"}`，将真实单公式 AST 导出到该 custom 格式。
-importer 目标只能是规范内置语义 ID；exporter 源只能是当前实现的 LaTeX/MathML/OMML/Typst AST 投影。
+importer 目标只能是规范内置单公式 ID（含 `ascii-math`、`unicode-math`）；
+exporter 源为当前实现的 LaTeX/MathML/OMML/Typst/AsciiMath/UnicodeMath 单公式投影。
+profile 中下划线、大小写别名、Markdown 文档、图片/MTEF/OLE 和未知自定义目标仍拒绝。
+新线性路线的配置/来源/方向摘要、重建损失及每次执行信任复验不变。
 字符串 API 仍不接二进制 MTEF、图片或 OLE。配置及所有嵌套字段拒绝未知项，版本不匹配拒绝。
 
 验证器为 Core 编译的完整字符串正则，不运行脚本、宏或 guest validator；模式最多 2048 字节、

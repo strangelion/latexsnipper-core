@@ -6,7 +6,8 @@ use latexsnipper_conversion::{
         ConversionRegistryError, ConversionRegistryErrorCode, RegisteredConversionRequest,
         RegisteredFormulaBackend, SemanticConversionRegistry, CONVERSION_REGISTRY_VERSION,
     },
-    CapabilityTarget, DocumentConverter, FormulaConversionMode, FormulaInputFormat, OutputFormat,
+    CapabilityTarget, DocumentConverter, FormulaConversionMode, FormulaInputFormat,
+    FormulaOutputTarget, OutputFormat,
 };
 use latexsnipper_plugin::{CancellationToken, PluginHook};
 use sha2::{Digest, Sha256};
@@ -22,7 +23,7 @@ const MAX_DOCUMENT_BYTES: usize = 256 * 1024;
 enum Operation {
     Import {
         transport: String,
-        output: OutputFormat,
+        output: FormulaOutputTarget,
     },
     Export {
         transport: String,
@@ -48,6 +49,23 @@ impl WasiFormulaBackend {
         input_id: &str,
         transport: &str,
         output: OutputFormat,
+    ) -> Result<Self, ConversionRegistryError> {
+        Self::importer_to_target(
+            plugin,
+            backend_id,
+            input_id,
+            transport,
+            FormulaOutputTarget::Semantic(output),
+        )
+    }
+
+    /// Formula-only target dispatch; keeps the legacy document enum/API intact.
+    pub fn importer_to_target(
+        plugin: ActivatedRemoteWasiPlugin,
+        backend_id: &str,
+        input_id: &str,
+        transport: &str,
+        output: FormulaOutputTarget,
     ) -> Result<Self, ConversionRegistryError> {
         validate_declaration(
             &plugin,
@@ -83,6 +101,8 @@ impl WasiFormulaBackend {
                 | FormulaInputFormat::Mathml
                 | FormulaInputFormat::Omml
                 | FormulaInputFormat::Typst
+                | FormulaInputFormat::AsciiMath
+                | FormulaInputFormat::UnicodeMath
         ) {
             return Err(rejected(
                 "exporter input must have an implemented formula parser",
@@ -139,6 +159,23 @@ impl WasiFormulaBackend {
                 .into(),
             "best-effort output is not a visual, semantic or editable fidelity guarantee".into(),
         ];
+        if matches!(
+            &operation,
+            Operation::Import {
+                output: FormulaOutputTarget::AsciiMath | FormulaOutputTarget::UnicodeMath,
+                ..
+            } | Operation::Export {
+                input: FormulaInputFormat::AsciiMath | FormulaInputFormat::UnicodeMath,
+                ..
+            }
+        ) {
+            limitations.extend([
+                "Core finite linear grammar; unrepresentable projected AST is rejected".into(),
+                "canonical projection does not preserve original spelling, rich-text fonts or spacing".into(),
+                "no complete UnicodeMath/AsciiMath or Word buildup parity".into(),
+                "source reconstruction may lose unsupported syntax or style".into(),
+            ]);
+        }
         for capability in &manifest.format_capabilities {
             let pair = match &operation {
                 Operation::Import { .. } => (transport.as_str(), "AST"),
@@ -261,7 +298,7 @@ impl RegisteredFormulaBackend for WasiFormulaBackend {
                     ));
                 }
                 let (source, input) = import_formula_source(&document.payload)?;
-                DocumentConverter::convert_formula_string(
+                DocumentConverter::convert_formula_to_target(
                     &source,
                     input,
                     *output,
@@ -537,6 +574,18 @@ mod tests {
             assert!(!projected.contains("document"));
             assert!(!projected.contains("\\["));
             assert!(projected.contains('x') && projected.contains('2'));
+        }
+        for (input, source) in [
+            (FormulaInputFormat::AsciiMath, "{:x:}^(2)"),
+            (FormulaInputFormat::UnicodeMath, "〖x〗^(2)"),
+        ] {
+            let projected = DocumentConverter::convert_formula_fragment(
+                source,
+                input,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert_eq!(projected, "{{x}}^{2}");
         }
     }
     #[test]
