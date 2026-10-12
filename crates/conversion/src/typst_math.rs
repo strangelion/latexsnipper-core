@@ -295,7 +295,13 @@ fn convert_atom(atom: &str, depth: usize, in_fence: bool) -> ParseResult {
             };
             let rows = rows
                 .iter()
-                .map(|row| convert(row))
+                .map(|row| {
+                    case_cells(row)?
+                        .iter()
+                        .map(|cell| convert(cell))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map(|cells| cells.join(" & "))
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(format!(
                 "\\begin{{cases}} {} \\end{{cases}}",
@@ -374,6 +380,33 @@ fn convert_atom(atom: &str, depth: usize, in_fence: bool) -> ParseResult {
         }
         _ => Err(unsupported()),
     }
+}
+
+fn case_cells(row: &str) -> Result<Vec<&str>, String> {
+    let parts = split_args(row, '&')?;
+    if parts.len() == 1 {
+        return Ok(parts);
+    }
+    if parts[0].is_empty() && parts.len() % 2 == 0 {
+        let mut cells = vec![parts[1]];
+        for pair in parts[2..].chunks_exact(2) {
+            if !pair[0].is_empty() {
+                return Err(unsupported());
+            }
+            let tail = pair[1].strip_prefix("quad").ok_or_else(unsupported)?;
+            if tail.chars().next().is_some_and(|ch| !ch.is_whitespace()) {
+                return Err(unsupported());
+            }
+            cells.push(tail.trim_start());
+        }
+        return Ok(cells);
+    }
+    // Basic alignment points retain columns, including one trailing empty cell.
+    // Empty alternating blocks cannot be guessed into a TeX column spec.
+    if parts.len() == 2 || parts.iter().all(|part| !part.is_empty()) {
+        return Ok(parts);
+    }
+    Err(unsupported())
 }
 
 fn fixed_delimiter(body: &str) -> ParseResult {

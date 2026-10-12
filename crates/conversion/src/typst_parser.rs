@@ -9,7 +9,18 @@ pub fn parse_typst_to_latex(typst: &str) -> String {
 pub(crate) fn symbol_atom(s: &str) -> String {
     if matches!(
         s,
-        "min" | "max" | "lim" | "sin" | "cos" | "tan" | "log" | "ln" | "exp" | "det" | "gcd"
+        "min"
+            | "max"
+            | "lim"
+            | "sin"
+            | "cos"
+            | "tan"
+            | "log"
+            | "ln"
+            | "exp"
+            | "det"
+            | "gcd"
+            | "quad"
     ) {
         return format!("\\{s} ");
     }

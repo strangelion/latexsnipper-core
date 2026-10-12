@@ -129,6 +129,9 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
             convert_font_modifier(font, &inner)
         }
         LatexNode::Matrix { env, rows } => {
+            if env == "cases" {
+                return render_cases(rows);
+            }
             let typst_fn = match env.as_str() {
                 "pmatrix" | "bmatrix" | "Bmatrix" => "mat",
                 "vmatrix" | "Vmatrix" => "mat",
@@ -186,18 +189,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 cells.join(", ")
             )
         }
-        LatexNode::Cases(rows) => {
-            let cases: Vec<String> = rows
-                .iter()
-                .map(|row| {
-                    row.iter()
-                        .map(latex_ast_to_typst)
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                })
-                .collect();
-            format!("cases({})", cases.join(", "))
-        }
+        LatexNode::Cases(rows) => render_cases(rows),
         LatexNode::Command { name, args } => {
             let arg_str: Vec<String> = args.iter().map(latex_ast_to_typst).collect();
             convert_command(name, &arg_str, args)
@@ -330,6 +322,19 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
         LatexNode::Minipage { content, .. } => latex_ast_to_typst(content),
         LatexNode::Float { content, .. } => latex_ast_to_typst(content),
     }
+}
+
+fn render_cases(rows: &[Vec<LatexNode>]) -> String {
+    let branches = rows
+        .iter()
+        .map(|row| {
+            let cells = row.iter().map(latex_ast_to_typst).collect::<Vec<_>>();
+            // The leading marker and double markers keep every logical column left
+            // aligned. The explicit quad separates columns, not mathematical atoms.
+            format!("& {}", cells.join(" && quad "))
+        })
+        .collect::<Vec<_>>();
+    format!("cases({})", branches.join(", "))
 }
 
 /// Convert delimiter to Typst syntax.
