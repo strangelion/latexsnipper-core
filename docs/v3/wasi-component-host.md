@@ -118,10 +118,22 @@ fresh hosts can have equal stable fingerprints, but their random execution conte
 and request IDs remain distinct: a session grant cannot be restored or replayed
 merely by knowing the fingerprint.
 
+Remote integrations can opt in with
+`ActivatedRemoteWasiPlugin::with_remembered_approval_binding(trusted_domain)`;
+this also binds the installed archive SHA-256 and the route's fixed default-deny
+broker identity. Rebinding rechecks enablement/trust, while every execution still
+checks that the installed archive and manifest are unchanged. Identical component
+bytes in a different archive cannot inherit the binding.
+`WasiFormulaProfile::prepare_with_remembered_approval_binding(store, cancellation,
+trusted_domain)` additionally binds the complete canonical profile, including its
+format validator. `PreparedFormulaRegistry::remembered_binding_sha256` is `None`
+on the ordinary preparation path. The bound path still leaves the registry backend
+disabled and creates no consent grants. Host scope arguments are not guest/profile
+JSON fields, and no new guest authority is introduced.
+
 Authenticated policy storage, revocation/rollback checkpoints, policy-driven renewal
-and application UI are still pending. Remote-package/profile binding adapters must
-also bind their verified archive and profile identities before enabling that route.
-This method neither persists anything nor removes `PLUGIN_WASI_APPROVAL_REQUIRED`.
+and application UI are still pending. These methods neither persist anything nor
+remove `PLUGIN_WASI_APPROVAL_REQUIRED`.
 
 ### Core grant lifecycle and enforcement
 

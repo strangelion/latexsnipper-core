@@ -3,6 +3,124 @@ mod fixture;
 use latexsnipper_conversion::{conversion_registry::*, FormulaConversionMode};
 use latexsnipper_plugin_wasi::WasiFormulaProfile;
 
+#[test]
+fn remembered_remote_binding_includes_archive_and_profile_without_enabling() {
+    use latexsnipper_plugin::CancellationToken;
+    use latexsnipper_plugin_wasi::ActivatedRemoteWasiPlugin;
+
+    let (_temporary, store) = fixture::store();
+    let (_other_temporary, other_store) = fixture::store_with_archive_comment("different archive");
+    let activate = |store: &latexsnipper_plugin::RemotePluginStore| {
+        ActivatedRemoteWasiPlugin::activate(store, "fixture.component")
+            .unwrap()
+            .with_remembered_approval_binding("fixture:trusted-document")
+            .unwrap()
+    };
+    let remote = activate(&store);
+    let remote_binding = remote.remembered_approval_binding().unwrap().to_owned();
+    let repeated = remote
+        .with_remembered_approval_binding("fixture:trusted-document")
+        .unwrap();
+    assert_eq!(
+        repeated.remembered_approval_binding().unwrap(),
+        remote_binding
+    );
+    assert_eq!(
+        activate(&store).remembered_approval_binding().unwrap(),
+        remote_binding
+    );
+    let other = activate(&other_store);
+    assert_eq!(repeated.component_sha256(), other.component_sha256());
+    assert_eq!(
+        serde_json::to_value(repeated.manifest()).unwrap(),
+        serde_json::to_value(other.manifest()).unwrap()
+    );
+    assert_ne!(other.remembered_approval_binding().unwrap(), remote_binding);
+    assert!(repeated.approval_controller().grants().unwrap().is_empty());
+
+    let definition = fixture::profile(false);
+    let profile = WasiFormulaProfile::from_json(&serde_json::to_vec(&definition).unwrap()).unwrap();
+    let prepare = |profile: &WasiFormulaProfile, store: &latexsnipper_plugin::RemotePluginStore| {
+        profile
+            .prepare_with_remembered_approval_binding(
+                store,
+                CancellationToken::default(),
+                "fixture:trusted-document",
+            )
+            .unwrap()
+    };
+    let mut prepared = prepare(&profile, &store);
+    let binding = prepared.remembered_binding_sha256.clone().unwrap();
+    assert_ne!(binding, remote_binding);
+    assert_eq!(
+        prepare(&profile, &store).remembered_binding_sha256.unwrap(),
+        binding
+    );
+    assert_ne!(
+        prepare(&profile, &other_store)
+            .remembered_binding_sha256
+            .unwrap(),
+        binding
+    );
+    let mut changed = definition;
+    changed["format"]["validation"]["pattern"] = serde_json::json!("[a-z]:[0-8]");
+    let changed = WasiFormulaProfile::from_json(&serde_json::to_vec(&changed).unwrap()).unwrap();
+    assert_ne!(
+        prepare(&changed, &store).remembered_binding_sha256.unwrap(),
+        binding
+    );
+    assert_eq!(
+        prepared
+            .registry
+            .convert(&request(false, "x:2"))
+            .unwrap_err()
+            .code,
+        ConversionRegistryErrorCode::BackendDisabled
+    );
+    assert!(prepared.approval_controller.grants().unwrap().is_empty());
+    prepared
+        .registry
+        .set_backend_enabled(&prepared.backend_id, true)
+        .unwrap();
+    assert!(prepared
+        .registry
+        .convert(&request(false, "x:2"))
+        .unwrap()
+        .candidate
+        .content
+        .contains("m:sSup"));
+    store.set_enabled("fixture.component", false).unwrap();
+    assert!(prepared.registry.convert(&request(false, "x:2")).is_err());
+    assert!(repeated
+        .with_remembered_approval_binding("fixture:trusted-document")
+        .is_err());
+}
+
+#[test]
+fn remembered_profile_binding_checks_domain_before_touching_a_store() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().join("absent-store");
+    let store = latexsnipper_plugin::RemotePluginStore::new(root.clone());
+    let profile =
+        WasiFormulaProfile::from_json(&serde_json::to_vec(&fixture::profile(false)).unwrap())
+            .unwrap();
+    for domain in ["".to_owned(), "x".repeat(4097)] {
+        assert_eq!(
+            profile
+                .prepare_with_remembered_approval_binding(
+                    &store,
+                    latexsnipper_plugin::CancellationToken::default(),
+                    &domain,
+                )
+                .err()
+                .unwrap()
+                .code,
+            ConversionRegistryErrorCode::InvalidDeclaration
+        );
+        assert!(!root.exists());
+    }
+}
+
 fn request(exporter: bool, source: &str) -> RegisteredConversionRequest {
     RegisteredConversionRequest {
         schema_version: 1,
@@ -24,6 +142,7 @@ fn profiles_execute_actual_import_export_and_bind_validator_identity() {
     let mut prepared = profile
         .prepare_with_cancellation(&store, cancellation.clone())
         .unwrap();
+    assert!(prepared.remembered_binding_sha256.is_none());
     assert_eq!(
         prepared
             .registry

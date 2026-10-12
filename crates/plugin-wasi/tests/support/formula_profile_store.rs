@@ -18,10 +18,22 @@ pub fn profile(exporter: bool) -> Value {
 }
 
 pub fn store() -> (tempfile::TempDir, RemotePluginStore) {
-    store_with_fuel(1_000_000)
+    store_with_archive_comment("")
 }
 
 pub fn store_with_fuel(fuel: u64) -> (tempfile::TempDir, RemotePluginStore) {
+    store_with_options(fuel, "")
+}
+
+pub fn store_with_archive_comment(comment: &str) -> (tempfile::TempDir, RemotePluginStore) {
+    if comment.is_empty() {
+        store_with_fuel(1_000_000)
+    } else {
+        store_with_options(1_000_000, comment)
+    }
+}
+
+fn store_with_options(fuel: u64, comment: &str) -> (tempfile::TempDir, RemotePluginStore) {
     let component = ComponentEncoder::default()
         .module(include_bytes!("../fixtures/success-component.core.wasm"))
         .unwrap()
@@ -55,6 +67,7 @@ pub fn store_with_fuel(fuel: u64) -> (tempfile::TempDir, RemotePluginStore) {
         "configurationSchema":{"type":"object","additionalProperties":false}
     });
     let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    archive.set_comment(comment);
     let options = zip::write::FileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o644);

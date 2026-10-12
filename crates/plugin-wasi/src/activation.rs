@@ -1,5 +1,6 @@
 use latexsnipper_plugin::{CancellationToken, PluginManifestV3, RemotePluginStore, TrustState};
 use semver::Version;
+use sha2::{Digest, Sha256};
 
 use crate::{
     CompiledWasiComponent, ComponentInvocation, ComponentInvocationResult, WasiComponentHost,
@@ -21,6 +22,47 @@ impl ActivatedRemoteWasiPlugin {
     pub fn approval_controller(&self) -> std::sync::Arc<crate::SensitiveActionController> {
         self.host.approval_controller()
     }
+
+    /// Opt-in scope identity, not consent. Includes the installed archive identity.
+    pub fn with_remembered_approval_binding(
+        self,
+        trusted_domain: &str,
+    ) -> Result<Self, WasiDiagnostic> {
+        self.bind_remembered_profile(trusted_domain, None)
+    }
+
+    pub fn remembered_approval_binding(&self) -> Option<&str> {
+        self.host.remembered_approval_binding()
+    }
+
+    pub(crate) fn bind_remembered_profile(
+        mut self,
+        trusted_domain: &str,
+        profile_sha256: Option<&str>,
+    ) -> Result<Self, WasiDiagnostic> {
+        if trusted_domain.is_empty() || trusted_domain.len() > 4096 {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiInvalidInput,
+                "remembered approval host identity exceeds bounds",
+            ));
+        }
+        self.ensure_still_enabled()?;
+        let identity = serde_json::to_vec(&(
+            "core-wasi-remote-remembered-binding-v1",
+            trusted_domain,
+            self.package_sha256.to_ascii_lowercase(),
+            profile_sha256,
+        ))
+        .map_err(|_| activation_error("cannot bind remembered remote approval identity"))?;
+        // This route exposes no custom broker/configuration injection. Version this
+        // identity if its fixed broker policy changes; never accept it from a guest.
+        self.host = self.host.with_remembered_approval_binding(
+            &hex::encode(Sha256::digest(identity)),
+            b"core-remote-default-deny-broker-v1",
+        )?;
+        Ok(self)
+    }
+
     pub fn activate(store: &RemotePluginStore, id: &str) -> Result<Self, WasiDiagnostic> {
         Self::activate_with_policy(store, id, WasiHostPolicy::default())
     }

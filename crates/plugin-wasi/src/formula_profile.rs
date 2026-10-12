@@ -58,6 +58,8 @@ pub struct PreparedFormulaRegistry {
     pub backend_id: String,
     pub profile_sha256: String,
     pub approval_controller: std::sync::Arc<crate::SensitiveActionController>,
+    /// Optional stable scope metadata, not evidence of consent.
+    pub remembered_binding_sha256: Option<String>,
 }
 
 impl WasiFormulaProfile {
@@ -93,6 +95,29 @@ impl WasiFormulaProfile {
         store: &RemotePluginStore,
         cancellation: CancellationToken,
     ) -> Result<PreparedFormulaRegistry, ConversionRegistryError> {
+        self.prepare_bound(store, cancellation, None)
+    }
+
+    /// Bind a trusted host domain plus verified archive and complete profile identity.
+    /// Does not enable a backend, approve an action or restore any execution grant.
+    pub fn prepare_with_remembered_approval_binding(
+        &self,
+        store: &RemotePluginStore,
+        cancellation: CancellationToken,
+        trusted_domain: &str,
+    ) -> Result<PreparedFormulaRegistry, ConversionRegistryError> {
+        if trusted_domain.is_empty() || trusted_domain.len() > 4096 {
+            return Err(invalid("remembered approval host identity exceeds bounds"));
+        }
+        self.prepare_bound(store, cancellation, Some(trusted_domain))
+    }
+
+    fn prepare_bound(
+        &self,
+        store: &RemotePluginStore,
+        cancellation: CancellationToken,
+        trusted_domain: Option<&str>,
+    ) -> Result<PreparedFormulaRegistry, ConversionRegistryError> {
         // Validate all profile fields and compile the bounded validator before
         // touching the package store or compiling guest code.
         let mut registry = self.validated_registry()?;
@@ -103,13 +128,24 @@ impl WasiFormulaProfile {
             ));
         }
         let profile_sha256 = format!("{:x}", Sha256::digest(self.canonical_bytes()?));
-        let plugin =
+        let mut plugin =
             ActivatedRemoteWasiPlugin::activate(store, &self.plugin_id).map_err(|error| {
                 failure(
                     ConversionRegistryErrorCode::BackendFailed,
                     format!("{}: {}", error.code, error.message),
                 )
             })?;
+        if let Some(domain) = trusted_domain {
+            plugin = plugin
+                .bind_remembered_profile(domain, Some(&profile_sha256))
+                .map_err(|error| {
+                    failure(
+                        ConversionRegistryErrorCode::BackendFailed,
+                        format!("{}: {}", error.code, error.message),
+                    )
+                })?;
+        }
+        let remembered_binding_sha256 = plugin.remembered_approval_binding().map(str::to_owned);
         let approval_controller = plugin.approval_controller();
         let backend = match &self.operation {
             FormulaProfileOperation::Importer { output } => WasiFormulaBackend::importer_to_target(
@@ -136,6 +172,7 @@ impl WasiFormulaProfile {
             backend_id: self.backend_id.clone(),
             profile_sha256,
             approval_controller,
+            remembered_binding_sha256,
         })
     }
 
