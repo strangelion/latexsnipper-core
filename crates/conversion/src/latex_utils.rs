@@ -108,6 +108,28 @@ pub(crate) fn literal_command_symbol(command: &str) -> Option<&'static str> {
 }
 
 // Recognize a delimiter marker without changing the public AST variants.
+pub(crate) fn fixed_delimiter_parts<'a>(
+    name: &str,
+    args: &'a [crate::latex_ast::LatexNode],
+) -> Option<(&'static str, &'static str, &'a str)> {
+    let size = latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name)?;
+    if args.len() != 1 {
+        return None;
+    }
+    let crate::latex_ast::LatexNode::Text(token) = &args[0] else {
+        return None;
+    };
+    let glyph = latexsnipper_syntax::latex::scalable_delimiter_glyph(token)?;
+    let class = match name.as_bytes().last() {
+        Some(b'l') => "opening",
+        Some(b'm') => "relation",
+        Some(b'r') => "closing",
+        _ => "normal",
+    };
+    Some((size, class, glyph))
+}
+
+// Recognize a delimiter marker without changing the public AST variants.
 pub(crate) fn middle_glyph(node: &crate::latex_ast::LatexNode) -> Option<&str> {
     use crate::latex_ast::LatexNode;
     match node {

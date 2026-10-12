@@ -229,7 +229,9 @@ impl FormulaParser {
             }
 
             // Delimiters
-            "left" | "right" | "middle" => {
+            name if matches!(name, "left" | "right" | "middle")
+                || latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name).is_some() =>
+            {
                 self.skip_whitespace();
                 let start = self.pos;
                 let first = *self

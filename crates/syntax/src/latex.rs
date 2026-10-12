@@ -134,6 +134,30 @@ pub fn validate_latex_structure(input: &str) -> Vec<Diagnostic> {
             b'\\' => {
                 if let Some((command, next_index)) = control_sequence(input, index) {
                     match command {
+                        command
+                            if latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(
+                                command,
+                            )
+                            .is_some() =>
+                        {
+                            let token = read_scalable_delimiter(input, next_index);
+                            let end = token.map_or(next_index, |(_, end)| end);
+                            if token
+                                .is_none_or(|(token, _)| scalable_delimiter_glyph(token).is_none())
+                            {
+                                diagnostics.push(structural_diagnostic(
+                                    DiagnosticLevel::Error,
+                                    E_LATEX_SCALABLE_DELIMITER_INVALID,
+                                    "missing or unsupported fixed delimiter token",
+                                    input,
+                                    index,
+                                    end,
+                                    false,
+                                ));
+                            }
+                            index = end;
+                            continue;
+                        }
                         "left" | "right" | "middle" => {
                             let token = read_scalable_delimiter(input, next_index);
                             let end = token.map_or(next_index, |(_, end)| end);

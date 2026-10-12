@@ -648,7 +648,9 @@ impl LatexParser {
             "begin" => self.parse_environment(start - 1),
             // \left ... \right
             "left" => self.parse_delimited(start - 1),
-            "middle" => {
+            name if name == "middle"
+                || latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name).is_some() =>
+            {
                 let token = self.delimiter_token().unwrap_or_default();
                 self.skip_whitespace();
                 Some(LatexNode::Command {

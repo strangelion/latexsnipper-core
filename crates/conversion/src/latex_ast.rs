@@ -238,10 +238,14 @@ impl std::fmt::Display for LatexNode {
                 write!(f, "\\{s}")
             }
             LatexNode::Symbol(s) => write!(f, "{}", s),
-            LatexNode::Command { name, args } if name == "middle" => {
+            LatexNode::Command { name, args }
+                if name == "middle"
+                    || latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name)
+                        .is_some() =>
+            {
                 write!(
                     f,
-                    "\\middle{}",
+                    "\\{name}{}",
                     args.first().map(ToString::to_string).unwrap_or_default()
                 )
             }

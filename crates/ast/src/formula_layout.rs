@@ -264,6 +264,18 @@ pub fn latex_delimiter_glyph(token: &str) -> Option<&str> {
     })
 }
 
+/// Resolve the standard four fixed delimiter tiers in em units.
+/// Font-specific TeX delimiter variants still require renderer/host validation.
+pub fn latex_fixed_delimiter_size(command: &str) -> Option<&'static str> {
+    Some(match command {
+        "big" | "bigl" | "bigm" | "bigr" => "1.2em",
+        "Big" | "Bigl" | "Bigm" | "Bigr" => "1.8em",
+        "bigg" | "biggl" | "biggm" | "biggr" => "2.4em",
+        "Bigg" | "Biggl" | "Biggm" | "Biggr" => "3em",
+        _ => return None,
+    })
+}
+
 /// Join canonical fragments without merging a terminal TeX control word with letters.
 pub fn join_latex_fragments(fragments: impl IntoIterator<Item = String>) -> String {
     let mut result = String::new();
@@ -292,7 +304,8 @@ fn canonical_latex(node: &FormulaNode) -> String {
     match node {
         FormulaNode::Symbol(symbol) => symbol.latex.clone(),
         FormulaNode::Command(command) => {
-            if matches!(command.name.as_str(), "left" | "right" | "middle")
+            if (matches!(command.name.as_str(), "left" | "right" | "middle")
+                || latex_fixed_delimiter_size(&command.name).is_some())
                 && command.args.len() == 1
             {
                 return format!("\\{}{}", command.name, canonical_latex(&command.args[0]));

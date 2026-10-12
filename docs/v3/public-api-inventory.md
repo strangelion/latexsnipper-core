@@ -90,6 +90,11 @@ as the existing single-formula Document JSON/LaTeX projection, with the same
 verified activation, explicit enablement, candidate validation and execution
 budgets. These routes do not grant filesystem/network consent or browser WASI.
 
+`formula_layout::latex_fixed_delimiter_size` is an additive finite Rust helper for
+the 16 fixed delimiter commands. Existing command/argument layouts and serialized
+AST shapes remain unchanged. Its em tiers are target projections, not proof of
+TeX/Word/SVG font equivalence; strict OMML still refuses unresolved fixed sizing.
+
 GA hardening also freezes CLI behavior/exit codes, package contents, compatibility adapters,
 WIT, and this inventory together. `contracts/v3-contract-freeze.json` is checked
 in CI and covers exact contract files plus aggregate hashes for the public Rust

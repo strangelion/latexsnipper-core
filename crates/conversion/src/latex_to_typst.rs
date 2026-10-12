@@ -358,9 +358,40 @@ fn convert_delimiter(s: &str) -> &str {
     }
 }
 
+fn delimiter_atom(glyph: &str) -> &str {
+    match glyph {
+        "(" => "paren.l",
+        ")" => "paren.r",
+        "[" => "bracket.l",
+        "]" => "bracket.r",
+        "{" => "brace.l",
+        "}" => "brace.r",
+        "/" => "slash",
+        "\\" => "backslash",
+        _ => convert_delimiter(glyph),
+    }
+}
+
 /// Convert LaTeX command to Typst.
 fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String {
     match name {
+        name if latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name).is_some() => {
+            match crate::latex_utils::fixed_delimiter_parts(name, args) {
+                Some((_, class, "")) => format!("class(\"{class}\", #box())"),
+                Some((size, class, glyph)) => format!(
+                    "class(\"{class}\", lr(size: #{size}, {}))",
+                    delimiter_atom(glyph)
+                ),
+                None => format!(
+                    "#raw({}, lang: \"latex\")",
+                    serde_json::to_string(&format!(
+                        "\\{name}{}",
+                        args.first().map(ToString::to_string).unwrap_or_default()
+                    ))
+                    .unwrap_or_default()
+                ),
+            }
+        }
         "middle" => match args.first().and_then(|arg| match arg {
             LatexNode::Text(token) if args.len() == 1 => {
                 latexsnipper_syntax::latex::scalable_delimiter_glyph(token)
@@ -369,17 +400,7 @@ fn convert_command(name: &str, arg_str: &[String], args: &[LatexNode]) -> String
         }) {
             Some("") => String::new(),
             Some(glyph) => {
-                let symbol = match glyph {
-                    "(" => "paren.l",
-                    ")" => "paren.r",
-                    "[" => "bracket.l",
-                    "]" => "bracket.r",
-                    "{" => "brace.l",
-                    "}" => "brace.r",
-                    "/" => "slash",
-                    "\\" => "backslash",
-                    _ => convert_delimiter(glyph),
-                };
+                let symbol = delimiter_atom(glyph);
                 format!("mid({symbol})")
             }
             None => format!(

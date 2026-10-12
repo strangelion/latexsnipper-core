@@ -21,8 +21,19 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                         continue;
                     }
                     let key = local_tag(attr.key.as_ref());
-                    if tag == "mfenced"
-                        && matches!(key.as_str(), "open" | "close" | "separators")
+                    if (tag == "mfenced" && matches!(key.as_str(), "open" | "close" | "separators")
+                        || tag == "mo"
+                            && matches!(
+                                key.as_str(),
+                                "minsize"
+                                    | "maxsize"
+                                    | "stretchy"
+                                    | "symmetric"
+                                    | "form"
+                                    | "fence"
+                                    | "lspace"
+                                    | "rspace"
+                            ))
                         && attr.key.as_ref().contains(&b':')
                     {
                         return Err("Qualified MathML fence attributes are not supported; retain the original XML".into());
@@ -38,6 +49,14 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                             | "open"
                             | "close"
                             | "separators"
+                            | "minsize"
+                            | "maxsize"
+                            | "stretchy"
+                            | "symmetric"
+                            | "form"
+                            | "fence"
+                            | "lspace"
+                            | "rspace"
                     ) {
                         attr.decoded_and_normalized_value(
                             quick_xml::XmlVersion::Implicit1_0,
@@ -48,6 +67,22 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                     } else {
                         String::from_utf8_lossy(&attr.value).to_string()
                     };
+                    if tag == "mo"
+                        && matches!(
+                            key.as_str(),
+                            "minsize"
+                                | "maxsize"
+                                | "stretchy"
+                                | "symmetric"
+                                | "form"
+                                | "fence"
+                                | "lspace"
+                                | "rspace"
+                        )
+                        && val.chars().any(char::is_whitespace)
+                    {
+                        return Err("Noncanonical sized MathML operator properties; retain the original XML".into());
+                    }
                     if tag == "mfenced"
                         && matches!(key.as_str(), "open" | "close")
                         && latexsnipper_syntax::latex::scalable_delimiter_glyph(
@@ -73,6 +108,9 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                         attrs.push(' ');
                     }
                     attrs.push_str(&format!("{}={}", key, val));
+                }
+                if tag == "mo" {
+                    fixed_operator_command(&attrs)?;
                 }
                 stack.push((tag, Vec::new(), attrs));
                 current_text.clear();
@@ -108,6 +146,17 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
             }
             Ok(Event::Empty(e)) => {
                 let tag = local_tag(e.name().as_ref());
+                if tag == "mo" {
+                    for attribute in e.attributes() {
+                        let attribute = attribute.map_err(|error| error.to_string())?;
+                        if matches!(
+                            local_tag(attribute.key.as_ref()).as_str(),
+                            "minsize" | "maxsize"
+                        ) {
+                            return Err("Empty sized MathML operators require explicit token content; retain the original XML".into());
+                        }
+                    }
+                }
                 let text = extract_text_attrs(&e);
                 let attrs = if tag == "mfenced" {
                     let mut fields = Vec::new();
@@ -165,6 +214,18 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                     } else {
                         text.trim()
                     };
+                    if tag == "mo"
+                        && fixed_operator_command(&attrs)?.is_some()
+                        && (!children.is_empty()
+                            || latexsnipper_syntax::latex::scalable_delimiter_glyph(
+                                &crate::latex_utils::delimiter_source_token(text),
+                            ) != Some(text))
+                    {
+                        return Err(
+                            "Unsupported sized MathML operator glyph; retain the original XML"
+                                .into(),
+                        );
+                    }
                     let node = build_mathml_node(&tag, text, &children, &attrs);
                     current_text.clear();
                     if let Some((_, ref mut parent, _)) = stack.last_mut() {
@@ -222,6 +283,67 @@ fn collect_text(children: &[String]) -> String {
     children.concat()
 }
 
+fn join_math_children(children: &[String]) -> String {
+    latexsnipper_ast::formula_layout::join_latex_fragments(children.iter().cloned())
+}
+
+// Recognize the bounded fixed-fence output, not arbitrary MathML sizing/CSS.
+fn fixed_operator_command(attrs: &str) -> Result<Option<String>, String> {
+    let fields: Vec<_> = attrs
+        .split_whitespace()
+        .filter_map(|field| field.split_once('='))
+        .collect();
+    let value = |name| {
+        fields
+            .iter()
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| *value)
+    };
+    if value("minsize").is_none() && value("maxsize").is_none() {
+        return Ok(None);
+    }
+    let invalid =
+        || "Unsupported fixed MathML operator properties; retain the original XML".to_string();
+    if fields.iter().any(|(key, _)| {
+        !matches!(
+            *key,
+            "minsize"
+                | "maxsize"
+                | "stretchy"
+                | "symmetric"
+                | "form"
+                | "fence"
+                | "lspace"
+                | "rspace"
+        )
+    }) || value("stretchy") != Some("true")
+        || value("symmetric") != Some("true")
+        || value("minsize") != value("maxsize")
+    {
+        return Err(invalid());
+    }
+    let tier = match value("minsize") {
+        Some("1.2em") => "big",
+        Some("1.8em") => "Big",
+        Some("2.4em") => "bigg",
+        Some("3em") => "Bigg",
+        _ => return Err(invalid()),
+    };
+    let suffix = match (
+        value("form"),
+        value("fence"),
+        value("lspace"),
+        value("rspace"),
+    ) {
+        (Some("prefix"), Some("true"), Some("0em"), Some("0em")) => "l",
+        (Some("postfix"), Some("true"), Some("0em"), Some("0em")) => "r",
+        (Some("infix"), Some("true"), Some("0em"), Some("0em")) => "",
+        (Some("infix"), Some("false"), Some("0.277778em"), Some("0.277778em")) => "m",
+        _ => return Err(invalid()),
+    };
+    Ok(Some(format!("{tier}{suffix}")))
+}
+
 fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) -> String {
     match tag {
         "mfenced" => {
@@ -247,7 +369,7 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             if children.is_empty() {
                 text.to_string()
             } else {
-                children.join("")
+                join_math_children(children)
             }
         }
 
@@ -255,7 +377,7 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             let inner = if children.is_empty() {
                 text.to_string()
             } else {
-                children.join("")
+                join_math_children(children)
             };
             let mut color = String::new();
             let mut bold = false;
@@ -313,7 +435,13 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             }
         }
         "mn" => crate::latex_utils::escape_text_symbols(text),
-        "mo" => map_operator(text),
+        "mo" => match fixed_operator_command(attrs) {
+            Ok(Some(command)) => format!(
+                "\\{command}{}",
+                crate::latex_utils::delimiter_source_token(text)
+            ),
+            _ => map_operator(text),
+        },
         "mtext" | "ms" => format!(
             "\\text{{{}}}",
             crate::latex_utils::escape_text_symbols(text)
@@ -328,14 +456,14 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             }
         }
         "msqrt" => {
-            let inner = children.join("");
+            let inner = join_math_children(children);
             format!("\\sqrt{{{}}}", inner)
         }
         "mroot" => {
             if children.len() >= 2 {
                 format!("\\sqrt[{}]{{{}}}", children[1], children[0])
             } else {
-                format!("\\sqrt{{{}}}", children.join(""))
+                format!("\\sqrt{{{}}}", join_math_children(children))
             }
         }
 
@@ -492,15 +620,15 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             }
         }
         "mtr" => children.join(" & "),
-        "mtd" => children.join(""),
+        "mtd" => join_math_children(children),
 
         "mopen" | "mclose" => text.to_string(),
-        "mpadded" => children.join(""),
+        "mpadded" => join_math_children(children),
         "mphantom" => {
-            format!("\\phantom{{{}}}", children.join(""))
+            format!("\\phantom{{{}}}", join_math_children(children))
         }
         "menclose" => {
-            let inner = children.join("");
+            let inner = join_math_children(children);
             let notation = attrs
                 .split_whitespace()
                 .find_map(|part| part.strip_prefix("notation="))
@@ -557,7 +685,7 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
         "mprescripts" => "\\mpscripts".to_string(),
         "mglyph" => text.to_string(),
 
-        _ => children.join(""),
+        _ => join_math_children(children),
     }
 }
 

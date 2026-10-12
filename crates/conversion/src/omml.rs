@@ -604,6 +604,7 @@ fn ast_to_omml(node: &LatexNode) -> String {
 
         LatexNode::Command { name, args } => {
             match name.as_str() {
+                name if latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name).is_some() => wrap_normal_mtext(&node.to_string()),
                 "binom" if args.len() == 2 => {
                     format!(
                         "<m:d>\n  <m:dPr><m:begChr m:val=\"(\"/><m:endChr m:val=\")\"/></m:dPr>\n  <m:e><m:f>\n  <m:num>{}</m:num>\n  <m:den>{}</m:den>\n</m:f></m:e>\n</m:d>",

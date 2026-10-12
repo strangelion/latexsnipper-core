@@ -1,4 +1,4 @@
-# 可伸缩定界符与上下标边界
+# 定界符尺寸与上下标边界
 
 更新：2026-10-12。属于 FMT-02/FMT-03/FMT-04 的常用有限子集，不是完整 TeX 排版支持。
 
@@ -23,6 +23,14 @@
   [Typst lr/mid](https://typst.app/docs/reference/math/lr/)。
   未增加公共 AST variant、WIT 或序列化字段；严格替换仍拒绝同层混合 glyph、跨分组/环境/数学围栏或未知 token。
   混合 glyph 的 OMML/MathML best-effort 导出保留 canonical 原文，不伪装成已支持的普通运算符。
+- 固定尺寸的 `big/Big/bigg/Bigg` 及每档的 `l/m/r` 形式，共 16 个命令按单 token 解析。
+  四档分别投影到 `1.2em/1.8em/2.4em/3em`，类别保持 normal/opening/relation/closing，不把一对固定符号合成自动增长围栏。
+  MathML 使用 `mo` 的相等 `minsize/maxsize`、明确 form/fence/spacing；有限回读只接受已支持的尺寸和类别形状，
+  不支持的尺寸范围、样式、qualified 属性及未知 glyph 明确拒绝。数学子节点连接保留命名控制词与后续字母的边界。
+  Typst 使用显式代码长度 `lr(size: #1.2em, ...)` 等与 `class`；共享布局保留现有 command/argument 结构和 canonical 源码。
+  依据：[MathML Core operator 尺寸约束](https://www.w3.org/TR/mathml-core/)、[Typst class](https://typst.app/docs/reference/math/class/)。
+  OMML 尚未实现相对字号固定尺寸映射：严格替换拒绝，best-effort 保留完整 command/token 文本；未替换为自动增长括号。
+  这些分档是有限目标投影，不承诺所有 TeX 字体、math style 或目标字体 glyph 变体的高度/间距完全相等。
 
 ## 验证与证据
 
@@ -43,11 +51,20 @@
   `target/array-column-typst-1791786423589480100/`，PNG SHA-256：
   `381ae539e8234bea51caf56f6a939be78e0951cd9912db6250fcf3930f3a3895`。
   两种 feature 配置的 all-targets Clippy warnings-as-errors、`wasm32-unknown-unknown` 检查、格式和冻结清单校验通过。
+- 固定尺寸专项：16 个命令 × 19 个 token 的 MathML 分档/类别和回读，另有操作数/上下标归属、嵌套、注释、未知形状拒绝、
+  OMML 源保护与共享布局测试；featureless/native 转换全套、AST/Syntax 和共享解析回归通过。
+  本机 Typst 0.15.1 编译并目视检查 10 个实际导出实例（包含不可见定界符的脚本基底），忽略目录 `target/fixed-delimiter-runtime-1791788904898904500/`，
+  PNG SHA-256：`ffd5c20a413524ceba78ba92170a52ca7a2517a2990eb915714826e54be53e9d`。
+  实际 Chromium 154 检查四档括号逻辑高度依次为 40、47.33、61.33、89.33 CSS px；小档括号 40 px，邻接嵌套分式 75.875 px。
+  不可见基底的组合脚本宽度 10.70 px、无横向溢出，console/network 无错误。浏览器截图 SHA-256：
+  `b8aa6a5a6d180bec9742705d903141fe89359566513c35286ffdebc23de31272`。
+  截图同时显示当前 legacy `mfenced` 的围栏在 Chromium 中缺失，反斜线没有取得与其他 glyph 相同的伸缩效果；
+  这是未完成的现代 MathML/字体适配，不以“无报错”或 finite XML 回读通过作为视觉验收。
 
 ## 仍需推进
 
-同层混合 glyph 的 `\middle`、固定大小定界符、任意宏、动态 catcode、完整文本/未分组参数语义、
-高级 array、有限集合外的 OMML separator 与所有 MathML 围栏布局仍需独立补齐。
+同层混合 glyph 的 `\middle`、固定尺寸的 OMML/SVG 相对字号与字体保真、任意宏、动态 catcode、完整文本/未分组参数语义、
+高级 array、有限集合外的 OMML separator、固定尺寸 Typst 回读与完整 MathML 围栏布局仍需独立补齐；现代浏览器围栏输出优先于进一步扩大语法。
 共享布局接口目前保留有限命令表示，不声称已有全部定界符语义树。
 上述证据不证明所有旧版 Typst、TeX 字体/间距等价或 10000 条真实文档保真。
 

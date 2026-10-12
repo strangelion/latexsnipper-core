@@ -182,7 +182,11 @@ fn latex_to_mathml_mode(latex: &str, display: bool) -> String {
         return rendered;
     }
 
-    if latex.contains("\\left") || (latex.contains('_') && latex.contains('^')) {
+    if latex.contains("\\left")
+        || latex.contains("\\big")
+        || latex.contains("\\Big")
+        || (latex.contains('_') && latex.contains('^'))
+    {
         if let Some(rendered) = render_left_right_mathml(latex) {
             return rendered;
         }
@@ -644,12 +648,34 @@ fn render_left_right_mathml(latex: &str) -> Option<String> {
     render_delimited_node(&crate::latex_parser::parse_latex(latex))
 }
 
+fn render_fixed_delimiter_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
+    let crate::latex_ast::LatexNode::Command { name, args } = node else {
+        return None;
+    };
+    latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name)?;
+    let Some((size, class, glyph)) = crate::latex_utils::fixed_delimiter_parts(name, args) else {
+        return Some(format!("<mtext>{}</mtext>", xml_escape(&node.to_string())));
+    };
+    let (form, fence, space) = match class {
+        "opening" => ("prefix", "true", "0em"),
+        "closing" => ("postfix", "true", "0em"),
+        "relation" => ("infix", "false", "0.277778em"),
+        _ => ("infix", "true", "0em"),
+    };
+    Some(format!("<mo stretchy=\"true\" symmetric=\"true\" minsize=\"{size}\" maxsize=\"{size}\" form=\"{form}\" fence=\"{fence}\" lspace=\"{space}\" rspace=\"{space}\">{}</mo>", xml_escape(glyph)))
+}
+
 fn render_delimited_node(node: &crate::latex_ast::LatexNode) -> Option<String> {
     use crate::latex_ast::LatexNode;
     let child = |node: &LatexNode| {
         render_delimited_node(node).unwrap_or_else(|| latex_to_mathml(&node.to_string()))
     };
     Some(match node {
+        LatexNode::Command { name, .. }
+            if latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name).is_some() =>
+        {
+            render_fixed_delimiter_node(node)?
+        }
         LatexNode::Delimited {
             left,
             content,
@@ -761,7 +787,10 @@ fn has_delimited_node(node: &crate::latex_ast::LatexNode) -> bool {
     use crate::latex_ast::LatexNode;
     match node {
         LatexNode::Delimited { .. } => true,
-        LatexNode::Command { name, .. } => name == "invalid-scalable-delimiter",
+        LatexNode::Command { name, .. } => {
+            name == "invalid-scalable-delimiter"
+                || latexsnipper_ast::formula_layout::latex_fixed_delimiter_size(name).is_some()
+        }
         LatexNode::Sequence(nodes) | LatexNode::Group(nodes) => {
             nodes.iter().any(has_delimited_node)
         }
@@ -1378,6 +1407,9 @@ fn render_symbol_ast(
     let row = |node: &LatexNode, found: &mut bool| {
         render_symbol_ast(node, found, depth + 1).map(|xml| format!("<mrow>{xml}</mrow>"))
     };
+    if let Some(xml) = render_fixed_delimiter_node(node) {
+        return Some(xml);
+    }
     if let Some(extremum) = crate::extrema::head(node) {
         *found = true;
         let base = format!("<mi mathvariant=\"normal\">{}</mi>", extremum.name);
