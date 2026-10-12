@@ -135,7 +135,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-audit --locked
-      - run: cargo audit --deny warnings
+      - run: |
+          python -m unittest discover -s scripts/tests -p test_dependency_audit.py
+          python scripts/verify_dependency_audit.py
 
   benchmark-regression:
     name: Comparable benchmark snapshot

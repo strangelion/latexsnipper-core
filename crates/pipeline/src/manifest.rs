@@ -1,6 +1,8 @@
 use latexsnipper_foundation::{Result, SnipperError};
 use serde::{Deserialize, Serialize};
 
+const MAX_MANIFEST_YAML_BYTES: usize = 4 * 1024 * 1024;
+
 /// A declarative pipeline definition loaded from YAML/JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineManifest {
@@ -32,7 +34,35 @@ pub struct NodeDef {
 impl PipelineManifest {
     /// Parse a manifest from YAML string.
     pub fn from_yaml(yaml: &str) -> Result<Self> {
-        serde_yaml::from_str(yaml)
+        if yaml.len() > MAX_MANIFEST_YAML_BYTES {
+            return Err(SnipperError::Pipeline(
+                "YAML manifest exceeds the 4 MiB input budget".into(),
+            ));
+        }
+        let options = serde_saphyr::options! {
+            emit_comments: false,
+            merge_keys: serde_saphyr::MergeKeyPolicy::AsOrdinary,
+            reject_unsupported_tags: true,
+            with_snippet: false,
+            budget: serde_saphyr::budget! {
+                max_depth: 64,
+                max_documents: 1,
+                max_events: 100_000,
+                max_nodes: 100_000,
+                max_aliases: 10_000,
+                max_anchors: 1_024,
+                max_recorded_anchor_events: 100_000,
+                max_recorded_anchor_bytes: MAX_MANIFEST_YAML_BYTES,
+                max_total_scalar_bytes: MAX_MANIFEST_YAML_BYTES,
+                max_total_comment_bytes: MAX_MANIFEST_YAML_BYTES,
+            },
+            alias_limits: serde_saphyr::alias_limits! {
+                max_total_replayed_events: 100_000,
+                max_replay_stack_depth: 64,
+                max_alias_expansions_per_anchor: 10_000,
+            },
+        };
+        serde_saphyr::from_str_with_options(yaml, options)
             .map_err(|e| SnipperError::Pipeline(format!("Invalid YAML manifest: {}", e)))
     }
 
@@ -158,6 +188,119 @@ nodes:
         let manifest = PipelineManifest::from_json(json).unwrap();
         assert_eq!(manifest.nodes.len(), 2);
         assert!(manifest.validate().is_ok());
+    }
+
+    #[test]
+    fn yaml_preserves_unicode_scalars_aliases_and_literal_merge_keys() {
+        let yaml = r#"
+name: "\u516c\u5f0f-pipeline"
+description: |
+  first line
+  second line
+defaults: &defaults {threshold: 0.75, enabled: true}
+nodes:
+  - name: a
+    type: detect
+    config:
+      defaults: *defaults
+      <<: *defaults
+      enabled: false
+      empty: null
+      offsets: [1, -2, 0.5]
+      nested: {formula: '\frac{a}{b}', label: "\u6761\u4ef6"}
+"#;
+        let manifest = PipelineManifest::from_yaml(yaml).unwrap();
+        assert_eq!(manifest.name, "\u{516c}\u{5f0f}-pipeline");
+        assert_eq!(manifest.description, "first line\nsecond line\n");
+        assert_eq!(
+            manifest.nodes[0].config,
+            serde_json::json!({
+                "defaults": {"threshold": 0.75, "enabled": true},
+                "<<": {"threshold": 0.75, "enabled": true},
+                "enabled": false,
+                "empty": null,
+                "offsets": [1, -2, 0.5],
+                "nested": {"formula": r"\frac{a}{b}", "label": "\u{6761}\u{4ef6}"},
+            })
+        );
+        assert!(manifest.validate().is_ok());
+    }
+
+    #[test]
+    fn yaml_rejects_malformed_and_multiple_documents() {
+        for yaml in [
+            "name: broken\nnodes: [",
+            "name: missing-nodes",
+            "name: first\nnodes: []\n---\nname: second\nnodes: []",
+            "name: duplicate\nname: second\nnodes: []",
+        ] {
+            assert!(PipelineManifest::from_yaml(yaml).is_err(), "{yaml}");
+        }
+    }
+
+    #[test]
+    fn yaml_rejects_external_tags_duplicate_config_keys_and_resource_exhaustion() {
+        for yaml in [
+            "name: tags\nnodes: [{name: a, type: detect, config: !include fixture.yaml}]",
+            "name: tags\nnodes: [{name: a, type: detect, config: !custom {value: x}}]",
+            "name: duplicates\nnodes: [{name: a, type: detect, config: {value: 1, value: 2}}]",
+        ] {
+            assert!(PipelineManifest::from_yaml(yaml).is_err(), "{yaml}");
+        }
+        let nested = format!(
+            "name: depth\nnodes: [{{name: a, type: detect, config: {}0{}}}]",
+            "[".repeat(128),
+            "]".repeat(128)
+        );
+        assert!(PipelineManifest::from_yaml(&nested).is_err());
+        let aliases = format!(
+            "name: aliases\nvalue: &v x\nnodes: [{{name: a, type: detect, config: [{}]}}]",
+            vec!["*v"; 10_001].join(",")
+        );
+        assert!(PipelineManifest::from_yaml(&aliases).is_err());
+        let expanded = format!(
+            "name: expanded\nvalue: &v '{}'\nnodes: [{{name: a, type: detect, config: [{}]}}]",
+            "x".repeat(512 * 1024),
+            vec!["*v"; 40].join(",")
+        );
+        let expansion_error = PipelineManifest::from_yaml(&expanded)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            expansion_error.to_ascii_lowercase().contains("budget"),
+            "{}",
+            expansion_error.chars().take(300).collect::<String>()
+        );
+        let bounded = format!(
+            "name: bounded\nvalue: &v '{}'\nnodes: [{{name: a, type: detect, config: [*v]}}]",
+            "x".repeat(512 * 1024),
+        );
+        assert_eq!(
+            PipelineManifest::from_yaml(&bounded).unwrap().nodes[0].config[0]
+                .as_str()
+                .unwrap()
+                .len(),
+            512 * 1024
+        );
+        let oversized = " ".repeat(MAX_MANIFEST_YAML_BYTES + 1);
+        assert!(PipelineManifest::from_yaml(&oversized)
+            .unwrap_err()
+            .to_string()
+            .contains("4 MiB input budget"));
+    }
+
+    #[test]
+    fn yaml_keeps_environment_like_text_literal_and_does_not_echo_source_snippets() {
+        let manifest = PipelineManifest::from_yaml(
+            "name: literal\nnodes: [{name: a, type: detect, config: {token: '${TOKEN}'}}]",
+        )
+        .unwrap();
+        assert_eq!(manifest.nodes[0].config["token"], "${TOKEN}");
+        let error =
+            PipelineManifest::from_yaml("# synthetic-private-context\nname: broken\nnodes: [")
+                .unwrap_err()
+                .to_string();
+        assert!(!error.contains("synthetic-private-context"), "{error}");
     }
 
     #[test]

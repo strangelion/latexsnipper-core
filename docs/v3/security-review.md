@@ -52,10 +52,19 @@ The WASI host pins Wasmtime 36.0.16 for RUSTSEC-2026-0316. Liquid's private
 register backend uses the compatible `anymap3` maintenance backport documented
 in `vendor/liquid-core-0.26.8-anymap3/BACKPORT.md`, removing `anymap2` and
 RUSTSEC-2026-0319 without changing the production Tract graph versions.
-Neither change broadens the audit exceptions. The deprecated pipeline YAML path
-still brings `unsafe-libyaml` (RUSTSEC-2024-0449); migration remains open and
-`cargo audit --deny warnings` must not be described as passing until it is removed
-and the normal audit, including yanked-package checks, succeeds.
+Neither change broadens the audit exceptions. Pipeline YAML now uses a pinned,
+deserialize-only `serde-saphyr` profile, removing `serde_yaml` and
+`unsafe-libyaml` (RUSTSEC-2024-0449) from the locked graph. Its input, parser,
+anchor and replay budgets are documented in [the pipeline guide](../pipeline.md#yaml-清单).
+File includes and environment interpolation are not enabled; duplicate keys and
+unsupported tags are rejected, while legacy literal merge keys are preserved.
+
+CI invokes `scripts/verify_dependency_audit.py`, which runs the normal
+`cargo audit --deny warnings --json` command without skipping database refresh or
+yanked-package checks. A valid clean JSON report is insufficient if the auditor
+also reports execution/registry errors on stderr, even when it exits zero.
+Malformed reports and incomplete checks fail the gate. Exact existing exceptions
+remain unchanged; diagnostic advisory-only checks are not complete audit evidence.
 
 ## Host approval gate and remaining integration
 
