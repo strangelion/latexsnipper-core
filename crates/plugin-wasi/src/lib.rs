@@ -10,6 +10,7 @@ pub mod host;
 pub mod limits;
 pub mod package;
 pub mod permissions;
+pub mod remembered_approval;
 #[cfg(windows)]
 mod write_compression;
 mod write_security;
@@ -23,6 +24,10 @@ pub use approval::{
 };
 pub use formula_conversion::{WasiFormulaBackend, WASI_DOCUMENT_JSON_MEDIA_TYPE};
 pub use formula_profile::{PreparedFormulaRegistry, WasiFormulaProfile};
+pub use remembered_approval::{
+    ApprovalPolicyCheckpoint, ApprovalPolicyKey, RememberedApprovalPolicies,
+    RememberedApprovalPolicy, SealedApprovalPolicies,
+};
 
 pub use diagnostic::{
     WasiDiagnostic, WasiDiagnosticCode, WasiDiagnosticDetail, WasiDiagnosticSeverity,

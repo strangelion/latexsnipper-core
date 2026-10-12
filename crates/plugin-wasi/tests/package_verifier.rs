@@ -345,6 +345,38 @@ fn remembered_binding_does_not_approve_or_make_session_grants_portable() {
     ] {
         assert!(!serialized.contains(private));
     }
+    let policy_key = latexsnipper_plugin_wasi::ApprovalPolicyKey::generate().unwrap();
+    // Simulate protected host key storage only in this fixture's memory.
+    let restore_key =
+        latexsnipper_plugin_wasi::ApprovalPolicyKey::from_secret_bytes(*policy_key.secret_bytes());
+    let replay_key =
+        latexsnipper_plugin_wasi::ApprovalPolicyKey::from_secret_bytes(*policy_key.secret_bytes());
+    let policies = latexsnipper_plugin_wasi::RememberedApprovalPolicies::new(policy_key).unwrap();
+    let policy_id = approvals
+        .remember(
+            &request.id,
+            &policies,
+            latexsnipper_plugin_wasi::ApprovalScope::SameTarget {
+                max_payload_bytes: 16,
+            },
+            std::time::Duration::from_secs(3600),
+        )
+        .unwrap();
+    let sealed = policies.seal().unwrap();
+    let restored = latexsnipper_plugin_wasi::RememberedApprovalPolicies::restore(
+        restore_key,
+        &sealed.bytes,
+        &sealed.checkpoint,
+    )
+    .unwrap();
+    assert!(approvals.grants().unwrap().is_empty());
+    assert!(!directory.path().join("write/output.txt").exists());
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-write")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
     approvals
         .approve(
             &request.id,
@@ -389,6 +421,25 @@ fn remembered_binding_does_not_approve_or_make_session_grants_portable() {
         request.host_context_sha256
     );
     assert_ne!(fresh_request.id, request.id);
+    assert_eq!(
+        restored
+            .matching_policy(&fresh_request)
+            .unwrap()
+            .unwrap()
+            .id,
+        policy_id
+    );
+    assert!(restored.revoke(&policy_id).unwrap());
+    assert!(restored.matching_policy(&fresh_request).unwrap().is_none());
+    let revoked = restored.seal().unwrap();
+    assert!(
+        latexsnipper_plugin_wasi::RememberedApprovalPolicies::restore(
+            replay_key,
+            &sealed.bytes,
+            &revoked.checkpoint,
+        )
+        .is_err()
+    );
 }
 
 fn typed_trap_component() -> Vec<u8> {

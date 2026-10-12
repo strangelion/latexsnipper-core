@@ -131,9 +131,56 @@ on the ordinary preparation path. The bound path still leaves the registry backe
 disabled and creates no consent grants. Host scope arguments are not guest/profile
 JSON fields, and no new guest authority is introduced.
 
-Authenticated policy storage, revocation/rollback checkpoints, policy-driven renewal
-and application UI are still pending. These methods neither persist anything nor
-remove `PLUGIN_WASI_APPROVAL_REQUIRED`.
+### Authenticated remembered-policy snapshots
+
+`RememberedApprovalPolicies` now provides bounded policy metadata and authenticated
+snapshots, not execution grants. The trusted host must obtain a separate explicit
+remember-choice event before calling `SensitiveActionController::remember` with
+a current owned pending request. Missing stable bindings or stale/unknown request
+IDs refuse the operation. Remembering does not dismiss or replay pending work,
+approve a grant, attach a policy store to the broker, or enable any backend.
+
+A policy uses `Exact` or `SameTarget` with the existing exact file/network target
+rules. Its duration is positive whole seconds, at most 30 days, with at most
+128 policies, 8 KiB action metadata and a 16 MiB payload ceiling. This duration
+describes a future reusable consent window, not a restored session-use quota.
+Updating a same-target policy replaces its previous ceiling/deadline; it does not
+silently retain a broader older row. `policies` exposes display metadata;
+`matching_policy` returns metadata only and cannot grant authority. Expired rows
+may remain visible but cannot match. `revoke` and `clear` remove policy metadata,
+not independently issued in-memory session grants or native effects.
+
+Use a dedicated generated `ApprovalPolicyKey`, protect its exported bytes with
+the host's key store, and never log it. Its `Debug` is redacted and its owned
+key buffer is zeroized on drop; copies held by the host or cryptographic working
+state are not covered by that guarantee. `seal` returns authenticated bytes and
+an `ApprovalPolicyCheckpoint`. The frame is `LSAP` plus version byte `0x01`, a
+four-byte big-endian JSON byte length, UTF-8 closed-schema JSON, then a 32-byte
+HMAC-SHA256 tag over the domain separator and complete frame preceding the tag.
+Authentication uses [RustCrypto HMAC](https://docs.rs/hmac/0.12.1/hmac/), not a
+custom MAC implementation. Restore authenticates the bounded (at most 2 MiB)
+frame before parsing JSON, then rejects unknown fields, duplicate policy IDs,
+invalid identity/budgets, and mismatched checkpoints.
+
+The host must atomically publish snapshots together with separately protected
+latest checkpoints, serialize all policy mutations under one owner, and provide
+that authoritative checkpoint to `restore`. Never read the checkpoint from the
+same untrusted file as the snapshot. Restore requires the exact store ID,
+revision and snapshot SHA-256; replaying an old valid MAC against the latest
+checkpoint fails. A MAC alone does not detect replay of both old files. Protect
+the clock high-water mark too: matching/remembering and restore refuse backwards
+time, while listing, revoking, clearing and sealing remain possible so an incorrect
+clock cannot prevent removal of consent. Sealing retains the last valid high-water
+mark if the clock is unavailable or earlier. Unpublished observations cannot
+provide rollback protection across a crash/restart; a host must persist its time
+checkpoint or use an independently protected clock before enabling reuse.
+
+These snapshots are not encrypted: paths, routes and digests can be sensitive.
+Protect snapshot confidentiality and do not upload them. Core performs no disk IO
+or OS key-store integration. Independent restored instances do not synchronize
+revocation. Shared per-use revocable authority, bounded grant renewal from a
+validated policy, crash-safe host persistence and application UI remain pending.
+Restoring or matching a snapshot does not remove `PLUGIN_WASI_APPROVAL_REQUIRED`.
 
 ### Core grant lifecycle and enforcement
 

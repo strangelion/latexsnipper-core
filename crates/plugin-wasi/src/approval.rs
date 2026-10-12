@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{VerifiedComponentPackage, WasiDiagnostic, WasiDiagnosticCode};
@@ -15,11 +15,12 @@ const MAX_USES: u32 = 10_000;
 const MAX_TTL: Duration = Duration::from_secs(3600);
 const MAX_ACTION_BYTES: usize = 8192;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
-    rename_all_fields = "camelCase"
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
 )]
 pub enum SensitiveAction {
     FileWrite {
@@ -57,11 +58,12 @@ pub struct ApprovalRequest {
     pub action: SensitiveAction,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
-    rename_all_fields = "camelCase"
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
 )]
 pub enum ApprovalScope {
     /// The complete operation, including the payload digest and byte count.
@@ -159,6 +161,22 @@ pub struct SensitiveActionController {
 }
 
 impl SensitiveActionController {
+    /// Only trusted host code may call this after a distinct remember-choice confirmation.
+    /// Stores a policy, not an execution grant; pending work is not replayed or approved.
+    pub fn remember(
+        &self,
+        request_id: &str,
+        policies: &crate::RememberedApprovalPolicies,
+        scope: ApprovalScope,
+        valid_for: Duration,
+    ) -> Result<String, WasiDiagnostic> {
+        let state = self.lock()?;
+        let request = state.pending.get(request_id).ok_or_else(|| {
+            invalid("remembered consent requires a current owned pending request")
+        })?;
+        policies.remember_request(request, scope, valid_for)
+    }
+
     pub fn pending(&self) -> Result<Vec<ApprovalRequest>, WasiDiagnostic> {
         Ok(self.lock()?.pending.values().cloned().collect())
     }
@@ -448,13 +466,13 @@ impl ApprovalContext {
     }
 }
 
-fn payload_bytes(action: &SensitiveAction) -> usize {
+pub(crate) fn payload_bytes(action: &SensitiveAction) -> usize {
     match action {
         SensitiveAction::FileWrite { payload_bytes, .. }
         | SensitiveAction::NetworkSend { payload_bytes, .. } => *payload_bytes,
     }
 }
-fn same_target(first: &SensitiveAction, second: &SensitiveAction) -> bool {
+pub(crate) fn same_target(first: &SensitiveAction, second: &SensitiveAction) -> bool {
     match (first, second) {
         (
             SensitiveAction::FileWrite {
@@ -529,6 +547,53 @@ mod tests {
             payload_sha256: format!("{:x}", Sha256::digest(payload)),
             payload_bytes: payload.len(),
         }
+    }
+
+    #[test]
+    fn remember_requires_owned_pending_request_and_does_not_issue_a_grant() {
+        let controller = SensitiveActionController::default();
+        let policies =
+            crate::RememberedApprovalPolicies::new(crate::ApprovalPolicyKey::generate().unwrap())
+                .unwrap();
+        let mut context = context();
+        assert!(controller
+            .remember(
+                "unknown",
+                &policies,
+                ApprovalScope::Exact,
+                Duration::from_secs(60)
+            )
+            .is_err());
+        controller.authorize(&context, action("x")).unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        assert!(controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::Exact,
+                Duration::from_secs(60)
+            )
+            .is_err());
+        controller.clear().unwrap();
+        context.remembered_binding_sha256 = Some("c".repeat(64));
+        controller.authorize(&context, action("x")).unwrap_err();
+        let request = controller.pending().unwrap().remove(0);
+        let id = controller
+            .remember(
+                &request.id,
+                &policies,
+                ApprovalScope::SameTarget {
+                    max_payload_bytes: 4,
+                },
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        assert_eq!(policies.matching_policy(&request).unwrap().unwrap().id, id);
+        assert!(controller.grants().unwrap().is_empty());
+        assert_eq!(controller.pending().unwrap().len(), 1);
+        assert!(controller.authorize(&context, action("x")).is_err());
+        controller.approve_once(&request.id).unwrap();
+        assert!(controller.authorize(&context, action("x")).is_ok());
     }
 
     #[test]

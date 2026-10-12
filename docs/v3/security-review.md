@@ -74,6 +74,15 @@ The Rust WASI host now gates writes and external network sends with a default-de
 nonblocking controller. Application dialogs, durable user policy and independent
 approval are not completed by this implementation.
 
+Remembered-policy metadata now has a bounded HMAC-authenticated snapshot route
+and exact latest-checkpoint validation. These primitives do not restore grants,
+persist files, integrate an OS key store or renew consent. Replay protection
+depends on a separately protected latest store/revision/digest/time checkpoint;
+a MAC alone cannot prevent replay of both snapshot and checkpoint. Removing
+stored metadata does not revoke separately issued session grants. Shared per-use
+policy authority and crash-safe host persistence remain required before enabling
+automatic remembered-consent execution. See the [snapshot contract](wasi-component-host.md#authenticated-remembered-policy-snapshots).
+
 The host, never the guest, must own approval decisions for sensitive writes,
 overwrites and external data transfer. Offer explicit one-action, whole-batch
 and bounded-session approval, with visible scope, expiry and revocation.
