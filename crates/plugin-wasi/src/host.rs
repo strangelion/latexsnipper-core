@@ -617,6 +617,10 @@ impl filesystem_broker::Host for HostState {
             .validate_write_target(&grant_id, &relative_path)
         {
             Ok(grant) => grant,
+            Err(FilesystemOperationError::MetadataUnsupported) => {
+                return self.stop_approved_action(WasiDiagnostic::new(WasiDiagnosticCode::PluginWasiMetadataUnsupported,
+                    "target storage metadata cannot yet be preserved; no approval or replacement was made"));
+            }
             Err(error) => return Ok(Err(filesystem_access_error(error))),
         };
         let root = grant
@@ -651,6 +655,12 @@ impl filesystem_broker::Host for HostState {
         ) {
             Ok(()) => Ok(Ok(())),
             Err(CheckedWriteError::Interrupted(error)) => self.stop_approved_action(error),
+            Err(CheckedWriteError::Filesystem(FilesystemOperationError::MetadataUnsupported)) => {
+                self.stop_approved_action(WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiMetadataUnsupported,
+                    "storage metadata could not be preserved; no replacement was made",
+                ))
+            }
             Err(CheckedWriteError::Filesystem(FilesystemOperationError::Conflict)) => {
                 self.broker_failure = Some(WasiDiagnostic::new(
                     WasiDiagnosticCode::PluginWasiWriteConflict,
@@ -1434,6 +1444,7 @@ fn broker_plugin_error(error: WasiDiagnostic, limits: &WasiResourceLimits) -> ty
         | WasiDiagnosticCode::PluginWasiTimeout
         | WasiDiagnosticCode::PluginWasiMemoryLimit
         | WasiDiagnosticCode::PluginWasiWriteConflict
+        | WasiDiagnosticCode::PluginWasiMetadataUnsupported
         | WasiDiagnosticCode::PluginWasiHostFailure => types::PluginErrorCode::Internal,
     };
     let diagnostic_code = wit_diagnostic_code(error.code);
@@ -1509,7 +1520,9 @@ fn wit_diagnostic_code(code: WasiDiagnosticCode) -> types::DiagnosticCode {
         WasiDiagnosticCode::PluginWasiInvalidInput | WasiDiagnosticCode::PluginWasiInvalidPatch => {
             types::DiagnosticCode::PluginWasiInvalidPatch
         }
-        WasiDiagnosticCode::PluginWasiHostFailure | WasiDiagnosticCode::PluginWasiWriteConflict => {
+        WasiDiagnosticCode::PluginWasiHostFailure
+        | WasiDiagnosticCode::PluginWasiWriteConflict
+        | WasiDiagnosticCode::PluginWasiMetadataUnsupported => {
             types::DiagnosticCode::PluginWasiHostFailure
         }
         WasiDiagnosticCode::PluginWasiTrap => types::DiagnosticCode::PluginWasiTrap,
@@ -1573,7 +1586,9 @@ fn filesystem_access_error(error: FilesystemOperationError) -> filesystem_broker
         FilesystemOperationError::NotFound => filesystem_broker::AccessError::NotFound,
         FilesystemOperationError::InvalidPath => filesystem_broker::AccessError::InvalidPath,
         FilesystemOperationError::SizeLimit => filesystem_broker::AccessError::SizeLimit,
-        FilesystemOperationError::HostFailure | FilesystemOperationError::Conflict => {
+        FilesystemOperationError::HostFailure
+        | FilesystemOperationError::Conflict
+        | FilesystemOperationError::MetadataUnsupported => {
             filesystem_broker::AccessError::HostFailure
         }
     }

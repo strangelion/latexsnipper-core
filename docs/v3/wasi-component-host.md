@@ -127,7 +127,24 @@ no privilege enabling or ignore-ACL fallback is performed. The staging filename 
 one safe component, and native `CREATE_NEW` never overwrites a collision.
 These checks were exercised on controlled Windows x64 files, not every filesystem
 or enterprise policy. Unix owner identity, Windows SACL/security resource attributes,
-encryption/compression and other extended metadata remain open.
+encryption, sparse/integrity semantics and other extended metadata remain open.
+Existing files with encrypted, sparse, reparse or integrity flags are refused in
+storage preflight, before creating an approval request, with
+`PLUGIN_WASI_METADATA_UNSUPPORTED`, unless the no-follow path policy already refused
+the target. If detected during an approved write, the
+candidate is discarded without publication. Unsupported compression formats also
+fail explicitly; consent does not bypass unsupported preservation. This does not
+make those file types supported. Controlled real sparse fixtures exercise preflight;
+EFS is covered only by flag classification, without creating certificates or
+enabling privileges.
+NTFS compression NONE/LZNT1 is captured separately for the original primary stream
+and each named stream. Owned staging handles apply the observed format before
+payload writes; primary and named formats are rechecked before publication,
+including compression-only changes. New targets retain native directory defaults.
+Fixed-size synchronous control calls use Microsoft's
+[get](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_get_compression)
+and [set](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_set_compression)
+contracts, not a generic cross-filesystem storage clone.
 Windows named `$DATA` streams are now enumerated with a fixed, eight-byte-aligned
 64 KiB buffer. The parser bounds linked offsets, UTF-16 names (1024 bytes), types,
 duplicates and 128 named records. Named data is bounded in aggregate by the lesser
@@ -142,7 +159,8 @@ the final reparse point; single-letter base names are not parsed as drive prefix
 Creation requires an existing regular staging base and denies delete sharing while
 opening/writing the stream, so it cannot implicitly create a missing base with a
 broader DACL or overwrite an existing stream. Before publication both original and
-staged stream sets/content are rechecked. A stream-only edit is a write conflict;
+staged stream sets/content/compression are rechecked. A stream-only edit is a write
+conflict;
 cancellation, expiry and revocation stop at the same existing consent checkpoints,
 without another approval use or dialog. Deleting an owned staged base removes its
 streams too. Stream bytes/names can be sensitive and are never logged or uploaded.

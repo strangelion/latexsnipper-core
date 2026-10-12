@@ -16,6 +16,7 @@ pub enum WasiDiagnosticCode {
     PluginWasiApprovalRevoked,
     PluginWasiApprovalExpired,
     PluginWasiWriteConflict,
+    PluginWasiMetadataUnsupported,
     PluginWasiCapabilityMismatch,
     PluginWasiInvocationNotDeclared,
     PluginWasiProtocolMismatch,
@@ -38,6 +39,7 @@ impl WasiDiagnosticCode {
             Self::PluginWasiApprovalRevoked => "PLUGIN_WASI_APPROVAL_REVOKED",
             Self::PluginWasiApprovalExpired => "PLUGIN_WASI_APPROVAL_EXPIRED",
             Self::PluginWasiWriteConflict => "PLUGIN_WASI_WRITE_CONFLICT",
+            Self::PluginWasiMetadataUnsupported => "PLUGIN_WASI_METADATA_UNSUPPORTED",
             Self::PluginWasiCapabilityMismatch => "PLUGIN_WASI_CAPABILITY_MISMATCH",
             Self::PluginWasiInvocationNotDeclared => "PLUGIN_WASI_INVOCATION_NOT_DECLARED",
             Self::PluginWasiProtocolMismatch => "PLUGIN_WASI_PROTOCOL_MISMATCH",
@@ -107,6 +109,10 @@ mod tests {
 
     #[test]
     fn codes_are_stable_machine_values() {
+        assert_eq!(
+            WasiDiagnosticCode::PluginWasiMetadataUnsupported.as_str(),
+            "PLUGIN_WASI_METADATA_UNSUPPORTED"
+        );
         assert_eq!(
             WasiDiagnosticCode::PluginWasiApprovalRevoked.as_str(),
             "PLUGIN_WASI_APPROVAL_REVOKED"

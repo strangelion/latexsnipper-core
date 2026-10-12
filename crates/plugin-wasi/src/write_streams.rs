@@ -23,7 +23,13 @@ const CHUNK: usize = 64 * 1024;
 
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct WriteStreams {
-    streams: BTreeMap<String, Vec<u8>>,
+    streams: BTreeMap<String, NamedStream>,
+}
+
+#[derive(PartialEq, Eq)]
+struct NamedStream {
+    content: Vec<u8>,
+    compression: u16,
 }
 
 impl WriteStreams {
@@ -93,6 +99,7 @@ impl WriteStreams {
             if !metadata.is_file() || metadata.is_symlink() || metadata.nlink() > 1 {
                 return Err(FilesystemOperationError::InvalidPath.into());
             }
+            let compression = crate::write_compression::format(&stream)?;
             let mut reader = stream.take(remaining as u64 + 1);
             let mut content = Vec::with_capacity(declared_length);
             let mut buffer = [0_u8; CHUNK];
@@ -111,7 +118,13 @@ impl WriteStreams {
                 return Err(FilesystemOperationError::Conflict.into());
             }
             remaining -= content.len();
-            streams.insert(name, content);
+            streams.insert(
+                name,
+                NamedStream {
+                    content,
+                    compression,
+                },
+            );
         }
         Ok(Self { streams })
     }
@@ -122,7 +135,7 @@ impl WriteStreams {
         staged_name: &str,
         checkpoint: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<(), CheckedWriteError<E>> {
-        for (name, content) in &self.streams {
+        for (name, stream) in &self.streams {
             checkpoint().map_err(CheckedWriteError::Interrupted)?;
             let mut file = crate::write_security::open_named_stream(
                 parent,
@@ -131,7 +144,10 @@ impl WriteStreams {
                 true,
             )
             .map_err(map_io_error)?;
-            for chunk in content.chunks(CHUNK) {
+            if crate::write_compression::format(&file)? != stream.compression {
+                crate::write_compression::set_format(&file, stream.compression)?;
+            }
+            for chunk in stream.content.chunks(CHUNK) {
                 checkpoint().map_err(CheckedWriteError::Interrupted)?;
                 file.write_all(chunk).map_err(map_io_error)?;
             }

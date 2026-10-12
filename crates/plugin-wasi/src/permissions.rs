@@ -27,6 +27,7 @@ pub enum FilesystemOperationError {
     InvalidPath,
     SizeLimit,
     Conflict,
+    MetadataUnsupported,
     HostFailure,
 }
 
@@ -246,15 +247,21 @@ impl ComponentPermissions {
         let (parent, target) = write_parent(grant, Path::new(relative))?;
         let security = crate::write_security::WriteSecurity::read(&parent, &target)?;
         #[cfg(windows)]
+        let compression = crate::write_compression::WriteCompression::read(&parent, &target)?;
+        #[cfg(windows)]
         let streams =
             crate::write_streams::WriteStreams::read(&parent, &target, limit, &mut checkpoint)?;
         let (mut staged, mut file) = StagedWrite::create(&parent, &security)?;
+        #[cfg(windows)]
+        compression.apply(&file)?;
         for chunk in payload.chunks(64 * 1024) {
             checkpoint().map_err(CheckedWriteError::Interrupted)?;
             file.write_all(chunk).map_err(map_io_error)?;
         }
         #[cfg(windows)]
         streams.apply(&parent, &staged.name, &mut checkpoint)?;
+        #[cfg(windows)]
+        compression.verify_staging(&file)?;
         file.sync_all().map_err(map_io_error)?;
         drop(file);
         // Clones of this grant share publication ordering. Other hosts and
@@ -275,6 +282,7 @@ impl ComponentPermissions {
         security.recheck(&parent, &target)?;
         #[cfg(windows)]
         {
+            compression.recheck(&parent, &target)?;
             streams.recheck(&parent, &target, limit, &mut checkpoint)?;
             streams.recheck(&parent, Path::new(&staged.name), limit, &mut checkpoint)?;
         }
@@ -325,6 +333,8 @@ impl ComponentPermissions {
             }
             _ => {}
         }
+        #[cfg(windows)]
+        crate::write_compression::WriteCompression::read(&parent, &target)?;
         Ok(grant)
     }
 

@@ -10,6 +10,8 @@ pub mod host;
 pub mod limits;
 pub mod package;
 pub mod permissions;
+#[cfg(windows)]
+mod write_compression;
 mod write_security;
 #[cfg(windows)]
 mod write_streams;

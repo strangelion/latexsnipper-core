@@ -1046,6 +1046,45 @@ fn brokers_enforce_default_deny_and_explicit_grants() {
             approvals.revoke(&pending.id).unwrap();
         }
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+        use windows_sys::Win32::System::IO::DeviceIoControl;
+        let path = granted_package.path().join("write/output.txt");
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
+        let mut returned = 0;
+        // SAFETY: Test-only marking of an owned fixture, with fixed synchronous
+        // arguments. No global privileges or EFS certificates are created.
+        assert_ne!(
+            unsafe {
+                DeviceIoControl(
+                    file.as_raw_handle(),
+                    FSCTL_SET_SPARSE,
+                    std::ptr::null(),
+                    0,
+                    std::ptr::null_mut(),
+                    0,
+                    &mut returned,
+                    std::ptr::null_mut(),
+                )
+            },
+            0
+        );
+        drop(file);
+        assert_eq!(
+            transform(&host, &compiled, b"broker:filesystem-write")
+                .unwrap_err()
+                .code,
+            WasiDiagnosticCode::PluginWasiMetadataUnsupported
+        );
+        assert!(approvals.pending().unwrap().is_empty());
+        assert_eq!(fs::read(&path).unwrap(), b"written");
+    }
     assert_eq!(
         transform(&host, &compiled, b"broker:model").unwrap(),
         b"model"

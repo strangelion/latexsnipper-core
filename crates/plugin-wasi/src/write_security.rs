@@ -360,7 +360,7 @@ mod windows {
             None
         };
         let access = if create {
-            FILE_GENERIC_WRITE
+            FILE_GENERIC_READ | FILE_GENERIC_WRITE
         } else {
             FILE_GENERIC_READ
         };

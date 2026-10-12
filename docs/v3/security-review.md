@@ -73,8 +73,15 @@ or changing a host discards its stale requests/grants. This does not provide
 external-writer CAS, whole-invocation rollback or crash recovery. Windows staging
 now preserves and verifies owner/group/DACL before payload writes and rechecks that
 security identity before publication. Unix ownership and other extended metadata,
-Windows SACL/security resource attributes and encryption/compression are
-still open. Bounded named `$DATA` streams are copied to owned staging files,
+Windows SACL/security resource attributes and encryption/sparse/integrity semantics
+are still open. Storage preflight refuses existing encrypted, sparse, reparse or
+integrity targets with `PLUGIN_WASI_METADATA_UNSUPPORTED` before requesting approval,
+unless the no-follow path policy has already refused the target. This refusal is
+not preservation support. Controlled sparse-file evidence covers
+this path; EFS flag checking is not a full EFS/certificate test. NTFS primary and
+named-stream NONE/LZNT1 compression is preserved on staging and rechecked before
+publication; compression-only changes are conflicts. Bounded named `$DATA` streams
+are copied to owned staging files,
 checkpointed and rechecked on both original and candidate; stream-only edits refuse
 publication, and unknown/oversize metadata is not silently dropped. Enumeration,
 names, record count and aggregate bytes have independent limits. Stream creation
