@@ -31,7 +31,23 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                 .collect::<Vec<_>>()
                 .join(" ")
         }
-        LatexNode::Text(s) => s.clone(),
+        LatexNode::Text(s) => {
+            // Literal punctuation is not an argument/row separator. Adjacent
+            // TeX letters are math atoms even inside a mixed text node.
+            let mut output = String::new();
+            let mut previous_letter = false;
+            for ch in s.chars() {
+                if previous_letter && ch.is_ascii_alphabetic() {
+                    output.push(' ');
+                }
+                if matches!(ch, ',' | ';') {
+                    output.push('\\');
+                }
+                output.push(ch);
+                previous_letter = ch.is_ascii_alphabetic();
+            }
+            output
+        }
         LatexNode::Sequence(nodes) => {
             let mut result = String::new();
             for (i, n) in nodes.iter().enumerate() {
@@ -40,7 +56,7 @@ pub fn latex_ast_to_typst(node: &LatexNode) -> String {
                     // Don't add space before superscript/subscript
                     if !converted.starts_with('^') && !converted.starts_with('_') {
                         // Don't add space before a Symbol that looks like a closing delimiter or punctuation
-                        let skip = matches!(n, LatexNode::Symbol(s) if matches!(s.as_str(), ")" | "]" | "}" | "," | "." | "!" | "?"));
+                        let skip = matches!(n, LatexNode::Symbol(s) if converted == *s && matches!(s.as_str(), ")" | "]" | "}" | "," | "." | "!" | "?"));
                         if !skip && !result.ends_with(' ') {
                             result.push(' ');
                         }

@@ -92,9 +92,12 @@ fn expression(source: &str, depth: usize, in_fence: bool) -> ParseResult {
 fn atom_end(source: &str, start: usize) -> Result<usize, String> {
     let ch = source[start..].chars().next().ok_or_else(unsupported)?;
     match ch {
-        '(' => group_end(source, start),
+        '(' | '[' => group_end(source, start),
         '"' => string_end(source, start),
-        '#' | '$' | ')' | '_' | '^' | '[' | ']' | '{' | '}' => Err(unsupported()),
+        '\\' if source[start..].starts_with(r"\,") || source[start..].starts_with(r"\;") => {
+            Ok(start + 2)
+        }
+        '#' | '$' | ')' | '_' | '^' | ']' | '{' | '}' | '\\' => Err(unsupported()),
         ch if ch.is_ascii_alphanumeric() => {
             let mut end = start + ch.len_utf8();
             while end < source.len() {
@@ -165,6 +168,11 @@ fn split_args(source: &str, separator: char) -> Result<Vec<&str>, String> {
     let (mut index, mut start) = (0, 0);
     while index < source.len() {
         let ch = source[index..].chars().next().ok_or_else(unsupported)?;
+        if ch == '\\' && (source[index..].starts_with(r"\,") || source[index..].starts_with(r"\;"))
+        {
+            index += 2;
+            continue;
+        }
         if matches!(ch, '(' | '[' | '{') {
             index = group_end(source, index)?;
             continue;
@@ -187,6 +195,9 @@ fn convert_atom(atom: &str, depth: usize, in_fence: bool) -> ParseResult {
     if depth > 64 {
         return Err(unsupported());
     }
+    if matches!(atom, r"\," | r"\;") {
+        return Ok(atom[1..].into());
+    }
     if atom.starts_with('"') {
         let text: String = serde_json::from_str(atom).map_err(|_| unsupported())?;
         return Ok(format!(
@@ -197,6 +208,12 @@ fn convert_atom(atom: &str, depth: usize, in_fence: bool) -> ParseResult {
     if atom.starts_with('(') {
         return Ok(format!(
             "({})",
+            expression(&atom[1..atom.len() - 1], depth, in_fence)?
+        ));
+    }
+    if atom.starts_with('[') {
+        return Ok(format!(
+            "[{}]",
             expression(&atom[1..atom.len() - 1], depth, in_fence)?
         ));
     }
@@ -360,7 +377,7 @@ fn convert_atom(atom: &str, depth: usize, in_fence: bool) -> ParseResult {
                 "bold" => "mathbf",
                 "italic" => "mathit",
                 "mono" => "mathtt",
-                "serif" => "mathrm",
+                "serif" | "upright" => "mathrm",
                 "sans" => "mathsf",
                 "display" => "displaystyle",
                 "inline" => "textstyle",
@@ -368,7 +385,15 @@ fn convert_atom(atom: &str, depth: usize, in_fence: bool) -> ParseResult {
                 "sscript" => "scriptscriptstyle",
                 _ => return Err(unsupported()),
             };
-            let value = convert(value)?;
+            let mut value = convert(value)?;
+            if name == "upright"
+                && value
+                    .bytes()
+                    .all(|ch| ch.is_ascii_alphabetic() || ch.is_ascii_whitespace())
+            {
+                // Canonical export separates TeX letters to avoid a Typst name.
+                value.retain(|ch| !ch.is_ascii_whitespace());
+            }
             if name == "script" && value.starts_with("\\substack{") {
                 return Ok(value);
             }
@@ -389,7 +414,7 @@ fn case_cells(row: &str) -> Result<Vec<&str>, String> {
     }
     if parts[0].is_empty() && parts.len() % 2 == 0 {
         let mut cells = vec![parts[1]];
-        for pair in parts[2..].chunks_exact(2) {
+        for pair in parts[2..].as_chunks::<2>().0 {
             if !pair[0].is_empty() {
                 return Err(unsupported());
             }

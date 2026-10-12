@@ -422,7 +422,10 @@ fn library_formulas_roundtrip_typst() {
         for (fmt, target) in &targets {
             let back = DocumentConverter::convert_typst_string(&typst, *target);
             match back {
-                Err(e) => failures.push(format!("  {} : Typst→{} ERROR: {}", name, fmt, e)),
+                Err(e) => failures.push(format!(
+                    "  {} : Typst→{} ERROR: {}; projection: {}",
+                    name, fmt, e, typst
+                )),
                 Ok(r) if r.is_empty() => failures.push(format!("  {} : Typst→{} EMPTY", name, fmt)),
                 _ => {}
             }

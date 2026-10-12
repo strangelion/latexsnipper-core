@@ -7,6 +7,15 @@ pub fn parse_typst_to_latex(typst: &str) -> String {
 }
 
 pub(crate) fn symbol_atom(s: &str) -> String {
+    match s {
+        "thin" => return r"\, ".into(),
+        "med" => return r"\: ".into(),
+        "thick" => return r"\; ".into(),
+        "negthin" => return r"\! ".into(),
+        "qquad" => return r"\qquad ".into(),
+        "mid" => return r"\mid ".into(),
+        _ => {}
+    }
     if matches!(
         s,
         "min"

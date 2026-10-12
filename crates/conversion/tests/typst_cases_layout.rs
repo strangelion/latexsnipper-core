@@ -24,6 +24,7 @@ const SOURCES: &[&str] = &[
     r"\begin{cases}\begin{cases}x&x>0\\0&x\leq0\end{cases}&x>1\\\frac{a}{b}&\text{otherwise}\end{cases}",
     r"\begin{cases}x_i^2&\text{a,b;c\&d}\\\Bigl(\frac{a}{b}\Bigr)&\text{otherwise}\end{cases}_i^2+z",
     r"\begin{cases}\begin{matrix}a&b\\c&d\end{matrix}&\text{if}\end{cases}",
+    r"\begin{cases}x,&x>0\\0;&x\leq0\end{cases}",
 ];
 
 #[test]

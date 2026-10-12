@@ -116,6 +116,28 @@ fn adjacent_calls_nested_arguments_and_quoted_separators_do_not_swallow_tails() 
 }
 
 #[test]
+fn literal_brackets_punctuation_and_upright_keep_operand_boundaries() {
+    for source in [
+        "[X,Y]",
+        r"\nabla_{[X,Y]}Z+z",
+        r"\frac{[a,b];}{\mathrm{pH}}+z",
+        r"\mathbb{E}[X^2]-\mathbb{E}[X]^2",
+    ] {
+        let typst = render(source, OutputFormat::Typst);
+        let restored = fragment(&typst);
+        assert_eq!(
+            render(&restored, OutputFormat::MathML),
+            render(source, OutputFormat::MathML),
+            "{source} -> {typst} -> {restored}"
+        );
+    }
+    assert_eq!(fragment(r"frac(a\,b,c\;d)+z"), r"\frac{a,b}{c;d}+z");
+    for source in ["[x", "x]", "[x)+z", "[#read(\"secret\")]", r"frac(a\q,b)"] {
+        assert!(DocumentConverter::convert_typst_string(source, OutputFormat::MathML).is_err());
+    }
+}
+
+#[test]
 fn unsupported_projections_are_errors_in_adapters_and_preserved_in_legacy_parser() {
     for source in [
         r#"class("opening", lr(size: #2em, paren.l))"#,
