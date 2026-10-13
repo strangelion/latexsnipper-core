@@ -4,7 +4,8 @@ use std::fmt;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::ptr::NonNull;
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
@@ -66,6 +67,7 @@ pub struct WindowsProtectedApprovalCheckpoint {
     owner_sha256: String,
     target: Vec<u16>,
     persistence: u32,
+    clock: Arc<dyn Fn() -> Result<u64, WasiDiagnostic> + Send + Sync>,
 }
 
 impl WindowsProtectedApprovalCheckpoint {
@@ -111,6 +113,7 @@ impl WindowsProtectedApprovalCheckpoint {
             owner_sha256,
             target,
             persistence: mode,
+            clock: Arc::new(unix_time),
         })
     }
 
@@ -176,7 +179,9 @@ impl WindowsProtectedApprovalCheckpoint {
         check_deadline(deadline)
     }
 
-    /// Exact-checkpoint CAS under a shared OS file lock. All clients must use
+    /// Snapshot-identity CAS under a shared OS file lock. Clock-only advances
+    /// do not conflict with policy updates or allow lowering the protected floor.
+    /// All clients must use
     /// this same trusted root; no in-process mutex is substituted for coordination.
     pub fn publish(
         &self,
@@ -188,19 +193,17 @@ impl WindowsProtectedApprovalCheckpoint {
         let current = self
             .load()?
             .ok_or_else(|| failed("protected approval owner is missing"))?;
-        if &current.checkpoint != expected {
+        if !same_snapshot(&current.checkpoint, expected)
+            || expected.observed_unix_secs > current.checkpoint.observed_unix_secs
+        {
             return Err(conflict("protected approval checkpoint changed"));
         }
         let candidate_policies = validate_candidate(&current.key, candidate)?;
         if candidate.checkpoint.store_id != expected.store_id
             || candidate.checkpoint.revision < expected.revision
-            || candidate.checkpoint.observed_unix_secs < expected.observed_unix_secs
-            || (candidate.checkpoint.revision == expected.revision
-                && candidate.checkpoint.observed_unix_secs == expected.observed_unix_secs
-                && candidate.checkpoint != *expected)
         {
             return Err(conflict(
-                "protected approval checkpoint cannot move backwards or change without a revision",
+                "protected approval snapshot cannot change owner or move its revision backwards",
             ));
         }
         if candidate.checkpoint == *expected {
@@ -209,8 +212,8 @@ impl WindowsProtectedApprovalCheckpoint {
         }
         if candidate.checkpoint.revision == expected.revision {
             let previous = SealedApprovalPolicies {
-                bytes: self.read_snapshot(expected, deadline)?,
-                checkpoint: expected.clone(),
+                bytes: self.read_snapshot(&current.checkpoint, deadline)?,
+                checkpoint: current.checkpoint.clone(),
             };
             if candidate_policies != validate_candidate(&current.key, &previous)? {
                 return Err(conflict("policy changes require a new revision"));
@@ -218,28 +221,86 @@ impl WindowsProtectedApprovalCheckpoint {
         }
         check_deadline(deadline)?;
         self.save_snapshot(candidate, deadline)?;
-        self.write(&current.key, &candidate.checkpoint)?;
+        let mut published = candidate.checkpoint.clone();
+        published.observed_unix_secs = published
+            .observed_unix_secs
+            .max(current.checkpoint.observed_unix_secs);
+        self.write(&current.key, &published)?;
         check_deadline(deadline)
     }
 
     /// Recovers only the object selected by the protected checkpoint. Never scan
     /// old snapshots or silently initialize when selected data is missing/corrupt.
-    /// Restoring metadata alone does not attach execution authority to a host.
+    /// Restored metadata carries a protected clock and live owner guard, but does
+    /// not attach execution authority to a host or enable any backend.
     pub fn restore_policies(
         &self,
         deadline: Instant,
     ) -> Result<Option<RememberedApprovalPolicies>, WasiDiagnostic> {
-        let _lock = self.lock(deadline)?;
+        let lock = self.lock(deadline)?;
         let current = self.load()?;
         check_deadline(deadline)?;
         let Some(current) = current else {
             return Ok(None);
         };
         let bytes = self.read_snapshot(&current.checkpoint, deadline)?;
-        let policies =
-            RememberedApprovalPolicies::restore(current.key, &bytes, &current.checkpoint)?;
+        // Never enter a policy clock while retaining the owner lock. Policy
+        // clocks may hold their own store mutex and acquire this owner lock.
+        drop(lock);
+        let owner = Arc::new(self.duplicate()?);
+        let clock_owner = owner.clone();
+        let policies = RememberedApprovalPolicies::restore_with_clock(
+            current.key,
+            &bytes,
+            &current.checkpoint,
+            Arc::new(move || clock_owner.observe_time(Instant::now() + Duration::from_millis(50))),
+        )?
+        .with_authority_guard(owner);
         check_deadline(deadline)?;
         Ok(Some(policies))
+    }
+
+    /// Persist a wall-clock high-water mark without creating snapshot objects or
+    /// changing consent. A late native write may have committed; no use is granted.
+    pub fn observe_time(&self, deadline: Instant) -> Result<u64, WasiDiagnostic> {
+        let _lock = self.lock(deadline)?;
+        let current = self
+            .load()?
+            .ok_or_else(|| failed("protected approval owner is missing"))?;
+        self.observe_time_locked(&current, deadline)
+    }
+
+    fn observe_time_locked(
+        &self,
+        current: &WindowsProtectedApprovalState,
+        deadline: Instant,
+    ) -> Result<u64, WasiDiagnostic> {
+        check_deadline(deadline)?;
+        let now = (self.clock)()?;
+        if now < current.checkpoint.observed_unix_secs {
+            return Err(failed("protected approval clock moved backwards"));
+        }
+        if now > current.checkpoint.observed_unix_secs {
+            let mut checkpoint = current.checkpoint.clone();
+            checkpoint.observed_unix_secs = now;
+            check_deadline(deadline)?;
+            self.write(&current.key, &checkpoint)?;
+        }
+        check_deadline(deadline)?;
+        Ok(now)
+    }
+
+    fn duplicate(&self) -> Result<Self, WasiDiagnostic> {
+        Ok(Self {
+            directory: self
+                .directory
+                .try_clone()
+                .map_err(|_| failed("cannot retain protected approval root"))?,
+            owner_sha256: self.owner_sha256.clone(),
+            target: self.target.clone(),
+            persistence: self.persistence,
+            clock: self.clock.clone(),
+        })
     }
 
     fn snapshot_name(&self, checkpoint: &ApprovalPolicyCheckpoint) -> String {
@@ -433,14 +494,24 @@ impl RememberedApprovalAuthorityGuard for WindowsProtectedApprovalCheckpoint {
         let current = self
             .load()?
             .ok_or_else(|| failed("protected approval owner is missing"))?;
+        let now = self.observe_time_locked(&current, deadline)?;
         let bytes = self.read_snapshot(&current.checkpoint, deadline)?;
-        let policies =
-            RememberedApprovalPolicies::restore(current.key, &bytes, &current.checkpoint)?;
-        for policy in policies.policies()? {
+        // Authenticate metadata with the captured protected time, not a clock
+        // callback that would recursively acquire the owner lock.
+        let mut checkpoint = current.checkpoint.clone();
+        checkpoint.observed_unix_secs = now;
+        let sealed = SealedApprovalPolicies { bytes, checkpoint };
+        for policy in validate_candidate(&current.key, &sealed)? {
             if &RememberedPolicyIdentity::for_policy(&current.checkpoint.store_id, &policy)?
                 == identity
             {
                 check_deadline(deadline)?;
+                if now >= policy.expires_at_unix_secs {
+                    return Err(WasiDiagnostic::new(
+                        WasiDiagnosticCode::PluginWasiApprovalExpired,
+                        "protected owner's remembered policy expired",
+                    ));
+                }
                 return Ok(());
             }
         }
@@ -485,6 +556,15 @@ fn validate_candidate(
     candidate: &SealedApprovalPolicies,
 ) -> Result<Vec<crate::RememberedApprovalPolicy>, WasiDiagnostic> {
     crate::remembered_approval::validate_sealed_for_publication(key, candidate)
+}
+fn same_snapshot(a: &ApprovalPolicyCheckpoint, b: &ApprovalPolicyCheckpoint) -> bool {
+    a.store_id == b.store_id && a.revision == b.revision && a.snapshot_sha256 == b.snapshot_sha256
+}
+fn unix_time() -> Result<u64, WasiDiagnostic> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|_| failed("protected approval wall clock is unavailable"))
 }
 fn validate_checkpoint(checkpoint: &ApprovalPolicyCheckpoint) -> Result<(), WasiDiagnostic> {
     let valid = |text: &str, length| {
@@ -573,6 +653,181 @@ mod tests {
         };
         assert!(validate_checkpoint(&checkpoint).is_err());
         assert!(check_deadline(Instant::now()).is_err());
+        let mut advanced = checkpoint.clone();
+        advanced.observed_unix_secs += 1;
+        assert!(same_snapshot(&checkpoint, &advanced));
+        advanced.snapshot_sha256 = "c".repeat(64);
+        assert!(!same_snapshot(&checkpoint, &advanced));
+    }
+
+    #[test]
+    #[ignore = "explicit current-user owned clock fixture credential; cleanup removes only that entry"]
+    fn native_clock_floor_persists_without_snapshot_growth_and_forgetting_stays_available() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        let temporary = tempfile::tempdir().unwrap();
+        let mut backend = WindowsProtectedApprovalCheckpoint::open(
+            temporary.path(),
+            "fixture-protected-clock",
+            WindowsApprovalPersistence::LogonSession,
+        )
+        .unwrap();
+        assert!(backend.load().unwrap().is_none());
+        let key = ApprovalPolicyKey::generate().unwrap();
+        let policies = RememberedApprovalPolicies::new(ApprovalPolicyKey::from_secret_bytes(
+            *key.secret_bytes(),
+        ))
+        .unwrap();
+        policies
+            .remember_request(
+                &request("one.txt"),
+                crate::ApprovalScope::Exact,
+                Duration::from_secs(3600),
+            )
+            .unwrap();
+        let initial = policies.seal().unwrap();
+        let time = Arc::new(AtomicU64::new(initial.checkpoint.observed_unix_secs + 120));
+        let observed = time.clone();
+        backend.clock = Arc::new(move || {
+            let now = observed.load(Ordering::SeqCst);
+            if now == u64::MAX {
+                Err(failed("fixture clock is unavailable"))
+            } else {
+                Ok(now)
+            }
+        });
+        let mut cleanup = OwnedCredential {
+            backend: &backend,
+            armed: true,
+        };
+        backend
+            .initialize(&key, &initial, Instant::now() + Duration::from_secs(5))
+            .unwrap();
+        let restored = backend
+            .restore_policies(Instant::now() + Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        let before = std::fs::read_dir(temporary.path()).unwrap().count();
+        for _ in 0..30 {
+            assert!(restored
+                .authorize(&request("one.txt"))
+                .unwrap()
+                .unwrap()
+                .check()
+                .is_ok());
+        }
+        let held = backend
+            .lock(Instant::now() + Duration::from_secs(5))
+            .unwrap();
+        assert_eq!(
+            restored.authorize(&request("one.txt")).err().unwrap().code,
+            WasiDiagnosticCode::PluginWasiTimeout
+        );
+        drop(held);
+        assert!(restored
+            .authorize(&request("one.txt"))
+            .unwrap()
+            .unwrap()
+            .check()
+            .is_ok());
+        let protected = backend.load().unwrap().unwrap();
+        assert_eq!(
+            protected.checkpoint.observed_unix_secs,
+            time.load(Ordering::SeqCst)
+        );
+        assert!(same_snapshot(&protected.checkpoint, &initial.checkpoint));
+        assert_eq!(std::fs::read_dir(temporary.path()).unwrap().count(), before);
+
+        let identity = RememberedPolicyIdentity::for_policy(
+            &initial.checkpoint.store_id,
+            &policies.policies().unwrap()[0],
+        )
+        .unwrap();
+        let expired = initial.checkpoint.observed_unix_secs + 3601;
+        time.store(expired, Ordering::SeqCst);
+        assert_eq!(
+            backend
+                .check_current(&identity, Instant::now() + Duration::from_secs(5))
+                .unwrap_err()
+                .code,
+            WasiDiagnosticCode::PluginWasiApprovalExpired
+        );
+        time.store(expired - 1, Ordering::SeqCst);
+        assert!(restored.authorize(&request("one.txt")).is_err());
+        let mut independent = WindowsProtectedApprovalCheckpoint::open(
+            temporary.path(),
+            "fixture-protected-clock",
+            WindowsApprovalPersistence::LogonSession,
+        )
+        .unwrap();
+        independent.clock = backend.clock.clone();
+        assert!(independent
+            .restore_policies(Instant::now() + Duration::from_secs(5))
+            .is_err());
+        assert_eq!(
+            backend
+                .load()
+                .unwrap()
+                .unwrap()
+                .checkpoint
+                .observed_unix_secs,
+            expired
+        );
+
+        // An old but authenticated local view can still forget consent while the
+        // clock is broken. A stale snapshot identity, unlike clock-only advance,
+        // must still fail CAS. The protected time floor never moves backwards.
+        time.store(u64::MAX, Ordering::SeqCst);
+        assert!(independent
+            .restore_policies(Instant::now() + Duration::from_secs(5))
+            .is_err());
+        restored.clear().unwrap();
+        let forgotten = restored.seal().unwrap();
+        assert!(forgotten.checkpoint.observed_unix_secs < expired);
+        backend
+            .publish(
+                &initial.checkpoint,
+                &forgotten,
+                Instant::now() + Duration::from_secs(5),
+            )
+            .unwrap();
+        let latest = backend.load().unwrap().unwrap();
+        assert!(same_snapshot(&latest.checkpoint, &forgotten.checkpoint));
+        assert_eq!(latest.checkpoint.observed_unix_secs, expired);
+        assert!(backend
+            .publish(
+                &initial.checkpoint,
+                &initial,
+                Instant::now() + Duration::from_secs(5)
+            )
+            .is_err());
+        time.store(expired + 1, Ordering::SeqCst);
+        assert!(independent
+            .restore_policies(Instant::now() + Duration::from_secs(5))
+            .unwrap()
+            .unwrap()
+            .policies()
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            backend
+                .check_current(&identity, Instant::now() + Duration::from_secs(5))
+                .unwrap_err()
+                .code,
+            WasiDiagnosticCode::PluginWasiApprovalRevoked
+        );
+        assert_eq!(
+            std::fs::read_dir(temporary.path()).unwrap().count(),
+            before + 1
+        );
+
+        backend.remove_test_credential().unwrap();
+        cleanup.armed = false;
+        assert!(backend.load().unwrap().is_none());
+        drop(cleanup);
+        drop(restored);
+        drop(independent);
+        drop(backend);
+        temporary.close().unwrap();
     }
 
     #[test]
@@ -794,10 +1049,10 @@ mod tests {
         assert!(backend
             .restore_policies(Instant::now() + Duration::from_secs(5))
             .is_err());
-        assert_eq!(
-            backend.load().unwrap().unwrap().checkpoint,
-            current.checkpoint
-        );
+        assert!(same_snapshot(
+            &backend.load().unwrap().unwrap().checkpoint,
+            &current.checkpoint
+        ));
         // Repair only the synthetic fixture object using its known original bytes.
         backend
             .directory
@@ -838,6 +1093,7 @@ mod tests {
         assert!(backend.load().unwrap().is_none());
         drop(cleanup);
         drop(loaded);
+        drop(recovered);
         drop(backend);
         temporary.close().unwrap();
     }

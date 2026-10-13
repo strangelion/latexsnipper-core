@@ -274,10 +274,12 @@ This constructor does not prove ancestor ACL/reparse isolation or protect agains
 native code running as the same user. Snapshot objects are authenticated but not
 encrypted; private root access and confidentiality remain the host's responsibility.
 
-`initialize` and exact-checkpoint-CAS `publish` take a shared OS file lock, validate
+`initialize` and snapshot-identity-CAS `publish` take a shared OS file lock, validate
 authenticated metadata, sync a bounded immutable snapshot, publish its new name
 without overwriting an existing object, then update the protected checkpoint.
-Same-revision publications may advance the clock floor but not change policies.
+CAS compares store ID, revision and snapshot digest. Concurrent clock-only advances
+do not cause false policy-update conflicts, and publication never lowers the
+current protected clock floor. Same-revision publications cannot change policies.
 Publication validation deliberately does not require a working wall clock, so
 revocation/forgetting can be saved during clock rollback; execution still rejects
 that clock. All writers must use this backend and the same trusted root.
@@ -285,12 +287,21 @@ that clock. All writers must use this backend and the same trusted root.
 `restore_policies(deadline)` reads only the object selected by protected storage.
 Missing/corrupt selected data never falls back to an older snapshot. A write cut
 before checkpoint selection leaves an unselected object, not new consent. Restore
-returns metadata, not a host attachment or permission to run. This backend also
-implements `RememberedApprovalAuthorityGuard`: explicitly attach it to a restored
-store to veto stale clients using the current authenticated policy identity.
-The guard reads but does not publish clock observations: before enabling reuse,
-the host must also persist advancing time checkpoints or provide an independently
-protected clock. Otherwise a restart loses unpublished clock high-water marks.
+returns a store with a protected clock source and live owner guard, not a host
+attachment or permission to run. The returned store persists every successful
+clock observation before using its time. The backend also implements
+`RememberedApprovalAuthorityGuard`, which vetoes stale clients using the current
+authenticated policy identity and rejects expired policies. Native low-level
+`load` plus manual portable `restore` does not install these safeguards.
+
+`observe_time(deadline)` monotonically updates only the protected checkpoint's
+time, not its snapshot digest/revision or policy expiry. Existing authenticated
+snapshot time may be below the separately protected floor; it may never be above
+it. Repeated observations in the same second require no write, and observations
+create no snapshot files. A failed/late update grants no use. Backwards or
+unavailable time still permits authenticated revocation publication, retaining
+the latest floor. Once the clock is corrected, fresh confirmation remains usable.
+The credential schema and snapshot framing are unchanged.
 Do not enable reuse from restore alone or silently retry a failed publication.
 Native writes finishing after a deadline may already have committed; reread the
 protected checkpoint before deciding what happened.
@@ -298,12 +309,19 @@ protected checkpoint before deciding what happened.
 Current evidence covers real Credential Manager read/write, file-backed restore,
 unselected-object recovery, corruption refusal, forgetting, independent-client
 guard revocation and competing backend instances on Windows threads. It does not
-yet establish continuous clock-floor publication, OS child-process races, forced-kill/power-loss durability, logoff
+yet establish OS child-process races, forced-kill/power-loss durability, logoff
 persistence, orphan collection, Linux/macOS providers, application UI or release
 security approval. File sync is not a promise of directory-entry power-loss
 durability. Native key-store calls are trusted blocking OS calls, not preemptible
 sandbox operations; deadline overruns fail after return. The native credential
-test is ignored by default and runs explicitly with test-owned credential cleanup.
+tests are ignored by default and run explicitly with test-owned credential cleanup.
+Protected-clock tests cover fresh independent restoration after rollback, expired
+policy non-revival, unchanged snapshot count during repeated reuse, and forgetting
+with a broken clock. Policy clocks use a 50 ms native operation budget; unlike
+authority callbacks, a clock can run under its own Core policy mutex. The backend
+never calls that store while holding the owner lock, so lock order cannot recurse;
+no clock read opens UI or calls guest code. This is not a wall-clock rollback
+benchmark or proof of OS persistence across power loss/logoff.
 
 For UX, distinguish approval once, a bounded session/batch, and a separate explicit
 remember-choice. Repeated matching actions reuse remembered consent without new

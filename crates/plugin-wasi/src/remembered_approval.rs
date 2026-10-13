@@ -249,7 +249,7 @@ impl RememberedApprovalPolicies {
         Self::restore_with_clock(key, bytes, trusted_checkpoint, Arc::new(system_time))
     }
 
-    fn restore_with_clock(
+    pub(crate) fn restore_with_clock(
         key: ApprovalPolicyKey,
         bytes: &[u8],
         checkpoint: &ApprovalPolicyCheckpoint,
