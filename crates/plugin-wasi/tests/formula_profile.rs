@@ -414,7 +414,7 @@ fn linear_profiles_execute_real_components_without_widening_trust_or_retry() {
                 let invalid = if format == "ascii-math" {
                     "color(red)(x)"
                 } else {
-                    "∫_0^1 x"
+                    "∫1 x"
                 };
                 assert_eq!(
                     prepared
@@ -424,6 +424,18 @@ fn linear_profiles_execute_real_components_without_widening_trust_or_retry() {
                         .code,
                     ConversionRegistryErrorCode::InputRejected
                 );
+                if format == "unicode-math" {
+                    // Core accepts the n-ary formula, but this power-only fixture
+                    // Component must fail without implicit retry or trust changes.
+                    assert_eq!(
+                        prepared
+                            .registry
+                            .convert(&make_request("∫_0^1 x"))
+                            .unwrap_err()
+                            .code,
+                        ConversionRegistryErrorCode::BackendFailed
+                    );
+                }
                 let report = prepared.registry.convert_with_fallback(
                     &make_request("a/b"),
                     &ConversionFallbackPolicy {

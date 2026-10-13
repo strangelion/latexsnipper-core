@@ -22,9 +22,20 @@ for (const route of routes) {
 }
 assert.equal(successes, 78);
 for (const [source, input, output] of [["color(red)(x)", "ascii-math", "omml"],
-  ["∫_0^1 x", "unicode-math", "ascii-math"], ["body $x$", "markdown", "unicode-math"],
+  ["∫1 x", "unicode-math", "ascii-math"], ["body $x$", "markdown", "unicode-math"],
   [String.raw`\unknown{x}`, "latex", "ascii-math"]]) {
-  assert.equal(api.convert_formula_v3(source, input, output, "best-effort").error.code, "CONVERSION_FAILED");
+  const result = api.convert_formula_v3(source, input, output, "best-effort");
+  assert.equal(result.ok, false, JSON.stringify({source, input, output, result}));
+  assert.equal(result.error.code, "CONVERSION_FAILED");
+}
+const nary = api.convert_formula_v3("∫_0^1 x", "unicode-math", "ascii-math", "best-effort");
+assert.equal(nary.ok, true);
+assert.equal(nary.data.content, "{:int_(0)^(1) {:x:}:}");
+for (const [source, canonical] of [["sin x", "sin⁡〖x〗"],
+  ["∫_0^1 x", "〖〖∫〗_(0)〗^(1)▒〖x〗"], ['"rate"', '"rate"']]) {
+  const result = api.convert_formula_v3(source, "unicode-math", "unicode-math", "best-effort");
+  assert.equal(result.ok, true);
+  assert.equal(result.data.content, canonical);
 }
 assert.equal(api.convert_formula_v3("a/b", "ascii-math", "unicode-math", "best-effort").data.content, "(a)/(b)");
 console.log("Actual linear formula WASM: 78 converted, 98 unavailable, grammar and mixed-document refusals passed");

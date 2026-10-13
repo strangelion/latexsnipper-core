@@ -603,7 +603,12 @@ fn common_formula_format_integrity_suite() {
             "integral",
             r"\int_{0}^{1} f(x)\,dx",
             &["<m:nary>", "\u{222B}"][..],
-            &["<munderover>", "\u{222B}"][..],
+            &[
+                "<msubsup>",
+                "largeop=\"true\"",
+                "movablelimits=\"false\"",
+                "\u{222B}",
+            ][..],
             &["integral"][..],
             &["\\int", "0", "1", "f", "dx"][..],
         ),
