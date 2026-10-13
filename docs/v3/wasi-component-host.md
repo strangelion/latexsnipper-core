@@ -275,6 +275,38 @@ does not prove ancestor ACL/reparse isolation or protect against
 native code running as the same user. Snapshot objects are authenticated but not
 encrypted; private root access and confidentiality remain the host's responsibility.
 
+For a new root, use `create_private_root(parent, name, owner, persistence)`:
+the existing stable trusted parent must be selected by the host, and `name` must
+be one child name. The OS applies a protected DACL at creation, before any
+payload: effective current user, LocalSystem and builtin Administrators, each
+full control with child inheritance. No existing target, parent ACL, privilege,
+credential or installer configuration is modified. Invalid owner/name input
+does not create a directory; a failure after creation leaves the new root for
+inspection rather than deleting a possibly changed path.
+
+For an already provisioned root, `open_verified_private_root` validates only;
+it never repairs ACLs. These strict entries check the actual held directory's
+owner and protected three-entry DACL, and recheck before credential reads,
+publication locks, snapshot access and permission vetoes. Lock/staging/selected
+files are also checked by handle for the same finite principal/access policy;
+file inheritance flags may differ from directory flags. Null/unprotected root
+DACLs, additional principals, other ACE forms and unexpected access masks fail
+closed. Copies retained by restored policies keep this validation. This is a
+deliberately finite policy, not a general Windows effective-access evaluator.
+Low-level `open` retains its trusted-root precondition for compatibility.
+
+An owned Windows fixture verifies root creation, rejection without repair,
+existing-target refusal and inherited lock/snapshot permissions. A separate
+exact-credential fixture retains remembered consent through a temporary root
+or selected-file DACL violation: execution checks fail while unsafe, then the
+same unexpired permit and repeated matched uses work after fixture repair,
+without another remember-choice or a permanent blacklist. Only fresh fixture
+children/files have their DACL changed, and exact owned test credentials and
+temporary roots are removed on exit. Recovered permissions do not renew consent
+expiry, expand its scope or undo a prior information disclosure. Deployment,
+untrusted ancestor races, administrators/SYSTEM, native same-user malware and
+logon/power-loss behavior remain separate acceptance boundaries.
+
 `ApprovalStorageIsolation` is a trusted native permission veto, not consent.
 Declare private storage on every host before any guest execution using
 `WasiComponentHost::with_protected_approval_storage`; remote plugins expose the
@@ -291,8 +323,9 @@ case/label aliases refuse attachment; path text cannot substitute for a held
 directory capability. Siblings are allowed. It supports at most 128 filesystem
 grants, 128 ancestor entries per chain and 32768 UTF-16 path units; unresolved
 volume paths or inaccessible identities fail closed. This does not certify root
-DACL confidentiality, hostile ancestor races, network filesystems or native
-same-user attackers. The app must still provision a stable private directory.
+DACL confidentiality by itself, hostile ancestor races, network filesystems or
+native same-user attackers. The app must still provision a stable private
+directory, preferably through the strict entries above.
 
 Hosts retain up to 16 vetoes, recheck them before guest execution and filesystem
 broker IO, and recheck before staged publication even for explicit session grants.
@@ -391,8 +424,12 @@ For UX, distinguish approval once, a bounded session/batch, and a separate expli
 remember-choice. Repeated matching actions reuse remembered consent without new
 dialogs; a five-minute per-use permit is an internal lease, not a five-minute
 reapproval requirement. Revocation, expiry or changed binding/scope requires fresh
-consent. Storage/clock failures disable remembered reuse, not independent fresh
-confirmation; never turn a transient failure into a permanent blacklist.
+consent. A remembered checkpoint/clock failure alone disables remembered reuse,
+not independent fresh confirmation. A separate private-storage isolation veto
+still applies to that guest host, even after fresh confirmation: unsafe storage
+must be repaired or the host explicitly reconfigured safely, not bypassed by
+another consent dialog. Recovery is rechecked; never turn a transient failure
+into a permanent blacklist.
 
 ### Core grant lifecycle and enforcement
 

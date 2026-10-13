@@ -13,8 +13,9 @@ impl crate::ApprovalStorageIsolation for WindowsProtectedApprovalCheckpoint {
         deadline: Instant,
     ) -> Result<(), WasiDiagnostic> {
         check_deadline(deadline)?;
+        self.check_private_dacl()?;
         if permissions.filesystem.is_empty() {
-            return Ok(());
+            return check_deadline(deadline);
         }
         if permissions.filesystem.len() > 128 {
             return Err(denied());

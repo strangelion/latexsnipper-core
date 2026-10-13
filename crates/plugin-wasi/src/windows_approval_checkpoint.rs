@@ -2,6 +2,7 @@
 //! domain credentials, certificates, installer changes or plaintext key files.
 use std::fmt;
 use std::io::{Read, Write};
+use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
@@ -30,6 +31,9 @@ pub use cleanup::ApprovalSnapshotCleanup;
 
 #[path = "windows_approval_isolation.rs"]
 mod isolation;
+
+#[path = "windows_approval_private_root.rs"]
+mod private_root;
 
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,6 +90,7 @@ pub struct WindowsProtectedApprovalCheckpoint {
     target: Vec<u16>,
     persistence: u32,
     clock: Arc<dyn Fn() -> Result<u64, WasiDiagnostic> + Send + Sync>,
+    require_private_dacl: bool,
     #[cfg(test)]
     publication_probe: Option<Arc<dyn Fn(PublicationCut) + Send + Sync>>,
 }
@@ -134,6 +139,7 @@ impl WindowsProtectedApprovalCheckpoint {
             target,
             persistence: mode,
             clock: Arc::new(unix_time),
+            require_private_dacl: false,
             #[cfg(test)]
             publication_probe: None,
         })
@@ -141,6 +147,7 @@ impl WindowsProtectedApprovalCheckpoint {
 
     /// Reads only this backend's exact generic credential. Never list credentials.
     pub fn load(&self) -> Result<Option<WindowsProtectedApprovalState>, WasiDiagnostic> {
+        self.check_private_dacl()?;
         let mut raw = std::ptr::null_mut();
         // SAFETY: target is NUL-terminated and raw is a writable result pointer.
         if unsafe { CredReadW(self.target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut raw) } == 0 {
@@ -327,6 +334,7 @@ impl WindowsProtectedApprovalCheckpoint {
             target: self.target.clone(),
             persistence: self.persistence,
             clock: self.clock.clone(),
+            require_private_dacl: self.require_private_dacl,
             #[cfg(test)]
             publication_probe: self.publication_probe.clone(),
         })
@@ -345,6 +353,7 @@ impl WindowsProtectedApprovalCheckpoint {
         deadline: Instant,
     ) -> Result<Vec<u8>, WasiDiagnostic> {
         check_deadline(deadline)?;
+        self.check_private_dacl()?;
         validate_checkpoint(checkpoint)?;
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
@@ -352,6 +361,7 @@ impl WindowsProtectedApprovalCheckpoint {
             .directory
             .open_with(self.snapshot_name(checkpoint), &options)
             .map_err(|_| failed("selected approval snapshot is unavailable"))?;
+        self.check_private_file_dacl(file.as_raw_handle())?;
         let metadata = file
             .metadata()
             .map_err(|_| failed("cannot inspect selected approval snapshot"))?;
@@ -381,6 +391,7 @@ impl WindowsProtectedApprovalCheckpoint {
         deadline: Instant,
     ) -> Result<(), WasiDiagnostic> {
         check_deadline(deadline)?;
+        self.check_private_dacl()?;
         let target = self.snapshot_name(&candidate.checkpoint);
         if self.directory.symlink_metadata(&target).is_ok() {
             if self.read_snapshot(&candidate.checkpoint, deadline)? != candidate.bytes {
@@ -403,6 +414,7 @@ impl WindowsProtectedApprovalCheckpoint {
         #[cfg(test)]
         self.test_publication_cut(PublicationCut::StagingCreated);
         let result = (|| {
+            self.check_private_file_dacl(file.as_raw_handle())?;
             for chunk in candidate.bytes.chunks(64 * 1024) {
                 check_deadline(deadline)?;
                 file.write_all(chunk)
@@ -449,6 +461,7 @@ impl WindowsProtectedApprovalCheckpoint {
         key: &ApprovalPolicyKey,
         checkpoint: &ApprovalPolicyCheckpoint,
     ) -> Result<(), WasiDiagnostic> {
+        self.check_private_dacl()?;
         validate_checkpoint(checkpoint)?;
         let record = RootRecord {
             schema_version: 1,
@@ -481,6 +494,9 @@ impl WindowsProtectedApprovalCheckpoint {
     }
 
     fn lock(&self, deadline: Instant) -> Result<PublicationLock, WasiDiagnostic> {
+        check_deadline(deadline)?;
+        self.check_private_dacl()?;
+        check_deadline(deadline)?;
         let mut options = OpenOptions::new();
         options
             .read(true)
@@ -492,6 +508,7 @@ impl WindowsProtectedApprovalCheckpoint {
             .directory
             .open_with("approval-owner.lock", &options)
             .map_err(|_| failed("cannot open protected approval publication lock"))?;
+        self.check_private_file_dacl(file.as_raw_handle())?;
         let metadata = file
             .metadata()
             .map_err(|_| failed("cannot inspect protected approval publication lock"))?;
