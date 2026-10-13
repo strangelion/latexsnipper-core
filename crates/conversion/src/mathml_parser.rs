@@ -117,6 +117,23 @@ impl MathmlFrame {
             }
             self.children = fragments;
         }
+        if self.tag == "mrow"
+            && self.children.len() == 2
+            && self.text.trim().is_empty()
+            && self.children[0].len() <= 65_536
+            && self.children[0]
+                .bytes()
+                .filter(|byte| matches!(byte, b'\\' | b'^' | b'_'))
+                .count()
+                <= 64
+            && crate::unicodemath_pilot::nary_limits(&crate::latex_parser::parse_latex(
+                &self.children[0],
+            ))
+            .is_some()
+        {
+            // One head and one row operand is the finite owned n-ary projection.
+            self.children = vec![format!("{{{}{{{}}}}}", self.children[0], self.children[1])];
+        }
         let text = if self.children.is_empty() {
             self.text.clone()
         } else {
@@ -743,7 +760,13 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             if children.len() >= 2 {
                 let base = &children[0];
                 let accent = &children[1];
-                map_over_accent(base, accent)
+                if is_nary_source(base)
+                    && !attrs.split_whitespace().any(|field| field == "accent=true")
+                {
+                    format!("{base}^{{{accent}}}")
+                } else {
+                    map_over_accent(base, accent)
+                }
             } else {
                 text.to_string()
             }
@@ -752,13 +775,28 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             if children.len() >= 2 {
                 let base = &children[0];
                 let under = &children[1];
-                format!("\\underset{{{}}}{{{}}}", under, base)
+                if is_nary_source(base)
+                    && !attrs
+                        .split_whitespace()
+                        .any(|field| field == "accentunder=true")
+                {
+                    format!("{base}_{{{under}}}")
+                } else {
+                    format!("\\underset{{{}}}{{{}}}", under, base)
+                }
             } else {
                 text.to_string()
             }
         }
         "munderover" => {
             if children.len() >= 3 {
+                if is_nary_source(&children[0])
+                    && !attrs
+                        .split_whitespace()
+                        .any(|field| matches!(field, "accent=true" | "accentunder=true"))
+                {
+                    return format!("{}_{{{}}}^{{{}}}", children[0], children[1], children[2]);
+                }
                 format!(
                     "\\underset{{{}}}{{\\overset{{{}}}{{{}}}}}",
                     children[1], children[2], children[0]
@@ -909,8 +947,20 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
     }
 }
 
+fn is_nary_source(source: &str) -> bool {
+    source.len() <= 65_536
+        && source
+            .bytes()
+            .filter(|byte| matches!(byte, b'\\' | b'^' | b'_'))
+            .count()
+            <= 64
+        && crate::unicodemath_pilot::nary_limits(&crate::latex_parser::parse_latex(source))
+            .is_some()
+}
+
 fn reverse_mi_map(text: &str) -> Option<String> {
     match text {
+        "ⅆ" => Some("ⅆ".into()),
         "\u{03B1}" => Some("\\alpha".to_string()),
         "\u{03B2}" => Some("\\beta".to_string()),
         "\u{03B3}" => Some("\\gamma".to_string()),
@@ -981,6 +1031,8 @@ fn reverse_mi_map(text: &str) -> Option<String> {
         "\u{2211}" => Some("\\sum".to_string()),
         "\u{220F}" => Some("\\prod".to_string()),
         "\u{2210}" => Some("\\coprod".to_string()),
+        "\u{22C3}" => Some("\\bigcup".to_string()),
+        "\u{22C2}" => Some("\\bigcap".to_string()),
         "\u{222B}" => Some("\\int".to_string()),
         "\u{222C}" => Some("\\iint".to_string()),
         "\u{222D}" => Some("\\iiint".to_string()),
@@ -1067,6 +1119,8 @@ fn map_operator(text: &str) -> String {
         "\u{2211}" => "\\sum ".to_string(),
         "\u{220F}" => "\\prod ".to_string(),
         "\u{2210}" => "\\coprod ".to_string(),
+        "\u{22C3}" => "\\bigcup ".to_string(),
+        "\u{22C2}" => "\\bigcap ".to_string(),
         "\u{2202}" => "\\partial ".to_string(),
         "\u{2207}" => "\\nabla ".to_string(),
         "\u{2261}" => "\\equiv ".to_string(),

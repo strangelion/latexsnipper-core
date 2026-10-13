@@ -74,3 +74,18 @@ fn unicode_function_arguments_keep_the_formula_only_envelope() {
     assert!(content[..end].contains(" y</m:t>"));
     assert!(content[end..].contains("<m:t>b</m:t>"));
 }
+
+#[wasm_bindgen_test]
+fn unicode_nary_scope_keeps_the_formula_only_envelope() {
+    let result = json(convert_formula_v3(
+        "∫_0^1▒〖x+y〗+b",
+        "unicode-math",
+        "omml",
+        Some("best-effort".into()),
+    ));
+    assert_eq!(result["ok"].as_bool(), Some(true));
+    let content = result["data"]["content"].as_str().unwrap();
+    let end = content.find("</m:nary>").unwrap();
+    assert!(content[..end].contains(" y</m:t>"));
+    assert!(content[end..].contains("<m:t>b</m:t>"));
+}

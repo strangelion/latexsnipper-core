@@ -950,8 +950,34 @@ mod tests {
                 ("Typst", typst.as_str(), case.typst),
             ] {
                 for token in required {
+                    let mut present = output.contains(token);
+                    if !present {
+                        if let Some(wanted) = token
+                            .strip_prefix("<mo>")
+                            .and_then(|token| token.strip_suffix("</mo>"))
+                        {
+                            let mut reader = quick_xml::Reader::from_str(output);
+                            let mut operator = false;
+                            loop {
+                                match reader.read_event() {
+                                    Ok(quick_xml::events::Event::Start(element)) => {
+                                        operator = element.name().as_ref() == b"mo";
+                                    }
+                                    Ok(quick_xml::events::Event::Text(text)) if operator => {
+                                        if std::str::from_utf8(text.as_ref()) == Ok(wanted) {
+                                            present = true;
+                                            break;
+                                        }
+                                    }
+                                    Ok(quick_xml::events::Event::End(_)) => operator = false,
+                                    Ok(quick_xml::events::Event::Eof) | Err(_) => break,
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
                     assert!(
-                        output.contains(token),
+                        present,
                         "{label} lost {token:?} for {}:\n{output}",
                         case.latex
                     );

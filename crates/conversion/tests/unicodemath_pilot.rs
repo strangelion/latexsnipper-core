@@ -11,6 +11,161 @@ fn canonical(source: &str) -> String {
 }
 
 #[test]
+fn nary_heads_limits_and_owned_bodies_have_fixed_canonical_structure() {
+    for (source, expected) in [
+        ("∫_0^1 x", "〖〖∫〗_(0)〗^(1)▒〖x〗"),
+        ("∑_(i=1)^n x_i", "〖〖∑〗_(i = 1)〗^(n)▒〖〖x〗_(i)〗"),
+        ("∫▒(x+y)z", "∫▒〖(x + y)〗 z"),
+        ("∫▒〖(x+y)z〗", "∫▒〖(x + y) z〗"),
+        ("∫▒xⅆx/(x^2+1)", "∫▒〖(x ⅆ x)/(〖x〗^(2) + 1)〗"),
+        ("∑▒∏▒x", "∑▒〖∏▒〖x〗〗"),
+        ("sin▒x", "sin⁡〖x〗"),
+        ("∫", "∫"),
+        ("∫▒2", "∫▒〖2〗"),
+    ] {
+        assert_eq!(canonical(source), expected, "{source}");
+        assert_eq!(canonical(expected), expected, "{source}");
+    }
+    for glyph in ['∫', '∬', '∭', '∮', '∑', '∏', '∐', '⋃', '⋂'] {
+        let source = format!("{glyph}▒x");
+        assert_eq!(canonical(&source), format!("{glyph}▒〖x〗"));
+        for output in [OutputFormat::MathML, OutputFormat::OMML] {
+            let xml = DocumentConverter::convert_formula_string(
+                &source,
+                FormulaInputFormat::UnicodeMath,
+                output,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert!(xml.contains(glyph), "{source}: {xml}");
+            assert!(!xml.contains('\\'), "{source}: {xml}");
+        }
+    }
+    let LatexNode::Sequence(nodes) = parse_unicodemath("∫▒(x+y)z").unwrap() else {
+        panic!("scope")
+    };
+    assert_eq!(nodes.len(), 2);
+    let LatexNode::Group(call) = &nodes[0] else {
+        panic!("call")
+    };
+    let LatexNode::Group(body) = &call[1] else {
+        panic!("owned body")
+    };
+    assert!(matches!(&body[0], LatexNode::Delimited { .. }));
+    assert!(matches!(&nodes[1], LatexNode::Text(text) if text == "z"));
+}
+
+#[test]
+fn nary_projection_keeps_integrand_inside_and_following_terms_outside() {
+    let source = "∫_0^1▒〖x+y〗+b";
+    let omml = DocumentConverter::convert_formula_string(
+        source,
+        FormulaInputFormat::UnicodeMath,
+        OutputFormat::OMML,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    let end = omml.find("</m:nary>").unwrap();
+    assert!(omml[..end].contains(" y</m:t>"), "{omml}");
+    assert!(!omml[..end].contains("<m:t>b</m:t>"));
+    assert!(omml[end..].contains("<m:t>b</m:t>"));
+    assert!(omml.contains("<m:limLoc m:val=\"subSup\"/>"));
+    let mathml = DocumentConverter::convert_formula_string(
+        source,
+        FormulaInputFormat::UnicodeMath,
+        OutputFormat::MathML,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    assert!(mathml.contains("<msubsup>") && mathml.contains("movablelimits=\"false\""));
+    for source in [
+        "∫1 x",
+        "∑128 x",
+        "▒x",
+        "x▒y",
+        "∫▒",
+        "∫▒^2 x",
+        "∫⁡x",
+        "∫▒()",
+        "∯▒x",
+        "〖∫^a〗^b▒x",
+    ] {
+        assert!(parse_unicodemath(source).is_err(), "{source}");
+    }
+    let deep = format!("{}x", "∑▒".repeat(80));
+    assert_eq!(
+        parse_unicodemath(&deep).unwrap_err().kind,
+        UnicodeMathErrorKind::LimitExceeded
+    );
+    assert_eq!(canonical("∫▒x"), "∫▒〖x〗");
+}
+
+#[test]
+fn nary_xml_readback_keeps_scopes_instead_of_absorbing_following_terms() {
+    for source in [
+        "∫_0^1▒〖x+y〗+b",
+        "∑_(i=1)^n▒〖x_i+y_i〗+b",
+        "∑▒∏▒x",
+        "∫▒(x+y)z",
+        "∑▒sin x",
+        "∫▒x/y",
+        "∫▒x",
+        "∫▒xⅆx",
+        "∑▒xyz",
+        "⋃_i▒x",
+        "⋂_i▒x",
+        "∐_i▒x",
+    ] {
+        for (target, input) in [
+            (OutputFormat::MathML, FormulaInputFormat::Mathml),
+            (OutputFormat::OMML, FormulaInputFormat::Omml),
+        ] {
+            let xml = DocumentConverter::convert_formula_string(
+                source,
+                FormulaInputFormat::UnicodeMath,
+                target,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            let restored = DocumentConverter::convert_formula_to_target(
+                &xml,
+                input,
+                latexsnipper_conversion::FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap_or_else(|error| panic!("{source}: {error}; {xml}"));
+            assert_eq!(restored, canonical(source), "{source}: {xml}");
+        }
+    }
+}
+
+#[test]
+fn nary_readback_does_not_guess_unknown_or_duplicated_omml_characters() {
+    for properties in [
+        r#"<m:chr m:val="∯"/>"#,
+        r#"<m:chr m:val="∫"/><m:chr m:val="∑"/>"#,
+        r#"<m:chr m:val="\input{fixture}"/>"#,
+    ] {
+        let xml = format!(
+            r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:nary><m:naryPr>{properties}</m:naryPr><m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary></m:oMath>"#
+        );
+        assert!(latexsnipper_conversion::omml_parser::parse_omml_to_latex(&xml).is_err());
+    }
+    let xml = DocumentConverter::convert_formula_string(
+        "∫▒x",
+        FormulaInputFormat::UnicodeMath,
+        OutputFormat::OMML,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    assert!(
+        latexsnipper_conversion::omml_parser::parse_omml_to_latex(&xml)
+            .unwrap()
+            .contains(r"\int")
+    );
+}
+
+#[test]
 fn named_functions_preserve_argument_boundaries_and_scripts() {
     for (source, expected) in [
         ("sin x", "sin⁡〖x〗"),
@@ -468,8 +623,8 @@ fn unicode_mapping_and_utf8_diagnostics_are_explicit() {
 fn unsupported_and_malformed_sources_never_return_partial_success() {
     for source in [
         "\\frac{1}{2}",
-        "∫_0^1 x",
-        "∑_1^n x",
+        "∫1 x",
+        "∑128 x",
         "a⁄b",
         "a∕b",
         "a¦b",
@@ -526,7 +681,7 @@ fn external_ast_writer_preserves_binding_or_rejects_instead_of_dropping_nodes() 
         LatexNode::command("sin", vec![]),
         LatexNode::text("sin"),
         LatexNode::text("\\unknown"),
-        LatexNode::Operator("int".into()),
+        LatexNode::Operator("oiint".into()),
         LatexNode::Cases(vec![]),
     ] {
         assert_eq!(

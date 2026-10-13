@@ -193,6 +193,8 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                         "m" => &["mPr"],
                         "dPr" => &["begChr", "endChr", "sepChr"],
                         "d" => &["dPr"],
+                        "naryPr" => &["chr", "limLoc", "grow", "subHide", "supHide"],
+                        "nary" => &["naryPr", "chr", "sub", "sup", "e"],
                         _ => &[],
                     };
                     for property in unique_properties {
@@ -202,7 +204,9 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                             .count()
                             > 1
                         {
-                            return Err("Ambiguous OMML matrix column properties".into());
+                            return Err(format!(
+                                "Ambiguous OMML {tag} property {property}; retain the original XML"
+                            ));
                         }
                     }
                     if tag == "mcs"
@@ -249,6 +253,38 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                         }
                     }
                     let text = text_buf.clone();
+                    if tag == "nary" {
+                        let direct = get_child(&tagged_children, "chr");
+                        let properties = get_child(&tagged_children, "naryPr");
+                        if !direct.is_empty() && !properties.is_empty() {
+                            return Err(
+                                "Ambiguous OMML n-ary character; retain the original XML".into()
+                            );
+                        }
+                        let glyph = if direct.is_empty() {
+                            properties.as_str()
+                        } else {
+                            direct.as_str()
+                        };
+                        if !matches!(
+                            glyph,
+                            "" | "∫"
+                                | "∬"
+                                | "∭"
+                                | "∮"
+                                | "∑"
+                                | "∏"
+                                | "∐"
+                                | "⋃"
+                                | "⋂"
+                                | "∂"
+                                | "∇"
+                        ) {
+                            return Err(
+                                "Unsupported OMML n-ary character; retain the original XML".into(),
+                            );
+                        }
+                    }
                     text_buf.clear();
 
                     let result = build_latex(&tag, &tagged_children, &text);
@@ -407,7 +443,11 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             let sup = get_child(children, "sup");
             let body = get_child(children, "e");
             if sub.is_empty() && sup.is_empty() {
-                format!("{}{}", op, body)
+                if body.is_empty() {
+                    op.into()
+                } else {
+                    format!("{}{{{}}}", op, body)
+                }
             } else if sub.is_empty() {
                 format!("{}^{{{}}}{{{}}}", op, sup, body)
             } else if sup.is_empty() {

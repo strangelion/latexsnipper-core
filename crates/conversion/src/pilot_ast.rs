@@ -18,6 +18,17 @@ pub(super) fn unicode_shape(node: &LatexNode) -> Vec<Shape> {
 
 fn shape_impl(node: &LatexNode, ignore_spaces: bool) -> Vec<Shape> {
     let child = |node: &LatexNode| shape_impl(node, ignore_spaces);
+    if ignore_spaces {
+        if let Some(head) = crate::unicodemath_pilot::nary_limits(node) {
+            return vec![Shape {
+                name: format!("nary:{}", head.name),
+                children: vec![
+                    head.lower.map_or_else(Vec::new, child),
+                    head.upper.map_or_else(Vec::new, child),
+                ],
+            }];
+        }
+    }
     let combined = |nodes: &[LatexNode]| nodes.iter().flat_map(child).collect::<Vec<_>>();
     let (name, children) = match node {
         LatexNode::Sequence(nodes) | LatexNode::Group(nodes) => return combined(nodes),

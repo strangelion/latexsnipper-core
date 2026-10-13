@@ -7,6 +7,38 @@ use latexsnipper_conversion::{
 };
 
 #[test]
+fn registered_nary_formula_routes_keep_hashes_bound_to_unmodified_input() {
+    let source = "∑_(i=1)^n▒〖x_i+y_i〗+b";
+    let registry = SemanticConversionRegistry::default();
+    for output in ["unicode-math", "omml", "mathml"] {
+        let request = RegisteredConversionRequest {
+            schema_version: 1,
+            input: "unicode-math".into(),
+            output: output.into(),
+            mode: Mode::BestEffort,
+            backend: None,
+            content: source.into(),
+            context_sha256: "c".repeat(64),
+        };
+        let result = registry.convert(&request).unwrap();
+        assert_eq!(request.content, source);
+        use sha2::{Digest, Sha256};
+        assert_eq!(
+            result.input_sha256,
+            format!("{:x}", Sha256::digest(source.as_bytes()))
+        );
+        assert!(result.candidate.content.contains('∑'));
+    }
+    assert!(DocumentConverter::convert_formula_to_target(
+        source,
+        Input::UnicodeMath,
+        Target::UnicodeMath,
+        Mode::Strict
+    )
+    .is_err());
+}
+
+#[test]
 fn registered_named_functions_use_existing_routes_and_remain_best_effort() {
     let registry = SemanticConversionRegistry::default();
     for (source, input) in [

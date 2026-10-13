@@ -5,7 +5,7 @@ The pilot module name remains compatible; see [the registered binding contract](
 This is not a full UnicodeMath/Word implementation or visual-fidelity claim.
 
 Reference: [Unicode Technical Note 28, version 3.3](https://www.unicode.org/notes/tn28/UTN28-PlainTextMath-v3.3.pdf),
-sections 2.1–2.3, 3.5, 3.6, 3.9, 3.15 and 3.18. The implementation and fixtures are
+sections 2.1–2.3, 3.4–3.6, 3.9, 3.15 and 3.18. The implementation and fixtures are
 repository-authored; no renderer/parser source or dependency is vendored.
 
 ## Finite syntax and mapping
@@ -45,6 +45,15 @@ repository-authored; no renderer/parser source or dependency is vendored.
   immediately after U+2061 are supported; already-scripted heads followed by
   more scripts after U+2061 require explicit grouping. Bare known names remain
   operators. Unknown names with U+2061, aliases and substring guessing fail.
+- Nine n-ary glyphs (`∫`, `∬`, `∭`, `∮`, `∑`, `∏`, `∐`, `⋃`, `⋂`) use Operator
+  heads with at most one lower and one upper limit. A blank or `▒` binds the
+  following operand; canonical bodies use `▒〖...〗`. Bracketed bodies retain
+  their brackets and stop there, while invisible grouping can include adjacent
+  factors. `▒` also works as the finite function-apply alias. Bare heads remain
+  operators; explicit markers require nonempty bodies. Numeric flags immediately
+  after a head, duplicate limit slots, unknown glyphs and stray markers fail.
+  The differential glyph `ⅆ` is retained rather than replaced by ASCII `d`;
+  its font and differential spacing are not a host-fidelity claim.
 
 For example, `"rate"="distance"/"time"` becomes a text-labelled fraction, and
 the corresponding LaTeX text commands can serialize back to quoted UnicodeMath.
@@ -87,7 +96,8 @@ Escaped LaTeX text and emitted quoted output must separately fit 64 KiB;
 joins check output size incrementally. An input near a parse budget can exceed
 the emitted grouping/token budget and be rejected by the writer.
 
-Outside this milestone: arbitrary function names, n-ary operand semantics,
+Outside this milestone: arbitrary function/n-ary names, n-ary numeric layout flags,
+explicit limit-placement/growth overrides,
 autocorrect/control words, mathematical styled alphanumerics, combining accents,
 unquoted non-ASCII whitespace, rich-text style, equation arrays/numbering,
 skewed/linear fractions and other unlisted glyphs. Unknown glyphs/escapes fail,
@@ -96,7 +106,7 @@ UTN 28 algorithm; external font runs and arbitrary prose are not accepted.
 
 ## Evidence and next gates
 
-Nineteen focused tests include a versioned synthetic fixture (16 fixed accepted
+Twenty-three focused tests include a versioned synthetic fixture (16 fixed accepted
 outputs/root kinds, 8 fixed rejection cases), binding and whitespace differences
 from AsciiMath, six matrix types, roots/scripts/nested cells, UTF-8 diagnostics,
 input/AST/padding limits, failure isolation and 600 deterministic input
@@ -120,6 +130,17 @@ unknown/stray markers or ungrouped scalable-fence arguments are refused.
 OMML normal runs cannot identify the original quoted-text AST: that reconstruction
 is not claimed as a quoted-text round trip. Limit layout and actual host typography
 still require their existing independent gates.
+
+N-ary regressions check all nine glyphs, fixed canonical limits/body scope,
+bracket boundaries, nested operators/functions, differential identity and finite
+XML readback. MathML uses explicit large-operator/default-limit properties;
+its finite two-child row projection retains an owned body. Upper/lower slot
+ordering normalizes independently of source spelling, without erasing the limits.
+Bare mathematical text is tokenized without treating a variable run as an upright
+word; quoted text is separate. Style declarations retain their existing scope
+and inherited display mode. OMML rejects unknown explicit n-ary characters and
+duplicated properties; its existing omitted-character default is unchanged.
+The best-effort routes and reconstruction/style warnings remain mandatory.
 
 One formula-matrix bridge through existing LaTeX serializers checks MathML/OMML
 row/cell/fraction/root/script structure; it does not validate every token in each

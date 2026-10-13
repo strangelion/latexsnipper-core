@@ -111,6 +111,17 @@ const FUNCTIONS: &[&str] = &[
     "sin", "cos", "tan", "sec", "csc", "cot", "sinh", "cosh", "tanh", "arcsin", "arccos", "arctan",
     "log", "ln", "exp", "lim", "min", "max", "det", "dim", "gcd",
 ];
+const NARY: &[(char, &str)] = &[
+    ('∫', "int"),
+    ('∬', "iint"),
+    ('∭', "iiint"),
+    ('∮', "oint"),
+    ('∑', "sum"),
+    ('∏', "prod"),
+    ('∐', "coprod"),
+    ('⋃', "bigcup"),
+    ('⋂', "bigcap"),
+];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Quoted(usize),
@@ -120,11 +131,13 @@ enum Kind {
     Close(char),
     Root(char),
     Matrix(char),
+    Nary(char),
     Space,
     Slash,
     Sub,
     Sup,
     Apply,
+    Naryand,
     Cell,
     Row,
 }
@@ -211,13 +224,15 @@ fn lex(source: &str) -> Result<Vec<Token>, UnicodeMathError> {
             '&' => Kind::Cell,
             '@' => Kind::Row,
             '\u{2061}' => Kind::Apply,
+            '▒' => Kind::Naryand,
             '(' | '[' | '{' | '〖' => Kind::Open(ch),
             ')' | ']' | '}' | '〗' => Kind::Close(ch),
             '√' | '∛' | '∜' => Kind::Root(ch),
             ch if MATRICES.iter().any(|(glyph, _)| *glyph == ch) => Kind::Matrix(ch),
+            ch if NARY.iter().any(|(glyph, _)| *glyph == ch) => Kind::Nary(ch),
             ch if ch.is_ascii_alphanumeric()
                 || GREEK.iter().any(|(glyph, _)| *glyph == ch)
-                || ch == '∞' =>
+                || matches!(ch, '∞' | 'ⅆ') =>
             {
                 Kind::Operand(ch)
             }
@@ -316,6 +331,7 @@ impl Parser<'_> {
                     | Kind::Root(_)
                     | Kind::Matrix(_)
                     | Kind::Quoted(_)
+                    | Kind::Nary(_)
             )
         )
     }
@@ -466,6 +482,23 @@ impl Parser<'_> {
             return Ok(LatexNode::Operator(name));
         }
         match self.kind() {
+            Some(Kind::Nary(glyph)) => {
+                self.pos += 1;
+                if matches!(self.kind(), Some(Kind::Operand(ch)) if ch.is_ascii_digit()) {
+                    return Err(error(
+                        UnicodeMathErrorKind::UnsupportedSyntax,
+                        self.offset(),
+                        "numeric n-ary layout flags are not supported; separate a numeric operand",
+                    ));
+                }
+                Ok(LatexNode::Operator(
+                    NARY.iter()
+                        .find(|(value, _)| *value == glyph)
+                        .expect("lexed n-ary")
+                        .1
+                        .into(),
+                ))
+            }
             Some(Kind::Quoted(end)) => {
                 let start = self.offset();
                 let mut chars = self.source[start + 1..end].chars().peekable();
@@ -552,23 +585,35 @@ impl Parser<'_> {
         let is_run = matches!(self.kind(), Some(Kind::Operand(_)));
         let base = self.atom(depth)?;
         let mut base = self.scripts(base, is_run, depth)?;
-        if !is_function_head(&base) {
-            if self.kind() == Some(Kind::Apply) {
+        let nary = nary_name(&base).is_some();
+        if nary && nary_limits(&base).is_none() {
+            return Err(error(
+                UnicodeMathErrorKind::UnsupportedSyntax,
+                self.offset(),
+                "duplicate n-ary limit slots are outside the finite grammar",
+            ));
+        }
+        if !is_function_head(&base) && !nary {
+            if matches!(self.kind(), Some(Kind::Apply | Kind::Naryand)) {
                 return Err(error(
                     UnicodeMathErrorKind::UnsupportedSyntax,
                     self.offset(),
-                    "application requires a supported named function",
+                    "application requires a supported function or n-ary head",
                 ));
             }
             return Ok(base);
         }
         let saved = self.pos;
         self.spaces();
-        let explicit = self.kind() == Some(Kind::Apply);
+        let marker = if nary { Kind::Naryand } else { Kind::Apply };
+        let explicit = self.kind() == Some(marker) || (!nary && self.kind() == Some(Kind::Naryand));
+        if nary && !explicit && self.pos == saved {
+            return Ok(base);
+        }
         if explicit {
             self.pos += 1;
             // UTN 28 moves scripts immediately after Apply onto the name.
-            if matches!(self.kind(), Some(Kind::Sub | Kind::Sup)) {
+            if !nary && matches!(self.kind(), Some(Kind::Sub | Kind::Sup)) {
                 if !matches!(base, LatexNode::Operator(_)) {
                     return Err(self.fail("repeated function-head scripts require grouping"));
                 }
@@ -578,7 +623,7 @@ impl Parser<'_> {
         }
         if !self.starts_factor() {
             if explicit {
-                return Err(self.fail("function application needs a nonempty argument"));
+                return Err(self.fail("application needs a nonempty argument"));
             }
             self.pos = saved;
             return Ok(base);
@@ -933,6 +978,30 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
             "AST exceeds depth budget",
         ));
     }
+    if nary_name(node).is_some() && nary_limits(node).is_none() {
+        return Err(error(
+            UnicodeMathErrorKind::UnsupportedSyntax,
+            0,
+            "duplicate n-ary limit slots cannot be serialized",
+        ));
+    }
+    if let Some(head) = nary_limits(node) {
+        let mut output = head.glyph.to_string();
+        if let Some(lower) = head.lower {
+            output = format!("〖{output}〗_({})", write_node(lower, depth + 1)?);
+        }
+        if let Some(upper) = head.upper {
+            output = format!("〖{output}〗^({})", write_node(upper, depth + 1)?);
+        }
+        if output.len() > MAX_BYTES {
+            return Err(error(
+                UnicodeMathErrorKind::LimitExceeded,
+                0,
+                "n-ary head output exceeds 64 KiB",
+            ));
+        }
+        return Ok(output);
+    }
     let unsupported = || {
         error(
             UnicodeMathErrorKind::UnsupportedSyntax,
@@ -991,7 +1060,7 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
             if text.is_empty()
                 || !text
                     .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || "+-=<>., ".contains(ch))
+                    .all(|ch| ch.is_ascii_alphanumeric() || "+-=<>., ⅆ".contains(ch))
             {
                 return Err(unsupported());
             }
@@ -1005,6 +1074,9 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
             }
         }
         LatexNode::Sequence(nodes) => write_sequence(nodes, depth + 1)?,
+        LatexNode::Group(nodes) if nodes.len() == 2 && nary_name(&nodes[0]).is_some() => {
+            format!("{}▒〖{}〗", child(&nodes[0])?, child(&nodes[1])?)
+        }
         LatexNode::Group(nodes) if nodes.len() == 2 && is_function_head(&nodes[0]) => {
             format!("{}\u{2061}〖{}〗", child(&nodes[0])?, child(&nodes[1])?)
         }
@@ -1025,6 +1097,11 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
             .map(|(glyph, _)| glyph.to_string())
             .ok_or_else(unsupported)?,
         LatexNode::Operator(name) if FUNCTIONS.contains(&name.as_str()) => name.clone(),
+        LatexNode::Operator(name) => NARY
+            .iter()
+            .find(|(_, mapped)| *mapped == name)
+            .map(|(glyph, _)| glyph.to_string())
+            .ok_or_else(unsupported)?,
         LatexNode::Symbol(name) | LatexNode::Relation(name) => SYMBOLS
             .iter()
             .find(|(_, mapped)| *mapped == name.trim_start_matches('\\'))
@@ -1073,8 +1150,18 @@ fn write_sequence(nodes: &[LatexNode], depth: usize) -> Result<String, UnicodeMa
     let mut index = 0;
     join(
         std::iter::from_fn(|| {
+            while matches!(nodes.get(index), Some(LatexNode::Text(text))
+                if !text.is_empty() && text.chars().all(|ch| ch == ' '))
+            {
+                index += 1;
+            }
             let node = nodes.get(index)?;
             index += 1;
+            while matches!(nodes.get(index), Some(LatexNode::Text(text))
+                if !text.is_empty() && text.chars().all(|ch| ch == ' '))
+            {
+                index += 1;
+            }
             let argument = nodes.get(index).filter(|argument| match argument {
                 LatexNode::Relation(_) => false,
                 LatexNode::Text(text) => {
@@ -1083,10 +1170,17 @@ fn write_sequence(nodes: &[LatexNode], depth: usize) -> Result<String, UnicodeMa
                 _ => true,
             });
             Some(
-                if let Some(argument) = argument.filter(|_| is_function_head(node)) {
+                if let Some(argument) =
+                    argument.filter(|_| is_function_head(node) || nary_name(node).is_some())
+                {
                     index += 1;
+                    let marker = if nary_name(node).is_some() {
+                        "▒"
+                    } else {
+                        "\u{2061}"
+                    };
                     write_node(node, depth).and_then(|head| {
-                        write_node(argument, depth).map(|body| format!("{head}\u{2061}〖{body}〗"))
+                        write_node(argument, depth).map(|body| format!("{head}{marker}〖{body}〗"))
                     })
                 } else {
                     write_node(node, depth)
@@ -1115,6 +1209,51 @@ pub(crate) fn function_name(node: &LatexNode) -> Option<&str> {
 
 pub(crate) fn is_function_name(name: &str) -> bool {
     FUNCTIONS.contains(&name)
+}
+
+pub(crate) fn nary_name(node: &LatexNode) -> Option<&str> {
+    match node {
+        LatexNode::Operator(name) if NARY.iter().any(|(_, mapped)| *mapped == name) => Some(name),
+        LatexNode::Superscript { base, .. } | LatexNode::Subscript { base, .. } => nary_name(base),
+        LatexNode::Group(nodes) if nodes.len() == 1 => nary_name(&nodes[0]),
+        _ => None,
+    }
+}
+
+pub(crate) struct NaryLimits<'a> {
+    pub name: &'a str,
+    pub glyph: char,
+    pub lower: Option<&'a LatexNode>,
+    pub upper: Option<&'a LatexNode>,
+}
+
+pub(crate) fn nary_limits(node: &LatexNode) -> Option<NaryLimits<'_>> {
+    match node {
+        LatexNode::Operator(name) => Some(NaryLimits {
+            name,
+            glyph: NARY.iter().find(|(_, mapped)| *mapped == name)?.0,
+            lower: None,
+            upper: None,
+        }),
+        LatexNode::Subscript { base, sub } => {
+            let mut head = nary_limits(base)?;
+            if head.lower.is_some() {
+                return None;
+            }
+            head.lower = Some(sub);
+            Some(head)
+        }
+        LatexNode::Superscript { base, exp } => {
+            let mut head = nary_limits(base)?;
+            if head.upper.is_some() {
+                return None;
+            }
+            head.upper = Some(exp);
+            Some(head)
+        }
+        LatexNode::Group(nodes) if nodes.len() == 1 => nary_limits(&nodes[0]),
+        _ => None,
+    }
 }
 
 fn encode_text(text: &str, offset: usize) -> Result<String, UnicodeMathError> {

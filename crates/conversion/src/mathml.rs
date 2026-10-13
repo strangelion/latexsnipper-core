@@ -1134,7 +1134,7 @@ fn render_styled_sequence(latex: &str) -> Option<String> {
                 flush_mathml_plain(&mut output, &mut plain);
                 output.push_str(&math_style_mathml(
                     command.as_str(),
-                    &latex_to_mathml(&inner),
+                    &latex_to_mathml_mode(&inner, command == "displaystyle"),
                 ));
                 pos = after_inner;
                 found_style = true;
@@ -1382,6 +1382,21 @@ fn map_symbol_mathml(latex: &str) -> Option<&str> {
 // Finite AST handling for mixed glyph commands avoids treating an entire
 // expression as one identifier. Unsupported nodes retain the legacy path.
 fn render_finite_symbol_expression(latex: &str, display: bool) -> Option<String> {
+    // Style declarations bind the remaining source, unlike parse_single.
+    // Keep the existing declaration-aware scanner in charge of that scope.
+    for style in [
+        "\\displaystyle",
+        "\\textstyle",
+        "\\scriptstyle",
+        "\\scriptscriptstyle",
+    ] {
+        for (at, _) in latex.match_indices(style) {
+            let suffix = latex[at + style.len()..].trim_start();
+            if !suffix.starts_with('{') {
+                return None;
+            }
+        }
+    }
     if latex.len() > 65_536
         || !latex.contains('\\')
         || latex.bytes().filter(|byte| *byte == b'\\').count() > 512
@@ -1440,6 +1455,40 @@ fn render_symbol_ast(
     if let Some(xml) = render_fixed_delimiter_node(node) {
         return Some(xml);
     }
+    if let Some(head) = crate::unicodemath_pilot::nary_limits(node) {
+        *found = true;
+        let integral = matches!(head.name, "int" | "iint" | "iiint" | "oint");
+        let movable = if integral { "false" } else { "true" };
+        let base = format!(
+            "<mo largeop=\"true\" movablelimits=\"{movable}\">{}</mo>",
+            head.glyph
+        );
+        let lower = if let Some(node) = head.lower {
+            Some(row(node, found)?)
+        } else {
+            None
+        };
+        let upper = if let Some(node) = head.upper {
+            Some(row(node, found)?)
+        } else {
+            None
+        };
+        return Some(match (lower, upper) {
+            (Some(lower), Some(upper)) => {
+                let tag = if integral { "msubsup" } else { "munderover" };
+                format!("<{tag}>{base}{lower}{upper}</{tag}>")
+            }
+            (Some(lower), None) => {
+                let tag = if integral { "msub" } else { "munder" };
+                format!("<{tag}>{base}{lower}</{tag}>")
+            }
+            (None, Some(upper)) => {
+                let tag = if integral { "msup" } else { "mover" };
+                format!("<{tag}>{base}{upper}</{tag}>")
+            }
+            _ => base,
+        });
+    }
     if let Some(extremum) = crate::extrema::head(node) {
         *found = true;
         let base = format!("<mi mathvariant=\"normal\">{}</mi>", extremum.name);
@@ -1478,6 +1527,38 @@ fn render_symbol_ast(
             }
             if text.is_empty() {
                 return Some(String::new());
+            }
+            if text
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || "+-=<>., ⅆ".contains(ch))
+            {
+                let mut output = String::new();
+                let mut chars = text.chars().peekable();
+                while let Some(ch) = chars.next() {
+                    if ch == ' ' {
+                        continue;
+                    }
+                    if ch.is_ascii_digit() {
+                        let mut number = ch.to_string();
+                        while chars.peek().is_some_and(char::is_ascii_digit) {
+                            number.push(chars.next().expect("peeked digit"));
+                        }
+                        if chars.peek().is_some_and(|ch| matches!(ch, '.' | ','))
+                            && chars.clone().nth(1).is_some_and(|ch| ch.is_ascii_digit())
+                        {
+                            number.push(chars.next().expect("peeked separator"));
+                            while chars.peek().is_some_and(char::is_ascii_digit) {
+                                number.push(chars.next().expect("peeked digit"));
+                            }
+                        }
+                        output.push_str(&format!("<mn>{number}</mn>"));
+                    } else if ch.is_ascii_alphabetic() || ch == 'ⅆ' {
+                        output.push_str(&format!("<mi>{ch}</mi>"));
+                    } else {
+                        output.push_str(&format!("<mo>{}</mo>", xml_escape(&ch.to_string())));
+                    }
+                }
+                return Some(format!("<mrow>{output}</mrow>"));
             }
             // Preserve existing punctuation, decimal and function-call token
             // behavior. No backslash means this cannot re-enter the AST path.
