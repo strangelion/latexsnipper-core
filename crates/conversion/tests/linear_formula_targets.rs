@@ -7,6 +7,41 @@ use latexsnipper_conversion::{
 };
 
 #[test]
+fn registered_growth_routes_preserve_source_identity_and_do_not_retry_lossy_targets() {
+    use sha2::{Digest, Sha256};
+    let registry = SemanticConversionRegistry::default();
+    let request = RegisteredConversionRequest {
+        schema_version: 1,
+        input: "unicode-math".into(),
+        output: "omml".into(),
+        mode: Mode::BestEffort,
+        backend: None,
+        content: "∫65_0^1▒x+b".into(),
+        context_sha256: "a".repeat(64),
+    };
+    let result = registry.convert(&request).unwrap();
+    assert_eq!(result.backend, "core:builtin");
+    assert_eq!(
+        result.input_sha256,
+        format!("{:x}", Sha256::digest(request.content.as_bytes()))
+    );
+    assert!(result.candidate.content.contains("<m:grow m:val=\"0\"/>"));
+    let mut readback = request.clone();
+    readback.input = "omml".into();
+    readback.output = "unicode-math".into();
+    readback.content = result.candidate.content;
+    let restored = registry.convert(&readback).unwrap();
+    assert_eq!(restored.candidate.content, "〖〖∫65〗_(0)〗^(1)▒〖x〗 + b");
+    let mut lossy = request.clone();
+    lossy.output = "mathml".into();
+    let rejected = registry.convert(&lossy).unwrap_err();
+    assert_eq!(rejected.code, ConversionRegistryErrorCode::InputRejected);
+    assert!(rejected.message.contains("growth"));
+    assert_eq!(request.content, "∫65_0^1▒x+b");
+    assert!(registry.convert(&request).is_ok());
+}
+
+#[test]
 fn registered_nary_formula_routes_keep_hashes_bound_to_unmodified_input() {
     let source = "∑_(i=1)^n▒〖x_i+y_i〗+b";
     let registry = SemanticConversionRegistry::default();

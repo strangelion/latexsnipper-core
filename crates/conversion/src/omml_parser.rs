@@ -5,7 +5,90 @@ use quick_xml::Reader;
 pub fn parse_omml_to_latex(xml: &str) -> Result<String, String> {
     let math_xml = extract_o_math(xml).unwrap_or_else(|| xml.to_string());
     let cleaned = strip_xml_declaration(&math_xml);
-    parse_inner(&cleaned)
+    parse_inner(&cleaned, false)
+}
+
+const GROWTH_BRIDGE: &str = "LatexSnipperInternalNaryNoGrow";
+
+pub(crate) fn parse_omml_to_linear_ast(xml: &str) -> Result<crate::latex_ast::LatexNode, String> {
+    let math_xml = extract_o_math(xml).unwrap_or_else(|| xml.to_string());
+    let latex = parse_inner(&strip_xml_declaration(&math_xml), true)?;
+    crate::document_converter::guard_formula_input(&latex, false)
+        .map_err(|error| error.to_string())?;
+    if let Some(diagnostic) = latexsnipper_syntax::latex::validate_latex_structure(&latex).first() {
+        return Err(format!("{}: {}", diagnostic.code, diagnostic.message));
+    }
+    let mut node = crate::latex_parser::parse_latex(&latex);
+    restore_growth_nodes(&mut node)?;
+    crate::omml::validate_omml_node(&node, 0)?;
+    Ok(node)
+}
+
+// The bridge is produced only while reading properties, never exported as TeX.
+fn restore_growth_nodes(node: &mut crate::latex_ast::LatexNode) -> Result<(), String> {
+    use crate::latex_ast::LatexNode;
+    match node {
+        LatexNode::Sequence(nodes)
+        | LatexNode::Group(nodes)
+        | LatexNode::Delimited { content: nodes, .. } => {
+            let mut index = 0;
+            while index < nodes.len() {
+                if matches!(&nodes[index], LatexNode::Command { name, args }
+                    if name == GROWTH_BRIDGE && args.is_empty())
+                {
+                    if !nodes.get(index + 1).is_some_and(|head| {
+                        matches!(head, LatexNode::Group(_))
+                            && crate::unicodemath_pilot::nary_limits(head).is_some()
+                    }) {
+                        return Err(
+                            "Invalid structured n-ary growth bridge; retain the original XML"
+                                .into(),
+                        );
+                    }
+                    let head = nodes.remove(index + 1);
+                    nodes[index] = LatexNode::Command {
+                        name: "nary-no-grow".into(),
+                        args: vec![head],
+                    };
+                }
+                restore_growth_nodes(&mut nodes[index])?;
+                index += 1;
+            }
+        }
+        LatexNode::Command { args, .. } | LatexNode::OperatorName { args, .. } => {
+            for child in args {
+                restore_growth_nodes(child)?;
+            }
+        }
+        LatexNode::Subscript { base, sub } => {
+            restore_growth_nodes(base)?;
+            restore_growth_nodes(sub)?;
+        }
+        LatexNode::Superscript { base, exp } => {
+            restore_growth_nodes(base)?;
+            restore_growth_nodes(exp)?;
+        }
+        LatexNode::Fraction { num, den } => {
+            restore_growth_nodes(num)?;
+            restore_growth_nodes(den)?;
+        }
+        LatexNode::SquareRoot { index, content } => {
+            restore_growth_nodes(content)?;
+            if let Some(index) = index {
+                restore_growth_nodes(index)?;
+            }
+        }
+        LatexNode::Matrix { rows, .. } | LatexNode::Array { rows, .. } | LatexNode::Cases(rows) => {
+            for child in rows.iter_mut().flatten() {
+                restore_growth_nodes(child)?;
+            }
+        }
+        LatexNode::FontModifier { content, .. } | LatexNode::Accent { content, .. } => {
+            restore_growth_nodes(content)?
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn strip_xml_declaration(xml: &str) -> String {
@@ -120,7 +203,7 @@ fn attribute_value(
     Ok(value)
 }
 
-fn parse_inner(xml: &str) -> Result<String, String> {
+fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
@@ -132,9 +215,14 @@ fn parse_inner(xml: &str) -> Result<String, String> {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
                 let tag = local(e.name().as_ref());
+                if tag == "grow"
+                    && attribute_value(&e, reader.decoder())?.is_some_and(|value| value.is_empty())
+                {
+                    return Err("Empty explicit OMML growth value; retain the original XML".into());
+                }
                 let children = if matches!(
                     tag.as_str(),
-                    "count" | "mcJc" | "begChr" | "endChr" | "sepChr" | "limLoc"
+                    "count" | "mcJc" | "begChr" | "endChr" | "sepChr" | "limLoc" | "grow"
                 ) {
                     attribute_value(&e, reader.decoder())?
                         .map(|value| vec![("$val".into(), value)])
@@ -156,6 +244,11 @@ fn parse_inner(xml: &str) -> Result<String, String> {
             }
             Ok(Event::Empty(e)) => {
                 let tag = local(e.name().as_ref());
+                if tag == "grow"
+                    && attribute_value(&e, reader.decoder())?.is_some_and(|value| value.is_empty())
+                {
+                    return Err("Empty explicit OMML growth value; retain the original XML".into());
+                }
                 if tag.starts_with("xmlns") {
                     continue;
                 }
@@ -185,7 +278,7 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                 }
             }
             Ok(Event::End(_)) => {
-                if let Some((tag, tagged_children)) = stack.pop() {
+                if let Some((tag, mut tagged_children)) = stack.pop() {
                     let unique_properties: &[&str] = match tag.as_str() {
                         "mcPr" => &["count", "mcJc"],
                         "mc" => &["mcPr"],
@@ -253,6 +346,16 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                         }
                     }
                     if tag == "naryPr" {
+                        let grow = get_child(&tagged_children, "grow");
+                        if !matches!(grow.as_str(), "" | "0" | "1" | "false" | "true") {
+                            return Err(
+                                "Unsupported OMML n-ary growth value; retain the original XML"
+                                    .into(),
+                            );
+                        }
+                        if !allow_growth && matches!(grow.as_str(), "0" | "false") {
+                            return Err("OMML n-ary growth cannot be faithfully exported through LaTeX; retain the original XML".into());
+                        }
                         let location = get_child(&tagged_children, "limLoc");
                         if (tagged_children.iter().any(|(name, _)| name == "limLoc")
                             && location.is_empty())
@@ -265,7 +368,29 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                         }
                     }
                     let text = text_buf.clone();
+                    if tag == "grow"
+                        && (!text.trim().is_empty()
+                            || tagged_children.iter().any(|(name, _)| name != "$val"))
+                    {
+                        return Err("Non-leaf OMML growth property; retain the original XML".into());
+                    }
+                    if allow_growth && text.contains(GROWTH_BRIDGE) {
+                        return Err("Reserved structured growth marker in source text; retain the original XML".into());
+                    }
                     if tag == "nary" {
+                        if tagged_children
+                            .iter()
+                            .any(|(name, _)| matches!(name.as_str(), "grow" | "limLoc"))
+                        {
+                            return Err(
+                                "Misplaced OMML n-ary style property; retain the original XML"
+                                    .into(),
+                            );
+                        }
+                        if allow_growth && !tagged_children.iter().any(|(name, _)| name == "naryPr")
+                        {
+                            tagged_children.push(("$naryNoGrow".into(), "1".into()));
+                        }
                         let direct = get_child(&tagged_children, "chr");
                         let properties = get_child(&tagged_children, "naryPr");
                         if !direct.is_empty() && !properties.is_empty() {
@@ -307,6 +432,13 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                             let location = get_child(&tagged_children, "limLoc");
                             if !location.is_empty() {
                                 parent.push(("$naryLimLoc".into(), location));
+                            }
+                            let grow = get_child(&tagged_children, "grow");
+                            if allow_growth
+                                && (matches!(grow.as_str(), "0" | "false")
+                                    || !tagged_children.iter().any(|(name, _)| name == "grow"))
+                            {
+                                parent.push(("$naryNoGrow".into(), "1".into()));
                             }
                         }
                     } else {
@@ -471,6 +603,20 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     "\\nolimits"
                 });
             }
+            if get_child(children, "$naryNoGrow") == "1" {
+                if !sub.is_empty() {
+                    op.push_str(&format!("_{{{sub}}}"));
+                }
+                if !sup.is_empty() {
+                    op.push_str(&format!("^{{{sup}}}"));
+                }
+                let head = format!("\\{GROWTH_BRIDGE}{{{op}}}");
+                return if body.trim().is_empty() {
+                    head
+                } else {
+                    format!("{head}{{{body}}}")
+                };
+            }
             if sub.is_empty() && sup.is_empty() {
                 if body.is_empty() {
                     op
@@ -633,7 +779,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
         }
         "mPr" => get_child(children, "mcs"),
-        "count" | "mcJc" | "limLoc" => get_child(children, "$val"),
+        "count" | "mcJc" | "limLoc" | "grow" => get_child(children, "$val"),
         "mcs" => children
             .iter()
             .filter(|(tag, _)| tag == "mc")

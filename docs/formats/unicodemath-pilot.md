@@ -55,7 +55,9 @@ repository-authored; no renderer/parser source or dependency is vendored.
   complete head has at least one limit. Canonical text retains these overrides;
   LaTeX uses `\limits`/`\nolimits`, and OMML/MathML retain nondefault placement
   on readback. XML properties equal to the finite default may normalize to that
-  default, not the original flag spelling. Other numeric flags, duplicate limit
+  default, not the original flag spelling. Growth flags `64`/`128` and their
+  combinations with `1`/`2` are preserved in the bounded AST and structured
+  OMML path; see below. Other numeric flags, duplicate limit
   slots, unknown glyphs and stray markers fail.
   The differential glyph `ⅆ` is retained rather than replaced by ASCII `d`;
   its font and differential spacing are not a host-fidelity claim.
@@ -70,6 +72,31 @@ XML escaping. This is plain text, not rich-text/font parity or actual Word build
 This is a separate lexer/parser, not AsciiMath keyword substitution. The only
 shared pilot helper compares AST structure. Parsing ASCII spaces explicitly
 avoids changing `a b/c` into `ab/c`; redundant spaces otherwise normalize.
+
+## Structured n-ary growth
+
+The finite masks are `0`, `1`, `2`, `64`, `65`, `66`, `128`, `129` and `130`.
+`64` prevents operand-height growth and `128` enables it; either combines with
+the existing placement bits. Both growth bits together, placeholder bits and
+other placement modes are rejected, not ignored. Placement still requires a limit;
+growth alone does not. The meanings follow [UTN 28 section 3.4](https://www.unicode.org/notes/tn28/UTN28-PlainTextMath-v3.3.pdf).
+
+UnicodeMath/AsciiMath to OMML now serializes the validated AST directly rather
+than reparsing generated TeX. Growth annotations use reserved internal Command
+nodes without adding a public enum variant or a source macro. The OMML linear
+adapter reconstructs these annotations; its private intermediate marker cannot
+be supplied in XML text or escape into exported content. The AST Display view
+is diagnostic for growth, not a LaTeX exporter. Formal routes to LaTeX, MathML,
+Typst, Markdown and HTML refuse growth rather than manufacture a macro or omit it.
+
+OMML to OMML also uses this structured path. Omitted n-ary `grow` means false,
+whereas a present `grow` with no `val` means true; see [Microsoft's definition](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.math.growoperators?view=openxml-3.0.1).
+The adapter keeps no-growth even on bare heads, nested operands and matrices.
+Explicit true can normalize to the existing Core default on XML readback;
+this is not preservation of the original flag spelling. Unknown, empty explicit
+or duplicate property values fail. The general public XML-to-LaTeX reader cannot
+export explicit no-growth faithfully through this pipeline and reports that limit.
+Other target mappings and actual Word font/height fidelity remain independent work.
 No typography/space-width, source-spelling or rich-text buildup parity is implied.
 
 ## API, limits and diagnostics
@@ -102,7 +129,7 @@ joins check output size incrementally. An input near a parse budget can exceed
 the emitted grouping/token budget and be rejected by the writer.
 
 Outside this milestone: arbitrary function/n-ary names, other n-ary numeric flags,
-placement on unscripted heads, growth/placeholder overrides and inherited host layout,
+placement on unscripted heads, growth in other semantic targets, placeholder overrides and inherited host layout,
 autocorrect/control words, mathematical styled alphanumerics, combining accents,
 unquoted non-ASCII whitespace, rich-text style, equation arrays/numbering,
 skewed/linear fractions and other unlisted glyphs. Unknown glyphs/escapes fail,

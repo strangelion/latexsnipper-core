@@ -17,7 +17,7 @@ use crate::{
 };
 
 // Conservative per-call budgets for the new string API, not syntax validation.
-fn guard_formula_input(content: &str, xml: bool) -> Result<()> {
+pub(crate) fn guard_formula_input(content: &str, xml: bool) -> Result<()> {
     use latexsnipper_foundation::SnipperError;
     const MAX_BYTES: usize = 64 * 1024;
     const MAX_DEPTH: usize = 64;
@@ -205,6 +205,11 @@ impl DocumentConverter {
         match input {
             FormulaInputFormat::Latex => Self::convert_latex_string(content, output),
             FormulaInputFormat::Mathml | FormulaInputFormat::Omml | FormulaInputFormat::Typst => {
+                if input == FormulaInputFormat::Omml && output == OutputFormat::OMML {
+                    let node = crate::omml_parser::parse_omml_to_linear_ast(content)
+                        .map_err(latexsnipper_foundation::SnipperError::Conversion)?;
+                    return crate::omml::linear_ast_to_omml(&node);
+                }
                 let latex = match input {
                     FormulaInputFormat::Mathml => {
                         crate::mathml_parser::parse_mathml_to_latex(content)
@@ -220,7 +225,15 @@ impl DocumentConverter {
             }
             FormulaInputFormat::Markdown => Self::convert_markdown_string(content, output),
             FormulaInputFormat::AsciiMath | FormulaInputFormat::UnicodeMath => {
-                let latex = crate::formula_target::linear_ast(content, input)?.to_string();
+                let node = crate::formula_target::linear_ast(content, input)?;
+                if output == OutputFormat::OMML {
+                    return crate::omml::linear_ast_to_omml(&node);
+                }
+                if crate::unicodemath_pilot::contains_growth(&node) {
+                    return Err(latexsnipper_foundation::SnipperError::Conversion(
+                        "n-ary growth has no faithful LaTeX bridge for this target; retain the original source".into()));
+                }
+                let latex = node.to_string();
                 guard_formula_input(&latex, false)?;
                 Self::convert_latex_string(&latex, output)
             }

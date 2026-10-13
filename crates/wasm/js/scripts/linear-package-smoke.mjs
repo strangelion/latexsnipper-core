@@ -48,4 +48,17 @@ for (const [source, location] of [["∫1_0^1▒x+b", "undOvr"], ["∑2_i^n▒x+b
   assert.equal(restored.ok, true);
   assert.equal(restored.data.content, canonical.data.content);
 }
-console.log("Actual linear formula WASM: 78 converted, 98 unavailable, grammar and mixed-document refusals passed");
+const noGrow = "∫65_0^1▒x+b";
+const noGrowCanonical = api.convert_formula_v3(noGrow, "unicode-math", "unicode-math", "best-effort");
+assert.equal(noGrowCanonical.ok, true);
+assert.equal(noGrowCanonical.data.content, "〖〖∫65〗_(0)〗^(1)▒〖x〗 + b");
+const noGrowXml = api.convert_formula_v3(noGrow, "unicode-math", "omml", "best-effort");
+assert.equal(noGrowXml.ok, true);
+assert.ok(noGrowXml.data.content.includes('<m:grow m:val="0"/>'));
+const noGrowRestored = api.convert_formula_v3(noGrowXml.data.content, "omml", "unicode-math", "best-effort");
+assert.equal(noGrowRestored.ok, true);
+assert.equal(noGrowRestored.data.content, noGrowCanonical.data.content);
+const noGrowRejected = api.convert_formula_v3(noGrow, "unicode-math", "latex_display", "best-effort");
+assert.equal(noGrowRejected.ok, false);
+assert.equal(noGrowRejected.error.code, "CONVERSION_FAILED");
+console.log("Actual linear formula WASM: 78 converted, 98 unavailable, grammar, growth and mixed-document refusals passed");

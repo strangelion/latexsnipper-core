@@ -171,6 +171,10 @@ impl LatexNode {
 
 impl std::fmt::Display for LatexNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if crate::unicodemath_pilot::nary_limits(self).is_some_and(|head| head.grow.is_some()) {
+            // Display is diagnostic only here; formal export rejects this style first.
+            return write!(f, "\\text{{[n-ary growth requires structured output]}}");
+        }
         // Invisible head groups must not turn a large operator into a grouped atom.
         if let Some(head) =
             crate::unicodemath_pilot::nary_limits(self).filter(|head| head.limits.is_some())

@@ -11,6 +11,181 @@ fn canonical(source: &str) -> String {
 }
 
 #[test]
+fn growth_masks_use_structured_omml_without_fabricating_a_tex_macro() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    assert_eq!(canonical("∫64"), "∫64");
+    assert_eq!(canonical("∫65_0▒x"), "〖∫65〗_(0)▒〖x〗");
+    let diagnostic = parse_unicodemath("∫64▒x").unwrap().to_string();
+    assert!(diagnostic.contains("requires structured output"));
+    assert!(!diagnostic.contains("LatexSnipperInternal"));
+    for source in [
+        "∫64_0^1▒x+b",
+        "∫65_0^1▒x+b",
+        "∑66_i^n▒x+b",
+        "∫64▒x",
+        "∫64",
+        "∫64▒∑66_i^n▒x",
+        "■(∫64▒x&∑66_i^n▒y)",
+        "(∫64▒x)/y",
+        "√(∫64▒x)",
+    ] {
+        let written = canonical(source);
+        assert_eq!(canonical(&written), written);
+        let xml = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::OMML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(xml.contains("<m:grow m:val=\"0\"/>"), "{xml}");
+        assert!(!xml.contains("LatexSnipperInternal"));
+        let restored = DocumentConverter::convert_formula_to_target(
+            &xml,
+            FormulaInputFormat::Omml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(restored, written, "{source}: {xml}");
+        let native_roundtrip = DocumentConverter::convert_formula_string(
+            &xml,
+            FormulaInputFormat::Omml,
+            OutputFormat::OMML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(
+            native_roundtrip.contains("<m:grow m:val=\"0\"/>"),
+            "{native_roundtrip}"
+        );
+        for output in [
+            OutputFormat::LatexDisplay,
+            OutputFormat::MathML,
+            OutputFormat::Typst,
+            OutputFormat::Html,
+        ] {
+            let error = DocumentConverter::convert_formula_string(
+                source,
+                FormulaInputFormat::UnicodeMath,
+                output,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("growth"), "{error}");
+        }
+        assert!(DocumentConverter::convert_formula_to_target(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            FormulaOutputTarget::AsciiMath,
+            FormulaConversionMode::BestEffort
+        )
+        .is_err());
+    }
+    for (source, normalized) in [
+        ("∫128_0^1▒x", "∫_0^1▒x"),
+        ("∫129_0^1▒x", "∫1_0^1▒x"),
+        ("∑130_i^n▒x", "∑2_i^n▒x"),
+    ] {
+        assert_eq!(canonical(&canonical(source)), canonical(source));
+        let xml = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::OMML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(xml.contains("<m:grow m:val=\"1\"/>"));
+        assert_eq!(
+            DocumentConverter::convert_formula_to_target(
+                &xml,
+                FormulaInputFormat::Omml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap(),
+            canonical(normalized)
+        );
+    }
+    for source in [
+        "∫192▒x",
+        "∑194_i▒x",
+        "∑72_i▒x",
+        "∑80_i▒x",
+        "∑131_i▒x",
+        "∑256_i▒x",
+        "∫999999999999▒x",
+    ] {
+        assert_eq!(
+            parse_unicodemath(source).unwrap_err().kind,
+            UnicodeMathErrorKind::UnsupportedSyntax
+        );
+    }
+}
+
+#[test]
+fn omml_growth_defaults_presence_and_invalid_properties_are_distinct() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    let prefix = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:nary><m:naryPr><m:chr m:val="∫"/>"#;
+    let suffix = r#"</m:naryPr><m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary></m:oMath>"#;
+    for (property, expected) in [
+        ("", "∫64▒x"),
+        (r#"<m:grow m:val="0"/>"#, "∫64▒x"),
+        (r#"<m:grow m:val="false"></m:grow>"#, "∫64▒x"),
+        ("<m:grow/>", "∫▒x"),
+        ("<m:grow></m:grow>", "∫▒x"),
+        (r#"<m:grow m:val="true"/>"#, "∫▒x"),
+    ] {
+        let xml = format!("{prefix}{property}{suffix}");
+        let restored = DocumentConverter::convert_formula_to_target(
+            &xml,
+            FormulaInputFormat::Omml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(restored, canonical(expected), "{xml}");
+    }
+    for property in [
+        r#"<m:grow m:val="maybe"/>"#,
+        r#"<m:grow m:val=""/>"#,
+        r#"<m:grow m:val=""></m:grow>"#,
+        r#"<m:grow m:val="0"><m:r/></m:grow>"#,
+        "<m:grow>0</m:grow>",
+        r#"<m:grow m:val="0" m:val="1"/>"#,
+        r#"<m:grow m:val="0"/><m:grow m:val="1"/>"#,
+    ] {
+        assert!(DocumentConverter::convert_formula_to_target(
+            &format!("{prefix}{property}{suffix}"),
+            FormulaInputFormat::Omml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort
+        )
+        .is_err());
+    }
+    let missing_properties = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:nary><m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary></m:oMath>"#;
+    assert_eq!(
+        DocumentConverter::convert_formula_to_target(
+            missing_properties,
+            FormulaInputFormat::Omml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort
+        )
+        .unwrap(),
+        canonical("∫64▒x")
+    );
+    let forged = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>\LatexSnipperInternalNaryNoGrow{\int}</m:t></m:r></m:oMath>"#;
+    assert!(DocumentConverter::convert_formula_to_target(
+        forged,
+        FormulaInputFormat::Omml,
+        FormulaOutputTarget::UnicodeMath,
+        FormulaConversionMode::BestEffort
+    )
+    .is_err());
+}
+
+#[test]
 fn explicit_nary_placement_preserves_limits_body_and_xml_layout() {
     for (source, mode, tag, modifier) in [
         ("∫1_0^1▒x+b", "undOvr", "munderover", "\\limits"),
@@ -127,8 +302,8 @@ fn explicit_nary_placement_preserves_limits_body_and_xml_layout() {
         "∫4_0▒x",
         "∫8_0▒x",
         "∫16_0▒x",
-        "∫64_0▒x",
-        "∫128_0▒x",
+        "∫192_0▒x",
+        "∫256_0▒x",
         "∫12_0▒x",
         "∫1▒x",
         "∫2▒x",
@@ -153,7 +328,7 @@ fn omml_nary_placement_properties_are_bounded_and_not_guessed() {
             FormulaConversionMode::BestEffort,
         )
         .unwrap();
-        assert_eq!(output, canonical("∫1_0▒x"));
+        assert_eq!(output, canonical("∫65_0▒x"));
     }
     for properties in [
         r#"<m:limLoc/>"#,
@@ -229,7 +404,7 @@ fn nary_projection_keeps_integrand_inside_and_following_terms_outside() {
     )
     .unwrap();
     let end = omml.find("</m:nary>").unwrap();
-    assert!(omml[..end].contains(" y</m:t>"), "{omml}");
+    assert!(omml[..end].contains("<m:t>y</m:t>"), "{omml}");
     assert!(!omml[..end].contains("<m:t>b</m:t>"));
     assert!(omml[end..].contains("<m:t>b</m:t>"));
     assert!(omml.contains("<m:limLoc m:val=\"subSup\"/>"));
@@ -243,7 +418,7 @@ fn nary_projection_keeps_integrand_inside_and_following_terms_outside() {
     assert!(mathml.contains("<msubsup>") && mathml.contains("movablelimits=\"false\""));
     for source in [
         "∫1 x",
-        "∑128 x",
+        "∑192 x",
         "▒x",
         "x▒y",
         "∫▒",
@@ -402,8 +577,8 @@ fn function_projection_owns_grouped_operand_and_does_not_guess_unknown_names() {
     )
     .unwrap();
     let end = omml.find("</m:func>").expect("function");
-    assert!(omml[..end].contains("<m:t>x </m:t>"), "{omml}");
-    assert!(omml[..end].contains("<m:t> y</m:t>"), "{omml}");
+    assert!(omml[..end].contains("<m:t>x</m:t>"), "{omml}");
+    assert!(omml[..end].contains("<m:t>y</m:t>"), "{omml}");
     assert!(!omml[..end].contains("<m:t>b</m:t>"));
     assert!(omml[end..].contains("<m:t>b</m:t>"));
     for source in [
@@ -787,7 +962,7 @@ fn unsupported_and_malformed_sources_never_return_partial_success() {
     for source in [
         "\\frac{1}{2}",
         "∫1 x",
-        "∑128 x",
+        "∑192 x",
         "a⁄b",
         "a∕b",
         "a¦b",

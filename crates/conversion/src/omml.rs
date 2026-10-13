@@ -92,6 +92,18 @@ fn latex_to_omml_mode(latex: &str, display: bool) -> String {
     fix_omml(&omml)
 }
 
+// Linear grammars already own a bounded AST. Do not discard it through TeX text.
+pub(crate) fn linear_ast_to_omml(node: &LatexNode) -> Result<String> {
+    validate_omml_node(node, 0).map_err(latexsnipper_foundation::SnipperError::Conversion)?;
+    let body = fix_omml(&ast_to_omml(node));
+    let word_namespace = if body.contains("<w:") {
+        " xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\""
+    } else {
+        ""
+    };
+    Ok(format!("<m:oMathPara xmlns:m=\"{OMML_NAMESPACE}\"{word_namespace}>\n<m:oMath>{body}\n</m:oMath>\n</m:oMathPara>"))
+}
+
 /// Conservative opt-in validation for workflows that replace original source.
 /// The legacy converter remains best-effort; a successful XML serialization is
 /// not proof that an unknown macro/environment was faithfully converted.
@@ -143,7 +155,10 @@ pub fn validate_omml_latex(latex: &str) -> std::result::Result<(), String> {
     validate_omml_node(&node, 0)
 }
 
-fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(), String> {
+pub(crate) fn validate_omml_node(
+    node: &LatexNode,
+    depth: usize,
+) -> std::result::Result<(), String> {
     use LatexNode::*;
     if depth > 128 {
         return Err("OMML syntax tree nesting limit exceeded".into());
@@ -165,6 +180,12 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
             sections.into_iter().flatten().collect()
         }
         Command { name, args } => {
+            if matches!(name.as_str(), "nary-grow" | "nary-no-grow")
+                && args.len() == 1
+                && crate::unicodemath_pilot::nary_limits(node).is_some()
+            {
+                return validate_omml_node(&args[0], depth + 1);
+            }
             if matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
                 && args.len() == 1
                 && (crate::extrema::head(&args[0]).is_some()
@@ -895,6 +916,7 @@ impl NaryOperator {
 struct OmmlNary<'a> {
     operator: NaryOperator,
     limits: Option<bool>,
+    grow: Option<bool>,
     sub: Option<&'a LatexNode>,
     sup: Option<&'a LatexNode>,
     body: Vec<&'a LatexNode>,
@@ -905,6 +927,7 @@ fn normalize_nary_head(node: &LatexNode) -> Option<OmmlNary<'_>> {
         LatexNode::Operator(name) => Some(OmmlNary {
             operator: NaryOperator::from_name(name)?,
             limits: None,
+            grow: None,
             sub: None,
             sup: None,
             body: Vec::new(),
@@ -934,6 +957,13 @@ fn normalize_nary_head(node: &LatexNode) -> Option<OmmlNary<'_>> {
             }
         }
         LatexNode::Group(nodes) if nodes.len() == 1 => normalize_nary_head(&nodes[0]),
+        LatexNode::Command { name, args }
+            if matches!(name.as_str(), "nary-grow" | "nary-no-grow") && args.len() == 1 =>
+        {
+            let mut nary = normalize_nary_head(&args[0])?;
+            nary.grow = Some(name == "nary-grow");
+            Some(nary)
+        }
         LatexNode::Command { name, args }
             if matches!(name.as_str(), "limits" | "nolimits") && args.len() == 1 =>
         {
@@ -1028,12 +1058,13 @@ fn is_nary_operand_boundary(node: &LatexNode) -> bool {
 
 fn nary_to_omml(nary: &OmmlNary<'_>) -> String {
     let mut properties = format!(
-        "<m:chr m:val=\"{}\"/><m:limLoc m:val=\"{}\"/><m:grow m:val=\"1\"/>",
+        "<m:chr m:val=\"{}\"/><m:limLoc m:val=\"{}\"/><m:grow m:val=\"{}\"/>",
         nary.operator.symbol(),
         nary.limits.map_or_else(
             || nary.operator.limit_location(),
             |vertical| if vertical { "undOvr" } else { "subSup" }
-        )
+        ),
+        if nary.grow.unwrap_or(true) { "1" } else { "0" }
     );
     if nary.sub.is_none() {
         properties.push_str("<m:subHide m:val=\"1\"/>");

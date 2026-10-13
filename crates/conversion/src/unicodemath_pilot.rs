@@ -484,36 +484,57 @@ impl Parser<'_> {
         match self.kind() {
             Some(Kind::Nary(glyph)) => {
                 self.pos += 1;
-                let head = LatexNode::Operator(
+                let mut head = LatexNode::Operator(
                     NARY.iter()
                         .find(|(value, _)| *value == glyph)
                         .expect("lexed n-ary")
                         .1
                         .into(),
                 );
-                if let Some(Kind::Operand(flag)) = self
-                    .kind()
-                    .filter(|kind| matches!(kind, Kind::Operand(ch) if ch.is_ascii_digit()))
-                {
+                if matches!(self.kind(), Some(Kind::Operand(ch)) if ch.is_ascii_digit()) {
                     let offset = self.offset();
-                    self.pos += 1;
-                    if !matches!(flag, '0' | '1' | '2')
-                        || matches!(self.kind(), Some(Kind::Operand(ch)) if ch.is_ascii_digit())
+                    let mut flag = 0_u16;
+                    let mut digits = 0;
+                    while let Some(Kind::Operand(ch)) = self
+                        .kind()
+                        .filter(|kind| matches!(kind, Kind::Operand(ch) if ch.is_ascii_digit()))
                     {
+                        digits += 1;
+                        if digits > 3 {
+                            return Err(error(
+                                UnicodeMathErrorKind::UnsupportedSyntax,
+                                offset,
+                                "n-ary flag exceeds the finite mask range",
+                            ));
+                        }
+                        flag = flag * 10 + ch.to_digit(10).expect("ASCII digit") as u16;
+                        self.pos += 1;
+                    }
+                    if !matches!(flag, 0..=2 | 64..=66 | 128..=130) {
                         return Err(error(
                             UnicodeMathErrorKind::UnsupportedSyntax,
                             offset,
-                            "n-ary flags support only default, under-over and sub-sup placement",
+                            "n-ary flags support finite placement and one growth setting only",
                         ));
                     }
-                    return Ok(if flag == '0' {
-                        head
-                    } else {
-                        LatexNode::Command {
-                            name: if flag == '1' { "limits" } else { "nolimits" }.into(),
+                    let placement = flag & 3;
+                    if placement != 0 {
+                        head = LatexNode::Command {
+                            name: if placement == 1 { "limits" } else { "nolimits" }.into(),
                             args: vec![head],
-                        }
-                    });
+                        };
+                    }
+                    if flag & 192 != 0 {
+                        head = LatexNode::Command {
+                            name: if flag & 64 != 0 {
+                                "nary-no-grow"
+                            } else {
+                                "nary-grow"
+                            }
+                            .into(),
+                            args: vec![head],
+                        };
+                    }
                 }
                 Ok(head)
             }
@@ -1040,8 +1061,12 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
     }
     if let Some(head) = nary_limits(node) {
         let mut output = head.glyph.to_string();
-        if let Some(vertical) = head.limits {
-            output.push(if vertical { '1' } else { '2' });
+        let flag = head
+            .limits
+            .map_or(0, |vertical| if vertical { 1 } else { 2 })
+            + head.grow.map_or(0, |grow| if grow { 128 } else { 64 });
+        if flag != 0 {
+            output.push_str(&flag.to_string());
         }
         if let Some(lower) = head.lower {
             output = format!("〖{output}〗_({})", write_node(lower, depth + 1)?);
@@ -1273,7 +1298,10 @@ pub(crate) fn nary_name(node: &LatexNode) -> Option<&str> {
         LatexNode::Superscript { base, .. } | LatexNode::Subscript { base, .. } => nary_name(base),
         LatexNode::Group(nodes) if nodes.len() == 1 => nary_name(&nodes[0]),
         LatexNode::Command { name, args }
-            if matches!(name.as_str(), "limits" | "nolimits") && args.len() == 1 =>
+            if matches!(
+                name.as_str(),
+                "limits" | "nolimits" | "nary-grow" | "nary-no-grow"
+            ) && args.len() == 1 =>
         {
             nary_name(&args[0])
         }
@@ -1287,6 +1315,7 @@ pub(crate) struct NaryLimits<'a> {
     pub lower: Option<&'a LatexNode>,
     pub upper: Option<&'a LatexNode>,
     pub limits: Option<bool>,
+    pub grow: Option<bool>,
 }
 
 pub(crate) fn nary_limits(node: &LatexNode) -> Option<NaryLimits<'_>> {
@@ -1297,6 +1326,7 @@ pub(crate) fn nary_limits(node: &LatexNode) -> Option<NaryLimits<'_>> {
             lower: None,
             upper: None,
             limits: None,
+            grow: None,
         }),
         LatexNode::Subscript { base, sub } => {
             let mut head = nary_limits(base)?;
@@ -1325,8 +1355,45 @@ pub(crate) fn nary_limits(node: &LatexNode) -> Option<NaryLimits<'_>> {
             head.limits = Some(name == "limits");
             Some(head)
         }
+        LatexNode::Command { name, args }
+            if matches!(name.as_str(), "nary-grow" | "nary-no-grow") && args.len() == 1 =>
+        {
+            let mut head = nary_limits(&args[0])?;
+            if head.grow.is_some() {
+                return None;
+            }
+            head.grow = Some(name == "nary-grow");
+            Some(head)
+        }
         _ => None,
     }
+}
+
+pub(crate) fn contains_growth(node: &LatexNode) -> bool {
+    let mut stack = vec![node];
+    while let Some(node) = stack.pop() {
+        match node {
+            LatexNode::Command { name, args } => {
+                if matches!(name.as_str(), "nary-grow" | "nary-no-grow") {
+                    return true;
+                }
+                stack.extend(args);
+            }
+            LatexNode::Sequence(nodes)
+            | LatexNode::Group(nodes)
+            | LatexNode::Delimited { content: nodes, .. } => stack.extend(nodes),
+            LatexNode::Subscript { base, sub } => stack.extend([base.as_ref(), sub.as_ref()]),
+            LatexNode::Superscript { base, exp } => stack.extend([base.as_ref(), exp.as_ref()]),
+            LatexNode::Fraction { num, den } => stack.extend([num.as_ref(), den.as_ref()]),
+            LatexNode::SquareRoot { index, content } => {
+                stack.push(content);
+                stack.extend(index.iter().map(Box::as_ref));
+            }
+            LatexNode::Matrix { rows, .. } => stack.extend(rows.iter().flatten()),
+            _ => {}
+        }
+    }
+    false
 }
 
 fn encode_text(text: &str, offset: usize) -> Result<String, UnicodeMathError> {
