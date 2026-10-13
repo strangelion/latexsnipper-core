@@ -1458,7 +1458,12 @@ fn render_symbol_ast(
     if let Some(head) = crate::unicodemath_pilot::nary_limits(node) {
         *found = true;
         let integral = matches!(head.name, "int" | "iint" | "iiint" | "oint");
-        let movable = if integral { "false" } else { "true" };
+        let vertical = head.limits.unwrap_or(!integral);
+        let movable = if integral || head.limits.is_some() {
+            "false"
+        } else {
+            "true"
+        };
         let base = format!(
             "<mo largeop=\"true\" movablelimits=\"{movable}\">{}</mo>",
             head.glyph
@@ -1475,15 +1480,15 @@ fn render_symbol_ast(
         };
         return Some(match (lower, upper) {
             (Some(lower), Some(upper)) => {
-                let tag = if integral { "msubsup" } else { "munderover" };
+                let tag = if vertical { "munderover" } else { "msubsup" };
                 format!("<{tag}>{base}{lower}{upper}</{tag}>")
             }
             (Some(lower), None) => {
-                let tag = if integral { "msub" } else { "munder" };
+                let tag = if vertical { "munder" } else { "msub" };
                 format!("<{tag}>{base}{lower}</{tag}>")
             }
             (None, Some(upper)) => {
-                let tag = if integral { "msup" } else { "mover" };
+                let tag = if vertical { "mover" } else { "msup" };
                 format!("<{tag}>{base}{upper}</{tag}>")
             }
             _ => base,

@@ -484,20 +484,38 @@ impl Parser<'_> {
         match self.kind() {
             Some(Kind::Nary(glyph)) => {
                 self.pos += 1;
-                if matches!(self.kind(), Some(Kind::Operand(ch)) if ch.is_ascii_digit()) {
-                    return Err(error(
-                        UnicodeMathErrorKind::UnsupportedSyntax,
-                        self.offset(),
-                        "numeric n-ary layout flags are not supported; separate a numeric operand",
-                    ));
-                }
-                Ok(LatexNode::Operator(
+                let head = LatexNode::Operator(
                     NARY.iter()
                         .find(|(value, _)| *value == glyph)
                         .expect("lexed n-ary")
                         .1
                         .into(),
-                ))
+                );
+                if let Some(Kind::Operand(flag)) = self
+                    .kind()
+                    .filter(|kind| matches!(kind, Kind::Operand(ch) if ch.is_ascii_digit()))
+                {
+                    let offset = self.offset();
+                    self.pos += 1;
+                    if !matches!(flag, '0' | '1' | '2')
+                        || matches!(self.kind(), Some(Kind::Operand(ch)) if ch.is_ascii_digit())
+                    {
+                        return Err(error(
+                            UnicodeMathErrorKind::UnsupportedSyntax,
+                            offset,
+                            "n-ary flags support only default, under-over and sub-sup placement",
+                        ));
+                    }
+                    return Ok(if flag == '0' {
+                        head
+                    } else {
+                        LatexNode::Command {
+                            name: if flag == '1' { "limits" } else { "nolimits" }.into(),
+                            args: vec![head],
+                        }
+                    });
+                }
+                Ok(head)
             }
             Some(Kind::Quoted(end)) => {
                 let start = self.offset();
@@ -839,7 +857,42 @@ pub fn parse_unicodemath(source: &str) -> Result<LatexNode, UnicodeMathError> {
     }
     let node = sequence(nodes);
     check_ast_budget(&node)?;
+    validate_nary_placement(&node)?;
     Ok(node)
+}
+
+// Validate complete heads, not their temporary unscripted bases inside groups.
+fn validate_nary_placement(node: &LatexNode) -> Result<(), UnicodeMathError> {
+    let mut stack = vec![node];
+    while let Some(node) = stack.pop() {
+        if let Some(head) = nary_limits(node) {
+            if head.limits.is_some() && head.lower.is_none() && head.upper.is_none() {
+                return Err(error(
+                    UnicodeMathErrorKind::UnsupportedSyntax,
+                    0,
+                    "explicit n-ary placement currently requires a lower or upper limit",
+                ));
+            }
+            stack.extend(head.lower.into_iter().chain(head.upper));
+            continue;
+        }
+        match node {
+            LatexNode::Sequence(nodes)
+            | LatexNode::Group(nodes)
+            | LatexNode::Delimited { content: nodes, .. } => stack.extend(nodes),
+            LatexNode::Command { args, .. } => stack.extend(args),
+            LatexNode::Subscript { base, sub } => stack.extend([base.as_ref(), sub.as_ref()]),
+            LatexNode::Superscript { base, exp } => stack.extend([base.as_ref(), exp.as_ref()]),
+            LatexNode::Fraction { num, den } => stack.extend([num.as_ref(), den.as_ref()]),
+            LatexNode::SquareRoot { index, content } => {
+                stack.push(content);
+                stack.extend(index.iter().map(Box::as_ref));
+            }
+            LatexNode::Matrix { rows, .. } => stack.extend(rows.iter().flatten()),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 fn check_ast_budget(node: &LatexNode) -> Result<(), UnicodeMathError> {
     let mut stack = vec![(node, 0)];
@@ -987,6 +1040,9 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
     }
     if let Some(head) = nary_limits(node) {
         let mut output = head.glyph.to_string();
+        if let Some(vertical) = head.limits {
+            output.push(if vertical { '1' } else { '2' });
+        }
         if let Some(lower) = head.lower {
             output = format!("〖{output}〗_({})", write_node(lower, depth + 1)?);
         }
@@ -1216,6 +1272,11 @@ pub(crate) fn nary_name(node: &LatexNode) -> Option<&str> {
         LatexNode::Operator(name) if NARY.iter().any(|(_, mapped)| *mapped == name) => Some(name),
         LatexNode::Superscript { base, .. } | LatexNode::Subscript { base, .. } => nary_name(base),
         LatexNode::Group(nodes) if nodes.len() == 1 => nary_name(&nodes[0]),
+        LatexNode::Command { name, args }
+            if matches!(name.as_str(), "limits" | "nolimits") && args.len() == 1 =>
+        {
+            nary_name(&args[0])
+        }
         _ => None,
     }
 }
@@ -1225,6 +1286,7 @@ pub(crate) struct NaryLimits<'a> {
     pub glyph: char,
     pub lower: Option<&'a LatexNode>,
     pub upper: Option<&'a LatexNode>,
+    pub limits: Option<bool>,
 }
 
 pub(crate) fn nary_limits(node: &LatexNode) -> Option<NaryLimits<'_>> {
@@ -1234,6 +1296,7 @@ pub(crate) fn nary_limits(node: &LatexNode) -> Option<NaryLimits<'_>> {
             glyph: NARY.iter().find(|(_, mapped)| *mapped == name)?.0,
             lower: None,
             upper: None,
+            limits: None,
         }),
         LatexNode::Subscript { base, sub } => {
             let mut head = nary_limits(base)?;
@@ -1252,6 +1315,16 @@ pub(crate) fn nary_limits(node: &LatexNode) -> Option<NaryLimits<'_>> {
             Some(head)
         }
         LatexNode::Group(nodes) if nodes.len() == 1 => nary_limits(&nodes[0]),
+        LatexNode::Command { name, args }
+            if matches!(name.as_str(), "limits" | "nolimits") && args.len() == 1 =>
+        {
+            let mut head = nary_limits(&args[0])?;
+            if head.limits.is_some() {
+                return None;
+            }
+            head.limits = Some(name == "limits");
+            Some(head)
+        }
         _ => None,
     }
 }

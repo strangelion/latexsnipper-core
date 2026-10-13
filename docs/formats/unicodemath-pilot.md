@@ -50,8 +50,13 @@ repository-authored; no renderer/parser source or dependency is vendored.
   following operand; canonical bodies use `▒〖...〗`. Bracketed bodies retain
   their brackets and stop there, while invisible grouping can include adjacent
   factors. `▒` also works as the finite function-apply alias. Bare heads remain
-  operators; explicit markers require nonempty bodies. Numeric flags immediately
-  after a head, duplicate limit slots, unknown glyphs and stray markers fail.
+  operators; explicit markers require nonempty bodies. Numeric flag `0` uses
+  the default; `1` and `2` select under-over and side-script placement when the
+  complete head has at least one limit. Canonical text retains these overrides;
+  LaTeX uses `\limits`/`\nolimits`, and OMML/MathML retain nondefault placement
+  on readback. XML properties equal to the finite default may normalize to that
+  default, not the original flag spelling. Other numeric flags, duplicate limit
+  slots, unknown glyphs and stray markers fail.
   The differential glyph `ⅆ` is retained rather than replaced by ASCII `d`;
   its font and differential spacing are not a host-fidelity claim.
 
@@ -96,8 +101,8 @@ Escaped LaTeX text and emitted quoted output must separately fit 64 KiB;
 joins check output size incrementally. An input near a parse budget can exceed
 the emitted grouping/token budget and be rejected by the writer.
 
-Outside this milestone: arbitrary function/n-ary names, n-ary numeric layout flags,
-explicit limit-placement/growth overrides,
+Outside this milestone: arbitrary function/n-ary names, other n-ary numeric flags,
+placement on unscripted heads, growth/placeholder overrides and inherited host layout,
 autocorrect/control words, mathematical styled alphanumerics, combining accents,
 unquoted non-ASCII whitespace, rich-text style, equation arrays/numbering,
 skewed/linear fractions and other unlisted glyphs. Unknown glyphs/escapes fail,

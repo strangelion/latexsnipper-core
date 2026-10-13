@@ -31,11 +31,13 @@ impl LatexParser {
                     LatexNode::Command { name, args }
                         if args.is_empty()
                             && matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
-                            && nodes
-                                .last()
-                                .is_some_and(|last| crate::extrema::head(last).is_some()) =>
+                            && nodes.last().is_some_and(|last| {
+                                crate::extrema::head(last).is_some()
+                                    || (name != "displaylimits"
+                                        && crate::unicodemath_pilot::nary_name(last).is_some())
+                            }) =>
                     {
-                        let base = nodes.pop().expect("checked preceding extremum");
+                        let base = nodes.pop().expect("checked preceding operator");
                         nodes.push(LatexNode::Command {
                             name: name.clone(),
                             args: vec![base],
@@ -1163,11 +1165,13 @@ impl LatexParser {
                 LatexNode::Command { name, args }
                     if args.is_empty()
                         && matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
-                        && result
-                            .last()
-                            .is_some_and(|last| crate::extrema::head(last).is_some()) =>
+                        && result.last().is_some_and(|last| {
+                            crate::extrema::head(last).is_some()
+                                || (name != "displaylimits"
+                                    && crate::unicodemath_pilot::nary_name(last).is_some())
+                        }) =>
                 {
-                    let base = result.pop().expect("checked preceding extremum");
+                    let base = result.pop().expect("checked preceding operator");
                     result.push(LatexNode::Command {
                         name: name.clone(),
                         args: vec![base],

@@ -11,6 +11,169 @@ fn canonical(source: &str) -> String {
 }
 
 #[test]
+fn explicit_nary_placement_preserves_limits_body_and_xml_layout() {
+    for (source, mode, tag, modifier) in [
+        ("∫1_0^1▒x+b", "undOvr", "munderover", "\\limits"),
+        ("∑2_i^n▒x+b", "subSup", "msubsup", "\\nolimits"),
+        ("∬1_0▒x+b", "undOvr", "munder", "\\limits"),
+        ("∏2^n▒x+b", "subSup", "msup", "\\nolimits"),
+    ] {
+        let canonical_source = canonical(source);
+        assert_eq!(canonical(&canonical_source), canonical_source);
+        let latex = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::LatexDisplay,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        let latex =
+            latexsnipper_conversion::formula_fragment::latex_display_to_fragment(&latex).unwrap();
+        assert!(latex.contains(modifier), "{source}: {latex}");
+        assert!(!latex.contains("\\limits}"), "{latex}");
+        assert!(!latex.contains("\\nolimits}"), "{latex}");
+        let restored = DocumentConverter::convert_formula_to_target(
+            &latex,
+            FormulaInputFormat::Latex,
+            latexsnipper_conversion::FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(restored, canonical_source, "{latex}");
+        let display = DocumentConverter::convert_formula_string(
+            &canonical_source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::LatexDisplay,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        let canonical_latex =
+            latexsnipper_conversion::formula_fragment::latex_display_to_fragment(&display).unwrap();
+        assert!(!canonical_latex.contains("\\limits}"), "{canonical_latex}");
+        assert!(
+            !canonical_latex.contains("\\nolimits}"),
+            "{canonical_latex}"
+        );
+        assert_eq!(
+            DocumentConverter::convert_formula_to_target(
+                &canonical_latex,
+                FormulaInputFormat::Latex,
+                latexsnipper_conversion::FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap(),
+            canonical_source
+        );
+        for (output, input) in [
+            (OutputFormat::OMML, FormulaInputFormat::Omml),
+            (OutputFormat::MathML, FormulaInputFormat::Mathml),
+        ] {
+            let xml = DocumentConverter::convert_formula_string(
+                source,
+                FormulaInputFormat::UnicodeMath,
+                output,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            if output == OutputFormat::OMML {
+                assert!(
+                    xml.contains(&format!("<m:limLoc m:val=\"{mode}\"/>")),
+                    "{xml}"
+                );
+                let end = xml.find("</m:nary>").unwrap();
+                assert!(xml[end..].contains("<m:t>b</m:t>"), "{xml}");
+            } else {
+                assert!(xml.contains(&format!("<{tag}>")), "{xml}");
+                assert!(xml.contains("movablelimits=\"false\""), "{xml}");
+            }
+            let restored = DocumentConverter::convert_formula_to_target(
+                &xml,
+                input,
+                latexsnipper_conversion::FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert_eq!(restored, canonical_source, "{source}: {xml}");
+        }
+    }
+    assert_eq!(canonical("∫0_0^1▒x"), canonical("∫_0^1▒x"));
+    for glyph in ['∫', '∬', '∭', '∮', '∑', '∏', '∐', '⋃', '⋂'] {
+        for (flag, mode, tag) in [('1', "undOvr", "munderover"), ('2', "subSup", "msubsup")] {
+            let source = format!("{glyph}{flag}_0^1▒x");
+            assert_eq!(canonical(&canonical(&source)), canonical(&source));
+            let omml = DocumentConverter::convert_formula_string(
+                &source,
+                FormulaInputFormat::UnicodeMath,
+                OutputFormat::OMML,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert!(
+                omml.contains(&format!("<m:limLoc m:val=\"{mode}\"/>")),
+                "{source}: {omml}"
+            );
+            let mathml = DocumentConverter::convert_formula_string(
+                &source,
+                FormulaInputFormat::UnicodeMath,
+                OutputFormat::MathML,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert!(mathml.contains(&format!("<{tag}>")), "{source}: {mathml}");
+        }
+    }
+    for source in [
+        "∫3_0▒x",
+        "∫4_0▒x",
+        "∫8_0▒x",
+        "∫16_0▒x",
+        "∫64_0▒x",
+        "∫128_0▒x",
+        "∫12_0▒x",
+        "∫1▒x",
+        "∫2▒x",
+        "∫999999_0▒x",
+    ] {
+        assert!(parse_unicodemath(source).is_err(), "{source}");
+    }
+}
+
+#[test]
+fn omml_nary_placement_properties_are_bounded_and_not_guessed() {
+    let prefix = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:nary><m:naryPr><m:chr m:val="∫"/>"#;
+    let suffix = r#"</m:naryPr><m:sub><m:r><m:t>0</m:t></m:r></m:sub><m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary></m:oMath>"#;
+    for properties in [
+        r#"<m:limLoc m:val="undOvr"/>"#,
+        r#"<m:limLoc m:val="undOvr"></m:limLoc>"#,
+    ] {
+        let output = DocumentConverter::convert_formula_to_target(
+            &format!("{prefix}{properties}{suffix}"),
+            FormulaInputFormat::Omml,
+            latexsnipper_conversion::FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(output, canonical("∫1_0▒x"));
+    }
+    for properties in [
+        r#"<m:limLoc/>"#,
+        r#"<m:limLoc m:val="other"/>"#,
+        r#"<m:limLoc m:val="undOvr"/><m:limLoc m:val="subSup"/>"#,
+    ] {
+        assert!(
+            DocumentConverter::convert_formula_to_target(
+                &format!("{prefix}{properties}{suffix}"),
+                FormulaInputFormat::Omml,
+                latexsnipper_conversion::FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .is_err(),
+            "{properties}"
+        );
+    }
+}
+
+#[test]
 fn nary_heads_limits_and_owned_bodies_have_fixed_canonical_structure() {
     for (source, expected) in [
         ("∫_0^1 x", "〖〖∫〗_(0)〗^(1)▒〖x〗"),

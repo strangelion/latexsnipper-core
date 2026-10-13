@@ -706,14 +706,22 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
 
         "msup" => {
             if children.len() >= 2 {
-                format!("{{{}}}^{{{}}}", children[0], children[1])
+                format!(
+                    "{{{}}}^{{{}}}",
+                    nary_script_base(&children[0], false),
+                    children[1]
+                )
             } else {
                 text.to_string()
             }
         }
         "msub" => {
             if children.len() >= 2 {
-                format!("{{{}}}_{{{}}}", children[0], children[1])
+                format!(
+                    "{{{}}}_{{{}}}",
+                    nary_script_base(&children[0], false),
+                    children[1]
+                )
             } else {
                 text.to_string()
             }
@@ -722,7 +730,9 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             if children.len() >= 3 {
                 format!(
                     "{{{}}}_{{{}}}^{{{}}}",
-                    children[0], children[1], children[2]
+                    nary_script_base(&children[0], false),
+                    children[1],
+                    children[2]
                 )
             } else {
                 text.to_string()
@@ -763,7 +773,7 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
                 if is_nary_source(base)
                     && !attrs.split_whitespace().any(|field| field == "accent=true")
                 {
-                    format!("{base}^{{{accent}}}")
+                    format!("{}^{{{accent}}}", nary_script_base(base, true))
                 } else {
                     map_over_accent(base, accent)
                 }
@@ -780,7 +790,7 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
                         .split_whitespace()
                         .any(|field| field == "accentunder=true")
                 {
-                    format!("{base}_{{{under}}}")
+                    format!("{}_{{{under}}}", nary_script_base(base, true))
                 } else {
                     format!("\\underset{{{}}}{{{}}}", under, base)
                 }
@@ -795,7 +805,12 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
                         .split_whitespace()
                         .any(|field| matches!(field, "accent=true" | "accentunder=true"))
                 {
-                    return format!("{}_{{{}}}^{{{}}}", children[0], children[1], children[2]);
+                    return format!(
+                        "{}_{{{}}}^{{{}}}",
+                        nary_script_base(&children[0], true),
+                        children[1],
+                        children[2]
+                    );
                 }
                 format!(
                     "\\underset{{{}}}{{\\overset{{{}}}{{{}}}}}",
@@ -956,6 +971,21 @@ fn is_nary_source(source: &str) -> bool {
             <= 64
         && crate::unicodemath_pilot::nary_limits(&crate::latex_parser::parse_latex(source))
             .is_some()
+}
+
+fn nary_script_base(source: &str, vertical: bool) -> String {
+    if is_nary_source(source) {
+        let node = crate::latex_parser::parse_latex(source);
+        let head = crate::unicodemath_pilot::nary_limits(&node).expect("checked n-ary");
+        let default_vertical = !matches!(head.name, "int" | "iint" | "iiint" | "oint");
+        if head.limits.is_none() && vertical != default_vertical {
+            return format!(
+                "{source}{}",
+                if vertical { "\\limits" } else { "\\nolimits" }
+            );
+        }
+    }
+    source.into()
 }
 
 fn reverse_mi_map(text: &str) -> Option<String> {

@@ -134,7 +134,7 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                 let tag = local(e.name().as_ref());
                 let children = if matches!(
                     tag.as_str(),
-                    "count" | "mcJc" | "begChr" | "endChr" | "sepChr"
+                    "count" | "mcJc" | "begChr" | "endChr" | "sepChr" | "limLoc"
                 ) {
                     attribute_value(&e, reader.decoder())?
                         .map(|value| vec![("$val".into(), value)])
@@ -252,6 +252,18 @@ fn parse_inner(xml: &str) -> Result<String, String> {
                             }
                         }
                     }
+                    if tag == "naryPr" {
+                        let location = get_child(&tagged_children, "limLoc");
+                        if (tagged_children.iter().any(|(name, _)| name == "limLoc")
+                            && location.is_empty())
+                            || !matches!(location.as_str(), "" | "undOvr" | "subSup")
+                        {
+                            return Err(
+                                "Unsupported OMML n-ary limit location; retain the original XML"
+                                    .into(),
+                            );
+                        }
+                    }
                     let text = text_buf.clone();
                     if tag == "nary" {
                         let direct = get_child(&tagged_children, "chr");
@@ -291,6 +303,12 @@ fn parse_inner(xml: &str) -> Result<String, String> {
 
                     if let Some((_, ref mut parent)) = stack.last_mut() {
                         parent.push((tag, result));
+                        if parent.last().is_some_and(|(tag, _)| tag == "naryPr") {
+                            let location = get_child(&tagged_children, "limLoc");
+                            if !location.is_empty() {
+                                parent.push(("$naryLimLoc".into(), location));
+                            }
+                        }
                     } else {
                         roots.push(result);
                     }
@@ -438,13 +456,24 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     c
                 }
             };
-            let op = map_nary(&chr);
+            let mut op = map_nary(&chr).to_owned();
             let sub = get_child(children, "sub");
             let sup = get_child(children, "sup");
             let body = get_child(children, "e");
+            let location = get_child(children, "$naryLimLoc");
+            let integral = matches!(chr.as_str(), "" | "∫" | "∬" | "∭" | "∮");
+            if (!sub.is_empty() || !sup.is_empty())
+                && ((integral && location == "undOvr") || (!integral && location == "subSup"))
+            {
+                op.push_str(if location == "undOvr" {
+                    "\\limits"
+                } else {
+                    "\\nolimits"
+                });
+            }
             if sub.is_empty() && sup.is_empty() {
                 if body.is_empty() {
-                    op.into()
+                    op
                 } else {
                     format!("{}{{{}}}", op, body)
                 }
@@ -604,7 +633,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
         }
         "mPr" => get_child(children, "mcs"),
-        "count" | "mcJc" => get_child(children, "$val"),
+        "count" | "mcJc" | "limLoc" => get_child(children, "$val"),
         "mcs" => children
             .iter()
             .filter(|(tag, _)| tag == "mc")

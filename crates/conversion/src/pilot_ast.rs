@@ -21,7 +21,7 @@ fn shape_impl(node: &LatexNode, ignore_spaces: bool) -> Vec<Shape> {
     if ignore_spaces {
         if let Some(head) = crate::unicodemath_pilot::nary_limits(node) {
             return vec![Shape {
-                name: format!("nary:{}", head.name),
+                name: format!("nary:{}:{:?}", head.name, head.limits),
                 children: vec![
                     head.lower.map_or_else(Vec::new, child),
                     head.upper.map_or_else(Vec::new, child),

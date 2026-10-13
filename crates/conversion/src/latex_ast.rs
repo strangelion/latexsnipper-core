@@ -171,6 +171,28 @@ impl LatexNode {
 
 impl std::fmt::Display for LatexNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Invisible head groups must not turn a large operator into a grouped atom.
+        if let Some(head) =
+            crate::unicodemath_pilot::nary_limits(self).filter(|head| head.limits.is_some())
+        {
+            write!(
+                f,
+                "\\{}\\{}",
+                head.name,
+                if head.limits == Some(true) {
+                    "limits"
+                } else {
+                    "nolimits"
+                }
+            )?;
+            if let Some(lower) = head.lower {
+                write!(f, "_{{{lower}}}")?;
+            }
+            if let Some(upper) = head.upper {
+                write!(f, "^{{{upper}}}")?;
+            }
+            return Ok(());
+        }
         match self {
             LatexNode::Text(s) => write!(f, "{}", s),
             LatexNode::Sequence(nodes) => {
@@ -265,7 +287,8 @@ impl std::fmt::Display for LatexNode {
             LatexNode::Command { name, args }
                 if matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
                     && args.len() == 1
-                    && crate::extrema::head(&args[0]).is_some() =>
+                    && (crate::extrema::head(&args[0]).is_some()
+                        || crate::unicodemath_pilot::nary_name(&args[0]).is_some()) =>
             {
                 write!(f, "{}\\{}", args[0], name)
             }

@@ -167,7 +167,9 @@ fn validate_omml_node(node: &LatexNode, depth: usize) -> std::result::Result<(),
         Command { name, args } => {
             if matches!(name.as_str(), "limits" | "nolimits" | "displaylimits")
                 && args.len() == 1
-                && crate::extrema::head(&args[0]).is_some()
+                && (crate::extrema::head(&args[0]).is_some()
+                    || (name != "displaylimits"
+                        && crate::unicodemath_pilot::nary_limits(node).is_some()))
             {
                 return validate_omml_node(&args[0], depth + 1);
             }
@@ -892,6 +894,7 @@ impl NaryOperator {
 
 struct OmmlNary<'a> {
     operator: NaryOperator,
+    limits: Option<bool>,
     sub: Option<&'a LatexNode>,
     sup: Option<&'a LatexNode>,
     body: Vec<&'a LatexNode>,
@@ -901,6 +904,7 @@ fn normalize_nary_head(node: &LatexNode) -> Option<OmmlNary<'_>> {
     match node {
         LatexNode::Operator(name) => Some(OmmlNary {
             operator: NaryOperator::from_name(name)?,
+            limits: None,
             sub: None,
             sup: None,
             body: Vec::new(),
@@ -930,6 +934,13 @@ fn normalize_nary_head(node: &LatexNode) -> Option<OmmlNary<'_>> {
             }
         }
         LatexNode::Group(nodes) if nodes.len() == 1 => normalize_nary_head(&nodes[0]),
+        LatexNode::Command { name, args }
+            if matches!(name.as_str(), "limits" | "nolimits") && args.len() == 1 =>
+        {
+            let mut nary = normalize_nary_head(&args[0])?;
+            nary.limits = Some(name == "limits");
+            Some(nary)
+        }
         _ => None,
     }
 }
@@ -1019,7 +1030,10 @@ fn nary_to_omml(nary: &OmmlNary<'_>) -> String {
     let mut properties = format!(
         "<m:chr m:val=\"{}\"/><m:limLoc m:val=\"{}\"/><m:grow m:val=\"1\"/>",
         nary.operator.symbol(),
-        nary.operator.limit_location()
+        nary.limits.map_or_else(
+            || nary.operator.limit_location(),
+            |vertical| if vertical { "undOvr" } else { "subSup" }
+        )
     );
     if nary.sub.is_none() {
         properties.push_str("<m:subHide m:val=\"1\"/>");

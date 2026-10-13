@@ -38,4 +38,14 @@ for (const [source, canonical] of [["sin x", "sin⁡〖x〗"],
   assert.equal(result.data.content, canonical);
 }
 assert.equal(api.convert_formula_v3("a/b", "ascii-math", "unicode-math", "best-effort").data.content, "(a)/(b)");
+for (const [source, location] of [["∫1_0^1▒x+b", "undOvr"], ["∑2_i^n▒x+b", "subSup"]]) {
+  const canonical = api.convert_formula_v3(source, "unicode-math", "unicode-math", "best-effort");
+  assert.equal(canonical.ok, true);
+  const xml = api.convert_formula_v3(source, "unicode-math", "omml", "best-effort");
+  assert.equal(xml.ok, true);
+  assert.ok(xml.data.content.includes(`<m:limLoc m:val="${location}"/>`));
+  const restored = api.convert_formula_v3(xml.data.content, "omml", "unicode-math", "best-effort");
+  assert.equal(restored.ok, true);
+  assert.equal(restored.data.content, canonical.data.content);
+}
 console.log("Actual linear formula WASM: 78 converted, 98 unavailable, grammar and mixed-document refusals passed");
