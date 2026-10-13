@@ -255,24 +255,7 @@ impl RememberedApprovalPolicies {
         checkpoint: &ApprovalPolicyCheckpoint,
         clock: Clock,
     ) -> Result<Self, WasiDiagnostic> {
-        if bytes.len() < HEADER_BYTES + TAG_BYTES
-            || bytes.len() > MAX_SNAPSHOT_BYTES
-            || &bytes[..MAGIC.len()] != MAGIC
-        {
-            return Err(invalid("invalid remembered policy snapshot framing"));
-        }
-        let payload_length = u32::from_be_bytes(bytes[5..9].try_into().unwrap()) as usize;
-        if payload_length != bytes.len() - HEADER_BYTES - TAG_BYTES {
-            return Err(invalid("invalid remembered policy snapshot length"));
-        }
-        let tag_offset = bytes.len() - TAG_BYTES;
-        let mut mac = key.mac()?;
-        mac.update(&bytes[..tag_offset]);
-        mac.verify_slice(&bytes[tag_offset..])
-            .map_err(|_| invalid("remembered policy snapshot authentication failed"))?;
-        // Authenticate bounded bytes before parsing attacker-controlled JSON.
-        let snapshot: Snapshot = serde_json::from_slice(&bytes[HEADER_BYTES..tag_offset])
-            .map_err(|_| invalid("invalid remembered policy snapshot declaration"))?;
+        let snapshot = authenticate_snapshot(&key, bytes)?;
         if snapshot.schema_version != 1
             || snapshot.revision == u64::MAX
             || !hex_digest(&snapshot.store_id, 32)
@@ -537,6 +520,58 @@ impl RememberedApprovalPolicies {
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, State>, WasiDiagnostic> {
         lock_state(&self.state)
     }
+}
+
+fn authenticate_snapshot(
+    key: &ApprovalPolicyKey,
+    bytes: &[u8],
+) -> Result<Snapshot, WasiDiagnostic> {
+    if bytes.len() < HEADER_BYTES + TAG_BYTES
+        || bytes.len() > MAX_SNAPSHOT_BYTES
+        || &bytes[..MAGIC.len()] != MAGIC
+    {
+        return Err(invalid("invalid remembered policy snapshot framing"));
+    }
+    let payload_length = u32::from_be_bytes(bytes[5..9].try_into().unwrap()) as usize;
+    if payload_length != bytes.len() - HEADER_BYTES - TAG_BYTES {
+        return Err(invalid("invalid remembered policy snapshot length"));
+    }
+    let tag_offset = bytes.len() - TAG_BYTES;
+    let mut mac = key.mac()?;
+    mac.update(&bytes[..tag_offset]);
+    mac.verify_slice(&bytes[tag_offset..])
+        .map_err(|_| invalid("remembered policy snapshot authentication failed"))?;
+    // Authenticate bounded bytes before parsing attacker-controlled JSON.
+    serde_json::from_slice(&bytes[HEADER_BYTES..tag_offset])
+        .map_err(|_| invalid("invalid remembered policy snapshot declaration"))
+}
+
+/// Identification for deleting owned unselected cache objects only. A checkpoint
+/// derived from an object is never trusted latest state or execution authority.
+#[cfg(windows)]
+pub(crate) fn inspect_snapshot_for_cleanup(
+    key: &ApprovalPolicyKey,
+    bytes: &[u8],
+    store_id: &str,
+) -> Result<ApprovalPolicyCheckpoint, WasiDiagnostic> {
+    let snapshot = authenticate_snapshot(key, bytes)?;
+    if snapshot.store_id != store_id {
+        return Err(invalid("cleanup snapshot belongs to a different store"));
+    }
+    let checkpoint = ApprovalPolicyCheckpoint {
+        store_id: snapshot.store_id,
+        revision: snapshot.revision,
+        snapshot_sha256: hex::encode(Sha256::digest(bytes)),
+        observed_unix_secs: snapshot.observed_unix_secs,
+    };
+    let observed = checkpoint.observed_unix_secs;
+    RememberedApprovalPolicies::restore_with_clock(
+        ApprovalPolicyKey::from_secret_bytes(*key.secret_bytes()),
+        bytes,
+        &checkpoint,
+        Arc::new(move || Ok(observed)),
+    )?;
+    Ok(checkpoint)
 }
 
 impl Drop for RememberedApprovalPolicies {

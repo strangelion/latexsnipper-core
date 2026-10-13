@@ -24,6 +24,21 @@ use crate::{
     WasiDiagnosticCode,
 };
 
+#[path = "windows_approval_cleanup.rs"]
+mod cleanup;
+pub use cleanup::ApprovalSnapshotCleanup;
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublicationCut {
+    StagingCreated,
+    StagingChunkWritten,
+    StagingSynced,
+    ObjectLinked,
+    ObjectReady,
+    CheckpointWritten,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum WindowsApprovalPersistence {
     /// Temporary testing or deliberately session-only host choices.
@@ -68,6 +83,8 @@ pub struct WindowsProtectedApprovalCheckpoint {
     target: Vec<u16>,
     persistence: u32,
     clock: Arc<dyn Fn() -> Result<u64, WasiDiagnostic> + Send + Sync>,
+    #[cfg(test)]
+    publication_probe: Option<Arc<dyn Fn(PublicationCut) + Send + Sync>>,
 }
 
 impl WindowsProtectedApprovalCheckpoint {
@@ -114,6 +131,8 @@ impl WindowsProtectedApprovalCheckpoint {
             target,
             persistence: mode,
             clock: Arc::new(unix_time),
+            #[cfg(test)]
+            publication_probe: None,
         })
     }
 
@@ -173,8 +192,10 @@ impl WindowsProtectedApprovalCheckpoint {
             return Err(conflict("protected approval owner already exists"));
         }
         check_deadline(deadline)?;
-        self.save_snapshot(candidate, deadline)?;
+        self.save_snapshot(key, candidate, deadline)?;
         self.write(key, &candidate.checkpoint)?;
+        #[cfg(test)]
+        self.test_publication_cut(PublicationCut::CheckpointWritten);
         // A late write may have committed. Report ambiguity, never silently retry.
         check_deadline(deadline)
     }
@@ -220,12 +241,14 @@ impl WindowsProtectedApprovalCheckpoint {
             }
         }
         check_deadline(deadline)?;
-        self.save_snapshot(candidate, deadline)?;
+        self.save_snapshot(&current.key, candidate, deadline)?;
         let mut published = candidate.checkpoint.clone();
         published.observed_unix_secs = published
             .observed_unix_secs
             .max(current.checkpoint.observed_unix_secs);
         self.write(&current.key, &published)?;
+        #[cfg(test)]
+        self.test_publication_cut(PublicationCut::CheckpointWritten);
         check_deadline(deadline)
     }
 
@@ -300,6 +323,8 @@ impl WindowsProtectedApprovalCheckpoint {
             target: self.target.clone(),
             persistence: self.persistence,
             clock: self.clock.clone(),
+            #[cfg(test)]
+            publication_probe: self.publication_probe.clone(),
         })
     }
 
@@ -347,6 +372,7 @@ impl WindowsProtectedApprovalCheckpoint {
     /// leaves only an unselected object; readers never adopt it as consent.
     fn save_snapshot(
         &self,
+        key: &ApprovalPolicyKey,
         candidate: &SealedApprovalPolicies,
         deadline: Instant,
     ) -> Result<(), WasiDiagnostic> {
@@ -360,7 +386,7 @@ impl WindowsProtectedApprovalCheckpoint {
         }
         let mut random = [0_u8; 16];
         getrandom::fill(&mut random).map_err(|_| failed("cannot name approval staging object"))?;
-        let staging = format!("approval-stage-{}.tmp", hex::encode(random));
+        let staging = self.staging_name(key, &random)?;
         let mut options = OpenOptions::new();
         options
             .write(true)
@@ -370,20 +396,28 @@ impl WindowsProtectedApprovalCheckpoint {
             .directory
             .open_with(&staging, &options)
             .map_err(|_| failed("cannot create approval staging object"))?;
+        #[cfg(test)]
+        self.test_publication_cut(PublicationCut::StagingCreated);
         let result = (|| {
             for chunk in candidate.bytes.chunks(64 * 1024) {
                 check_deadline(deadline)?;
                 file.write_all(chunk)
                     .map_err(|_| failed("cannot write approval staging object"))?;
+                #[cfg(test)]
+                self.test_publication_cut(PublicationCut::StagingChunkWritten);
             }
             file.sync_all()
                 .map_err(|_| failed("cannot sync approval staging object"))?;
+            #[cfg(test)]
+            self.test_publication_cut(PublicationCut::StagingSynced);
             drop(file);
             check_deadline(deadline)?;
             // Publish a new name only. Do not overwrite an immutable object.
             self.directory
                 .hard_link(&staging, &self.directory, &target)
                 .map_err(|_| failed("cannot publish immutable approval snapshot"))?;
+            #[cfg(test)]
+            self.test_publication_cut(PublicationCut::ObjectLinked);
             Ok(())
         })();
         // Only remove the exact staging name successfully created by this call.
@@ -394,7 +428,16 @@ impl WindowsProtectedApprovalCheckpoint {
         result?;
         cleanup?;
         self.read_snapshot(&candidate.checkpoint, deadline)?;
+        #[cfg(test)]
+        self.test_publication_cut(PublicationCut::ObjectReady);
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn test_publication_cut(&self, phase: PublicationCut) {
+        if let Some(probe) = &self.publication_probe {
+            probe(phase);
+        }
     }
 
     fn write(
@@ -1026,7 +1069,7 @@ mod tests {
                 .lock(Instant::now() + Duration::from_secs(5))
                 .unwrap();
             backend
-                .save_snapshot(&forgotten, Instant::now() + Duration::from_secs(5))
+                .save_snapshot(&key, &forgotten, Instant::now() + Duration::from_secs(5))
                 .unwrap();
         }
         assert_eq!(
@@ -1067,7 +1110,7 @@ mod tests {
                 .lock(Instant::now() + Duration::from_secs(5))
                 .unwrap();
             backend
-                .save_snapshot(&selected, Instant::now() + Duration::from_secs(5))
+                .save_snapshot(&key, &selected, Instant::now() + Duration::from_secs(5))
                 .unwrap();
         }
         backend

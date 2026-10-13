@@ -34,7 +34,8 @@ pub use remembered_approval::{
 };
 #[cfg(windows)]
 pub use windows_approval_checkpoint::{
-    WindowsApprovalPersistence, WindowsProtectedApprovalCheckpoint, WindowsProtectedApprovalState,
+    ApprovalSnapshotCleanup, WindowsApprovalPersistence, WindowsProtectedApprovalCheckpoint,
+    WindowsProtectedApprovalState,
 };
 
 pub use diagnostic::{

@@ -314,8 +314,13 @@ authenticated views, then verifies one CAS winner, one stale-view conflict and
 cross-process policy veto. Its parent bounds waits, terminates only its own children
 on fixture failure, and removes only the exact owned credential/temporary root.
 The ignored worker entry is transport scaffolding, not an independent verification.
-This does not yet establish forced-kill/power-loss durability, logoff
-persistence, orphan collection, Linux/macOS providers, application UI or release
+Another owned fixture terminates real child processes at six publication cuts:
+staging creation, first 64 KiB write of a larger snapshot, file sync, object link,
+staging-name removal, and protected-checkpoint publication. Before selection,
+restart recovers the old selected policies; after checkpoint publication it recovers
+the new ones without replaying a stale update. Test probes exist only in test builds.
+This does not yet establish power-loss durability, logoff
+persistence, Linux/macOS providers, application UI or release
 security approval. File sync is not a promise of directory-entry power-loss
 durability. Native key-store calls are trusted blocking OS calls, not preemptible
 sandbox operations; deadline overruns fail after return. The native credential
@@ -327,6 +332,30 @@ authority callbacks, a clock can run under its own Core policy mutex. The backen
 never calls that store while holding the owner lock, so lock order cannot recurse;
 no clock read opens UI or calls guest code. This is not a wall-clock rollback
 benchmark or proof of OS persistence across power loss/logoff.
+
+`collect_unselected_snapshots(max_objects, deadline)` is explicit host maintenance,
+not a general file-delete API or a guest capability. Under the same owner lock it
+first authenticates the selected object; if selected data is missing/corrupt,
+collection stops before deleting anything. It never deletes the selected snapshot
+or changes the protected checkpoint/consent. A snapshot must match this owner's
+filename digest and authenticated store ID. New staging names bind owner and
+random nonce with a separate HMAC domain; single-linked partial staging objects
+can therefore be recognized after termination. A two-link crash pair is removed
+only after authenticating the complete snapshot and matching both file identities.
+Unexpected links, malformed objects, other owners, directories, wrong-store data
+and old unauthenticated staging names are retained. No recursive traversal occurs.
+
+Limits are 1..128 removed file entries, at most 4096 scanned directory entries,
+2 MiB per object and an aggregate 8 MiB read budget. Object-budget exhaustion is
+reported in `ApprovalSnapshotCleanup`; scan/read exhaustion, IO failures or deadline
+expiry return an error, possibly after some unselected objects were removed.
+These discarded cache objects are not recoverable through this API; current consent
+and unverified data are preserved. Maintenance must run outside latency-sensitive
+guest work; a blocked clock/guard check keeps the independent confirmation route.
+Native tests cover bounded collection, selected-object corruption refusal, wrong
+keys/store IDs, personal-file and hardlink preservation, and idempotent collection
+after actual child termination. Native same-user attackers and hostile root
+ancestors remain outside this trusted-private-root backend's guarantee.
 
 For UX, distinguish approval once, a bounded session/batch, and a separate explicit
 remember-choice. Repeated matching actions reuse remembered consent without new
