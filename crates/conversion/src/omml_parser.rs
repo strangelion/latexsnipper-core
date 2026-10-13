@@ -825,6 +825,19 @@ fn map_nary(chr: &str) -> &str {
 
 fn map_function_name(name: &str) -> String {
     let trimmed = name.trim();
+    if trimmed.len() <= 65_536
+        && trimmed
+            .bytes()
+            .filter(|byte| matches!(byte, b'\\' | b'^' | b'_'))
+            .count()
+            <= 64
+        && trimmed.contains(['^', '_'])
+    {
+        let mut node = crate::latex_parser::parse_latex(trimmed);
+        if normalize_scripted_function_head(&mut node, 0) {
+            return node.to_string();
+        }
+    }
     let normalized = trimmed
         .strip_prefix("\\mathrm{")
         .and_then(|value| value.strip_suffix('}'))
@@ -832,9 +845,34 @@ fn map_function_name(name: &str) -> String {
     match normalized {
         "lim" | "limsup" | "liminf" | "max" | "min" | "sup" | "inf" | "log" | "ln" | "sin"
         | "cos" | "tan" | "cot" | "sec" | "csc" | "arcsin" | "arccos" | "arctan" | "sinh"
-        | "cosh" | "tanh" | "det" | "gcd" => format!("\\{}", normalized),
+        | "cosh" | "tanh" | "exp" | "dim" | "det" | "gcd" => format!("\\{}", normalized),
         other if !other.is_empty() => format!("\\operatorname{{{}}}", other),
         _ => String::new(),
+    }
+}
+
+fn normalize_scripted_function_head(node: &mut crate::latex_ast::LatexNode, depth: usize) -> bool {
+    use crate::latex_ast::LatexNode;
+    if depth >= 64 {
+        return false;
+    }
+    match node {
+        LatexNode::FontModifier { font, content } if font == "mathrm" => {
+            let name = content.to_string();
+            if !crate::unicodemath_pilot::is_function_name(&name) {
+                return false;
+            }
+            *node = LatexNode::Operator(name);
+            true
+        }
+        LatexNode::Operator(name) => crate::unicodemath_pilot::is_function_name(name),
+        LatexNode::Superscript { base, .. } | LatexNode::Subscript { base, .. } => {
+            normalize_scripted_function_head(base, depth + 1)
+        }
+        LatexNode::Group(nodes) if nodes.len() == 1 => {
+            normalize_scripted_function_head(&mut nodes[0], depth + 1)
+        }
+        _ => false,
     }
 }
 

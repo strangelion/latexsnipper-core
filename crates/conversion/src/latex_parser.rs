@@ -296,7 +296,9 @@ impl LatexParser {
             "int" | "iint" | "iiint" | "oint" | "sum" | "prod" | "coprod" | "bigcup" | "bigcap"
             | "lim" | "limsup" | "liminf" | "max" | "min" | "sup" | "inf" | "log" | "ln"
             | "sin" | "cos" | "tan" | "cot" | "sec" | "csc" | "arcsin" | "arccos" | "arctan"
-            | "sinh" | "cosh" | "tanh" | "det" | "gcd" => Some(LatexNode::Operator(cmd)),
+            | "sinh" | "cosh" | "tanh" | "exp" | "dim" | "det" | "gcd" => {
+                Some(LatexNode::Operator(cmd))
+            }
             // Relations
             "leq" | "le" | "geq" | "ge" | "neq" | "ne" | "approx" | "equiv" | "sim" | "propto"
             | "ll" | "gg" | "prec" | "succ" | "cong" => Some(LatexNode::Relation(cmd)),
@@ -1075,23 +1077,66 @@ impl LatexParser {
 
     fn parse_until(&mut self, delimiter: char) -> Vec<LatexNode> {
         let mut nodes = Vec::new();
-        let mut depth = 0i32;
+        let mut groups = Vec::new();
 
         while self.pos < self.chars.len() {
             match self.chars[self.pos] {
                 '{' => {
-                    depth += 1;
-                    self.pos += 1;
+                    if groups.len() < 128 {
+                        groups.push(std::mem::take(&mut nodes));
+                        self.pos += 1;
+                    } else {
+                        // Preserve over-budget grouping as literal source without
+                        // building an unbounded recursive AST. Strict conversion
+                        // separately rejects excessive source nesting.
+                        let start = self.pos;
+                        let mut depth = 0_usize;
+                        loop {
+                            match self.chars.get(self.pos) {
+                                Some('{') => depth += 1,
+                                Some('}') => depth -= 1,
+                                Some('\\') => {
+                                    self.pos += 1;
+                                    if self.pos >= self.chars.len() {
+                                        break;
+                                    }
+                                }
+                                Some('%') => {
+                                    while self.pos < self.chars.len()
+                                        && !matches!(self.chars[self.pos], '\n' | '\r')
+                                    {
+                                        self.pos += 1;
+                                    }
+                                    continue;
+                                }
+                                None => break,
+                                _ => {}
+                            }
+                            self.pos += 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        nodes.push(LatexNode::Text(
+                            self.chars[start..self.pos].iter().collect(),
+                        ));
+                    }
                 }
                 '}' => {
-                    if depth == 0 && delimiter == '}' {
+                    if let Some(mut parent) = groups.pop() {
+                        parent.push(LatexNode::Group(Self::merge_sub_sup(nodes)));
+                        nodes = parent;
+                        self.pos += 1;
+                    } else if delimiter == '}' {
                         self.pos += 1;
                         return Self::merge_sub_sup(nodes);
+                    } else {
+                        // An unmatched closing brace is not a hidden group.
+                        nodes.push(LatexNode::Text("}".into()));
+                        self.pos += 1;
                     }
-                    depth -= 1;
-                    self.pos += 1;
                 }
-                c if c == delimiter && depth == 0 => {
+                c if c == delimiter && groups.is_empty() => {
                     self.pos += 1;
                     return Self::merge_sub_sup(nodes);
                 }
@@ -1102,7 +1147,10 @@ impl LatexParser {
                 }
             }
         }
-
+        while let Some(mut parent) = groups.pop() {
+            parent.push(LatexNode::Group(Self::merge_sub_sup(nodes)));
+            nodes = parent;
+        }
         Self::merge_sub_sup(nodes)
     }
 

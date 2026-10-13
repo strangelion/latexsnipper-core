@@ -124,6 +124,7 @@ enum Kind {
     Slash,
     Sub,
     Sup,
+    Apply,
     Cell,
     Row,
 }
@@ -209,6 +210,7 @@ fn lex(source: &str) -> Result<Vec<Token>, UnicodeMathError> {
             '^' => Kind::Sup,
             '&' => Kind::Cell,
             '@' => Kind::Row,
+            '\u{2061}' => Kind::Apply,
             '(' | '[' | '{' | '〖' => Kind::Open(ch),
             ')' | ']' | '}' | '〗' => Kind::Close(ch),
             '√' | '∛' | '∜' => Kind::Root(ch),
@@ -439,6 +441,30 @@ impl Parser<'_> {
     }
     fn atom(&mut self, depth: usize) -> Result<LatexNode, UnicodeMathError> {
         self.depth(depth)?;
+        // Recognize complete names only, never substrings of variable runs.
+        let mut end = self.pos;
+        let mut name = String::new();
+        while let Some(Token {
+            kind: Kind::Operand(ch),
+            ..
+        }) = self.tokens.get(end)
+        {
+            if !ch.is_ascii_alphabetic() {
+                break;
+            }
+            name.push(*ch);
+            end += 1;
+        }
+        if FUNCTIONS.contains(&name.as_str()) {
+            if matches!(
+                self.tokens.get(end).map(|token| token.kind),
+                Some(Kind::Operand(_))
+            ) {
+                return Err(self.fail("function name needs an application or operand boundary"));
+            }
+            self.pos = end;
+            return Ok(LatexNode::Operator(name));
+        }
         match self.kind() {
             Some(Kind::Quoted(end)) => {
                 let start = self.offset();
@@ -524,7 +550,85 @@ impl Parser<'_> {
     fn factor(&mut self, depth: usize) -> Result<LatexNode, UnicodeMathError> {
         self.depth(depth)?;
         let is_run = matches!(self.kind(), Some(Kind::Operand(_)));
-        let mut base = self.atom(depth)?;
+        let base = self.atom(depth)?;
+        let mut base = self.scripts(base, is_run, depth)?;
+        if !is_function_head(&base) {
+            if self.kind() == Some(Kind::Apply) {
+                return Err(error(
+                    UnicodeMathErrorKind::UnsupportedSyntax,
+                    self.offset(),
+                    "application requires a supported named function",
+                ));
+            }
+            return Ok(base);
+        }
+        let saved = self.pos;
+        self.spaces();
+        let explicit = self.kind() == Some(Kind::Apply);
+        if explicit {
+            self.pos += 1;
+            // UTN 28 moves scripts immediately after Apply onto the name.
+            if matches!(self.kind(), Some(Kind::Sub | Kind::Sup)) {
+                if !matches!(base, LatexNode::Operator(_)) {
+                    return Err(self.fail("repeated function-head scripts require grouping"));
+                }
+                base = self.scripts(base, false, depth + 1)?;
+            }
+            self.spaces();
+        }
+        if !self.starts_factor() {
+            if explicit {
+                return Err(self.fail("function application needs a nonempty argument"));
+            }
+            self.pos = saved;
+            return Ok(base);
+        }
+        // A bracketed argument ends at its closing bracket. Adjacent factors
+        // after it belong to the enclosing expression, not to this function.
+        let bracketed = matches!(self.kind(), Some(Kind::Open(_)));
+        let mut argument = if bracketed {
+            self.factor(depth + 1)?
+        } else {
+            self.operand(depth + 1)?
+        };
+        if !bracketed {
+            let mut chain = 0;
+            loop {
+                let saved = self.pos;
+                self.spaces();
+                if self.kind() != Some(Kind::Slash) {
+                    self.pos = saved;
+                    break;
+                }
+                chain += 1;
+                if chain >= MAX_DEPTH {
+                    return Err(error(
+                        UnicodeMathErrorKind::LimitExceeded,
+                        self.offset(),
+                        "function argument fraction chain exceeds budget",
+                    ));
+                }
+                self.pos += 1;
+                self.spaces();
+                argument = LatexNode::Fraction {
+                    num: Box::new(consume_round(argument)),
+                    den: Box::new(consume_round(self.operand(depth + 1)?)),
+                };
+            }
+        }
+        // Keep the owned argument nested through the existing LaTeX bridge.
+        Ok(LatexNode::Group(vec![
+            base,
+            LatexNode::Group(vec![argument]),
+        ]))
+    }
+    fn scripts(
+        &mut self,
+        mut base: LatexNode,
+        is_run: bool,
+        depth: usize,
+    ) -> Result<LatexNode, UnicodeMathError> {
+        self.depth(depth)?;
         if !matches!(self.kind(), Some(Kind::Sub | Kind::Sup)) {
             return Ok(base);
         }
@@ -785,7 +889,7 @@ pub fn write_unicodemath(node: &LatexNode) -> Result<String, UnicodeMathError> {
     check_ast_budget(node)?;
     let output = write_node(node, 0)?;
     let rebuilt = parse_unicodemath(&output)?;
-    if crate::pilot_ast::shape(node) != crate::pilot_ast::shape(&rebuilt) {
+    if crate::pilot_ast::unicode_shape(node) != crate::pilot_ast::unicode_shape(&rebuilt) {
         return Err(error(
             UnicodeMathErrorKind::UnsupportedSyntax,
             0,
@@ -881,10 +985,13 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
                     "AST text exceeds 64 KiB",
                 ));
             }
+            if !text.is_empty() && text.chars().all(|ch| ch == ' ') {
+                return Ok(String::new());
+            }
             if text.is_empty()
                 || !text
                     .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || "+-=<>.,".contains(ch))
+                    .all(|ch| ch.is_ascii_alphanumeric() || "+-=<>., ".contains(ch))
             {
                 return Err(unsupported());
             }
@@ -897,8 +1004,11 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
                 child(&parsed)?
             }
         }
-        LatexNode::Sequence(nodes) => join(nodes.iter().map(child), " ")?,
-        LatexNode::Group(nodes) if !nodes.is_empty() => join(nodes.iter().map(child), " ")?,
+        LatexNode::Sequence(nodes) => write_sequence(nodes, depth + 1)?,
+        LatexNode::Group(nodes) if nodes.len() == 2 && is_function_head(&nodes[0]) => {
+            format!("{}\u{2061}〖{}〗", child(&nodes[0])?, child(&nodes[1])?)
+        }
+        LatexNode::Group(nodes) if !nodes.is_empty() => write_sequence(nodes, depth + 1)?,
         LatexNode::Fraction { num, den } => format!("({})/({})", child(num)?, child(den)?),
         LatexNode::SquareRoot { index, content } => {
             if let Some(index) = index {
@@ -914,6 +1024,7 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
             .find(|(_, mapped)| *mapped == name)
             .map(|(glyph, _)| glyph.to_string())
             .ok_or_else(unsupported)?,
+        LatexNode::Operator(name) if FUNCTIONS.contains(&name.as_str()) => name.clone(),
         LatexNode::Symbol(name) | LatexNode::Relation(name) => SYMBOLS
             .iter()
             .find(|(_, mapped)| *mapped == name.trim_start_matches('\\'))
@@ -956,6 +1067,54 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
         ));
     }
     Ok(output)
+}
+
+fn write_sequence(nodes: &[LatexNode], depth: usize) -> Result<String, UnicodeMathError> {
+    let mut index = 0;
+    join(
+        std::iter::from_fn(|| {
+            let node = nodes.get(index)?;
+            index += 1;
+            let argument = nodes.get(index).filter(|argument| match argument {
+                LatexNode::Relation(_) => false,
+                LatexNode::Text(text) => {
+                    !matches!(text.trim(), "+" | "-" | "=" | "<" | ">" | "." | ",")
+                }
+                _ => true,
+            });
+            Some(
+                if let Some(argument) = argument.filter(|_| is_function_head(node)) {
+                    index += 1;
+                    write_node(node, depth).and_then(|head| {
+                        write_node(argument, depth).map(|body| format!("{head}\u{2061}〖{body}〗"))
+                    })
+                } else {
+                    write_node(node, depth)
+                },
+            )
+        }),
+        " ",
+    )
+}
+
+pub(crate) fn is_function_head(node: &LatexNode) -> bool {
+    function_name(node).is_some()
+}
+
+pub(crate) fn function_name(node: &LatexNode) -> Option<&str> {
+    // Callers validate depth/node budgets before external AST traversal.
+    match node {
+        LatexNode::Operator(name) if is_function_name(name) => Some(name),
+        LatexNode::Subscript { base, .. } | LatexNode::Superscript { base, .. } => {
+            function_name(base)
+        }
+        LatexNode::Group(nodes) if nodes.len() == 1 => function_name(&nodes[0]),
+        _ => None,
+    }
+}
+
+pub(crate) fn is_function_name(name: &str) -> bool {
+    FUNCTIONS.contains(&name)
 }
 
 fn encode_text(text: &str, offset: usize) -> Result<String, UnicodeMathError> {

@@ -22,7 +22,7 @@
   ],
   "rejected": [
     { "source": "∫_0^1 x", "kind": "UnsupportedSyntax" },
-    { "source": "sin x", "kind": "UnsupportedSyntax" },
+    { "source": "f⁡x", "kind": "UnsupportedSyntax" },
     { "source": "a⁄b", "kind": "UnsupportedSyntax" },
     { "source": "x̂", "kind": "UnsupportedSyntax" },
     { "source": "a/", "kind": "UnexpectedToken" },

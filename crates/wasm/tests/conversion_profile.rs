@@ -59,3 +59,18 @@ fn quoted_unicode_text_keeps_the_formula_only_envelope() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn unicode_function_arguments_keep_the_formula_only_envelope() {
+    let result = json(convert_formula_v3(
+        "sin⁡〖x+y〗+b",
+        "unicode-math",
+        "omml",
+        Some("best-effort".into()),
+    ));
+    assert_eq!(result["ok"].as_bool(), Some(true));
+    let content = result["data"]["content"].as_str().unwrap();
+    let end = content.find("</m:func>").unwrap();
+    assert!(content[..end].contains(" y</m:t>"));
+    assert!(content[end..].contains("<m:t>b</m:t>"));
+}

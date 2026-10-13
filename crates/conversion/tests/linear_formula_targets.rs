@@ -7,6 +7,46 @@ use latexsnipper_conversion::{
 };
 
 #[test]
+fn registered_named_functions_use_existing_routes_and_remain_best_effort() {
+    let registry = SemanticConversionRegistry::default();
+    for (source, input) in [
+        ("sin⁡〖x+y〗", Input::UnicodeMath),
+        (r"{\sin{x+y}}", Input::Latex),
+    ] {
+        let output = DocumentConverter::convert_formula_to_target(
+            source,
+            input,
+            Target::UnicodeMath,
+            Mode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(output, "sin⁡〖x + y〗");
+    }
+    for output in ["unicode-math", "omml", "mathml"] {
+        let request = RegisteredConversionRequest {
+            schema_version: 1,
+            input: "unicode-math".into(),
+            output: output.into(),
+            mode: Mode::BestEffort,
+            backend: None,
+            content: "exp⁡〖x+y〗".into(),
+            context_sha256: "b".repeat(64),
+        };
+        let result = registry.convert(&request).unwrap();
+        assert_eq!(result.input, "unicode-math");
+        assert!(!result.candidate.content.is_empty());
+        assert!(!result.candidate.content.contains(r"\exp"));
+    }
+    assert!(DocumentConverter::convert_formula_to_target(
+        "sin x",
+        Input::UnicodeMath,
+        Target::UnicodeMath,
+        Mode::Strict
+    )
+    .is_err());
+}
+
+#[test]
 fn registered_unicode_text_routes_keep_literals_and_original_input_identity() {
     let source = r#""rate"="distance"/"time""#;
     let output = DocumentConverter::convert_formula_to_target(

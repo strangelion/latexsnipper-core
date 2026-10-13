@@ -9,19 +9,29 @@ pub(super) struct Shape {
     children: Vec<Vec<Shape>>,
 }
 pub(super) fn shape(node: &LatexNode) -> Vec<Shape> {
-    let combined = |nodes: &[LatexNode]| nodes.iter().flat_map(shape).collect::<Vec<_>>();
+    shape_impl(node, false)
+}
+
+pub(super) fn unicode_shape(node: &LatexNode) -> Vec<Shape> {
+    shape_impl(node, true)
+}
+
+fn shape_impl(node: &LatexNode, ignore_spaces: bool) -> Vec<Shape> {
+    let child = |node: &LatexNode| shape_impl(node, ignore_spaces);
+    let combined = |nodes: &[LatexNode]| nodes.iter().flat_map(child).collect::<Vec<_>>();
     let (name, children) = match node {
         LatexNode::Sequence(nodes) | LatexNode::Group(nodes) => return combined(nodes),
         LatexNode::Text(text) => {
             return text
                 .chars()
+                .filter(|ch| !ignore_spaces || *ch != ' ')
                 .map(|ch| Shape {
                     name: format!("text:{ch}"),
                     children: vec![],
                 })
                 .collect()
         }
-        LatexNode::Fraction { num, den } => ("frac".into(), vec![shape(num), shape(den)]),
+        LatexNode::Fraction { num, den } => ("frac".into(), vec![child(num), child(den)]),
         LatexNode::SquareRoot { index, content } => (
             if index.is_some() {
                 "indexed-root"
@@ -30,18 +40,21 @@ pub(super) fn shape(node: &LatexNode) -> Vec<Shape> {
             }
             .into(),
             vec![
-                index.as_ref().map_or_else(Vec::new, |index| shape(index)),
-                shape(content),
+                index.as_ref().map_or_else(Vec::new, |index| child(index)),
+                child(content),
             ],
         ),
-        LatexNode::Subscript { base, sub } => ("sub".into(), vec![shape(base), shape(sub)]),
-        LatexNode::Superscript { base, exp } => ("sup".into(), vec![shape(base), shape(exp)]),
+        LatexNode::Subscript { base, sub } => ("sub".into(), vec![child(base), child(sub)]),
+        LatexNode::Superscript { base, exp } => ("sup".into(), vec![child(base), child(exp)]),
         LatexNode::Greek(name) => (format!("greek:{name}"), vec![]),
         LatexNode::Operator(name) => (format!("operator:{name}"), vec![]),
-        LatexNode::FontModifier { font, content } => (format!("font:{font}"), vec![shape(content)]),
-        LatexNode::Command { name, args } => {
-            (format!("command:{name}"), args.iter().map(shape).collect())
-        }
+        LatexNode::FontModifier { font, content } => (format!("font:{font}"), vec![child(content)]),
+        LatexNode::Command { name, args } => (
+            format!("command:{name}"),
+            args.iter()
+                .map(|node| shape_impl(node, ignore_spaces && name != "text"))
+                .collect(),
+        ),
         LatexNode::Symbol(name) | LatexNode::Relation(name) => {
             (format!("symbol:{}", name.trim_start_matches('\\')), vec![])
         }
@@ -56,7 +69,7 @@ pub(super) fn shape(node: &LatexNode) -> Vec<Shape> {
                 .map(|row| {
                     vec![Shape {
                         name: "row".into(),
-                        children: row.iter().map(shape).collect(),
+                        children: row.iter().map(child).collect(),
                     }]
                 })
                 .collect(),

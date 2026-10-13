@@ -676,6 +676,25 @@ mod tests {
     }
 
     #[test]
+    fn unicode_function_arguments_use_existing_c_envelope() {
+        let request = json!({"content": "sin⁡〖x+y〗+b", "inputFormat": "unicode-math",
+            "outputFormat": "omml", "mode": "best-effort"})
+        .to_string();
+        // SAFETY: one live UTF-8 request buffer with explicit byte length.
+        let result = unsafe {
+            take_json(latexsnipper_formula_convert(
+                request.as_ptr(),
+                request.len(),
+            ))
+        };
+        assert_eq!(result["ok"], true);
+        let content = result["data"]["content"].as_str().unwrap();
+        let end = content.find("</m:func>").unwrap();
+        assert!(content[..end].contains(" y</m:t>"));
+        assert!(content[end..].contains("<m:t>b</m:t>"));
+    }
+
+    #[test]
     fn formula_routes_and_errors_preserve_v3_envelopes_and_ownership() {
         let capabilities = unsafe { take_json(latexsnipper_formula_capabilities()) };
         assert_eq!(capabilities["ok"], true);

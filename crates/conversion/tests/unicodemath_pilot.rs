@@ -11,6 +11,187 @@ fn canonical(source: &str) -> String {
 }
 
 #[test]
+fn named_functions_preserve_argument_boundaries_and_scripts() {
+    for (source, expected) in [
+        ("sin x", "sin⁡〖x〗"),
+        ("sin⁡xy", "sin⁡〖x y〗"),
+        ("cos(x)b", "cos⁡〖(x)〗 b"),
+        ("sin⁡〖(x)b〗", "sin⁡〖(x) b〗"),
+        ("log_2 x", "〖log〗_(2)⁡〖x〗"),
+        ("sin^2⁡x", "〖sin〗^(2)⁡〖x〗"),
+        ("sin⁡^2 x", "〖sin〗^(2)⁡〖x〗"),
+        ("sin cos x", "sin⁡〖cos⁡〖x〗〗"),
+        ("sin x/y", "sin⁡〖(x)/(y)〗"),
+        ("sin(x)/y", "(sin⁡〖(x)〗)/(y)"),
+        ("sin", "sin"),
+    ] {
+        assert_eq!(canonical(source), expected, "{source}");
+        assert_eq!(canonical(expected), expected, "{source}");
+    }
+    let LatexNode::Sequence(nodes) = parse_unicodemath("sin⁡(x)b").unwrap() else {
+        panic!("argument boundary")
+    };
+    assert_eq!(nodes.len(), 2);
+    let LatexNode::Group(call) = &nodes[0] else {
+        panic!("call")
+    };
+    assert!(matches!(&call[0], LatexNode::Operator(name) if name == "sin"));
+    let LatexNode::Group(argument) = &call[1] else {
+        panic!("argument")
+    };
+    assert!(matches!(&argument[0], LatexNode::Delimited { content, .. }
+        if content.len() == 1 && matches!(&content[0], LatexNode::Text(text) if text == "x")));
+    assert!(matches!(&nodes[1], LatexNode::Text(text) if text == "b"));
+    for name in [
+        "sin", "cos", "tan", "sec", "csc", "cot", "sinh", "cosh", "tanh", "arcsin", "arccos",
+        "arctan", "log", "ln", "exp", "lim", "min", "max", "det", "dim", "gcd",
+    ] {
+        let source = format!("{name}⁡x");
+        assert_eq!(canonical(&source), format!("{name}⁡〖x〗"));
+        for target in [OutputFormat::MathML, OutputFormat::OMML] {
+            let xml = DocumentConverter::convert_formula_string(
+                &source,
+                FormulaInputFormat::UnicodeMath,
+                target,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert!(!xml.contains(&format!(r"\{name}")), "{name}: {xml}");
+            assert!(xml.contains(name) && xml.contains('x'));
+        }
+    }
+    let external = LatexNode::Sequence(vec![
+        LatexNode::Operator("sin".into()),
+        LatexNode::Text("ab".into()),
+        LatexNode::Text("+".into()),
+        LatexNode::Operator("cos".into()),
+        LatexNode::Text("cd".into()),
+    ]);
+    assert_eq!(
+        write_unicodemath(&external).unwrap(),
+        "sin⁡〖a b〗 + cos⁡〖c d〗"
+    );
+}
+
+#[test]
+fn function_projection_owns_grouped_operand_and_does_not_guess_unknown_names() {
+    let source = "sin⁡〖x+y〗+b";
+    let omml = DocumentConverter::convert_formula_string(
+        source,
+        FormulaInputFormat::UnicodeMath,
+        OutputFormat::OMML,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    let end = omml.find("</m:func>").expect("function");
+    assert!(omml[..end].contains("<m:t>x </m:t>"), "{omml}");
+    assert!(omml[..end].contains("<m:t> y</m:t>"), "{omml}");
+    assert!(!omml[..end].contains("<m:t>b</m:t>"));
+    assert!(omml[end..].contains("<m:t>b</m:t>"));
+    for source in [
+        "f⁡x",
+        "sine⁡x",
+        "asin⁡x",
+        "sin⁡",
+        "sin⁡+x",
+        "sin⁡()",
+        "sin2x",
+        "sin^2⁡^3 x",
+        "sin⁡⁡x",
+    ] {
+        assert!(parse_unicodemath(source).is_err(), "{source}");
+    }
+    assert_eq!(
+        parse_unicodemath("α+sin⁡").unwrap_err().offset,
+        "α+sin⁡".len()
+    );
+    let deep = format!("{}x", "sin⁡".repeat(80));
+    assert_eq!(
+        parse_unicodemath(&deep).unwrap_err().kind,
+        UnicodeMathErrorKind::LimitExceeded
+    );
+    assert_eq!(canonical("sin x"), "sin⁡〖x〗");
+    for source in [
+        "sin⁡\"label\"",
+        "sin^2 x",
+        "log_2 x",
+        "■(sin x&cos y@exp z&dim w)",
+    ] {
+        let xml = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::MathML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(xml.contains("mathvariant=\"normal\""), "{xml}");
+        assert!(!xml.contains('\\'), "{xml}");
+    }
+    let log = DocumentConverter::convert_formula_string(
+        "log_2 x",
+        FormulaInputFormat::UnicodeMath,
+        OutputFormat::MathML,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    assert!(log.contains("<msub>") && !log.contains("<munder>"));
+}
+
+#[test]
+fn finite_function_xml_readback_retains_owned_arguments_and_refuses_stray_apply() {
+    for source in [
+        "sin⁡〖x+y〗+b",
+        "sin cos x",
+        "sin⁡(x)b",
+        "sin x/y",
+        "sin^2 x",
+        "log_2 x",
+        "sin⁡\"label\"",
+    ] {
+        for (target, input) in [
+            (OutputFormat::MathML, FormulaInputFormat::Mathml),
+            (OutputFormat::OMML, FormulaInputFormat::Omml),
+        ] {
+            if source.contains('"') && input == FormulaInputFormat::Omml {
+                // OMML normal runs do not identify the original literal-text AST.
+                continue;
+            }
+            let xml = DocumentConverter::convert_formula_string(
+                source,
+                FormulaInputFormat::UnicodeMath,
+                target,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            let restored = DocumentConverter::convert_formula_to_target(
+                &xml,
+                input,
+                latexsnipper_conversion::FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap_or_else(|error| {
+                panic!(
+                    "{source}: {error}; {xml}; {:?}",
+                    if input == FormulaInputFormat::Mathml {
+                        latexsnipper_conversion::mathml_parser::parse_mathml_to_latex(&xml)
+                    } else {
+                        latexsnipper_conversion::omml_parser::parse_omml_to_latex(&xml)
+                    }
+                )
+            });
+            assert_eq!(restored, canonical(source), "{source}: {xml}");
+        }
+    }
+    for xml in ["<math><mo>&#x2061;</mo><mi>x</mi></math>",
+        "<math><mi mathvariant=\"normal\">sin</mi><mrow>&#x2061;</mrow><mi>x</mi></math>",
+        "<math><mi mathvariant=\"normal\">sin</mi><mo>&#x2061;</mo></math>",
+        "<math><mi>f</mi><mo>&#x2061;</mo><mi>x</mi></math>",
+        "<math><mfrac><mi mathvariant=\"normal\">sin</mi><mo>&#x2061;</mo><mi>x</mi></mfrac></math>"] {
+        assert!(latexsnipper_conversion::mathml_parser::parse_mathml_to_latex(xml).is_err());
+    }
+}
+
+#[test]
 fn quoted_text_is_atomic_literal_not_variables_or_math_syntax() {
     for (source, latex, output) in [
         (r#""rate""#, r"\text{rate}", r#""rate""#),
@@ -293,8 +474,7 @@ fn unsupported_and_malformed_sources_never_return_partial_success() {
         "a∕b",
         "a¦b",
         "a/b#1",
-        "sin x",
-        "cos(x)",
+        "sine⁡x",
         "x\t+y",
         "x\n+y",
         "𝑥+y",
@@ -309,8 +489,8 @@ fn unsupported_and_malformed_sources_never_return_partial_success() {
         );
     }
     for source in [
-        "", " ", "a/", "/a", "(a]", "a_", "a^ b", "■(a&b", "a&b", "a@b", "√()", "√(n&)", "(a",
-        "a)", "a_b^c_d", "1.2.3",
+        "", " ", "cos⁡", "a/", "/a", "(a]", "a_", "a^ b", "■(a&b", "a&b", "a@b", "√()", "√(n&)",
+        "(a", "a)", "a_b^c_d", "1.2.3",
     ] {
         assert_eq!(
             parse_unicodemath(source).unwrap_err().kind,

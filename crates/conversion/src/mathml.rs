@@ -1411,6 +1411,20 @@ fn render_finite_symbol_expression(latex: &str, display: bool) -> Option<String>
     found_symbol.then_some(xml)
 }
 
+fn is_legacy_limit_head(node: &crate::latex_ast::LatexNode) -> bool {
+    use crate::latex_ast::LatexNode;
+    match node {
+        LatexNode::Operator(name) => {
+            matches!(name.as_str(), "lim" | "limsup" | "liminf" | "sup" | "inf")
+        }
+        LatexNode::Subscript { base, .. } | LatexNode::Superscript { base, .. } => {
+            is_legacy_limit_head(base)
+        }
+        LatexNode::Group(nodes) if nodes.len() == 1 => is_legacy_limit_head(&nodes[0]),
+        _ => false,
+    }
+}
+
 fn render_symbol_ast(
     node: &crate::latex_ast::LatexNode,
     found: &mut bool,
@@ -1482,7 +1496,6 @@ fn render_symbol_ast(
                     | "coprod"
                     | "bigcup"
                     | "bigcap"
-                    | "lim"
                     | "limsup"
                     | "liminf"
                     | "sup"
@@ -1490,6 +1503,7 @@ fn render_symbol_ast(
             ) {
                 None
             } else {
+                *found |= crate::unicodemath_pilot::is_function_head(node);
                 Some(format!(
                     "<mi mathvariant=\"normal\">{}</mi>",
                     xml_escape(name)
@@ -1518,12 +1532,33 @@ fn render_symbol_ast(
             *found = true;
             Some(xml.into())
         }
+        LatexNode::Command { name, args } if name == "text" && args.len() == 1 => {
+            let LatexNode::Text(text) = &args[0] else {
+                return None;
+            };
+            *found = true;
+            Some(format!(
+                "<mtext>{}</mtext>",
+                xml_escape(&crate::latex_utils::decode_text_symbols(text))
+            ))
+        }
         LatexNode::Sequence(nodes) | LatexNode::Group(nodes) => {
-            let parts: Option<Vec<_>> = nodes
-                .iter()
-                .map(|node| render_symbol_ast(node, found, depth + 1))
-                .collect();
-            Some(format!("<mrow>{}</mrow>", parts?.concat()))
+            let mut parts = String::new();
+            for (index, node) in nodes.iter().enumerate() {
+                parts.push_str(&render_symbol_ast(node, found, depth + 1)?);
+                if crate::unicodemath_pilot::is_function_head(node)
+                    && nodes.get(index + 1).is_some_and(|argument| match argument {
+                        LatexNode::Relation(_) => false,
+                        LatexNode::Text(text) => {
+                            !matches!(text.trim(), "+" | "-" | "=" | "<" | ">" | "." | ",")
+                        }
+                        _ => true,
+                    })
+                {
+                    parts.push_str("<mo>&#x2061;</mo>");
+                }
+            }
+            Some(format!("<mrow>{parts}</mrow>"))
         }
         LatexNode::Math { content, .. } => {
             let parts: Option<Vec<_>> = content
@@ -1580,6 +1615,9 @@ fn render_symbol_ast(
             })
         }
         LatexNode::Superscript { base, exp } => {
+            if is_legacy_limit_head(base) {
+                return None;
+            }
             Some(if let LatexNode::Subscript { base, sub } = base.as_ref() {
                 format!(
                     "<msubsup>{}{}{}</msubsup>",
@@ -1591,18 +1629,23 @@ fn render_symbol_ast(
                 format!("<msup>{}{}</msup>", row(base, found)?, row(exp, found)?)
             })
         }
-        LatexNode::Subscript { base, sub } => Some(
-            if let LatexNode::Superscript { base, exp } = base.as_ref() {
-                format!(
-                    "<msubsup>{}{}{}</msubsup>",
-                    row(base, found)?,
-                    row(sub, found)?,
-                    row(exp, found)?
-                )
-            } else {
-                format!("<msub>{}{}</msub>", row(base, found)?, row(sub, found)?)
-            },
-        ),
+        LatexNode::Subscript { base, sub } => {
+            if is_legacy_limit_head(base) {
+                return None;
+            }
+            Some(
+                if let LatexNode::Superscript { base, exp } = base.as_ref() {
+                    format!(
+                        "<msubsup>{}{}{}</msubsup>",
+                        row(base, found)?,
+                        row(sub, found)?,
+                        row(exp, found)?
+                    )
+                } else {
+                    format!("<msub>{}{}</msub>", row(base, found)?, row(sub, found)?)
+                },
+            )
+        }
         LatexNode::Matrix { env, rows } => {
             let (open, close) = match env.as_str() {
                 "matrix" | "smallmatrix" | "aligned" | "align" | "align*" | "gather"

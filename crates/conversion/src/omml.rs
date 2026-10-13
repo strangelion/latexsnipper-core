@@ -967,18 +967,30 @@ fn function_sequence_to_omml(nodes: &[LatexNode]) -> String {
     let mut output = String::new();
     let mut index = 0;
     while index < nodes.len() {
-        if let LatexNode::Operator(name) = &nodes[index] {
-            if !is_limit_operator(name)
-                && NaryOperator::from_name(name).is_none()
-                && index + 1 < nodes.len()
-                && !is_nary_operand_boundary(&nodes[index + 1])
-            {
+        let name = match &nodes[index] {
+            LatexNode::Operator(name) => Some(name.as_str()),
+            node => crate::unicodemath_pilot::function_name(node),
+        };
+        if let Some(name) = name {
+            let argument = (index + 1..nodes.len()).find(
+                |next| !matches!(&nodes[*next], LatexNode::Text(text) if text.trim().is_empty()),
+            );
+            if let Some(argument) = argument.filter(|next| {
+                !is_limit_operator(name)
+                    && NaryOperator::from_name(name).is_none()
+                    && !is_nary_operand_boundary(&nodes[*next])
+            }) {
+                let head = if matches!(&nodes[index], LatexNode::Operator(_)) {
+                    wrap_normal_mtext(name)
+                } else {
+                    ast_to_omml(&nodes[index])
+                };
                 output.push_str(&format!(
                     "<m:func><m:fName>{}</m:fName><m:e>{}</m:e></m:func>",
-                    wrap_normal_mtext(name),
-                    ast_to_omml(&nodes[index + 1])
+                    head,
+                    ast_to_omml(&nodes[argument])
                 ));
-                index += 2;
+                index = argument + 1;
                 continue;
             }
         }

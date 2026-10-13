@@ -29,7 +29,19 @@ impl MathmlFrame {
     }
 
     fn finish(mut self) -> Result<(String, Option<FenceMarker>), String> {
+        if self.children.is_empty()
+            && self.text.trim() == "\u{2061}"
+            && !matches!(self.tag.as_str(), "mo" | "mtext" | "ms")
+        {
+            return Err(
+                "MathML function application marker must be an mo element; retain the original XML"
+                    .into(),
+            );
+        }
         if self.fences.iter().any(Option::is_some) {
+            if self.children.iter().any(|child| child == "\u{2061}") {
+                return Err("MathML function application needs a separately grouped fence argument; retain the original XML".into());
+            }
             if !matches!(
                 self.tag.as_str(),
                 "math" | "mrow" | "mstyle" | "style" | "semantics" | "annotation-xml"
@@ -64,6 +76,46 @@ impl MathmlFrame {
             self.children = vec![latexsnipper_ast::formula_layout::join_latex_fragments(
                 fragments,
             )];
+        }
+        if self.children.iter().any(|child| child == "\u{2061}") {
+            if !matches!(
+                self.tag.as_str(),
+                "math" | "mrow" | "mstyle" | "style" | "semantics" | "annotation-xml"
+            ) || !self.text.trim().is_empty()
+            {
+                return Err("MathML function application crosses an operand or text scope; retain the original XML".into());
+            }
+            let mut fragments = Vec::new();
+            let mut children = self.children.into_iter();
+            while let Some(source) = children.next() {
+                if source == "\u{2061}" {
+                    let head: String = fragments.pop().ok_or(
+                        "MathML function application has no name; retain the original XML",
+                    )?;
+                    let argument = children
+                        .next()
+                        .filter(|value| !value.is_empty() && value != "\u{2061}")
+                        .ok_or(
+                            "MathML function application has no argument; retain the original XML",
+                        )?;
+                    if head.len() > 65_536
+                        || head
+                            .bytes()
+                            .filter(|byte| matches!(byte, b'\\' | b'^' | b'_'))
+                            .count()
+                            > 64
+                        || !crate::unicodemath_pilot::is_function_head(
+                            &crate::latex_parser::parse_latex(&head),
+                        )
+                    {
+                        return Err("MathML function name is outside the finite named-function subset; retain the original XML".into());
+                    }
+                    fragments.push(format!("{{{head}{{{argument}}}}}"));
+                } else {
+                    fragments.push(source);
+                }
+            }
+            self.children = fragments;
         }
         let text = if self.children.is_empty() {
             self.text.clone()
@@ -582,7 +634,13 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
         }
 
         "mi" => {
-            if let Some(latex) = reverse_mi_map(text) {
+            if attrs
+                .split_whitespace()
+                .any(|field| field == "mathvariant=normal")
+                && crate::unicodemath_pilot::is_function_name(text)
+            {
+                format!("\\{text}")
+            } else if let Some(latex) = reverse_mi_map(text) {
                 latex
             } else if is_greek(text) {
                 format!("\\{} ", text)
@@ -596,6 +654,7 @@ fn build_mathml_node(tag: &str, text: &str, children: &[String], attrs: &str) ->
             }
         }
         "mn" => crate::latex_utils::escape_text_symbols(text),
+        "mo" if text == "\u{2061}" => text.into(),
         "mo" => match fixed_operator_command(attrs) {
             Ok(Some(command)) => format!(
                 "\\{command}{}",
