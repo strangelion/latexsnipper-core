@@ -598,6 +598,10 @@ fn conflict(message: &str) -> WasiDiagnostic {
 }
 
 #[cfg(test)]
+#[path = "windows_approval_process_tests.rs"]
+mod process_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;

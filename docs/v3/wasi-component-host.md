@@ -308,8 +308,13 @@ protected checkpoint before deciding what happened.
 
 Current evidence covers real Credential Manager read/write, file-backed restore,
 unselected-object recovery, corruption refusal, forgetting, independent-client
-guard revocation and competing backend instances on Windows threads. It does not
-yet establish OS child-process races, forced-kill/power-loss durability, logoff
+guard revocation and competing backend instances on Windows threads. A separate
+owned fixture launches two real OS child processes, barriers their independent
+authenticated views, then verifies one CAS winner, one stale-view conflict and
+cross-process policy veto. Its parent bounds waits, terminates only its own children
+on fixture failure, and removes only the exact owned credential/temporary root.
+The ignored worker entry is transport scaffolding, not an independent verification.
+This does not yet establish forced-kill/power-loss durability, logoff
 persistence, orphan collection, Linux/macOS providers, application UI or release
 security approval. File sync is not a promise of directory-entry power-loss
 durability. Native key-store calls are trusted blocking OS calls, not preemptible
