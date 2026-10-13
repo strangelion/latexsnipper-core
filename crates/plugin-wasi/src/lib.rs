@@ -16,6 +16,8 @@ pub mod remembered_approval;
 #[cfg(windows)]
 pub mod windows_approval_checkpoint;
 #[cfg(windows)]
+mod write_basic_metadata;
+#[cfg(windows)]
 mod write_compression;
 mod write_security;
 #[cfg(windows)]

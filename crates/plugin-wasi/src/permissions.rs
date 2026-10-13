@@ -276,6 +276,8 @@ impl ComponentPermissions {
             return Err(FilesystemOperationError::SizeLimit.into());
         }
         let (parent, target) = write_parent(grant, Path::new(relative))?;
+        #[cfg(windows)]
+        let basic = crate::write_basic_metadata::WriteBasicMetadata::read(&parent, &target)?;
         let security = crate::write_security::WriteSecurity::read(&parent, &target)?;
         #[cfg(windows)]
         let compression = crate::write_compression::WriteCompression::read(&parent, &target)?;
@@ -283,6 +285,8 @@ impl ComponentPermissions {
         let streams =
             crate::write_streams::WriteStreams::read(&parent, &target, limit, &mut checkpoint)?;
         let (mut staged, mut file) = StagedWrite::create(&parent, &security)?;
+        #[cfg(windows)]
+        basic.prepare(&file)?;
         #[cfg(windows)]
         compression.apply(&file)?;
         for chunk in payload.chunks(64 * 1024) {
@@ -293,8 +297,9 @@ impl ComponentPermissions {
         streams.apply(&parent, &staged.name, &mut checkpoint)?;
         #[cfg(windows)]
         compression.verify_staging(&file)?;
+        #[cfg(windows)]
+        basic.apply(&file)?;
         file.sync_all().map_err(map_io_error)?;
-        drop(file);
         // Clones of this grant share publication ordering. Other hosts and
         // external editors still require a final observed-content check.
         let _publication = loop {
@@ -316,6 +321,8 @@ impl ComponentPermissions {
             compression.recheck(&parent, &target)?;
             streams.recheck(&parent, &target, limit, &mut checkpoint)?;
             streams.recheck(&parent, Path::new(&staged.name), limit, &mut checkpoint)?;
+            basic.recheck(&parent, &target)?;
+            basic.recheck_staging(&parent, Path::new(&staged.name))?;
         }
         // Preserve ordinary permissions as well as platform staging security.
         if let Ok(metadata) = parent.symlink_metadata(&target) {
@@ -329,10 +336,15 @@ impl ComponentPermissions {
                 // Replacing content must not restore setuid/setgid bits.
                 Permissions::from_mode(permissions.mode() & 0o777)
             };
-            parent
-                .set_permissions(&staged.name, permissions)
-                .map_err(map_io_error)?;
+            // Apply through the owned file handle. On Windows the directory
+            // adapter reconstructs permissions from its parent and may copy
+            // unrelated directory attributes to the staging path.
+            file.set_permissions(permissions).map_err(map_io_error)?;
         }
+        #[cfg(windows)]
+        basic.recheck_staging(&parent, Path::new(&staged.name))?;
+        file.sync_all().map_err(map_io_error)?;
+        drop(file);
         checkpoint().map_err(CheckedWriteError::Interrupted)?;
         parent
             .rename(&staged.name, &parent, &target)
@@ -364,6 +376,8 @@ impl ComponentPermissions {
             }
             _ => {}
         }
+        #[cfg(windows)]
+        crate::write_basic_metadata::WriteBasicMetadata::read(&parent, &target)?;
         #[cfg(windows)]
         crate::write_compression::WriteCompression::read(&parent, &target)?;
         Ok(grant)

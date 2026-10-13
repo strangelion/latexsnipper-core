@@ -484,7 +484,9 @@ external/native writers can race between the last check and replacement, and
 independently created grant/host instances do not share a global filesystem lock.
 On Windows the pinned capability library's rename ultimately uses native paths;
 this is not a guarantee against hostile native directory moves/reparse changes.
-Replacement preserves ordinary file permission bits (never Unix setuid/setgid).
+Replacement preserves ordinary file permission bits (never Unix setuid/setgid),
+applied through the owned staging file handle rather than reconstructing Windows
+attributes from a directory permission adapter.
 Windows existing-file staging also reads owner/group/DACL, including inheritance
 protection, from the original file, creates the empty staging file with that
 security descriptor and verifies the resulting identity before writing payload.
@@ -496,7 +498,27 @@ requires privileges the process lacks, the write fails without altering the targ
 no privilege enabling or ignore-ACL fallback is performed. The staging filename is
 one safe component, and native `CREATE_NEW` never overwrites a collision.
 These checks were exercised on controlled Windows x64 files, not every filesystem
-or enterprise policy. Unix owner identity, Windows SACL/security resource attributes,
+or enterprise policy. Windows basic-metadata capture now preserves positive
+creation time and supported hidden/system/temporary/not-content-indexed flags.
+New content is marked ARCHIVE for backup; it does not restore old last-write,
+last-access or metadata-change times. Absent targets retain native defaults.
+Before data-read opens, preflight inspects the no-follow metadata's finite flags;
+readonly files are refused without changing their attributes or opening approval.
+Unsupported offline/recall/pinning/no-scrub/unknown attributes are rejected rather
+than silently erased. This is not a guarantee against native path races or cloud
+minifilter hydration behavior, and these providers have only flag-classification
+coverage, not live cloud-driver acceptance.
+
+Creation/last-write times and supported flags are rechecked on the original;
+time-only, attribute-only and readonly concurrent edits conflict without publishing.
+Staging is checked before payload and again before rename, after permission changes;
+only its held handle receives basic metadata and permission writes. Owned NTFS
+fixtures verify actual replacement, backup marking, natural new-content write time,
+readonly preservation and fresh operation recovery after conflicts. Compression
+and named-stream preservation remain separately checked. The finite
+[basic-information API](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle)
+does not establish all timestamps, drivers or extended metadata as supported.
+Unix owner identity, Windows SACL/security resource attributes,
 encryption, sparse/integrity semantics and other extended metadata remain open.
 Existing files with encrypted, sparse, reparse or integrity flags are refused in
 storage preflight, before creating an approval request, with
