@@ -105,6 +105,7 @@ pub struct WasiComponentHost {
     concurrency: Arc<ConcurrencyGate>,
     approvals: Arc<SensitiveActionController>,
     approval_context: ApprovalContext,
+    storage_isolations: Vec<Arc<dyn crate::ApprovalStorageIsolation>>,
 }
 
 impl Drop for WasiComponentHost {
@@ -139,6 +140,7 @@ impl WasiComponentHost {
             concurrency,
             approvals: Arc::new(SensitiveActionController::default()),
             approval_context,
+            storage_isolations: Vec::new(),
         })
     }
 
@@ -337,11 +339,39 @@ impl WasiComponentHost {
     /// Explicit trusted-host opt-in to a shared validated policy store.
     /// Bind scope first. This does not persist policies or replay pending work.
     pub fn with_remembered_policies(
-        self,
+        mut self,
         policies: Arc<crate::RememberedApprovalPolicies>,
     ) -> Result<Self, WasiDiagnostic> {
+        if let Some(isolation) = policies.storage_isolation() {
+            self = self.with_protected_approval_storage(isolation)?;
+        }
         self.approvals
             .attach_remembered(&self.approval_context, policies)?;
+        Ok(self)
+    }
+
+    /// Declare private storage before any guest execution, even when remembered
+    /// reuse is disabled. This veto only restricts existing manifest grants.
+    pub fn with_protected_approval_storage(
+        mut self,
+        isolation: Arc<dyn crate::ApprovalStorageIsolation>,
+    ) -> Result<Self, WasiDiagnostic> {
+        if self
+            .storage_isolations
+            .iter()
+            .any(|guard| Arc::ptr_eq(guard, &isolation))
+        {
+            return Ok(self);
+        }
+        if self.storage_isolations.len() >= 16 {
+            return Err(invalid_input("private storage isolation limit exceeded"));
+        }
+        crate::approval_storage_isolation::check_isolations(
+            std::slice::from_ref(&isolation),
+            &self.package.permissions,
+            Instant::now() + Duration::from_millis(50),
+        )?;
+        self.storage_isolations.push(isolation);
         Ok(self)
     }
 
@@ -381,6 +411,23 @@ impl WasiComponentHost {
             ))
             .ok_or_else(|| host_failure("execution deadline overflow"))?;
         let _permit = self.concurrency.acquire_until(deadline, &cancellation)?;
+        crate::approval_storage_isolation::check_isolations(
+            &self.storage_isolations,
+            &self.package.permissions,
+            deadline,
+        )?;
+        if cancellation.is_cancelled() {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiCancelled,
+                "component execution cancelled during private storage validation",
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err(WasiDiagnostic::new(
+                WasiDiagnosticCode::PluginWasiTimeout,
+                "component deadline elapsed during private storage validation",
+            ));
+        }
         validate_input_size(&invocation, self.package.permissions.limits.input_bytes)?;
         let interrupt = Arc::new(AtomicU8::new(INTERRUPT_NONE));
         let state = HostState::new(
@@ -393,6 +440,7 @@ impl WasiComponentHost {
             ApprovalExecution {
                 controller: Arc::clone(&self.approvals),
                 context: self.approval_context.clone(),
+                storage_isolations: self.storage_isolations.clone(),
             },
         );
         let mut linker = Linker::new(&self.engine);
@@ -544,6 +592,7 @@ impl WasiComponentHost {
 struct ApprovalExecution {
     controller: Arc<SensitiveActionController>,
     context: ApprovalContext,
+    storage_isolations: Vec<Arc<dyn crate::ApprovalStorageIsolation>>,
 }
 
 struct HostState {
@@ -657,6 +706,11 @@ impl HostState {
             ));
         }
         permit.check_before(self.deadline)?;
+        crate::approval_storage_isolation::check_isolations(
+            &self.approval.storage_isolations,
+            &self.permissions,
+            self.deadline,
+        )?;
         // Recheck after the trusted native callback, before publication/dispatch.
         if self.cancellation.is_cancelled() {
             return Err(WasiDiagnostic::new(
@@ -702,17 +756,31 @@ impl filesystem_broker::Host for HostState {
         relative_path: String,
     ) -> wasmtime::Result<Result<Vec<u8>, filesystem_broker::AccessError>> {
         self.checkpoint()?;
+        if let Err(error) = crate::approval_storage_isolation::check_isolations(
+            &self.approval.storage_isolations,
+            &self.permissions,
+            self.deadline,
+        ) {
+            return self.stop_approved_action(error);
+        }
+        self.checkpoint()?;
         if !self.declares("filesystem_read") {
             return Ok(Err(filesystem_broker::AccessError::PermissionDenied));
         }
-        Ok(self
-            .permissions
-            .read_file(
+        let result = if self.approval.storage_isolations.is_empty() {
+            self.permissions.read_file(
                 &grant_id,
                 &relative_path,
                 self.permissions.limits.output_bytes,
             )
-            .map_err(filesystem_access_error))
+        } else {
+            self.permissions.read_file_no_follow_parents(
+                &grant_id,
+                &relative_path,
+                self.permissions.limits.output_bytes,
+            )
+        };
+        Ok(result.map_err(filesystem_access_error))
     }
 
     fn write(
@@ -721,6 +789,14 @@ impl filesystem_broker::Host for HostState {
         relative_path: String,
         payload: Vec<u8>,
     ) -> wasmtime::Result<Result<(), filesystem_broker::AccessError>> {
+        self.checkpoint()?;
+        if let Err(error) = crate::approval_storage_isolation::check_isolations(
+            &self.approval.storage_isolations,
+            &self.permissions,
+            self.deadline,
+        ) {
+            return self.stop_approved_action(error);
+        }
         self.checkpoint()?;
         if !self.declares("filesystem_write") {
             return Ok(Err(filesystem_broker::AccessError::PermissionDenied));

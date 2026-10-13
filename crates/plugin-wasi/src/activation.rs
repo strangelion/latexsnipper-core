@@ -19,6 +19,14 @@ pub struct ActivatedRemoteWasiPlugin {
 }
 
 impl ActivatedRemoteWasiPlugin {
+    pub fn with_protected_approval_storage(
+        mut self,
+        isolation: std::sync::Arc<dyn crate::ApprovalStorageIsolation>,
+    ) -> Result<Self, WasiDiagnostic> {
+        self.ensure_still_enabled()?;
+        self.host = self.host.with_protected_approval_storage(isolation)?;
+        Ok(self)
+    }
     pub fn approval_controller(&self) -> std::sync::Arc<crate::SensitiveActionController> {
         self.host.approval_controller()
     }

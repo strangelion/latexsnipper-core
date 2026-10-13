@@ -20,6 +20,13 @@ pub struct FilesystemGrant {
     publication: Arc<Mutex<()>>,
 }
 
+impl FilesystemGrant {
+    #[cfg(windows)]
+    pub(crate) fn directory(&self) -> &Dir {
+        &self.directory
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilesystemOperationError {
     PermissionDenied,
@@ -171,6 +178,25 @@ impl ComponentPermissions {
         relative: &str,
         limit: usize,
     ) -> Result<Vec<u8>, FilesystemOperationError> {
+        self.read_file_with_parent_policy(grant_id, relative, limit, false)
+    }
+
+    pub(crate) fn read_file_no_follow_parents(
+        &self,
+        grant_id: &str,
+        relative: &str,
+        limit: usize,
+    ) -> Result<Vec<u8>, FilesystemOperationError> {
+        self.read_file_with_parent_policy(grant_id, relative, limit, true)
+    }
+
+    fn read_file_with_parent_policy(
+        &self,
+        grant_id: &str,
+        relative: &str,
+        limit: usize,
+        no_follow_parents: bool,
+    ) -> Result<Vec<u8>, FilesystemOperationError> {
         let grant = self
             .filesystem
             .get(grant_id)
@@ -179,10 +205,15 @@ impl ComponentPermissions {
         reject_unsafe_relative_path(relative)?;
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
-        let file = grant
-            .directory
-            .open_with(relative, &options)
-            .map_err(map_io_error)?;
+        let file = if no_follow_parents {
+            let (parent, target) = write_parent(grant, relative)?;
+            parent.open_with(target, &options).map_err(map_io_error)?
+        } else {
+            grant
+                .directory
+                .open_with(relative, &options)
+                .map_err(map_io_error)?
+        };
         let metadata = file.metadata().map_err(map_io_error)?;
         if !metadata.is_file() || metadata.nlink() > 1 {
             return Err(FilesystemOperationError::InvalidPath);

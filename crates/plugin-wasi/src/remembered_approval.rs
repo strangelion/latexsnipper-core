@@ -198,9 +198,23 @@ pub struct RememberedApprovalPolicies {
     state: Arc<Mutex<State>>,
     clock: Clock,
     authority_guard: Option<Arc<dyn crate::RememberedApprovalAuthorityGuard>>,
+    storage_isolation: Option<Arc<dyn crate::ApprovalStorageIsolation>>,
 }
 
 impl RememberedApprovalPolicies {
+    /// Trusted-host private storage exclusion, separate from consent or live
+    /// policy authority. Configure before sharing; hosts retain this veto.
+    pub fn with_storage_isolation(
+        mut self,
+        isolation: Arc<dyn crate::ApprovalStorageIsolation>,
+    ) -> Self {
+        self.storage_isolation = Some(isolation);
+        self
+    }
+
+    pub(crate) fn storage_isolation(&self) -> Option<Arc<dyn crate::ApprovalStorageIsolation>> {
+        self.storage_isolation.clone()
+    }
     /// Attach before sharing/activation. The host is responsible for using a
     /// protected, fresh authoritative source. Core never infers this from JSON.
     pub fn with_authority_guard(
@@ -238,6 +252,7 @@ impl RememberedApprovalPolicies {
             })),
             clock,
             authority_guard: None,
+            storage_isolation: None,
         })
     }
 
@@ -295,6 +310,7 @@ impl RememberedApprovalPolicies {
             })),
             clock,
             authority_guard: None,
+            storage_isolation: None,
         })
     }
 

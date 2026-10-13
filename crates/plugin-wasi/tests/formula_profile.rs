@@ -4,6 +4,65 @@ use latexsnipper_conversion::{conversion_registry::*, FormulaConversionMode};
 use latexsnipper_plugin_wasi::WasiFormulaProfile;
 
 #[test]
+fn protected_storage_profile_remains_disabled_and_rechecks_veto_after_enablement() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    struct Gate(AtomicBool);
+    impl latexsnipper_plugin_wasi::ApprovalStorageIsolation for Gate {
+        fn check_permissions(
+            &self,
+            _: &latexsnipper_plugin_wasi::ComponentPermissions,
+            _: std::time::Instant,
+        ) -> Result<(), latexsnipper_plugin_wasi::WasiDiagnostic> {
+            if self.0.load(Ordering::SeqCst) {
+                Err(latexsnipper_plugin_wasi::WasiDiagnostic::new(
+                    latexsnipper_plugin_wasi::WasiDiagnosticCode::PluginWasiPermissionDenied,
+                    "fixture protected storage veto",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+    }
+    let (_temporary, store) = fixture::store();
+    let profile =
+        WasiFormulaProfile::from_json(&serde_json::to_vec(&fixture::profile(false)).unwrap())
+            .unwrap();
+    let gate = Arc::new(Gate(AtomicBool::new(false)));
+    let mut prepared = profile
+        .prepare_with_protected_approval_storage(
+            &store,
+            latexsnipper_plugin::CancellationToken::default(),
+            gate.clone(),
+        )
+        .unwrap();
+    assert!(prepared.remembered_binding_sha256.is_none());
+    assert!(prepared.approval_controller.grants().unwrap().is_empty());
+    assert_eq!(
+        prepared
+            .registry
+            .convert(&request(false, "x:2"))
+            .unwrap_err()
+            .code,
+        ConversionRegistryErrorCode::BackendDisabled
+    );
+    prepared
+        .registry
+        .set_backend_enabled(&prepared.backend_id, true)
+        .unwrap();
+    gate.0.store(true, Ordering::SeqCst);
+    let error = prepared
+        .registry
+        .convert(&request(false, "x:2"))
+        .unwrap_err();
+    assert!(error.message.contains("PLUGIN_WASI_PERMISSION_DENIED"));
+    gate.0.store(false, Ordering::SeqCst);
+    assert!(prepared.registry.convert(&request(false, "x:2")).is_ok());
+}
+
+#[test]
 fn remembered_remote_binding_includes_archive_and_profile_without_enabling() {
     use latexsnipper_plugin::CancellationToken;
     use latexsnipper_plugin_wasi::ActivatedRemoteWasiPlugin;

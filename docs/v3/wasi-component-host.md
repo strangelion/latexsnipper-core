@@ -270,9 +270,39 @@ not machine-wide consent. The namespace binds the canonical root, opaque owner
 and persistence mode. Moving the root does not silently migrate its identity.
 
 The host must supply an existing trusted private root outside every guest grant.
-This constructor does not prove ancestor ACL/reparse isolation or protect against
+The isolation hooks below reject physical grant overlap; this constructor alone
+does not prove ancestor ACL/reparse isolation or protect against
 native code running as the same user. Snapshot objects are authenticated but not
 encrypted; private root access and confidentiality remain the host's responsibility.
+
+`ApprovalStorageIsolation` is a trusted native permission veto, not consent.
+Declare private storage on every host before any guest execution using
+`WasiComponentHost::with_protected_approval_storage`; remote plugins expose the
+same method, and profiles use `prepare_with_protected_approval_storage`. This
+route does not enable a profile backend, attach remembered policies or issue
+grants. Restoring through the Windows backend puts its isolation on the policy
+store automatically; `with_remembered_policies` propagates it before attachment.
+Other hosts, including those with remembered reuse disabled, still need an
+explicit declaration: Core does not keep an implicit process-global directory list.
+
+The Windows provider compares actual directory handles, normalized volume-GUID
+paths and ancestor file identities. Same roots, grant ancestors/descendants and
+case/label aliases refuse attachment; path text cannot substitute for a held
+directory capability. Siblings are allowed. It supports at most 128 filesystem
+grants, 128 ancestor entries per chain and 32768 UTF-16 path units; unresolved
+volume paths or inaccessible identities fail closed. This does not certify root
+DACL confidentiality, hostile ancestor races, network filesystems or native
+same-user attackers. The app must still provision a stable private directory.
+
+Hosts retain up to 16 vetoes, recheck them before guest execution and filesystem
+broker IO, and recheck before staged publication even for explicit session grants.
+Callbacks run without controller/policy locks, never open UI or call guests, and
+have a 50 ms budget clipped to execution time; late success is rejected. Registered
+private-storage reads traverse parent directories without following links, which
+also rejects junction traversal into private storage. Ordinary unregistered read
+routes keep their existing behavior. Controller/session suspension does not remove
+storage exclusion. Correcting a temporary veto permits fresh explicit confirmation;
+it is not a blacklist or permission-expansion mechanism.
 
 `initialize` and snapshot-identity-CAS `publish` take a shared OS file lock, validate
 authenticated metadata, sync a bounded immutable snapshot, publish its new name

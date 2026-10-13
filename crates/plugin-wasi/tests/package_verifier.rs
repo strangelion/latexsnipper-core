@@ -1240,6 +1240,162 @@ fn signed_remote_component_requires_enablement_and_executes_after_activation() {
 }
 
 #[test]
+fn private_storage_is_rechecked_at_broker_io_and_recovery_is_not_a_blacklist() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Instant;
+    struct Gate {
+        calls: AtomicUsize,
+        deny_at: AtomicUsize,
+    }
+    impl latexsnipper_plugin_wasi::ApprovalStorageIsolation for Gate {
+        fn check_permissions(
+            &self,
+            _: &latexsnipper_plugin_wasi::ComponentPermissions,
+            _: Instant,
+        ) -> Result<(), latexsnipper_plugin_wasi::WasiDiagnostic> {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            if call == self.deny_at.load(Ordering::SeqCst) {
+                Err(latexsnipper_plugin_wasi::WasiDiagnostic::new(
+                    WasiDiagnosticCode::PluginWasiPermissionDenied,
+                    "fixture private storage veto",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+    }
+    let component = typed_success_component();
+    let directory = tempfile::tempdir().unwrap();
+    fs::create_dir(directory.path().join("read")).unwrap();
+    fs::create_dir(directory.path().join("write")).unwrap();
+    fs::write(directory.path().join("read/input.txt"), b"filesystem").unwrap();
+    let mut definition = manifest(&component);
+    definition["permissions"]["paths"] = json!([
+        {"path": "read", "access": "read"}, {"path": "write", "access": "write"}
+    ]);
+    write_package(&directory, &component, definition);
+    let verified = verifier().verify_path(directory.path()).unwrap();
+    let gate = Arc::new(Gate {
+        calls: AtomicUsize::new(0),
+        deny_at: AtomicUsize::new(2),
+    });
+    let host = WasiComponentHost::new(verified)
+        .unwrap()
+        .with_protected_approval_storage(gate.clone())
+        .unwrap();
+    let compiled = host.compile().unwrap();
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-read")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiPermissionDenied
+    );
+    assert_eq!(gate.calls.load(Ordering::SeqCst), 3);
+    assert!(host.approval_controller().pending().unwrap().is_empty());
+    gate.deny_at.store(usize::MAX, Ordering::SeqCst);
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-read").unwrap(),
+        b"filesystem"
+    );
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-write")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
+    let controller = host.approval_controller();
+    let request = controller.pending().unwrap().pop().unwrap();
+    controller
+        .approve(
+            &request.id,
+            latexsnipper_plugin_wasi::ApprovalScope::Exact,
+            1,
+            std::time::Duration::from_secs(60),
+        )
+        .unwrap();
+    gate.deny_at
+        .store(gate.calls.load(Ordering::SeqCst) + 3, Ordering::SeqCst);
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-write")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiPermissionDenied
+    );
+    assert!(!directory.path().join("write/output.txt").exists());
+    gate.deny_at.store(usize::MAX, Ordering::SeqCst);
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-write")
+            .unwrap_err()
+            .code,
+        WasiDiagnosticCode::PluginWasiApprovalRequired
+    );
+    let request = controller.pending().unwrap().pop().unwrap();
+    controller
+        .approve(
+            &request.id,
+            latexsnipper_plugin_wasi::ApprovalScope::Exact,
+            1,
+            std::time::Duration::from_secs(60),
+        )
+        .unwrap();
+    assert_eq!(
+        transform(&host, &compiled, b"broker:filesystem-write").unwrap(),
+        b"written"
+    );
+    assert_eq!(
+        fs::read(directory.path().join("write/output.txt")).unwrap(),
+        b"written"
+    );
+    drop(compiled);
+    drop(host);
+    // A policy store propagates its exclusion automatically on attachment,
+    // rather than relying on callers to add the same veto a second time.
+    let policies = Arc::new(
+        latexsnipper_plugin_wasi::RememberedApprovalPolicies::new(
+            latexsnipper_plugin_wasi::ApprovalPolicyKey::generate().unwrap(),
+        )
+        .unwrap()
+        .with_storage_isolation(gate.clone()),
+    );
+    gate.deny_at
+        .store(gate.calls.load(Ordering::SeqCst), Ordering::SeqCst);
+    let verified = verifier().verify_path(directory.path()).unwrap();
+    let guarded = WasiComponentHost::new(verified)
+        .unwrap()
+        .with_remembered_approval_binding("fixture-document", b"deny-network-v1")
+        .unwrap();
+    let error = match guarded.with_remembered_policies(policies) {
+        Ok(_) => panic!("policy storage exclusion was not checked"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code, WasiDiagnosticCode::PluginWasiPermissionDenied);
+    directory.close().unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn physical_windows_storage_isolation_refuses_guest_manifest_overlap() {
+    let (directory, verified) = remembered_binding_fixture();
+    let private = Arc::new(
+        latexsnipper_plugin_wasi::WindowsProtectedApprovalCheckpoint::open(
+            &directory.path().join("read"),
+            "fixture-private-read",
+            latexsnipper_plugin_wasi::WindowsApprovalPersistence::LogonSession,
+        )
+        .unwrap(),
+    );
+    let error = match WasiComponentHost::new(verified)
+        .unwrap()
+        .with_protected_approval_storage(private)
+    {
+        Ok(_) => panic!("overlapping private storage was attached"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code, WasiDiagnosticCode::PluginWasiPermissionDenied);
+    directory.close().unwrap();
+}
+
+#[test]
 fn brokers_enforce_default_deny_and_explicit_grants() {
     let component = typed_success_component();
     let denied_package = package(&component);

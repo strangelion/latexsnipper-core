@@ -95,7 +95,7 @@ impl WasiFormulaProfile {
         store: &RemotePluginStore,
         cancellation: CancellationToken,
     ) -> Result<PreparedFormulaRegistry, ConversionRegistryError> {
-        self.prepare_bound(store, cancellation, None, None)
+        self.prepare_bound(store, cancellation, None, None, None)
     }
 
     /// Bind a trusted host domain plus verified archive and complete profile identity.
@@ -109,7 +109,7 @@ impl WasiFormulaProfile {
         if trusted_domain.is_empty() || trusted_domain.len() > 4096 {
             return Err(invalid("remembered approval host identity exceeds bounds"));
         }
-        self.prepare_bound(store, cancellation, Some(trusted_domain), None)
+        self.prepare_bound(store, cancellation, Some(trusted_domain), None, None)
     }
 
     /// Explicit opt-in to live policy-backed execution, still with a disabled backend.
@@ -123,7 +123,23 @@ impl WasiFormulaProfile {
         if trusted_domain.is_empty() || trusted_domain.len() > 4096 {
             return Err(invalid("remembered approval host identity exceeds bounds"));
         }
-        self.prepare_bound(store, cancellation, Some(trusted_domain), Some(policies))
+        self.prepare_bound(
+            store,
+            cancellation,
+            Some(trusted_domain),
+            Some(policies),
+            None,
+        )
+    }
+
+    /// Private storage exclusion without enabling remembered reuse or the backend.
+    pub fn prepare_with_protected_approval_storage(
+        &self,
+        store: &RemotePluginStore,
+        cancellation: CancellationToken,
+        isolation: std::sync::Arc<dyn crate::ApprovalStorageIsolation>,
+    ) -> Result<PreparedFormulaRegistry, ConversionRegistryError> {
+        self.prepare_bound(store, cancellation, None, None, Some(isolation))
     }
 
     fn prepare_bound(
@@ -132,6 +148,7 @@ impl WasiFormulaProfile {
         cancellation: CancellationToken,
         trusted_domain: Option<&str>,
         policies: Option<std::sync::Arc<crate::RememberedApprovalPolicies>>,
+        isolation: Option<std::sync::Arc<dyn crate::ApprovalStorageIsolation>>,
     ) -> Result<PreparedFormulaRegistry, ConversionRegistryError> {
         // Validate all profile fields and compile the bounded validator before
         // touching the package store or compiling guest code.
@@ -167,6 +184,16 @@ impl WasiFormulaProfile {
                     format!("{}: {}", error.code, error.message),
                 )
             })?;
+        }
+        if let Some(isolation) = isolation {
+            plugin = plugin
+                .with_protected_approval_storage(isolation)
+                .map_err(|error| {
+                    failure(
+                        ConversionRegistryErrorCode::BackendFailed,
+                        format!("{}: {}", error.code, error.message),
+                    )
+                })?;
         }
         let remembered_binding_sha256 = plugin.remembered_approval_binding().map(str::to_owned);
         let approval_controller = plugin.approval_controller();

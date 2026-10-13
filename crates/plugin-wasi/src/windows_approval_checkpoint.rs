@@ -28,6 +28,9 @@ use crate::{
 mod cleanup;
 pub use cleanup::ApprovalSnapshotCleanup;
 
+#[path = "windows_approval_isolation.rs"]
+mod isolation;
+
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PublicationCut {
@@ -278,7 +281,8 @@ impl WindowsProtectedApprovalCheckpoint {
             &current.checkpoint,
             Arc::new(move || clock_owner.observe_time(Instant::now() + Duration::from_millis(50))),
         )?
-        .with_authority_guard(owner);
+        .with_authority_guard(owner.clone())
+        .with_storage_isolation(owner);
         check_deadline(deadline)?;
         Ok(Some(policies))
     }
