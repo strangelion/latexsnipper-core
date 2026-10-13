@@ -11,6 +11,213 @@ fn canonical(source: &str) -> String {
 }
 
 #[test]
+fn placeholder_masks_preserve_empty_slots_without_inventing_a_limit_value() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    for (source, expected) in [
+        ("∑8▒x", "∑8▒〖x〗"),
+        ("∫16▒x", "∫16▒〖x〗"),
+        ("∫24▒x", "∫24▒〖x〗"),
+        ("∫9▒x", "∫9▒〖x〗"),
+        ("∑26▒x", "∑26▒〖x〗"),
+        ("∑8_i▒x", "〖∑〗_(i)▒〖x〗"),
+        ("∑24_i▒x", "〖∑16〗_(i)▒〖x〗"),
+        ("〖∑_i〗_()▒x", "〖∑〗_(i)▒〖x〗"),
+        ("∫_()^()▒x", "∫24▒〖x〗"),
+    ] {
+        assert_eq!(canonical(source), expected, "{source}");
+        assert_eq!(canonical(expected), expected, "{source}");
+        for (output, input) in [
+            (OutputFormat::OMML, FormulaInputFormat::Omml),
+            (OutputFormat::MathML, FormulaInputFormat::Mathml),
+        ] {
+            let xml = DocumentConverter::convert_formula_string(
+                source,
+                FormulaInputFormat::UnicodeMath,
+                output,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            let restored = DocumentConverter::convert_formula_to_target(
+                &xml,
+                input,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert_eq!(restored, expected, "{source}: {xml}");
+            assert!(
+                !xml.contains("<m:t>0</m:t>") && !xml.contains("<mn>0</mn>"),
+                "{xml}"
+            );
+        }
+        let display = DocumentConverter::convert_formula_string(
+            expected,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::LatexDisplay,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        let bare =
+            latexsnipper_conversion::formula_fragment::latex_display_to_fragment(&display).unwrap();
+        assert_eq!(
+            DocumentConverter::convert_formula_to_target(
+                &bare,
+                FormulaInputFormat::Latex,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap(),
+            expected
+        );
+    }
+    let xml = DocumentConverter::convert_formula_string(
+        "∫24▒x",
+        FormulaInputFormat::UnicodeMath,
+        OutputFormat::OMML,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    assert!(xml.contains("<m:subHide m:val=\"0\"/>") && xml.contains("<m:supHide m:val=\"0\"/>"));
+    assert!(xml.contains("<m:sub></m:sub>") && xml.contains("<m:sup></m:sup>"));
+    for source in ["∫88▒x", "∫89▒x", "∫90▒x", "■(∫72▒x&∑82▒y)"] {
+        let expected = canonical(if source == "∫90▒x" {
+            "∫88▒x"
+        } else {
+            source
+        });
+        let xml = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::OMML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(
+            DocumentConverter::convert_formula_to_target(
+                &xml,
+                FormulaInputFormat::Omml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap(),
+            expected,
+            "{xml}"
+        );
+    }
+}
+
+#[test]
+fn finite_placement_placeholder_and_growth_masks_compose_without_budget_bypass() {
+    for placement in [0, 1, 2] {
+        for placeholders in [0, 8, 16, 24] {
+            for growth in [0, 64, 128] {
+                let flag = placement + placeholders + growth;
+                let lower = if placeholders == 0 { "_i" } else { "" };
+                let source = format!("∫{flag}{lower}▒x");
+                assert_eq!(canonical(&canonical(&source)), canonical(&source));
+                let xml = DocumentConverter::convert_formula_string(
+                    &source,
+                    FormulaInputFormat::UnicodeMath,
+                    OutputFormat::OMML,
+                    FormulaConversionMode::BestEffort,
+                )
+                .unwrap();
+                assert!(
+                    xml.contains(if growth == 64 {
+                        "<m:grow m:val=\"0\"/>"
+                    } else {
+                        "<m:grow m:val=\"1\"/>"
+                    }),
+                    "{source}: {xml}"
+                );
+                if placeholders & 8 != 0 {
+                    assert!(xml.contains("<m:subHide m:val=\"0\"/>"), "{xml}");
+                }
+                if placeholders & 16 != 0 {
+                    assert!(xml.contains("<m:supHide m:val=\"0\"/>"), "{xml}");
+                }
+            }
+        }
+    }
+    let deep = format!("{}x", "∫88▒".repeat(80));
+    assert_eq!(
+        parse_unicodemath(&deep).unwrap_err().kind,
+        UnicodeMathErrorKind::LimitExceeded
+    );
+}
+
+#[test]
+fn native_empty_limit_visibility_is_not_ignored_or_reinterpreted_as_a_value() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    let prefix = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:nary><m:naryPr><m:chr m:val="∫"/><m:grow m:val="1"/>"#;
+    let suffix =
+        r#"</m:naryPr><m:sub/><m:sup/><m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary></m:oMath>"#;
+    for (properties, expected) in [
+        ("", "∫24▒x"),
+        (r#"<m:subHide m:val="1"/><m:supHide m:val="true"/>"#, "∫▒x"),
+        (r#"<m:subHide m:val="0"/><m:supHide/>"#, "∫8▒x"),
+        (r#"<m:subHide/><m:supHide m:val="false"/>"#, "∫16▒x"),
+        (
+            r#"<m:subHide m:val="false"></m:subHide><m:supHide/>"#,
+            "∫8▒x",
+        ),
+    ] {
+        let xml = format!("{prefix}{properties}{suffix}");
+        assert_eq!(
+            DocumentConverter::convert_formula_to_target(
+                &xml,
+                FormulaInputFormat::Omml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap(),
+            canonical(expected),
+            "{xml}"
+        );
+    }
+    for properties in [
+        r#"<m:subHide m:val="maybe"/>"#,
+        r#"<m:supHide m:val=""/>"#,
+        r#"<m:subHide m:val="0"/><m:subHide/>"#,
+        "<m:supHide>0</m:supHide>",
+        r#"<m:subHide m:val="0"><m:r/></m:subHide>"#,
+    ] {
+        assert!(
+            DocumentConverter::convert_formula_to_target(
+                &format!("{prefix}{properties}{suffix}"),
+                FormulaInputFormat::Omml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .is_err(),
+            "{properties}"
+        );
+    }
+    for (slot, hide) in [("sub", "subHide"), ("sup", "supHide")] {
+        let xml = format!("{prefix}<m:{hide} m:val=\"1\"/></m:naryPr><m:{slot}><m:r><m:t>k</m:t></m:r></m:{slot}><m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary></m:oMath>");
+        let error = DocumentConverter::convert_formula_to_target(
+            &xml,
+            FormulaInputFormat::Omml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("Hidden nonempty"), "{error}");
+        assert!(DocumentConverter::convert_formula_string(
+            &xml,
+            FormulaInputFormat::Omml,
+            OutputFormat::OMML,
+            FormulaConversionMode::BestEffort
+        )
+        .is_err());
+    }
+    for source in ["x_()", "sin_() x", "∫▒()", "∫_()x", "〖∑_i〗_j▒x"] {
+        assert!(parse_unicodemath(source).is_err(), "{source}");
+    }
+}
+
+#[test]
 fn growth_masks_use_structured_omml_without_fabricating_a_tex_macro() {
     use latexsnipper_conversion::FormulaOutputTarget;
     assert_eq!(canonical("∫64"), "∫64");
@@ -111,8 +318,8 @@ fn growth_masks_use_structured_omml_without_fabricating_a_tex_macro() {
     for source in [
         "∫192▒x",
         "∑194_i▒x",
-        "∑72_i▒x",
-        "∑80_i▒x",
+        "∑96_i▒x",
+        "∑160_i▒x",
         "∑131_i▒x",
         "∑256_i▒x",
         "∫999999999999▒x",
@@ -300,8 +507,8 @@ fn explicit_nary_placement_preserves_limits_body_and_xml_layout() {
     for source in [
         "∫3_0▒x",
         "∫4_0▒x",
-        "∫8_0▒x",
-        "∫16_0▒x",
+        "∫32_0▒x",
+        "∫48_0▒x",
         "∫192_0▒x",
         "∫256_0▒x",
         "∫12_0▒x",

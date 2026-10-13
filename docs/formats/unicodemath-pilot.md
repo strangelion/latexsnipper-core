@@ -52,7 +52,7 @@ repository-authored; no renderer/parser source or dependency is vendored.
   factors. `▒` also works as the finite function-apply alias. Bare heads remain
   operators; explicit markers require nonempty bodies. Numeric flag `0` uses
   the default; `1` and `2` select under-over and side-script placement when the
-  complete head has at least one limit. Canonical text retains these overrides;
+  complete head has at least one limit or placeholder. Canonical text retains these overrides;
   LaTeX uses `\limits`/`\nolimits`, and OMML/MathML retain nondefault placement
   on readback. XML properties equal to the finite default may normalize to that
   default, not the original flag spelling. Growth flags `64`/`128` and their
@@ -75,10 +75,11 @@ avoids changing `a b/c` into `ab/c`; redundant spaces otherwise normalize.
 
 ## Structured n-ary growth
 
-The finite masks are `0`, `1`, `2`, `64`, `65`, `66`, `128`, `129` and `130`.
+The finite masks combine one placement (`0`, `1`, `2`), optional empty slots
+(`0`, `8`, `16`, `24`), and one growth choice (`0`, `64`, `128`).
 `64` prevents operand-height growth and `128` enables it; either combines with
-the existing placement bits. Both growth bits together, placeholder bits and
-other placement modes are rejected, not ignored. Placement still requires a limit;
+the existing placement and placeholder bits. Both growth bits together and
+other placement modes are rejected, not ignored. Placement still requires a slot;
 growth alone does not. The meanings follow [UTN 28 section 3.4](https://www.unicode.org/notes/tn28/UTN28-PlainTextMath-v3.3.pdf).
 
 UnicodeMath/AsciiMath to OMML now serializes the validated AST directly rather
@@ -97,6 +98,26 @@ this is not preservation of the original flag spelling. Unknown, empty explicit
 or duplicate property values fail. The general public XML-to-LaTeX reader cannot
 export explicit no-growth faithfully through this pipeline and reports that limit.
 Other target mappings and actual Word font/height fidelity remain independent work.
+
+## Empty limit slots
+
+`8` requests a lower placeholder, `16` an upper placeholder and `24` both.
+They become empty Subscript/Superscript arguments in the existing AST, not a
+new enum, zero, dummy variable or source macro. Canonical UnicodeMath uses the
+placeholder bits instead of `_()`/`^()`; only n-ary script slots accept that
+empty spelling. Empty ordinary script operands or n-aryands remain rejected.
+Real limits replace empty slots; redundant empty slots cannot erase a real limit,
+and two nonempty limits in the same slot still fail. A filled placeholder bit
+therefore normalizes away rather than preserving its original spelling.
+
+OMML explicitly emits `subHide=0`/`supHide=0` for empty visible slots and `1`
+for absent limits. Readback distinguishes an encoded empty argument, an absent
+argument and a hidden argument. Omitted hide properties mean visible; a present
+hide property without `val` means hidden. Invalid, duplicate, empty explicit or
+non-leaf boolean properties fail. Hidden nonempty limits are not rewritten as
+ordinary visible scripts: [Word can relocate their content](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oe376/21558c72-3684-46bd-99ec-146aef4a5a05).
+MathML/LaTeX keep empty slot structure, not Word's editable placeholder appearance;
+actual host/UI and font/layout verification remain separate.
 No typography/space-width, source-spelling or rich-text buildup parity is implied.
 
 ## API, limits and diagnostics
@@ -129,7 +150,7 @@ joins check output size incrementally. An input near a parse budget can exceed
 the emitted grouping/token budget and be rejected by the writer.
 
 Outside this milestone: arbitrary function/n-ary names, other n-ary numeric flags,
-placement on unscripted heads, growth in other semantic targets, placeholder overrides and inherited host layout,
+placement on heads without slots, growth in other semantic targets and inherited host layout,
 autocorrect/control words, mathematical styled alphanumerics, combining accents,
 unquoted non-ASCII whitespace, rich-text style, equation arrays/numbering,
 skewed/linear fractions and other unlisted glyphs. Unknown glyphs/escapes fail,

@@ -6,6 +6,9 @@ const MAX_BYTES: usize = 64 * 1024;
 const MAX_TOKENS: usize = 4096;
 const MAX_NODES: usize = 8192;
 const MAX_DEPTH: usize = 64;
+const NARY_PLACEMENT_BITS: u16 = 7;
+const NARY_GROWTH_BITS: u16 = 64 | 128;
+const NARY_ALLOWED_BITS: u16 = NARY_PLACEMENT_BITS | 8 | 16 | NARY_GROWTH_BITS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnicodeMathErrorKind {
@@ -510,21 +513,36 @@ impl Parser<'_> {
                         flag = flag * 10 + ch.to_digit(10).expect("ASCII digit") as u16;
                         self.pos += 1;
                     }
-                    if !matches!(flag, 0..=2 | 64..=66 | 128..=130) {
+                    if flag & !NARY_ALLOWED_BITS != 0
+                        || flag & NARY_PLACEMENT_BITS > 2
+                        || flag & NARY_GROWTH_BITS == NARY_GROWTH_BITS
+                    {
                         return Err(error(
                             UnicodeMathErrorKind::UnsupportedSyntax,
                             offset,
-                            "n-ary flags support finite placement and one growth setting only",
+                            "n-ary flags support finite placement, empty slots and one growth setting only",
                         ));
                     }
-                    let placement = flag & 3;
+                    if flag & 8 != 0 {
+                        head = LatexNode::Subscript {
+                            base: Box::new(head),
+                            sub: Box::new(LatexNode::Sequence(vec![])),
+                        };
+                    }
+                    if flag & 16 != 0 {
+                        head = LatexNode::Superscript {
+                            base: Box::new(head),
+                            exp: Box::new(LatexNode::Sequence(vec![])),
+                        };
+                    }
+                    let placement = flag & NARY_PLACEMENT_BITS;
                     if placement != 0 {
                         head = LatexNode::Command {
                             name: if placement == 1 { "limits" } else { "nolimits" }.into(),
                             args: vec![head],
                         };
                     }
-                    if flag & 192 != 0 {
+                    if flag & NARY_GROWTH_BITS != 0 {
                         head = LatexNode::Command {
                             name: if flag & 64 != 0 {
                                 "nary-no-grow"
@@ -729,7 +747,21 @@ impl Parser<'_> {
         let mut sup = None;
         while let Some(mark @ (Kind::Sub | Kind::Sup)) = self.kind() {
             self.pos += 1;
-            let value = self.script_operand(mark, depth + 1)?;
+            let value = if nary_name(&base).is_some()
+                && self.kind() == Some(Kind::Open('('))
+                && self
+                    .tokens
+                    .get(self.pos + 1)
+                    .is_some_and(|token| token.kind == Kind::Close(')'))
+            {
+                self.pos += 2;
+                if self.starts_factor() {
+                    return Err(self.fail("an empty n-ary slot needs an operand boundary"));
+                }
+                LatexNode::Sequence(vec![])
+            } else {
+                self.script_operand(mark, depth + 1)?
+            };
             let slot = if mark == Kind::Sub {
                 &mut sub
             } else {
@@ -1065,13 +1097,23 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
             .limits
             .map_or(0, |vertical| if vertical { 1 } else { 2 })
             + head.grow.map_or(0, |grow| if grow { 128 } else { 64 });
+        let flag =
+            flag + if head.lower.is_some_and(LatexNode::is_empty) {
+                8
+            } else {
+                0
+            } + if head.upper.is_some_and(LatexNode::is_empty) {
+                16
+            } else {
+                0
+            };
         if flag != 0 {
             output.push_str(&flag.to_string());
         }
-        if let Some(lower) = head.lower {
+        if let Some(lower) = head.lower.filter(|node| !node.is_empty()) {
             output = format!("〖{output}〗_({})", write_node(lower, depth + 1)?);
         }
-        if let Some(upper) = head.upper {
+        if let Some(upper) = head.upper.filter(|node| !node.is_empty()) {
             output = format!("〖{output}〗^({})", write_node(upper, depth + 1)?);
         }
         if output.len() > MAX_BYTES {
@@ -1330,18 +1372,22 @@ pub(crate) fn nary_limits(node: &LatexNode) -> Option<NaryLimits<'_>> {
         }),
         LatexNode::Subscript { base, sub } => {
             let mut head = nary_limits(base)?;
-            if head.lower.is_some() {
+            if head.lower.is_some_and(|lower| !lower.is_empty()) && !sub.is_empty() {
                 return None;
             }
-            head.lower = Some(sub);
+            if !sub.is_empty() || head.lower.is_none() {
+                head.lower = Some(sub);
+            }
             Some(head)
         }
         LatexNode::Superscript { base, exp } => {
             let mut head = nary_limits(base)?;
-            if head.upper.is_some() {
+            if head.upper.is_some_and(|upper| !upper.is_empty()) && !exp.is_empty() {
                 return None;
             }
-            head.upper = Some(exp);
+            if !exp.is_empty() || head.upper.is_none() {
+                head.upper = Some(exp);
+            }
             Some(head)
         }
         LatexNode::Group(nodes) if nodes.len() == 1 => nary_limits(&nodes[0]),

@@ -215,14 +215,22 @@ fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
                 let tag = local(e.name().as_ref());
-                if tag == "grow"
+                if matches!(tag.as_str(), "grow" | "subHide" | "supHide")
                     && attribute_value(&e, reader.decoder())?.is_some_and(|value| value.is_empty())
                 {
-                    return Err("Empty explicit OMML growth value; retain the original XML".into());
+                    return Err("Empty explicit OMML on/off value; retain the original XML".into());
                 }
                 let children = if matches!(
                     tag.as_str(),
-                    "count" | "mcJc" | "begChr" | "endChr" | "sepChr" | "limLoc" | "grow"
+                    "count"
+                        | "mcJc"
+                        | "begChr"
+                        | "endChr"
+                        | "sepChr"
+                        | "limLoc"
+                        | "grow"
+                        | "subHide"
+                        | "supHide"
                 ) {
                     attribute_value(&e, reader.decoder())?
                         .map(|value| vec![("$val".into(), value)])
@@ -244,10 +252,10 @@ fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
             }
             Ok(Event::Empty(e)) => {
                 let tag = local(e.name().as_ref());
-                if tag == "grow"
+                if matches!(tag.as_str(), "grow" | "subHide" | "supHide")
                     && attribute_value(&e, reader.decoder())?.is_some_and(|value| value.is_empty())
                 {
-                    return Err("Empty explicit OMML growth value; retain the original XML".into());
+                    return Err("Empty explicit OMML on/off value; retain the original XML".into());
                 }
                 if tag.starts_with("xmlns") {
                     continue;
@@ -346,6 +354,12 @@ fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
                         }
                     }
                     if tag == "naryPr" {
+                        for property in ["subHide", "supHide"] {
+                            let value = get_child(&tagged_children, property);
+                            if !matches!(value.as_str(), "" | "0" | "1" | "false" | "true") {
+                                return Err("Unsupported OMML n-ary visibility value; retain the original XML".into());
+                            }
+                        }
                         let grow = get_child(&tagged_children, "grow");
                         if !matches!(grow.as_str(), "" | "0" | "1" | "false" | "true") {
                             return Err(
@@ -368,20 +382,19 @@ fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
                         }
                     }
                     let text = text_buf.clone();
-                    if tag == "grow"
+                    if matches!(tag.as_str(), "grow" | "subHide" | "supHide")
                         && (!text.trim().is_empty()
                             || tagged_children.iter().any(|(name, _)| name != "$val"))
                     {
-                        return Err("Non-leaf OMML growth property; retain the original XML".into());
+                        return Err("Non-leaf OMML on/off property; retain the original XML".into());
                     }
                     if allow_growth && text.contains(GROWTH_BRIDGE) {
                         return Err("Reserved structured growth marker in source text; retain the original XML".into());
                     }
                     if tag == "nary" {
-                        if tagged_children
-                            .iter()
-                            .any(|(name, _)| matches!(name.as_str(), "grow" | "limLoc"))
-                        {
+                        if tagged_children.iter().any(|(name, _)| {
+                            matches!(name.as_str(), "grow" | "limLoc" | "subHide" | "supHide")
+                        }) {
                             return Err(
                                 "Misplaced OMML n-ary style property; retain the original XML"
                                     .into(),
@@ -390,6 +403,13 @@ fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
                         if allow_growth && !tagged_children.iter().any(|(name, _)| name == "naryPr")
                         {
                             tagged_children.push(("$naryNoGrow".into(), "1".into()));
+                        }
+                        for (slot, hide) in [("sub", "$narySubHide"), ("sup", "$narySupHide")] {
+                            if get_child(&tagged_children, hide) == "1"
+                                && !get_child(&tagged_children, slot).trim().is_empty()
+                            {
+                                return Err("Hidden nonempty OMML limit has no faithful finite projection; retain the original XML".into());
+                            }
                         }
                         let direct = get_child(&tagged_children, "chr");
                         let properties = get_child(&tagged_children, "naryPr");
@@ -429,6 +449,16 @@ fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
                     if let Some((_, ref mut parent)) = stack.last_mut() {
                         parent.push((tag, result));
                         if parent.last().is_some_and(|(tag, _)| tag == "naryPr") {
+                            for (property, key) in
+                                [("subHide", "$narySubHide"), ("supHide", "$narySupHide")]
+                            {
+                                if tagged_children.iter().any(|(name, _)| name == property) {
+                                    let value = get_child(&tagged_children, property);
+                                    let hidden = !matches!(value.as_str(), "0" | "false");
+                                    parent
+                                        .push((key.into(), if hidden { "1" } else { "0" }.into()));
+                                }
+                            }
                             let location = get_child(&tagged_children, "limLoc");
                             if !location.is_empty() {
                                 parent.push(("$naryLimLoc".into(), location));
@@ -591,10 +621,18 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             let mut op = map_nary(&chr).to_owned();
             let sub = get_child(children, "sub");
             let sup = get_child(children, "sup");
+            let present = |slot: &str, hide: &str, value: &str| {
+                let visibility = get_child(children, hide);
+                !value.trim().is_empty()
+                    || visibility == "0"
+                    || (visibility != "1" && children.iter().any(|(tag, _)| tag == slot))
+            };
+            let has_sub = present("sub", "$narySubHide", &sub);
+            let has_sup = present("sup", "$narySupHide", &sup);
             let body = get_child(children, "e");
             let location = get_child(children, "$naryLimLoc");
             let integral = matches!(chr.as_str(), "" | "∫" | "∬" | "∭" | "∮");
-            if (!sub.is_empty() || !sup.is_empty())
+            if (has_sub || has_sup)
                 && ((integral && location == "undOvr") || (!integral && location == "subSup"))
             {
                 op.push_str(if location == "undOvr" {
@@ -604,10 +642,10 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                 });
             }
             if get_child(children, "$naryNoGrow") == "1" {
-                if !sub.is_empty() {
+                if has_sub {
                     op.push_str(&format!("_{{{sub}}}"));
                 }
-                if !sup.is_empty() {
+                if has_sup {
                     op.push_str(&format!("^{{{sup}}}"));
                 }
                 let head = format!("\\{GROWTH_BRIDGE}{{{op}}}");
@@ -617,15 +655,15 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     format!("{head}{{{body}}}")
                 };
             }
-            if sub.is_empty() && sup.is_empty() {
+            if !has_sub && !has_sup {
                 if body.is_empty() {
                     op
                 } else {
                     format!("{}{{{}}}", op, body)
                 }
-            } else if sub.is_empty() {
+            } else if !has_sub {
                 format!("{}^{{{}}}{{{}}}", op, sup, body)
-            } else if sup.is_empty() {
+            } else if !has_sup {
                 format!("{}_{{{}}}{{{}}}", op, sub, body)
             } else {
                 format!("{}^{{{}}}_{{{}}}{{{}}}", op, sup, sub, body)
@@ -779,7 +817,7 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
             }
         }
         "mPr" => get_child(children, "mcs"),
-        "count" | "mcJc" | "limLoc" | "grow" => get_child(children, "$val"),
+        "count" | "mcJc" | "limLoc" | "grow" | "subHide" | "supHide" => get_child(children, "$val"),
         "mcs" => children
             .iter()
             .filter(|(tag, _)| tag == "mc")

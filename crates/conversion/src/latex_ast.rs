@@ -176,17 +176,19 @@ impl std::fmt::Display for LatexNode {
             return write!(f, "\\text{{[n-ary growth requires structured output]}}");
         }
         // Invisible head groups must not turn a large operator into a grouped atom.
-        if let Some(head) =
-            crate::unicodemath_pilot::nary_limits(self).filter(|head| head.limits.is_some())
-        {
+        if let Some(head) = crate::unicodemath_pilot::nary_limits(self).filter(|head| {
+            head.limits.is_some()
+                || head.lower.is_some_and(LatexNode::is_empty)
+                || head.upper.is_some_and(LatexNode::is_empty)
+        }) {
             write!(
                 f,
-                "\\{}\\{}",
+                "\\{}{}",
                 head.name,
-                if head.limits == Some(true) {
-                    "limits"
-                } else {
-                    "nolimits"
+                match head.limits {
+                    Some(true) => "\\limits",
+                    Some(false) => "\\nolimits",
+                    None => "",
                 }
             )?;
             if let Some(lower) = head.lower {

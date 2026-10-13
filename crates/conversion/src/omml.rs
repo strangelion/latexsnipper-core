@@ -218,7 +218,9 @@ pub(crate) fn validate_omml_node(
             if crate::extrema::head(base).is_some_and(|value| value.upper.is_some()) {
                 return Err("Duplicate extremum superscript".into());
             }
-            if base.is_empty() || exp.is_empty() {
+            if base.is_empty()
+                || (exp.is_empty() && crate::unicodemath_pilot::nary_limits(node).is_none())
+            {
                 return Err("Incomplete OMML superscript".into());
             }
             vec![base, exp]
@@ -227,7 +229,9 @@ pub(crate) fn validate_omml_node(
             if crate::extrema::head(base).is_some_and(|value| value.lower.is_some()) {
                 return Err("Duplicate extremum subscript".into());
             }
-            if base.is_empty() || sub.is_empty() {
+            if base.is_empty()
+                || (sub.is_empty() && crate::unicodemath_pilot::nary_limits(node).is_none())
+            {
                 return Err("Incomplete OMML subscript".into());
             }
             vec![base, sub]
@@ -923,56 +927,15 @@ struct OmmlNary<'a> {
 }
 
 fn normalize_nary_head(node: &LatexNode) -> Option<OmmlNary<'_>> {
-    match node {
-        LatexNode::Operator(name) => Some(OmmlNary {
-            operator: NaryOperator::from_name(name)?,
-            limits: None,
-            grow: None,
-            sub: None,
-            sup: None,
-            body: Vec::new(),
-        }),
-        LatexNode::Subscript { base, sub } => {
-            if let LatexNode::Superscript { base: inner, exp } = base.as_ref() {
-                let mut nary = normalize_nary_head(inner)?;
-                nary.sub = Some(sub);
-                nary.sup = Some(exp);
-                Some(nary)
-            } else {
-                let mut nary = normalize_nary_head(base)?;
-                nary.sub = Some(sub);
-                Some(nary)
-            }
-        }
-        LatexNode::Superscript { base, exp } => {
-            if let LatexNode::Subscript { base: inner, sub } = base.as_ref() {
-                let mut nary = normalize_nary_head(inner)?;
-                nary.sub = Some(sub);
-                nary.sup = Some(exp);
-                Some(nary)
-            } else {
-                let mut nary = normalize_nary_head(base)?;
-                nary.sup = Some(exp);
-                Some(nary)
-            }
-        }
-        LatexNode::Group(nodes) if nodes.len() == 1 => normalize_nary_head(&nodes[0]),
-        LatexNode::Command { name, args }
-            if matches!(name.as_str(), "nary-grow" | "nary-no-grow") && args.len() == 1 =>
-        {
-            let mut nary = normalize_nary_head(&args[0])?;
-            nary.grow = Some(name == "nary-grow");
-            Some(nary)
-        }
-        LatexNode::Command { name, args }
-            if matches!(name.as_str(), "limits" | "nolimits") && args.len() == 1 =>
-        {
-            let mut nary = normalize_nary_head(&args[0])?;
-            nary.limits = Some(name == "limits");
-            Some(nary)
-        }
-        _ => None,
-    }
+    let head = crate::unicodemath_pilot::nary_limits(node)?;
+    Some(OmmlNary {
+        operator: NaryOperator::from_name(head.name)?,
+        limits: head.limits,
+        grow: head.grow,
+        sub: head.lower,
+        sup: head.upper,
+        body: Vec::new(),
+    })
 }
 
 fn sequence_to_omml(nodes: &[LatexNode]) -> String {
@@ -1068,9 +1031,13 @@ fn nary_to_omml(nary: &OmmlNary<'_>) -> String {
     );
     if nary.sub.is_none() {
         properties.push_str("<m:subHide m:val=\"1\"/>");
+    } else if nary.sub.is_some_and(LatexNode::is_empty) {
+        properties.push_str("<m:subHide m:val=\"0\"/>");
     }
     if nary.sup.is_none() {
         properties.push_str("<m:supHide m:val=\"1\"/>");
+    } else if nary.sup.is_some_and(LatexNode::is_empty) {
+        properties.push_str("<m:supHide m:val=\"0\"/>");
     }
 
     let sub = nary.sub.map(ast_to_omml).unwrap_or_default();
