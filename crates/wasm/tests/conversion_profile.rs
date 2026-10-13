@@ -40,3 +40,22 @@ fn profile_truth_and_formula_contract_do_not_require_recognition_state() {
     ));
     assert_eq!(rejected["ok"].as_bool(), Some(false));
 }
+
+#[wasm_bindgen_test]
+fn quoted_unicode_text_keeps_the_formula_only_envelope() {
+    for output in ["unicode-math", "omml", "mathml"] {
+        let result = json(convert_formula_v3(
+            "\"a&100%\"",
+            "unicode-math",
+            output,
+            Some("best-effort".into()),
+        ));
+        assert_eq!(result["ok"].as_bool(), Some(true));
+        let content = result["data"]["content"].as_str().unwrap();
+        if output == "unicode-math" {
+            assert_eq!(content, "\"a&100%\"");
+        } else {
+            assert!(content.contains("a&amp;100%"));
+        }
+    }
+}

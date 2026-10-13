@@ -113,6 +113,7 @@ const FUNCTIONS: &[&str] = &[
 ];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
+    Quoted(usize),
     Operand(char),
     Other(char),
     Open(char),
@@ -140,13 +141,66 @@ fn lex(source: &str) -> Result<Vec<Token>, UnicodeMathError> {
         ));
     }
     let mut tokens = Vec::new();
-    for (offset, ch) in source.char_indices() {
-        if tokens.len() >= MAX_TOKENS {
+    let mut chars = source.char_indices().peekable();
+    let mut work = 0;
+    while let Some((offset, ch)) = chars.next() {
+        if work >= MAX_TOKENS {
             return Err(error(
                 UnicodeMathErrorKind::LimitExceeded,
                 offset,
                 "input exceeds 4096 tokens",
             ));
+        }
+        work += 1;
+        if ch == '"' {
+            let mut end = None;
+            while let Some((at, inner)) = chars.next() {
+                if work >= MAX_TOKENS {
+                    return Err(error(
+                        UnicodeMathErrorKind::LimitExceeded,
+                        at,
+                        "quoted text exceeds lexical budget",
+                    ));
+                }
+                work += 1;
+                if inner.is_control() || matches!(inner, '\u{2028}' | '\u{2029}') {
+                    return Err(error(
+                        UnicodeMathErrorKind::UnsupportedSyntax,
+                        at,
+                        "control characters and line breaks are outside quoted text",
+                    ));
+                }
+                if inner == '\\'
+                    && chars
+                        .peek()
+                        .is_some_and(|(_, value)| matches!(value, '"' | '\\'))
+                {
+                    let (escaped_at, _) = chars.next().expect("peeked escape");
+                    if work >= MAX_TOKENS {
+                        return Err(error(
+                            UnicodeMathErrorKind::LimitExceeded,
+                            escaped_at,
+                            "quoted text exceeds lexical budget",
+                        ));
+                    }
+                    work += 1;
+                } else if inner == '"' {
+                    end = Some(at);
+                    break;
+                }
+            }
+            let end = end.ok_or_else(|| {
+                error(
+                    UnicodeMathErrorKind::UnexpectedToken,
+                    offset,
+                    "unterminated quoted text",
+                )
+            })?;
+            tokens.push(Token {
+                kind: Kind::Quoted(end),
+                offset,
+            });
+            continue;
         }
         let kind = match ch {
             ' ' => Kind::Space,
@@ -213,12 +267,13 @@ fn pair(open: char) -> (char, &'static str, &'static str) {
         _ => ('〗', "", ""),
     }
 }
-struct Parser {
+struct Parser<'a> {
+    source: &'a str,
     tokens: Vec<Token>,
     pos: usize,
     end: usize,
 }
-impl Parser {
+impl Parser<'_> {
     fn kind(&self) -> Option<Kind> {
         self.tokens.get(self.pos).map(|token| token.kind)
     }
@@ -253,7 +308,13 @@ impl Parser {
     fn starts_factor(&self) -> bool {
         matches!(
             self.kind(),
-            Some(Kind::Operand(_) | Kind::Open(_) | Kind::Root(_) | Kind::Matrix(_))
+            Some(
+                Kind::Operand(_)
+                    | Kind::Open(_)
+                    | Kind::Root(_)
+                    | Kind::Matrix(_)
+                    | Kind::Quoted(_)
+            )
         )
     }
     fn expression(&mut self, depth: usize) -> Result<Vec<LatexNode>, UnicodeMathError> {
@@ -379,6 +440,24 @@ impl Parser {
     fn atom(&mut self, depth: usize) -> Result<LatexNode, UnicodeMathError> {
         self.depth(depth)?;
         match self.kind() {
+            Some(Kind::Quoted(end)) => {
+                let start = self.offset();
+                let mut chars = self.source[start + 1..end].chars().peekable();
+                let mut text = String::new();
+                while let Some(ch) = chars.next() {
+                    if ch == '\\' && chars.peek().is_some_and(|ch| matches!(ch, '"' | '\\')) {
+                        text.push(chars.next().expect("peeked escape"));
+                    } else {
+                        text.push(ch);
+                    }
+                }
+                let encoded = encode_text(&text, start)?;
+                self.pos += 1;
+                Ok(LatexNode::Command {
+                    name: "text".into(),
+                    args: vec![LatexNode::Text(encoded)],
+                })
+            }
             Some(Kind::Operand(_)) => Ok(sequence(self.run()?)),
             Some(Kind::Open(open)) => {
                 self.pos += 1;
@@ -597,6 +676,7 @@ impl Parser {
 /// Parse a finite UnicodeMath subset, not Word autocorrect or rich-text buildup.
 pub fn parse_unicodemath(source: &str) -> Result<LatexNode, UnicodeMathError> {
     let mut parser = Parser {
+        source,
         tokens: lex(source)?,
         pos: 0,
         end: source.len(),
@@ -683,6 +763,18 @@ fn check_ast_budget(node: &LatexNode) -> Result<(), UnicodeMathError> {
                     }
                 }
             }
+            LatexNode::Command { args, .. } => {
+                if args.len() > MAX_NODES - count {
+                    return Err(error(
+                        UnicodeMathErrorKind::LimitExceeded,
+                        0,
+                        "AST command exceeds node budget",
+                    ));
+                }
+                for node in args {
+                    push(node)?;
+                }
+            }
             _ => {}
         }
     }
@@ -746,6 +838,41 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
     };
     let child = |node: &LatexNode| write_node(node, depth + 1);
     let output = match node {
+        LatexNode::Command { name, args } if name == "text" && args.len() == 1 => {
+            let LatexNode::Text(encoded) = &args[0] else {
+                return Err(unsupported());
+            };
+            if encoded.len() > MAX_BYTES {
+                return Err(error(
+                    UnicodeMathErrorKind::LimitExceeded,
+                    0,
+                    "AST text exceeds 64 KiB",
+                ));
+            }
+            let text = crate::latex_utils::decode_text_symbols(encoded);
+            if text
+                .chars()
+                .any(|ch| ch.is_control() || matches!(ch, '\u{2028}' | '\u{2029}'))
+            {
+                return Err(unsupported());
+            }
+            let mut quoted = String::from("\"");
+            for ch in text.chars() {
+                if matches!(ch, '\\' | '"') {
+                    quoted.push('\\');
+                }
+                quoted.push(ch);
+                if quoted.len() >= MAX_BYTES {
+                    return Err(error(
+                        UnicodeMathErrorKind::LimitExceeded,
+                        0,
+                        "quoted output exceeds 64 KiB",
+                    ));
+                }
+            }
+            quoted.push('"');
+            quoted
+        }
         LatexNode::Text(text) => {
             if text.len() > MAX_BYTES {
                 return Err(error(
@@ -829,4 +956,25 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
         ));
     }
     Ok(output)
+}
+
+fn encode_text(text: &str, offset: usize) -> Result<String, UnicodeMathError> {
+    let mut length = 0_usize;
+    for ch in text.chars() {
+        length = length.saturating_add(match ch {
+            '\\' => "\\backslash{}".len(),
+            '^' => "\\textasciicircum{}".len(),
+            '~' => "\\textasciitilde{}".len(),
+            '%' | '&' | '#' | '_' | '$' | '{' | '}' => 2,
+            _ => ch.len_utf8(),
+        });
+        if length > MAX_BYTES {
+            return Err(error(
+                UnicodeMathErrorKind::LimitExceeded,
+                offset,
+                "escaped text exceeds 64 KiB",
+            ));
+        }
+    }
+    Ok(crate::latex_utils::escape_text_symbols(text))
 }

@@ -1,11 +1,11 @@
 # UnicodeMath bounded parser/AST pilot
 
-Status: finite Rust grammar with formal formula-only routes, 2026-10-12.
+Status: finite Rust grammar with formal formula-only routes, 2026-10-13.
 The pilot module name remains compatible; see [the registered binding contract](linear-formula-conversion.md).
 This is not a full UnicodeMath/Word implementation or visual-fidelity claim.
 
 Reference: [Unicode Technical Note 28, version 3.3](https://www.unicode.org/notes/tn28/UTN28-PlainTextMath-v3.3.pdf),
-sections 2.1–2.3, 3.6, 3.9 and 3.18. The implementation and fixtures are
+sections 2.1–2.3, 3.6, 3.9, 3.15 and 3.18. The implementation and fixtures are
 repository-authored; no renderer/parser source or dependency is vendored.
 
 ## Finite syntax and mapping
@@ -28,6 +28,20 @@ repository-authored; no renderer/parser source or dependency is vendored.
   `&` separates cells and `@` separates rows. Nested matrices and explicit empty
   cells are retained; short rows are padded with empty cells, with a work limit.
   `■()` is a one-cell empty matrix, not an empty formula.
+- ASCII-double-quoted ordinary text maps to one `text` Command with a literal
+  Text argument, not a run of mathematical variables. Spaces, Unicode prose and
+  mathematical-looking punctuation inside it remain text. `\"` represents a
+  literal quote; the finite canonical writer also uses `\\` for a literal
+  backslash. Other backslashes are text, not control-word execution. Empty text,
+  quoted fraction operands, matrix cells and script bases/operands are retained.
+  Control characters, line breaks and nested mathematical AST inside text fail.
+
+For example, `"rate"="distance"/"time"` becomes a text-labelled fraction, and
+the corresponding LaTeX text commands can serialize back to quoted UnicodeMath.
+TeX-significant text characters are escaped before constructing a LaTeX bridge;
+braces/comments/separators and command-looking prose cannot become active TeX
+syntax. MathML/OMML projection decodes those escapes into literal text and applies
+XML escaping. This is plain text, not rich-text/font parity or actual Word buildup.
 
 This is a separate lexer/parser, not AsciiMath keyword substitution. The only
 shared pilot helper compares AST structure. Parsing ASCII spaces explicitly
@@ -55,23 +69,31 @@ Budgets: input/output 64 KiB, lexical input 4,096 tokens, AST 8,192 nodes,
 matrix padded area 4,096 cells and depth below 64. Expression/group/command
 levels also count, so this is not a promise of 63 nested brackets. Iterative AST
 validation bounds visited **and queued** nodes before structural comparison;
+command arguments are also visited. Quoted content and its escapes count toward
+the lexical-work budget even though a whole quoted span is one parser token.
+Escaped LaTeX text and emitted quoted output must separately fit 64 KiB;
 joins check output size incrementally. An input near a parse budget can exceed
 the emitted grouping/token budget and be rejected by the writer.
 
 Outside this milestone: named function application, n-ary operand semantics,
 autocorrect/control words, mathematical styled alphanumerics, combining accents,
-quoted text, non-ASCII whitespace, rich-text style, equation arrays/numbering,
+unquoted non-ASCII whitespace, rich-text style, equation arrays/numbering,
 skewed/linear fractions and other unlisted glyphs. Unknown glyphs/escapes fail,
 not a guessed macro. Decimal and punctuation heuristics are finite, not the full
 UTN 28 algorithm; external font runs and arbitrary prose are not accepted.
 
 ## Evidence and next gates
 
-Thirteen focused tests include a versioned synthetic fixture (16 fixed accepted
+Sixteen focused tests include a versioned synthetic fixture (16 fixed accepted
 outputs/root kinds, 8 fixed rejection cases), binding and whitespace differences
 from AsciiMath, six matrix types, roots/scripts/nested cells, UTF-8 diagnostics,
 input/AST/padding limits, failure isolation and 600 deterministic input
-combinations. Accepted generated inputs must serialize and canonically reparse.
+combinations. New quoted-text tests independently check expected LaTeX/canonical
+output, empty/multilingual text, XML/TeX protection, script/matrix ownership,
+UTF-8 error offsets and lexical/escaped-output budgets. Formal registry cases
+check input hashes, explicit best-effort mode and existing target boundaries.
+The C envelope is exercised directly; the new WASM test is compiled, with its
+browser execution a separate gate. Accepted generated inputs must serialize and canonically reparse.
 This is not external accuracy data, random fuzzing or full grammar coverage.
 
 One formula-matrix bridge through existing LaTeX serializers checks MathML/OMML
@@ -97,8 +119,10 @@ cargo clippy --locked -p latexsnipper-conversion --no-default-features --all-tar
 cargo check --locked -p latexsnipper-conversion --no-default-features --target wasm32-unknown-unknown
 ```
 
-Local checks passed: 344 light / 395 native conversion tests including doc tests,
-both Clippy configurations, WASM compilation and default workspace tests.
-Existing ignored environment-dependent tests were not executed; actual host/visual
-tests were not run for this pilot. The reviewed freeze update retains all 28 files and 19
-source trees and changes only the registry file and conversion tree hashes.
+Local checks on 2026-10-13 passed: light and native conversion suites including
+doc tests, both Clippy configurations, workspace compilation, the selected C
+envelope regression and conversion-only WASM test compilation. Native filesystem
+fixtures use the existing repository-owned test temporary directory; no global
+permission changes are required. Ignored environment-dependent tests and actual
+host/visual tests were not run. The freeze update retains all 35 contract files
+and 21 source trees; this batch changes only conversion and FFI source-tree hashes.

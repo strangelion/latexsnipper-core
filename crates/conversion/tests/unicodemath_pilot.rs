@@ -11,6 +11,109 @@ fn canonical(source: &str) -> String {
 }
 
 #[test]
+fn quoted_text_is_atomic_literal_not_variables_or_math_syntax() {
+    for (source, latex, output) in [
+        (r#""rate""#, r"\text{rate}", r#""rate""#),
+        (r#""if x > 0""#, r"\text{if x > 0}", r#""if x > 0""#),
+        (r#""条件 α""#, r"\text{条件 α}", r#""条件 α""#),
+        (r#""a\"b""#, r#"\text{a"b}"#, r#""a\"b""#),
+        (
+            r#""C:\\path\\""#,
+            r"\text{C:\backslash{}path\backslash{}}",
+            r#""C:\\path\\""#,
+        ),
+        (
+            r#""&%#_${}^~""#,
+            r"\text{\&\%\#\_\$\{\}\textasciicircum{}\textasciitilde{}}",
+            r#""&%#_${}^~""#,
+        ),
+        (r#""""#, r"\text{}", r#""""#),
+    ] {
+        let node = parse_unicodemath(source).unwrap();
+        assert!(matches!(node, LatexNode::Command { ref name, .. } if name == "text"));
+        assert_eq!(node.to_string(), latex);
+        assert_eq!(write_unicodemath(&node).unwrap(), output);
+        assert_eq!(canonical(output), output);
+    }
+    assert_eq!(
+        canonical(r#""rate"="distance"/"time""#),
+        r#""rate" = ("distance")/("time")"#
+    );
+    assert_eq!(canonical(r#""label"_1"#), r#"〖"label"〗_(1)"#);
+    let LatexNode::Matrix { rows, .. } = parse_unicodemath(r#"■("a&b"&"c@d"@"(x)"&"")"#).unwrap()
+    else {
+        panic!("matrix")
+    };
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|row| row.len() == 2));
+    assert!(parse_asciimath(r#""rate""#).is_err());
+}
+
+#[test]
+fn quoted_text_projection_escapes_tex_and_xml_without_executing_commands() {
+    let source = r#""\input{fixture}&100%_""#;
+    let ast = parse_unicodemath(source).unwrap();
+    assert_eq!(
+        ast.to_string(),
+        r"\text{\backslash{}input\{fixture\}\&100\%\_}"
+    );
+    for format in [OutputFormat::MathML, OutputFormat::OMML] {
+        let result = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            format,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(result.contains("fixture"));
+        assert!(result.contains("&amp;100%_"), "{result}");
+        assert!(!result.contains("<mfrac>") && !result.contains("<m:f>"));
+    }
+    let latex = DocumentConverter::convert_formula_string(
+        source,
+        FormulaInputFormat::UnicodeMath,
+        OutputFormat::LatexDisplay,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    assert!(!latex.contains(r"\input{") && latex.contains(r"\backslash{}input"));
+}
+
+#[test]
+fn quoted_text_diagnostics_and_work_budgets_cannot_be_bypassed() {
+    for source in [r#""unfinished"#, "x+\"a\nb\"", "\"a\tb\"", "\"a\u{2028}b\""] {
+        let error = parse_unicodemath(source).unwrap_err();
+        assert!(source.is_char_boundary(error.offset));
+    }
+    assert_eq!(parse_unicodemath("x+\"unfinished").unwrap_err().offset, 2);
+    assert_eq!(parse_unicodemath("\"a\nb\"").unwrap_err().offset, 2);
+    let long = format!("\"{}\"", "a".repeat(4095));
+    assert_eq!(
+        parse_unicodemath(&long).unwrap_err().kind,
+        UnicodeMathErrorKind::LimitExceeded
+    );
+    let escaped = format!("\"{}\"", "^".repeat(4094));
+    assert_eq!(
+        parse_unicodemath(&escaped).unwrap_err().kind,
+        UnicodeMathErrorKind::LimitExceeded
+    );
+    let injected = LatexNode::Command {
+        name: "text".into(),
+        args: vec![LatexNode::Text(r"\input{x}".into())],
+    };
+    assert!(write_unicodemath(&injected).is_err());
+    let rich = LatexNode::Command {
+        name: "text".into(),
+        args: vec![LatexNode::Fraction {
+            num: Box::new(LatexNode::Text("a".into())),
+            den: Box::new(LatexNode::Text("b".into())),
+        }],
+    };
+    assert!(write_unicodemath(&rich).is_err());
+    assert_eq!(canonical(r#""valid""#), r#""valid""#);
+}
+
+#[test]
 fn versioned_fixture_has_fixed_expected_structure_and_output() {
     let fixtures: serde_json::Value =
         serde_json::from_str(include_str!("fixtures/unicodemath-pilot-v1.json")).unwrap();
@@ -195,7 +298,6 @@ fn unsupported_and_malformed_sources_never_return_partial_success() {
         "x\t+y",
         "x\n+y",
         "𝑥+y",
-        "\"text\"",
         "a⁡b",
         "x̂",
         "a^b(c)",

@@ -653,6 +653,29 @@ mod tests {
     }
 
     #[test]
+    fn unicode_quoted_text_uses_existing_c_envelope_and_literal_escaping() {
+        for output in ["unicode-math", "omml", "mathml"] {
+            let request = json!({"content": "\"a&100%\"", "inputFormat": "unicode-math",
+                "outputFormat": output, "mode": "best-effort"})
+            .to_string();
+            // SAFETY: one live UTF-8 request buffer with explicit byte length.
+            let result = unsafe {
+                take_json(latexsnipper_formula_convert(
+                    request.as_ptr(),
+                    request.len(),
+                ))
+            };
+            assert_eq!(result["ok"], true);
+            let content = result["data"]["content"].as_str().unwrap();
+            if output == "unicode-math" {
+                assert_eq!(content, "\"a&100%\"");
+            } else {
+                assert!(content.contains("a&amp;100%"));
+            }
+        }
+    }
+
+    #[test]
     fn formula_routes_and_errors_preserve_v3_envelopes_and_ownership() {
         let capabilities = unsafe { take_json(latexsnipper_formula_capabilities()) };
         assert_eq!(capabilities["ok"], true);

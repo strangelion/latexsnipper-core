@@ -7,6 +7,50 @@ use latexsnipper_conversion::{
 };
 
 #[test]
+fn registered_unicode_text_routes_keep_literals_and_original_input_identity() {
+    let source = r#""rate"="distance"/"time""#;
+    let output = DocumentConverter::convert_formula_to_target(
+        r"\text{if x > 0}",
+        Input::Latex,
+        Target::UnicodeMath,
+        Mode::BestEffort,
+    )
+    .unwrap();
+    assert_eq!(output, r#""if x > 0""#);
+    let registry = SemanticConversionRegistry::default();
+    for target in ["unicode-math", "omml", "mathml"] {
+        let request = RegisteredConversionRequest {
+            schema_version: 1,
+            input: "unicode-math".into(),
+            output: target.into(),
+            mode: Mode::BestEffort,
+            backend: None,
+            content: source.into(),
+            context_sha256: "a".repeat(64),
+        };
+        let result = registry.convert(&request).unwrap();
+        assert_eq!(request.content, source);
+        assert_eq!(result.input_sha256, {
+            use sha2::{Digest, Sha256};
+            format!("{:x}", Sha256::digest(source.as_bytes()))
+        });
+        assert!(result
+            .candidate
+            .losses
+            .iter()
+            .all(|loss| !loss.code.is_empty()));
+        assert!(!result.candidate.content.is_empty());
+    }
+    assert!(DocumentConverter::convert_formula_to_target(
+        source,
+        Input::UnicodeMath,
+        Target::AsciiMath,
+        Mode::BestEffort
+    )
+    .is_err());
+}
+
+#[test]
 fn every_accepted_linear_fixture_has_the_exact_registered_canonical_output() {
     for (fixture, input, target) in [
         (

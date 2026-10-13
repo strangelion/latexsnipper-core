@@ -1,6 +1,6 @@
 # UnicodeMath / AsciiMath 单公式转换
 
-更新：2026-10-12。两者已有有限正式输入/输出路线，不再仅能通过独立 pilot 调用。
+更新：2026-10-13。两者已有有限正式输入/输出路线，不再仅能通过独立 pilot 调用。
 这不是完整 AsciiMath、UnicodeMath/Word buildup、MathType 或视觉保真支持。
 语法清单分别见 [AsciiMath](asciimath-pilot.md) 与 [UnicodeMath](unicodemath-pilot.md)，两者不混用关键字。
 
@@ -37,6 +37,10 @@ convert_formula("(a+b)/c", input_format="ascii-math",
 可表达结构；不能表达的 AST、未知 glyph/命令、损坏结构、超预算拒绝，不返回部分结果。
 AsciiMath 的 `a/b/c` 拒绝，而 UnicodeMath 的该串左结合；`abc/d` 的分子绑定也不同。
 原拼写、冗余分组、空格宽度、字体及完整 rich-text 不由这种规范化保留。
+UnicodeMath 另支持双引号普通文本及对应 LaTeX `text` 命令的有限投影：
+文本保持为文本，先保护 TeX 特殊字符再投影 XML，不执行其中的命令。
+引号内容计入词法工作预算；控制字符、跨行和嵌套数学 AST 不接收。
+AsciiMath 不因此获得引号文本语法，跨到该目标仍须明确拒绝不可表达节点。
 
 其他来源先获得单公式 LaTeX 投影，再验证其有限语法并写入线性目标。
 MathML/OMML/Typst 仍是重建，原解析器的 best-effort 限制不因新目标而消失。
