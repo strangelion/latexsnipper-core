@@ -9,6 +9,14 @@ pub(crate) struct WriteSecurity {
     snapshot: Option<windows::SecuritySnapshot>,
 }
 
+pub(crate) fn map_security_error(error: std::io::Error) -> FilesystemOperationError {
+    if error.kind() == std::io::ErrorKind::Unsupported {
+        FilesystemOperationError::MetadataUnsupported
+    } else {
+        crate::permissions::map_io_error(error)
+    }
+}
+
 #[cfg(windows)]
 pub(crate) fn open_named_stream(
     parent: &Dir,
@@ -86,10 +94,13 @@ mod windows {
         SE_FILE_OBJECT,
     };
     use windows_sys::Win32::Security::{
-        GetSecurityDescriptorControl, GetSecurityDescriptorLength, ACL, DACL_SECURITY_INFORMATION,
+        AclSizeInformation, GetAce, GetAclInformation, GetSecurityDescriptorControl,
+        GetSecurityDescriptorLength, GetSecurityDescriptorSacl, ACE_HEADER, ACL,
+        ACL_SIZE_INFORMATION, ATTRIBUTE_SECURITY_INFORMATION, DACL_SECURITY_INFORMATION,
         GROUP_SECURITY_INFORMATION, LABEL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
-        PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES,
-        SE_DACL_PROTECTED, UNPROTECTED_DACL_SECURITY_INFORMATION,
+        PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+        SCOPE_SECURITY_INFORMATION, SECURITY_ATTRIBUTES, SE_DACL_PROTECTED,
+        UNPROTECTED_DACL_SECURITY_INFORMATION,
     };
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, GetFinalPathNameByHandleW, CREATE_NEW, FILE_ATTRIBUTE_NORMAL,
@@ -99,7 +110,9 @@ mod windows {
     const INFO: u32 = OWNER_SECURITY_INFORMATION
         | GROUP_SECURITY_INFORMATION
         | DACL_SECURITY_INFORMATION
-        | LABEL_SECURITY_INFORMATION;
+        | LABEL_SECURITY_INFORMATION
+        | ATTRIBUTE_SECURITY_INFORMATION
+        | SCOPE_SECURITY_INFORMATION;
     // LABEL is distinct from audit SACL information in both querying and string
     // serialization. Never request ACCESS_SYSTEM_SECURITY or enable privileges.
     const FINGERPRINT_INFO: u32 = INFO;
@@ -134,7 +147,7 @@ mod windows {
         match parent.open_with(target, &options) {
             Ok(file) => SecuritySnapshot::from_file(&file)
                 .map(Some)
-                .map_err(map_io_error),
+                .map_err(map_security_error),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(map_io_error(error)),
         }
@@ -170,6 +183,7 @@ mod windows {
             if unsafe { GetSecurityDescriptorLength(descriptor.0) } > MAX_SECURITY_BYTES {
                 return Err(std::io::Error::other("security metadata exceeds budget"));
             }
+            reject_scoped_policy(descriptor.0)?;
             // SAFETY: Descriptor and output references have valid lifetimes.
             if unsafe { GetSecurityDescriptorControl(descriptor.0, &mut control, &mut revision) }
                 == 0
@@ -247,6 +261,73 @@ mod windows {
             }
             Ok(file)
         }
+    }
+
+    fn reject_scoped_policy(descriptor: PSECURITY_DESCRIPTOR) -> std::io::Result<()> {
+        let mut present = 0;
+        let mut defaulted = 0;
+        let mut sacl = null_mut();
+        // SAFETY: a live OS descriptor, already bounded to MAX_SECURITY_BYTES.
+        if unsafe { GetSecurityDescriptorSacl(descriptor, &mut present, &mut sacl, &mut defaulted) }
+            == 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+        if present == 0 || sacl.is_null() {
+            return Ok(());
+        }
+        let mut info = ACL_SIZE_INFORMATION::default();
+        // SAFETY: borrowed ACL in this same owned descriptor and fixed output.
+        if unsafe {
+            GetAclInformation(
+                sacl,
+                (&mut info as *mut ACL_SIZE_INFORMATION).cast(),
+                std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+                AclSizeInformation,
+            )
+        } == 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+        let length = unsafe { GetSecurityDescriptorLength(descriptor) } as usize;
+        if info.AceCount > 128 || info.AclBytesInUse as usize > length {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "security ACE budget exceeded",
+            ));
+        }
+        for index in 0..info.AceCount {
+            let mut ace = null_mut();
+            // SAFETY: index is bounded by the OS-reported ACL count.
+            if unsafe { GetAce(sacl, index, &mut ace) } == 0 || ace.is_null() {
+                return Err(std::io::Error::last_os_error());
+            }
+            let offset = (ace as usize)
+                .checked_sub(descriptor as usize)
+                .ok_or_else(|| std::io::Error::other("invalid security ACE offset"))?;
+            if length < std::mem::size_of::<ACE_HEADER>()
+                || offset > length - std::mem::size_of::<ACE_HEADER>()
+            {
+                return Err(std::io::Error::other("invalid security ACE header"));
+            }
+            // SAFETY: checked header span; do not interpret resource claim data.
+            let header = unsafe { std::ptr::read_unaligned(ace.cast::<ACE_HEADER>()) };
+            if header.AceSize < std::mem::size_of::<ACE_HEADER>() as u16
+                || usize::from(header.AceSize) > length - offset
+            {
+                return Err(std::io::Error::other("invalid security ACE size"));
+            }
+            // The queried subset contains labels (0x11), attributes (0x12), and
+            // CAP scope (0x13). CAP publication needs system-security access;
+            // reject it and unknown records rather than dropping that policy.
+            if !matches!(header.AceType, 0x11 | 0x12) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "scoped or unknown security policy cannot be preserved",
+                ));
+            }
+        }
+        Ok(())
     }
     fn fingerprint(descriptor: PSECURITY_DESCRIPTOR) -> std::io::Result<String> {
         let mut text = null_mut();
@@ -400,6 +481,7 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::permissions::CheckedWriteError;
         use cap_std::ambient_authority;
         use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
         use windows_sys::Win32::Security::{GetSecurityDescriptorDacl, GetSecurityDescriptorSacl};
@@ -408,11 +490,21 @@ mod windows {
         // Only fresh TempDir fixture files are passed here. No privileges are
         // enabled, and labels stay below the normal user's integrity level.
         fn apply_fixture_label(parent: &Dir, target: &str, value: &str) {
+            apply_fixture_subset(
+                parent,
+                target,
+                value,
+                LABEL_SECURITY_INFORMATION,
+                WRITE_OWNER,
+            );
+        }
+
+        fn apply_fixture_subset(parent: &Dir, target: &str, value: &str, info: u32, access: u32) {
             use cap_std::fs::OpenOptionsExt;
             let mut options = OpenOptions::new();
             options
                 .read(true)
-                .access_mode(FILE_GENERIC_READ | WRITE_OWNER)
+                .access_mode(FILE_GENERIC_READ | access)
                 .follow(FollowSymlinks::No);
             let file = parent.open_with(target, &options).unwrap();
             let text: Vec<_> = value.encode_utf16().chain(Some(0)).collect();
@@ -447,14 +539,14 @@ mod windows {
             );
             assert_ne!(present, 0);
             assert!(!label.is_null());
-            // SAFETY: exact fixture handle; LABEL only, not audit SACL/security
-            // privileges, and no parent/user-file mutation.
+            // SAFETY: exact fixture handle; a label/resource subset only, not
+            // audit SACL/security privileges or parent/user-file mutation.
             assert_eq!(
                 unsafe {
                     SetSecurityInfo(
                         file.as_raw_handle(),
                         SE_FILE_OBJECT,
-                        LABEL_SECURITY_INFORMATION,
+                        info,
                         null_mut(),
                         null_mut(),
                         null(),
@@ -466,14 +558,18 @@ mod windows {
         }
 
         fn fixture_label(file: &File) -> String {
+            fixture_subset(file, LABEL_SECURITY_INFORMATION)
+        }
+
+        fn fixture_subset(file: &File, info: u32) -> String {
             let mut raw = null_mut();
-            // SAFETY: borrowed live file; only the label subset is queried.
+            // SAFETY: borrowed live fixture file; only the selected subset is queried.
             assert_eq!(
                 unsafe {
                     GetSecurityInfo(
                         file.as_raw_handle(),
                         SE_FILE_OBJECT,
-                        LABEL_SECURITY_INFORMATION,
+                        info,
                         null_mut(),
                         null_mut(),
                         null_mut(),
@@ -493,7 +589,7 @@ mod windows {
                     ConvertSecurityDescriptorToStringSecurityDescriptorW(
                         descriptor.0,
                         1,
-                        LABEL_SECURITY_INFORMATION,
+                        info,
                         &mut text,
                         &mut length,
                     )
@@ -515,6 +611,128 @@ mod windows {
             let mut options = OpenOptions::new();
             options.read(true).follow(FollowSymlinks::No);
             parent.open_with(name, &options).unwrap()
+        }
+
+        #[test]
+        fn resource_attributes_are_present_before_payload_and_survive_replacement() {
+            let temporary = tempfile::tempdir().unwrap();
+            let root = temporary.path().join("write");
+            std::fs::create_dir(&root).unwrap();
+            let target = root.join("target");
+            std::fs::write(&target, b"original").unwrap();
+            let parent = Dir::open_ambient_dir(&root, ambient_authority()).unwrap();
+            apply_fixture_subset(&parent, "target",
+                "S:(RA;;;;;WD;(\"Fixture\",TS,0,\"first\",\"second\"))(RA;;;;;WD;(\"Rank\",TU,0,3))",
+                ATTRIBUTE_SECURITY_INFORMATION, WRITE_DAC);
+            apply_fixture_label(&parent, "target", "S:(ML;;NW;;;LW)");
+            let expected = fixture_subset(
+                &read_fixture(&parent, "target"),
+                ATTRIBUTE_SECURITY_INFORMATION,
+            );
+            assert!(expected.contains("Fixture") && expected.contains("Rank"));
+            let label = fixture_label(&read_fixture(&parent, "target"));
+            let snapshot = read(&parent, Path::new("target")).unwrap().unwrap();
+            let staged = snapshot.create(&parent, "candidate").unwrap();
+            assert_eq!(staged.metadata().unwrap().len(), 0);
+            assert!(fixture_subset(&staged, ATTRIBUTE_SECURITY_INFORMATION) == expected);
+            assert!(fixture_label(&staged) == label);
+            drop(staged);
+            parent.remove_file("candidate").unwrap();
+            let manifest: latexsnipper_plugin::PluginPermissionsV3 = serde_json::from_value(serde_json::json!({
+                "paths": [{"path": "write", "access": "write"}], "temporaryDirectory": false,
+                "clocks": false, "randomness": false,
+                "registrations": {"capabilities": false, "importers": false, "exporters": false, "runtimes": false},
+                "limits": {"maxConcurrentExecutions": 1}
+            })).unwrap();
+            let permissions =
+                crate::ComponentPermissions::from_manifest(&manifest, temporary.path()).unwrap();
+            permissions
+                .write_file("path-0", "target", b"first", 1024)
+                .unwrap();
+            assert!(
+                fixture_subset(
+                    &read_fixture(&parent, "target"),
+                    ATTRIBUTE_SECURITY_INFORMATION
+                ) == expected
+            );
+            assert!(fixture_label(&read_fixture(&parent, "target")) == label);
+            let digest = hex::encode(Sha256::digest(b"first"));
+            let mut changed = false;
+            let result = permissions.write_file_checked(
+                "path-0",
+                "target",
+                b"candidate",
+                1024,
+                Some(&digest),
+                || {
+                    if !changed && std::fs::read_dir(&root).unwrap().count() > 1 {
+                        apply_fixture_subset(
+                            &parent,
+                            "target",
+                            "S:(RA;;;;;WD;(\"Fixture\",TS,0,\"edited\"))",
+                            ATTRIBUTE_SECURITY_INFORMATION,
+                            WRITE_DAC,
+                        );
+                        changed = true;
+                    }
+                    Ok::<_, ()>(())
+                },
+            );
+            assert!(changed);
+            assert!(matches!(
+                result,
+                Err(CheckedWriteError::Filesystem(
+                    FilesystemOperationError::Conflict
+                ))
+            ));
+            assert_eq!(std::fs::read(&target).unwrap(), b"first");
+            assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+            let edited = fixture_subset(
+                &read_fixture(&parent, "target"),
+                ATTRIBUTE_SECURITY_INFORMATION,
+            );
+            permissions
+                .write_file("path-0", "target", b"second", 1024)
+                .unwrap();
+            assert!(
+                fixture_subset(
+                    &read_fixture(&parent, "target"),
+                    ATTRIBUTE_SECURITY_INFORMATION
+                ) == edited
+            );
+            drop(permissions);
+            drop(parent);
+            temporary.close().unwrap();
+        }
+
+        #[test]
+        fn scoped_policy_and_excess_resource_records_are_explicitly_unsupported() {
+            for value in [
+                "S:(SP;;;;;S-1-17-1)".to_string(),
+                format!("S:{}", "(RA;;;;;WD;(\"Fixture\",TU,0,1))".repeat(129)),
+            ] {
+                let wide: Vec<_> = value.encode_utf16().chain(Some(0)).collect();
+                let mut raw = null_mut();
+                // SAFETY: bounded synthetic descriptors only, never attached to
+                // a live object or installed as a central access policy.
+                assert_ne!(
+                    unsafe {
+                        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                            wide.as_ptr(),
+                            1,
+                            &mut raw,
+                            null_mut(),
+                        )
+                    },
+                    0
+                );
+                let allocation = LocalAllocation(raw);
+                let error = reject_scoped_policy(allocation.0).unwrap_err();
+                assert_eq!(
+                    map_security_error(error),
+                    FilesystemOperationError::MetadataUnsupported
+                );
+            }
         }
 
         #[test]

@@ -487,12 +487,12 @@ this is not a guarantee against hostile native directory moves/reparse changes.
 Replacement preserves ordinary file permission bits (never Unix setuid/setgid),
 applied through the owned staging file handle rather than reconstructing Windows
 attributes from a directory permission adapter.
-Windows existing-file staging also reads owner/group/DACL and mandatory integrity
-labels, including returned inheritance information, from the original file,
+Windows existing-file staging also reads owner/group/DACL, mandatory integrity
+labels and resource attributes, including returned inheritance information, from the original file,
 creates the empty staging file with that
 security descriptor and verifies the resulting identity before writing payload.
 It does not first write sensitive bytes under broader default directory permissions.
-Before publication it rechecks the original security identity; ACL/label-only changes
+Before publication it rechecks the original security identity; ACL/label/resource-only changes
 also cause `PLUGIN_WASI_WRITE_CONFLICT`. Descriptor/string/path buffers are bounded,
 and only a security digest is retained, not logged raw SID/SDDL. If preservation
 requires privileges the process lacks, the write fails without altering the target;
@@ -510,6 +510,25 @@ a no-read-up policy-only concurrent edit while preserving original data. A fresh
 operation then retains the updated policy; failure is not a permanent refusal.
 These fixtures do not prove every level, inherited label shape, remote filesystem,
 or enterprise rule, and this is not a complete audit-SACL clone.
+Resource attributes use their own ATTRIBUTE selection in both query and
+serialization, rather than audit SACL selection. Owned fixtures verify a combined
+low-label/string-multivalue/unsigned-integer resource descriptor on the empty stage
+and the actual replacement; resource-only edits preserve the original and require
+a fresh observed operation. Claims remain opaque OS data in bounded allocations,
+not interpreted as consent or logged. The selected SACL subset is limited to
+128 ACE records within the existing 64 KiB descriptor budget, with bounded ACE
+headers/spans. Unknown record kinds and scoped central-access-policy records are
+rejected with METADATA_UNSUPPORTED rather than silently discarded. Security
+preflight runs before creating a broker approval request, and staged creation
+also refuses an unsupported inherited policy before payload writes.
+
+CAP query requires existing READ_CONTROL access, while its publication requires
+system-security access; Core does not enable that privilege or install/modify a
+central policy. Scope/budget refusal currently has parsed-descriptor classification
+coverage, not a live enterprise CAP installation or deployment acceptance.
+Supported resource fixtures do not establish every claim type, inherited policy,
+filesystem or enterprise rule as supported. A repaired/changed supported target
+still permits fresh approval; these errors never create a permanent blacklist.
 These checks were exercised on controlled Windows x64 files, not every filesystem
 or enterprise policy. Windows basic-metadata capture now preserves positive
 creation time and supported hidden/system/temporary/not-content-indexed flags.
@@ -531,7 +550,7 @@ readonly preservation and fresh operation recovery after conflicts. Compression
 and named-stream preservation remain separately checked. The finite
 [basic-information API](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle)
 does not establish all timestamps, drivers or extended metadata as supported.
-Unix owner identity, complete Windows audit SACL/security resource attributes,
+Unix owner identity, complete Windows audit SACL, central-policy publication,
 encryption, sparse/integrity-stream storage semantics and other extended metadata remain open.
 Existing files with encrypted, sparse, reparse or integrity flags are refused in
 storage preflight, before creating an approval request, with

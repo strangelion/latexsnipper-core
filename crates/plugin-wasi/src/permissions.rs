@@ -380,6 +380,8 @@ impl ComponentPermissions {
         crate::write_basic_metadata::WriteBasicMetadata::read(&parent, &target)?;
         #[cfg(windows)]
         crate::write_compression::WriteCompression::read(&parent, &target)?;
+        #[cfg(windows)]
+        crate::write_security::WriteSecurity::read(&parent, &target)?;
         Ok(grant)
     }
 
@@ -479,7 +481,7 @@ impl<'a> StagedWrite<'a> {
                     ))
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(map_io_error(error)),
+                Err(error) => return Err(crate::write_security::map_security_error(error)),
             }
         }
         Err(FilesystemOperationError::HostFailure)
