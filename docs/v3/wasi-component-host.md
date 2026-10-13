@@ -487,16 +487,29 @@ this is not a guarantee against hostile native directory moves/reparse changes.
 Replacement preserves ordinary file permission bits (never Unix setuid/setgid),
 applied through the owned staging file handle rather than reconstructing Windows
 attributes from a directory permission adapter.
-Windows existing-file staging also reads owner/group/DACL, including inheritance
-protection, from the original file, creates the empty staging file with that
+Windows existing-file staging also reads owner/group/DACL and mandatory integrity
+labels, including returned inheritance information, from the original file,
+creates the empty staging file with that
 security descriptor and verifies the resulting identity before writing payload.
 It does not first write sensitive bytes under broader default directory permissions.
-Before publication it rechecks the original security identity; ACL-only changes
+Before publication it rechecks the original security identity; ACL/label-only changes
 also cause `PLUGIN_WASI_WRITE_CONFLICT`. Descriptor/string/path buffers are bounded,
 and only a security digest is retained, not logged raw SID/SDDL. If preservation
 requires privileges the process lacks, the write fails without altering the target;
 no privilege enabling or ignore-ACL fallback is performed. The staging filename is
 one safe component, and native `CREATE_NEW` never overwrites a collision.
+`LABEL_SECURITY_INFORMATION` is selected explicitly for both querying and SDDL
+serialization; audit-SACL selection alone is not a label fingerprint. The label
+query uses existing READ_CONTROL access, not ACCESS_SYSTEM_SECURITY or privilege
+enabling; see the [security-information rights](https://learn.microsoft.com/en-us/windows/win32/secauthz/security-information).
+Raw descriptors/strings remain bounded in-memory OS allocations, and only the
+text before any terminator is hashed. No label is changed on an original by
+production code. Owned NTFS fixtures independently read the label subset, verify
+a low-integrity empty stage before payload and the actual replacement, and reject
+a no-read-up policy-only concurrent edit while preserving original data. A fresh
+operation then retains the updated policy; failure is not a permanent refusal.
+These fixtures do not prove every level, inherited label shape, remote filesystem,
+or enterprise rule, and this is not a complete audit-SACL clone.
 These checks were exercised on controlled Windows x64 files, not every filesystem
 or enterprise policy. Windows basic-metadata capture now preserves positive
 creation time and supported hidden/system/temporary/not-content-indexed flags.
@@ -518,8 +531,8 @@ readonly preservation and fresh operation recovery after conflicts. Compression
 and named-stream preservation remain separately checked. The finite
 [basic-information API](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle)
 does not establish all timestamps, drivers or extended metadata as supported.
-Unix owner identity, Windows SACL/security resource attributes,
-encryption, sparse/integrity semantics and other extended metadata remain open.
+Unix owner identity, complete Windows audit SACL/security resource attributes,
+encryption, sparse/integrity-stream storage semantics and other extended metadata remain open.
 Existing files with encrypted, sparse, reparse or integrity flags are refused in
 storage preflight, before creating an approval request, with
 `PLUGIN_WASI_METADATA_UNSUPPORTED`, unless the no-follow path policy already refused

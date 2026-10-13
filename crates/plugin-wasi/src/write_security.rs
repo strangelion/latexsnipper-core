@@ -87,7 +87,7 @@ mod windows {
     };
     use windows_sys::Win32::Security::{
         GetSecurityDescriptorControl, GetSecurityDescriptorLength, ACL, DACL_SECURITY_INFORMATION,
-        GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
+        GROUP_SECURITY_INFORMATION, LABEL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
         PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES,
         SE_DACL_PROTECTED, UNPROTECTED_DACL_SECURITY_INFORMATION,
     };
@@ -96,8 +96,13 @@ mod windows {
         FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_DELETE,
         FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
     };
-    const INFO: u32 =
-        OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
+    const INFO: u32 = OWNER_SECURITY_INFORMATION
+        | GROUP_SECURITY_INFORMATION
+        | DACL_SECURITY_INFORMATION
+        | LABEL_SECURITY_INFORMATION;
+    // LABEL is distinct from audit SACL information in both querying and string
+    // serialization. Never request ACCESS_SYSTEM_SECURITY or enable privileges.
+    const FINGERPRINT_INFO: u32 = INFO;
     const MAX_SECURITY_BYTES: u32 = 64 * 1024;
 
     struct LocalAllocation(*mut c_void);
@@ -187,7 +192,7 @@ mod windows {
                 bInheritHandle: 0,
             };
             // SAFETY: The bounded, terminated path names a random staging file.
-            // CREATE_NEW prevents overwriting any pre-existing file. The complete
+            // CREATE_NEW prevents overwriting any pre-existing file. The captured
             // kernel-owned descriptor stays live throughout creation; no payload
             // is written under a broader inherited DACL first.
             let handle = unsafe {
@@ -252,7 +257,7 @@ mod windows {
             ConvertSecurityDescriptorToStringSecurityDescriptorW(
                 descriptor,
                 1,
-                INFO,
+                FINGERPRINT_INFO,
                 &mut text,
                 &mut length,
             )
@@ -264,10 +269,11 @@ mod windows {
         if allocation.0.is_null() || length == 0 || length > MAX_SECURITY_BYTES / 2 {
             return Err(std::io::Error::other("security identity exceeds budget"));
         }
-        // SAFETY: Win32 returned length UTF-16 units including the terminator.
+        // SAFETY: Win32 returned a bounded UTF-16 output buffer. Hash only the
+        // text, not an optional terminator or trailing allocation padding.
         let units = unsafe { std::slice::from_raw_parts(text, length as usize) };
         let mut digest = Sha256::new();
-        for unit in units {
+        for unit in units.iter().take_while(|unit| **unit != 0) {
             digest.update(unit.to_le_bytes());
         }
         Ok(hex::encode(digest.finalize()))
@@ -396,7 +402,208 @@ mod windows {
         use super::*;
         use cap_std::ambient_authority;
         use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
-        use windows_sys::Win32::Security::GetSecurityDescriptorDacl;
+        use windows_sys::Win32::Security::{GetSecurityDescriptorDacl, GetSecurityDescriptorSacl};
+        use windows_sys::Win32::Storage::FileSystem::WRITE_OWNER;
+
+        // Only fresh TempDir fixture files are passed here. No privileges are
+        // enabled, and labels stay below the normal user's integrity level.
+        fn apply_fixture_label(parent: &Dir, target: &str, value: &str) {
+            use cap_std::fs::OpenOptionsExt;
+            let mut options = OpenOptions::new();
+            options
+                .read(true)
+                .access_mode(FILE_GENERIC_READ | WRITE_OWNER)
+                .follow(FollowSymlinks::No);
+            let file = parent.open_with(target, &options).unwrap();
+            let text: Vec<_> = value.encode_utf16().chain(Some(0)).collect();
+            let mut descriptor = null_mut();
+            // SAFETY: terminated constant fixture SDDL and writable output.
+            assert_ne!(
+                unsafe {
+                    ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                        text.as_ptr(),
+                        1,
+                        &mut descriptor,
+                        null_mut(),
+                    )
+                },
+                0
+            );
+            let descriptor = LocalAllocation(descriptor);
+            let mut label = null_mut();
+            let mut present = 0;
+            let mut defaulted = 0;
+            // SAFETY: live OS descriptor and writable outputs.
+            assert_ne!(
+                unsafe {
+                    GetSecurityDescriptorSacl(
+                        descriptor.0,
+                        &mut present,
+                        &mut label,
+                        &mut defaulted,
+                    )
+                },
+                0
+            );
+            assert_ne!(present, 0);
+            assert!(!label.is_null());
+            // SAFETY: exact fixture handle; LABEL only, not audit SACL/security
+            // privileges, and no parent/user-file mutation.
+            assert_eq!(
+                unsafe {
+                    SetSecurityInfo(
+                        file.as_raw_handle(),
+                        SE_FILE_OBJECT,
+                        LABEL_SECURITY_INFORMATION,
+                        null_mut(),
+                        null_mut(),
+                        null(),
+                        label,
+                    )
+                },
+                0
+            );
+        }
+
+        fn fixture_label(file: &File) -> String {
+            let mut raw = null_mut();
+            // SAFETY: borrowed live file; only the label subset is queried.
+            assert_eq!(
+                unsafe {
+                    GetSecurityInfo(
+                        file.as_raw_handle(),
+                        SE_FILE_OBJECT,
+                        LABEL_SECURITY_INFORMATION,
+                        null_mut(),
+                        null_mut(),
+                        null_mut(),
+                        null_mut(),
+                        &mut raw,
+                    )
+                },
+                0
+            );
+            let descriptor = LocalAllocation(raw);
+            let mut text = null_mut();
+            let mut length = 0;
+            // SAFETY: serialize the already captured in-memory label subset,
+            // independently of the production combined fingerprint flags.
+            assert_ne!(
+                unsafe {
+                    ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                        descriptor.0,
+                        1,
+                        LABEL_SECURITY_INFORMATION,
+                        &mut text,
+                        &mut length,
+                    )
+                },
+                0
+            );
+            let allocation = LocalAllocation(text.cast());
+            assert!(!allocation.0.is_null() && length > 0 && length < 1024);
+            // SAFETY: returned bounded UTF-16 buffer; ignore any terminator.
+            let units = unsafe { std::slice::from_raw_parts(text, length as usize) };
+            let end = units
+                .iter()
+                .position(|value| *value == 0)
+                .unwrap_or(units.len());
+            String::from_utf16(&units[..end]).unwrap()
+        }
+
+        fn read_fixture(parent: &Dir, name: &str) -> File {
+            let mut options = OpenOptions::new();
+            options.read(true).follow(FollowSymlinks::No);
+            parent.open_with(name, &options).unwrap()
+        }
+
+        #[test]
+        fn owned_staging_has_original_integrity_label_before_any_payload() {
+            let temporary = tempfile::tempdir().unwrap();
+            std::fs::write(temporary.path().join("target"), b"original").unwrap();
+            let parent = Dir::open_ambient_dir(temporary.path(), ambient_authority()).unwrap();
+            apply_fixture_label(&parent, "target", "S:(ML;;NW;;;LW)");
+            let expected = fixture_label(&read_fixture(&parent, "target"));
+            assert!(expected.contains("(ML;;NW;;;LW)"));
+            let snapshot = read(&parent, Path::new("target")).unwrap().unwrap();
+            let staged = snapshot.create(&parent, "candidate").unwrap();
+            assert_eq!(staged.metadata().unwrap().len(), 0);
+            assert!(fixture_label(&staged) == expected);
+            assert!(
+                SecuritySnapshot::from_file(&staged).unwrap().fingerprint == snapshot.fingerprint
+            );
+            drop(staged);
+            parent.remove_file("candidate").unwrap();
+            assert_eq!(
+                std::fs::read(temporary.path().join("target")).unwrap(),
+                b"original"
+            );
+            drop(parent);
+            temporary.close().unwrap();
+        }
+
+        #[test]
+        fn actual_replacement_retains_label_and_policy_only_edit_is_a_conflict() {
+            use crate::permissions::CheckedWriteError;
+            let temporary = tempfile::tempdir().unwrap();
+            let root = temporary.path().join("write");
+            std::fs::create_dir(&root).unwrap();
+            let target = root.join("target");
+            std::fs::write(&target, b"original").unwrap();
+            let manifest: latexsnipper_plugin::PluginPermissionsV3 = serde_json::from_value(serde_json::json!({
+                "paths": [{"path": "write", "access": "write"}], "temporaryDirectory": false,
+                "clocks": false, "randomness": false,
+                "registrations": {"capabilities": false, "importers": false, "exporters": false, "runtimes": false},
+                "limits": {"maxConcurrentExecutions": 1}
+            })).unwrap();
+            let permissions =
+                crate::ComponentPermissions::from_manifest(&manifest, temporary.path()).unwrap();
+            let parent = Dir::open_ambient_dir(&root, ambient_authority()).unwrap();
+            apply_fixture_label(&parent, "target", "S:(ML;;NW;;;LW)");
+            let label = fixture_label(&read_fixture(&parent, "target"));
+            permissions
+                .write_file("path-0", "target", b"first", 1024)
+                .unwrap();
+            assert!(fixture_label(&read_fixture(&parent, "target")) == label);
+            let digest = hex::encode(Sha256::digest(b"first"));
+            let mut changed = false;
+            let result = permissions.write_file_checked(
+                "path-0",
+                "target",
+                &vec![b'x'; 128 * 1024],
+                128 * 1024,
+                Some(&digest),
+                || {
+                    if !changed && std::fs::read_dir(&root).unwrap().count() > 1 {
+                        apply_fixture_label(&parent, "target", "S:(ML;;NWNR;;;LW)");
+                        changed = true;
+                    }
+                    Ok::<_, ()>(())
+                },
+            );
+            assert!(changed);
+            assert!(
+                matches!(
+                    result,
+                    Err(CheckedWriteError::Filesystem(
+                        FilesystemOperationError::Conflict
+                    ))
+                ),
+                "fixture result: {result:?}"
+            );
+            assert_eq!(std::fs::read(&target).unwrap(), b"first");
+            assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+            let edited = fixture_label(&read_fixture(&parent, "target"));
+            assert!(edited != label);
+            // A fresh observed operation remains usable; no permanent refusal.
+            permissions
+                .write_file("path-0", "target", b"second", 1024)
+                .unwrap();
+            assert!(fixture_label(&read_fixture(&parent, "target")) == edited);
+            drop(permissions);
+            drop(parent);
+            temporary.close().unwrap();
+        }
 
         fn apply_owner_only_dacl(parent: &Dir, target: &str) {
             use cap_std::fs::OpenOptionsExt;
