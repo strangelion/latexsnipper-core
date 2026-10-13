@@ -177,8 +177,9 @@ provide rollback protection across a crash/restart; a host must persist its time
 checkpoint or use an independently protected clock before enabling reuse.
 
 These snapshots are not encrypted: paths, routes and digests can be sensitive.
-Protect snapshot confidentiality and do not upload them. Core performs no disk IO
-or OS key-store integration. Independent restored instances do not synchronize
+Protect snapshot confidentiality and do not upload them. The portable policy store
+performs no disk IO; the opt-in Windows backend below supplies OS storage.
+Independent unguarded restored instances do not synchronize
 revocation. Restoring or matching a snapshot alone does not remove
 `PLUGIN_WASI_APPROVAL_REQUIRED`. Crash-safe host persistence and application UI
 remain pending; never treat an unprotected file as a remembered permission source.
@@ -223,7 +224,7 @@ Authority is bounded to 128 attached host contexts and 128 active request identi
 per controller, with at most 10000 held permits per identity. Completed permits are
 pruned; capacity refusal is not a permanent blacklist. Restored independent stores
 do not synchronize revocation: use one authoritative shared store per owner. Core
-does not atomically coordinate multiple host processes or perform protected disk IO,
+does not automatically select protected storage or synchronize independent processes,
 and already-published files/native network effects cannot be undone.
 
 ### Live authoritative policy guard
@@ -254,12 +255,62 @@ sandbox, so the provider must use bounded nonblocking/timeout-aware operations.
 Failure creates no remembered authority; the actual pending request remains
 available for an independent fresh user confirmation.
 
-The interface is implemented, not a production protected-storage/IPC provider.
-In-memory fixtures cover independent restored clients and staged-write vetoes,
-not real OS-process coordination or OS key-store durability. A production host must
-authenticate the owner, serialize protected publications, and provide fresh
-per-policy checks before enabling cross-process remembered reuse. Restart/crash
-recovery, confidential snapshot storage and a real backend remain pending.
+The portable interface does not supply IPC or authenticate an arbitrary owner.
+A production host must select a protected provider, serialize publications and
+provide fresh per-policy checks before enabling cross-process remembered reuse.
+
+### Opt-in Windows protected owner
+
+`WindowsProtectedApprovalCheckpoint::open(root, owner, persistence)` uses one exact
+current-user generic Credential Manager entry for the dedicated key and latest
+checkpoint. It never enumerates credentials or changes domain credentials,
+certificates, registries or installation state. `LogonSession` is temporary;
+`ThisUserThisComputer` persists for the same user's logons on this computer,
+not machine-wide consent. The namespace binds the canonical root, opaque owner
+and persistence mode. Moving the root does not silently migrate its identity.
+
+The host must supply an existing trusted private root outside every guest grant.
+This constructor does not prove ancestor ACL/reparse isolation or protect against
+native code running as the same user. Snapshot objects are authenticated but not
+encrypted; private root access and confidentiality remain the host's responsibility.
+
+`initialize` and exact-checkpoint-CAS `publish` take a shared OS file lock, validate
+authenticated metadata, sync a bounded immutable snapshot, publish its new name
+without overwriting an existing object, then update the protected checkpoint.
+Same-revision publications may advance the clock floor but not change policies.
+Publication validation deliberately does not require a working wall clock, so
+revocation/forgetting can be saved during clock rollback; execution still rejects
+that clock. All writers must use this backend and the same trusted root.
+
+`restore_policies(deadline)` reads only the object selected by protected storage.
+Missing/corrupt selected data never falls back to an older snapshot. A write cut
+before checkpoint selection leaves an unselected object, not new consent. Restore
+returns metadata, not a host attachment or permission to run. This backend also
+implements `RememberedApprovalAuthorityGuard`: explicitly attach it to a restored
+store to veto stale clients using the current authenticated policy identity.
+The guard reads but does not publish clock observations: before enabling reuse,
+the host must also persist advancing time checkpoints or provide an independently
+protected clock. Otherwise a restart loses unpublished clock high-water marks.
+Do not enable reuse from restore alone or silently retry a failed publication.
+Native writes finishing after a deadline may already have committed; reread the
+protected checkpoint before deciding what happened.
+
+Current evidence covers real Credential Manager read/write, file-backed restore,
+unselected-object recovery, corruption refusal, forgetting, independent-client
+guard revocation and competing backend instances on Windows threads. It does not
+yet establish continuous clock-floor publication, OS child-process races, forced-kill/power-loss durability, logoff
+persistence, orphan collection, Linux/macOS providers, application UI or release
+security approval. File sync is not a promise of directory-entry power-loss
+durability. Native key-store calls are trusted blocking OS calls, not preemptible
+sandbox operations; deadline overruns fail after return. The native credential
+test is ignored by default and runs explicitly with test-owned credential cleanup.
+
+For UX, distinguish approval once, a bounded session/batch, and a separate explicit
+remember-choice. Repeated matching actions reuse remembered consent without new
+dialogs; a five-minute per-use permit is an internal lease, not a five-minute
+reapproval requirement. Revocation, expiry or changed binding/scope requires fresh
+consent. Storage/clock failures disable remembered reuse, not independent fresh
+confirmation; never turn a transient failure into a permanent blacklist.
 
 ### Core grant lifecycle and enforcement
 

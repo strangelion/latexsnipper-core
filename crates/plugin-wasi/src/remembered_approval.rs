@@ -90,6 +90,23 @@ pub struct SealedApprovalPolicies {
     pub checkpoint: ApprovalPolicyCheckpoint,
 }
 
+/// Publication validates authenticated metadata, not permission to execute.
+/// A broken wall clock must not prevent persisting revocation or forgetting.
+#[cfg(windows)]
+pub(crate) fn validate_sealed_for_publication(
+    key: &ApprovalPolicyKey,
+    candidate: &SealedApprovalPolicies,
+) -> Result<Vec<RememberedApprovalPolicy>, WasiDiagnostic> {
+    let observed = candidate.checkpoint.observed_unix_secs;
+    RememberedApprovalPolicies::restore_with_clock(
+        ApprovalPolicyKey::from_secret_bytes(*key.secret_bytes()),
+        &candidate.bytes,
+        &candidate.checkpoint,
+        Arc::new(move || Ok(observed)),
+    )?
+    .policies()
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Snapshot {
@@ -715,6 +732,24 @@ mod tests {
             &sealed.checkpoint,
             clock,
         )
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn publication_validation_allows_forgetting_during_clock_rollback_not_execution() {
+        let (store, time, clock) = fixture();
+        remember(&store);
+        time.store(999, Ordering::SeqCst);
+        assert!(store.authorize(&request()).is_err());
+        store.clear().unwrap();
+        let forgotten = store.seal().unwrap();
+        assert!(validate_sealed_for_publication(&key(), &forgotten)
+            .unwrap()
+            .is_empty());
+        assert!(restore(&forgotten, clock).is_err());
+        let mut corrupt = forgotten;
+        corrupt.bytes[12] ^= 1;
+        assert!(validate_sealed_for_publication(&key(), &corrupt).is_err());
     }
 
     #[test]

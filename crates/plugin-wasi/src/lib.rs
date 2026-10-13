@@ -13,6 +13,8 @@ pub mod package;
 pub mod permissions;
 pub mod remembered_approval;
 #[cfg(windows)]
+pub mod windows_approval_checkpoint;
+#[cfg(windows)]
 mod write_compression;
 mod write_security;
 #[cfg(windows)]
@@ -29,6 +31,10 @@ pub use formula_profile::{PreparedFormulaRegistry, WasiFormulaProfile};
 pub use remembered_approval::{
     ApprovalPolicyCheckpoint, ApprovalPolicyKey, RememberedApprovalPolicies,
     RememberedApprovalPolicy, SealedApprovalPolicies,
+};
+#[cfg(windows)]
+pub use windows_approval_checkpoint::{
+    WindowsApprovalPersistence, WindowsProtectedApprovalCheckpoint, WindowsProtectedApprovalState,
 };
 
 pub use diagnostic::{
