@@ -268,7 +268,6 @@ fn growth_masks_use_structured_omml_without_fabricating_a_tex_macro() {
         );
         for output in [
             OutputFormat::LatexDisplay,
-            OutputFormat::MathML,
             OutputFormat::Typst,
             OutputFormat::Html,
         ] {
@@ -327,6 +326,213 @@ fn growth_masks_use_structured_omml_without_fabricating_a_tex_macro() {
         assert_eq!(
             parse_unicodemath(source).unwrap_err().kind,
             UnicodeMathErrorKind::UnsupportedSyntax
+        );
+    }
+}
+
+#[test]
+fn mathml_growth_roundtrip_preserves_style_slots_and_owned_operands() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    for glyph in ['∫', '∬', '∭', '∮', '∑', '∏', '∐', '⋃', '⋂'] {
+        for growth in [64, 128] {
+            let source = format!("{glyph}{growth}_0^1▒x");
+            let xml = DocumentConverter::convert_formula_string(
+                &source,
+                FormulaInputFormat::UnicodeMath,
+                OutputFormat::MathML,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert_eq!(
+                DocumentConverter::convert_formula_to_target(
+                    &xml,
+                    FormulaInputFormat::Mathml,
+                    FormulaOutputTarget::UnicodeMath,
+                    FormulaConversionMode::BestEffort
+                )
+                .unwrap(),
+                canonical(&source)
+            );
+        }
+    }
+    for source in [
+        "∫64",
+        "∫128",
+        "∫64_0^1▒x+b",
+        "∑130_i^n▒x+b",
+        "∫89▒x",
+        "∑154▒x",
+        "∫64▒∑130_i^n▒x",
+        "■(∫64▒x&∑130_i^n▒y)",
+        "(∫64▒x)/y",
+        "√(∫128▒x)",
+    ] {
+        let xml = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::MathML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(xml.contains("stretchy="), "{xml}");
+        assert!(!xml.contains("LatexSnipperInternal"), "{xml}");
+        let restored = DocumentConverter::convert_formula_to_target(
+            &xml,
+            FormulaInputFormat::Mathml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(restored, canonical(source), "{source}: {xml}");
+        let rebuilt = DocumentConverter::convert_formula_string(
+            &xml,
+            FormulaInputFormat::Mathml,
+            OutputFormat::MathML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(
+            DocumentConverter::convert_formula_to_target(
+                &rebuilt,
+                FormulaInputFormat::Mathml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap(),
+            canonical(source),
+            "{source}"
+        );
+        let omml = DocumentConverter::convert_formula_string(
+            &xml,
+            FormulaInputFormat::Mathml,
+            OutputFormat::OMML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(omml.contains("<m:grow m:val="), "{omml}");
+        for target in [OutputFormat::Latex, OutputFormat::Typst, OutputFormat::Html] {
+            assert!(DocumentConverter::convert_formula_string(
+                &xml,
+                FormulaInputFormat::Mathml,
+                target,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("growth"));
+        }
+    }
+    for placement in [0, 1, 2] {
+        for placeholders in [0, 8, 16, 24] {
+            for growth in [64, 128] {
+                let flag = placement + placeholders + growth;
+                let source = if placeholders == 0 {
+                    format!("∫{flag}_0^1▒x")
+                } else {
+                    format!("∫{flag}▒x")
+                };
+                let xml = DocumentConverter::convert_formula_string(
+                    &source,
+                    FormulaInputFormat::UnicodeMath,
+                    OutputFormat::MathML,
+                    FormulaConversionMode::BestEffort,
+                )
+                .unwrap();
+                assert!(
+                    xml.contains(if growth == 64 {
+                        "stretchy=\"false\""
+                    } else {
+                        "stretchy=\"true\""
+                    }),
+                    "{xml}"
+                );
+                let restored = DocumentConverter::convert_formula_to_target(
+                    &xml,
+                    FormulaInputFormat::Mathml,
+                    FormulaOutputTarget::UnicodeMath,
+                    FormulaConversionMode::BestEffort,
+                )
+                .unwrap();
+                // Same-as-default integral placement has no distinct XML encoding.
+                let expected = if placement == 2 {
+                    source.replacen(&format!("∫{flag}"), &format!("∫{}", flag - 2), 1)
+                } else {
+                    source.clone()
+                };
+                assert_eq!(restored, canonical(&expected), "{source}: {xml}");
+            }
+        }
+    }
+}
+
+#[test]
+fn mathml_growth_rejects_unsupported_properties_and_reserved_bridge_text() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    for xml in [
+        format!(
+            "<math>{}<mo stretchy=\"true\">∫</mo>{}</math>",
+            "<mrow>".repeat(65),
+            "</mrow>".repeat(65)
+        ),
+        format!(
+            "<math><mtext>{}</mtext><mo stretchy=\"true\">∫</mo></math>",
+            "x".repeat(65_536)
+        ),
+    ] {
+        assert!(DocumentConverter::convert_formula_to_target(
+            &xml,
+            FormulaInputFormat::Mathml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort
+        )
+        .is_err());
+    }
+    for operator in [
+        "<mo stretchy=\"yes\">∫</mo>",
+        "<mo stretchy=\"\">∫</mo>",
+        "<mo stretchy=\"true\" largeop=\"false\">∫</mo>",
+        "<mo stretchy=\"true\" movablelimits=\"yes\">∫</mo>",
+        "<mo stretchy=\"true\" largeop=\"true\">⨁</mo>",
+        "<mo stretchy=\"true\" largeop=\"true\">∫∫</mo>",
+        "<mo stretchy=\"true\" style=\"height:3em\">∫</mo>",
+        "<mo stretchy=\"true\" minsize=\"2em\">∫</mo>",
+        "<mo stretchy=\"true\" stretchy=\"false\">∫</mo>",
+        "<mo xmlns:a=\"urn:test\" a:stretchy=\"true\">∫</mo>",
+        "<mo stretchy=\"true\"><mo>∫</mo></mo>",
+        "<mtext>LatexSnipperInternalNaryGrow</mtext>",
+        "<mtext>LatexSnipperInternalNaryNoGrow</mtext>",
+        "<mtext>LatexSnipperInternalNary&#x47;row</mtext>",
+        "<mtext><![CDATA[LatexSnipperInternalNaryGrow]]></mtext>",
+        "<mstyle mathcolor=\"LatexSnipperInternalNaryGrow\"><mi>x</mi></mstyle>",
+    ] {
+        let xml = format!("<math xmlns=\"http://www.w3.org/1998/Math/MathML\">{operator}</math>");
+        assert!(
+            DocumentConverter::convert_formula_to_target(
+                &xml,
+                FormulaInputFormat::Mathml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .is_err(),
+            "{xml}"
+        );
+    }
+    for stretchy in ["true", "false"] {
+        let xml = format!("<math><mo stretchy=\"{stretchy}\">∫</mo></math>");
+        let restored = DocumentConverter::convert_formula_to_target(
+            &xml,
+            FormulaInputFormat::Mathml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(
+            restored,
+            if stretchy == "true" {
+                "∫128"
+            } else {
+                "∫64"
+            }
         );
     }
 }

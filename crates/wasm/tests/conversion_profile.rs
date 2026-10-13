@@ -71,7 +71,8 @@ fn unicode_function_arguments_keep_the_formula_only_envelope() {
     assert_eq!(result["ok"].as_bool(), Some(true));
     let content = result["data"]["content"].as_str().unwrap();
     let end = content.find("</m:func>").unwrap();
-    assert!(content[..end].contains(" y</m:t>"));
+    assert!(content[..end].contains("<m:t>y</m:t>"));
+    assert!(!content[..end].contains("<m:t>b</m:t>"));
     assert!(content[end..].contains("<m:t>b</m:t>"));
 }
 
@@ -86,6 +87,53 @@ fn unicode_nary_scope_keeps_the_formula_only_envelope() {
     assert_eq!(result["ok"].as_bool(), Some(true));
     let content = result["data"]["content"].as_str().unwrap();
     let end = content.find("</m:nary>").unwrap();
-    assert!(content[..end].contains(" y</m:t>"));
+    assert!(content[..end].contains("<m:t>y</m:t>"));
+    assert!(!content[..end].contains("<m:t>b</m:t>"));
     assert!(content[end..].contains("<m:t>b</m:t>"));
+}
+
+#[wasm_bindgen_test]
+fn structured_mathml_growth_roundtrips_through_formula_bindings() {
+    for (source, stretchy) in [
+        ("∫65_0^1▒x+b", "false"),
+        ("∑130_i^n▒x+b", "true"),
+        ("∫88▒x", "false"),
+    ] {
+        let canonical = json(convert_formula_v3(
+            source,
+            "unicode-math",
+            "unicode-math",
+            Some("best-effort".into()),
+        ));
+        let mathml = json(convert_formula_v3(
+            source,
+            "unicode-math",
+            "mathml",
+            Some("best-effort".into()),
+        ));
+        assert_eq!(canonical["ok"], true);
+        assert_eq!(mathml["ok"], true);
+        let xml = mathml["data"]["content"].as_str().unwrap();
+        assert!(xml.contains(&format!("stretchy=\"{stretchy}\"")));
+        assert!(!xml.contains("LatexSnipperInternal"));
+        let restored = json(convert_formula_v3(
+            xml,
+            "mathml",
+            "unicode-math",
+            Some("best-effort".into()),
+        ));
+        assert_eq!(restored["ok"], true);
+        assert_eq!(restored["data"]["content"], canonical["data"]["content"]);
+        let omml = json(convert_formula_v3(
+            xml,
+            "mathml",
+            "omml",
+            Some("best-effort".into()),
+        ));
+        assert_eq!(omml["ok"], true);
+        assert!(omml["data"]["content"].as_str().unwrap().contains(&format!(
+            "<m:grow m:val=\"{}\"/>",
+            if stretchy == "true" { "1" } else { "0" }
+        )));
+    }
 }

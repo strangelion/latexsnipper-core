@@ -1440,6 +1440,20 @@ fn is_legacy_limit_head(node: &crate::latex_ast::LatexNode) -> bool {
     }
 }
 
+// Linear sources already own a validated AST; a TeX bridge loses growth settings.
+pub(crate) fn linear_ast_to_mathml(node: &crate::latex_ast::LatexNode) -> Result<String> {
+    crate::omml::validate_omml_node(node, 0)
+        .map_err(latexsnipper_foundation::SnipperError::Conversion)?;
+    let body = render_symbol_ast(node, &mut false, 0).ok_or_else(|| {
+        latexsnipper_foundation::SnipperError::Conversion(
+            "AST is outside structured MathML output; retain the original source".into(),
+        )
+    })?;
+    Ok(format!(
+        "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">{body}</math>"
+    ))
+}
+
 fn render_symbol_ast(
     node: &crate::latex_ast::LatexNode,
     found: &mut bool,
@@ -1464,8 +1478,11 @@ fn render_symbol_ast(
         } else {
             "true"
         };
+        let growth = head.grow.map_or_else(String::new, |grow| {
+            format!(" stretchy=\"{}\"", if grow { "true" } else { "false" })
+        });
         let base = format!(
-            "<mo largeop=\"true\" movablelimits=\"{movable}\">{}</mo>",
+            "<mo largeop=\"true\" movablelimits=\"{movable}\"{growth}>{}</mo>",
             head.glyph
         );
         let lower = if let Some(node) = head.lower {

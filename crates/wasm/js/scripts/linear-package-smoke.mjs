@@ -58,6 +58,33 @@ assert.ok(noGrowXml.data.content.includes('<m:grow m:val="0"/>'));
 const noGrowRestored = api.convert_formula_v3(noGrowXml.data.content, "omml", "unicode-math", "best-effort");
 assert.equal(noGrowRestored.ok, true);
 assert.equal(noGrowRestored.data.content, noGrowCanonical.data.content);
+for (const [source, stretch] of [[noGrow, "false"], ["∑130_i^n▒x+b", "true"], ["∫88▒x", "false"]]) {
+  const canonical = api.convert_formula_v3(source, "unicode-math", "unicode-math", "best-effort");
+  const mathml = api.convert_formula_v3(source, "unicode-math", "mathml", "best-effort");
+  assert.equal(canonical.ok, true);
+  assert.equal(mathml.ok, true);
+  assert.ok(mathml.data.content.includes(`stretchy="${stretch}"`));
+  assert.ok(!mathml.data.content.includes("LatexSnipperInternal"));
+  const restored = api.convert_formula_v3(mathml.data.content, "mathml", "unicode-math", "best-effort");
+  assert.equal(restored.ok, true);
+  assert.equal(restored.data.content, canonical.data.content);
+  const rebuilt = api.convert_formula_v3(mathml.data.content, "mathml", "omml", "best-effort");
+  assert.equal(rebuilt.ok, true);
+  assert.ok(rebuilt.data.content.includes(`<m:grow m:val="${stretch === "true" ? "1" : "0"}"/>`));
+}
+const badGrowth = api.convert_formula_v3('<math><mo stretchy="yes">∫</mo></math>', "mathml", "unicode-math", "best-effort");
+assert.equal(badGrowth.ok, false);
+assert.equal(badGrowth.error.code, "CONVERSION_FAILED");
+for (const [source, closing] of [["sin⁡〖x+y〗+b", "</m:func>"], ["∫_0^1▒〖x+y〗+b", "</m:nary>"]]) {
+  const result = api.convert_formula_v3(source, "unicode-math", "omml", "best-effort");
+  assert.equal(result.ok, true);
+  const content = result.data.content;
+  const end = content.indexOf(closing);
+  assert.ok(end >= 0);
+  assert.ok(content.slice(0, end).includes("<m:t>y</m:t>"));
+  assert.ok(!content.slice(0, end).includes("<m:t>b</m:t>"));
+  assert.ok(content.slice(end).includes("<m:t>b</m:t>"));
+}
 const noGrowRejected = api.convert_formula_v3(noGrow, "unicode-math", "latex_display", "best-effort");
 assert.equal(noGrowRejected.ok, false);
 assert.equal(noGrowRejected.error.code, "CONVERSION_FAILED");

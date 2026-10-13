@@ -690,7 +690,8 @@ mod tests {
         assert_eq!(result["ok"], true);
         let content = result["data"]["content"].as_str().unwrap();
         let end = content.find("</m:func>").unwrap();
-        assert!(content[..end].contains(" y</m:t>"));
+        assert!(content[..end].contains("<m:t>y</m:t>"));
+        assert!(!content[..end].contains("<m:t>b</m:t>"));
         assert!(content[end..].contains("<m:t>b</m:t>"));
     }
 
@@ -709,7 +710,8 @@ mod tests {
         assert_eq!(result["ok"], true);
         let content = result["data"]["content"].as_str().unwrap();
         let end = content.find("</m:nary>").unwrap();
-        assert!(content[..end].contains(" y</m:t>"));
+        assert!(content[..end].contains("<m:t>y</m:t>"));
+        assert!(!content[..end].contains("<m:t>b</m:t>"));
         assert!(content[end..].contains("<m:t>b</m:t>"));
     }
 

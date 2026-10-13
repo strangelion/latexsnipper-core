@@ -1,6 +1,6 @@
 # UnicodeMath bounded parser/AST pilot
 
-Status: finite Rust grammar with formal formula-only routes, 2026-10-13.
+Status: finite Rust grammar with formal formula-only routes, 2026-10-14.
 The pilot module name remains compatible; see [the registered binding contract](linear-formula-conversion.md).
 This is not a full UnicodeMath/Word implementation or visual-fidelity claim.
 
@@ -57,7 +57,7 @@ repository-authored; no renderer/parser source or dependency is vendored.
   on readback. XML properties equal to the finite default may normalize to that
   default, not the original flag spelling. Growth flags `64`/`128` and their
   combinations with `1`/`2` are preserved in the bounded AST and structured
-  OMML path; see below. Other numeric flags, duplicate limit
+  OMML/MathML paths; see below. Other numeric flags, duplicate limit
   slots, unknown glyphs and stray markers fail.
   The differential glyph `ⅆ` is retained rather than replaced by ASCII `d`;
   its font and differential spacing are not a host-fidelity claim.
@@ -87,8 +87,21 @@ than reparsing generated TeX. Growth annotations use reserved internal Command
 nodes without adding a public enum variant or a source macro. The OMML linear
 adapter reconstructs these annotations; its private intermediate marker cannot
 be supplied in XML text or escape into exported content. The AST Display view
-is diagnostic for growth, not a LaTeX exporter. Formal routes to LaTeX, MathML,
+is diagnostic for growth, not a LaTeX exporter. Formal routes to LaTeX,
 Typst, Markdown and HTML refuse growth rather than manufacture a macro or omit it.
+
+The structured MathML path maps explicit growth to `mo stretchy="true"/"false"`
+and retains `largeop` independently for display-size behavior. Readback keeps
+these explicit settings in UnicodeMath and OMML, including nested operands,
+matrices and empty limit slots. Only finite n-ary leaf operators with canonical
+`stretchy`, `largeop` and `movablelimits` properties are accepted; unknown glyphs,
+conflicting sizing/CSS, qualified or malformed properties are refused. An absent
+`stretchy` keeps the existing reconstruction path, not an inferred explicit growth
+choice. This maps the content-height setting, not exact glyph dimensions: MathML
+stretching depends on the host's available math font and stretch construction.
+See [MathML Core operator layout](https://www.w3.org/TR/mathml-core/#operator-fence-separator-or-accent-mo).
+The public XML-to-LaTeX reader refuses explicit n-ary growth; private structural
+markers cannot be supplied as XML text or escape into outputs.
 
 OMML to OMML also uses this structured path. Omitted n-ary `grow` means false,
 whereas a present `grow` with no `val` means true; see [Microsoft's definition](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.math.growoperators?view=openxml-3.0.1).
@@ -97,7 +110,7 @@ Explicit true can normalize to the existing Core default on XML readback;
 this is not preservation of the original flag spelling. Unknown, empty explicit
 or duplicate property values fail. The general public XML-to-LaTeX reader cannot
 export explicit no-growth faithfully through this pipeline and reports that limit.
-Other target mappings and actual Word font/height fidelity remain independent work.
+Other target mappings and actual Word/browser font-height fidelity remain independent work.
 
 ## Empty limit slots
 

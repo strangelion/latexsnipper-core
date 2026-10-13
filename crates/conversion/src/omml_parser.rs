@@ -8,7 +8,8 @@ pub fn parse_omml_to_latex(xml: &str) -> Result<String, String> {
     parse_inner(&cleaned, false)
 }
 
-const GROWTH_BRIDGE: &str = "LatexSnipperInternalNaryNoGrow";
+pub(crate) const GROWTH_BRIDGE: &str = "LatexSnipperInternalNaryNoGrow";
+pub(crate) const GROWTH_TRUE_BRIDGE: &str = "LatexSnipperInternalNaryGrow";
 
 pub(crate) fn parse_omml_to_linear_ast(xml: &str) -> Result<crate::latex_ast::LatexNode, String> {
     let math_xml = extract_o_math(xml).unwrap_or_else(|| xml.to_string());
@@ -25,7 +26,7 @@ pub(crate) fn parse_omml_to_linear_ast(xml: &str) -> Result<crate::latex_ast::La
 }
 
 // The bridge is produced only while reading properties, never exported as TeX.
-fn restore_growth_nodes(node: &mut crate::latex_ast::LatexNode) -> Result<(), String> {
+pub(crate) fn restore_growth_nodes(node: &mut crate::latex_ast::LatexNode) -> Result<(), String> {
     use crate::latex_ast::LatexNode;
     match node {
         LatexNode::Sequence(nodes)
@@ -34,20 +35,22 @@ fn restore_growth_nodes(node: &mut crate::latex_ast::LatexNode) -> Result<(), St
             let mut index = 0;
             while index < nodes.len() {
                 if matches!(&nodes[index], LatexNode::Command { name, args }
-                    if name == GROWTH_BRIDGE && args.is_empty())
+                    if matches!(name.as_str(), GROWTH_BRIDGE | GROWTH_TRUE_BRIDGE) && args.is_empty())
                 {
-                    if !nodes.get(index + 1).is_some_and(|head| {
-                        matches!(head, LatexNode::Group(_))
-                            && crate::unicodemath_pilot::nary_limits(head).is_some()
-                    }) {
+                    if nodes
+                        .get(index + 1)
+                        .is_none_or(|head| crate::unicodemath_pilot::nary_limits(head).is_none())
+                    {
                         return Err(
                             "Invalid structured n-ary growth bridge; retain the original XML"
                                 .into(),
                         );
                     }
+                    let grow = matches!(&nodes[index], LatexNode::Command { name, .. }
+                        if name == GROWTH_TRUE_BRIDGE);
                     let head = nodes.remove(index + 1);
                     nodes[index] = LatexNode::Command {
-                        name: "nary-no-grow".into(),
+                        name: if grow { "nary-grow" } else { "nary-no-grow" }.into(),
                         args: vec![head],
                     };
                 }
@@ -388,7 +391,9 @@ fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
                     {
                         return Err("Non-leaf OMML on/off property; retain the original XML".into());
                     }
-                    if allow_growth && text.contains(GROWTH_BRIDGE) {
+                    if allow_growth
+                        && (text.contains(GROWTH_BRIDGE) || text.contains(GROWTH_TRUE_BRIDGE))
+                    {
                         return Err("Reserved structured growth marker in source text; retain the original XML".into());
                     }
                     if tag == "nary" {

@@ -20,6 +20,7 @@ struct MathmlFrame {
     children: Vec<String>,
     fences: Vec<Option<FenceMarker>>,
     text: String,
+    allow_growth: bool,
 }
 
 impl MathmlFrame {
@@ -126,10 +127,7 @@ impl MathmlFrame {
                 .filter(|byte| matches!(byte, b'\\' | b'^' | b'_'))
                 .count()
                 <= 64
-            && crate::unicodemath_pilot::nary_limits(&crate::latex_parser::parse_latex(
-                &self.children[0],
-            ))
-            .is_some()
+            && is_nary_source(&self.children[0])
         {
             // One head and one row operand is the finite owned n-ary projection.
             self.children = vec![format!("{{{}{{{}}}}}", self.children[0], self.children[1])];
@@ -144,6 +142,39 @@ impl MathmlFrame {
         } else {
             text.trim()
         };
+        if self.allow_growth
+            && (self.text.contains(crate::omml_parser::GROWTH_BRIDGE)
+                || self.text.contains(crate::omml_parser::GROWTH_TRUE_BRIDGE))
+        {
+            return Err(
+                "Reserved structured growth marker in source text; retain the original XML".into(),
+            );
+        }
+        if self.tag == "mo" {
+            if let Some(grow) = nary_growth_property(text, &self.attrs)? {
+                if !self.children.is_empty() {
+                    return Err(
+                        "MathML n-ary growth requires a leaf operator; retain the original XML"
+                            .into(),
+                    );
+                }
+                if !self.allow_growth {
+                    return Err("MathML n-ary growth cannot be faithfully exported through LaTeX; retain the original XML".into());
+                }
+                return Ok((
+                    format!(
+                        "\\{}{{{}}}",
+                        if grow {
+                            crate::omml_parser::GROWTH_TRUE_BRIDGE
+                        } else {
+                            crate::omml_parser::GROWTH_BRIDGE
+                        },
+                        map_operator(text).trim()
+                    ),
+                    None,
+                ));
+            }
+        }
         let fence = if self.tag == "mo" {
             let role = scalable_operator_role(&self.attrs)?;
             if (role.is_some() || fixed_operator_command(&self.attrs)?.is_some())
@@ -170,6 +201,40 @@ impl MathmlFrame {
 
 /// Parse MathML XML string into a LaTeX string.
 pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
+    parse_mathml_inner(xml, false)
+}
+
+pub(crate) fn parse_mathml_to_linear_ast(xml: &str) -> Result<crate::latex_ast::LatexNode, String> {
+    crate::document_converter::guard_formula_input(xml, true).map_err(|e| e.to_string())?;
+    let latex = parse_mathml_inner(xml, true)?;
+    parse_growth_projection(&latex)
+}
+
+fn parse_growth_projection(latex: &str) -> Result<crate::latex_ast::LatexNode, String> {
+    crate::document_converter::guard_formula_input(latex, false).map_err(|e| e.to_string())?;
+    if let Some(diagnostic) = latexsnipper_syntax::latex::validate_latex_structure(latex).first() {
+        return Err(format!("{}: {}", diagnostic.code, diagnostic.message));
+    }
+    let mut node = crate::latex_parser::parse_latex(latex);
+    crate::omml_parser::restore_growth_nodes(&mut node)?;
+    crate::omml::validate_omml_node(&node, 0)?;
+    Ok(node)
+}
+
+pub(crate) fn parse_mathml_growth_ast(
+    xml: &str,
+) -> Result<Option<crate::latex_ast::LatexNode>, String> {
+    // Preserve the legacy best-effort path for XML with no growth annotation.
+    let latex = parse_mathml_inner(xml, true)?;
+    if !latex.contains(crate::omml_parser::GROWTH_BRIDGE)
+        && !latex.contains(crate::omml_parser::GROWTH_TRUE_BRIDGE)
+    {
+        return Ok(None);
+    }
+    parse_growth_projection(&latex).map(Some)
+}
+
+fn parse_mathml_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
     let cleaned = strip_xml_declaration(xml);
     let mut reader = Reader::from_str(&cleaned);
     reader.config_mut().trim_text(false);
@@ -197,6 +262,8 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                                 "minsize"
                                     | "maxsize"
                                     | "stretchy"
+                                    | "largeop"
+                                    | "movablelimits"
                                     | "symmetric"
                                     | "form"
                                     | "fence"
@@ -222,6 +289,8 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                             | "minsize"
                             | "maxsize"
                             | "stretchy"
+                            | "largeop"
+                            | "movablelimits"
                             | "symmetric"
                             | "form"
                             | "fence"
@@ -238,12 +307,17 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                     } else {
                         String::from_utf8_lossy(&attr.value).to_string()
                     };
+                    if allow_growth && contains_growth_marker(&val) {
+                        return Err("Reserved structured growth marker in source attributes; retain the original XML".into());
+                    }
                     if tag == "mo"
                         && matches!(
                             key.as_str(),
                             "minsize"
                                 | "maxsize"
                                 | "stretchy"
+                                | "largeop"
+                                | "movablelimits"
                                 | "symmetric"
                                 | "form"
                                 | "fence"
@@ -288,6 +362,7 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                 stack.push(MathmlFrame {
                     tag,
                     attrs,
+                    allow_growth,
                     ..MathmlFrame::default()
                 });
             }
@@ -357,6 +432,8 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                                 | "close"
                                 | "separators"
                                 | "stretchy"
+                                | "largeop"
+                                | "movablelimits"
                                 | "symmetric"
                                 | "form"
                                 | "fence"
@@ -378,6 +455,9 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                                 reader.decoder(),
                             )
                             .map_err(|error| error.to_string())?;
+                        if allow_growth && contains_growth_marker(&value) {
+                            return Err("Reserved structured growth marker in source attributes; retain the original XML".into());
+                        }
                         if tag == "mo" && value.chars().any(char::is_whitespace) {
                             return Err(
                                 "Noncanonical MathML fence properties; retain the original XML"
@@ -407,6 +487,7 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
                     tag,
                     attrs,
                     text,
+                    allow_growth,
                     ..MathmlFrame::default()
                 }
                 .finish()?;
@@ -969,13 +1050,66 @@ fn is_nary_source(source: &str) -> bool {
             .filter(|byte| matches!(byte, b'\\' | b'^' | b'_'))
             .count()
             <= 64
-        && crate::unicodemath_pilot::nary_limits(&crate::latex_parser::parse_latex(source))
-            .is_some()
+        && structured_nary_head(source).is_some()
+}
+
+fn structured_nary_head(source: &str) -> Option<crate::latex_ast::LatexNode> {
+    let mut node = crate::latex_parser::parse_latex(source);
+    crate::omml_parser::restore_growth_nodes(&mut node).ok()?;
+    while matches!(&node, crate::latex_ast::LatexNode::Sequence(nodes) if nodes.len() == 1) {
+        if let crate::latex_ast::LatexNode::Sequence(mut nodes) = node {
+            node = nodes.remove(0);
+        }
+    }
+    crate::unicodemath_pilot::nary_limits(&node)
+        .is_some()
+        .then_some(node)
+}
+
+// Only the bounded operator projection is a growth annotation, not a fence/CSS route.
+fn contains_growth_marker(value: &str) -> bool {
+    value.contains(crate::omml_parser::GROWTH_BRIDGE)
+        || value.contains(crate::omml_parser::GROWTH_TRUE_BRIDGE)
+}
+
+fn nary_growth_property(text: &str, attrs: &str) -> Result<Option<bool>, String> {
+    let fields: Vec<_> = attrs
+        .split_whitespace()
+        .filter_map(|part| part.split_once('='))
+        .collect();
+    let value = |key| {
+        fields
+            .iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| *value)
+    };
+    let Some(stretchy) = value("stretchy") else {
+        return Ok(None);
+    };
+    let nary = text.chars().count() == 1
+        && crate::unicodemath_pilot::nary_limits(&crate::latex_parser::parse_latex(&map_operator(
+            text,
+        )))
+        .is_some();
+    if !nary && value("largeop") != Some("true") {
+        return Ok(None);
+    }
+    if !nary
+        || !matches!(stretchy, "true" | "false")
+        || value("largeop").is_some_and(|value| value != "true")
+        || value("movablelimits").is_some_and(|value| !matches!(value, "true" | "false"))
+        || fields
+            .iter()
+            .any(|(key, _)| !matches!(*key, "stretchy" | "largeop" | "movablelimits"))
+    {
+        return Err("Unsupported MathML n-ary growth properties; retain the original XML".into());
+    }
+    Ok(Some(stretchy == "true"))
 }
 
 fn nary_script_base(source: &str, vertical: bool) -> String {
     if is_nary_source(source) {
-        let node = crate::latex_parser::parse_latex(source);
+        let node = structured_nary_head(source).expect("checked structured n-ary");
         let head = crate::unicodemath_pilot::nary_limits(&node).expect("checked n-ary");
         let default_vertical = !matches!(head.name, "int" | "iint" | "iiint" | "oint");
         if head.limits.is_none() && vertical != default_vertical {
@@ -1146,6 +1280,7 @@ fn map_operator(text: &str) -> String {
         "\u{222B}" => "\\int ".to_string(),
         "\u{222C}" => "\\iint ".to_string(),
         "\u{222D}" => "\\iiint ".to_string(),
+        "\u{222E}" => "\\oint ".to_string(),
         "\u{2211}" => "\\sum ".to_string(),
         "\u{220F}" => "\\prod ".to_string(),
         "\u{2210}" => "\\coprod ".to_string(),

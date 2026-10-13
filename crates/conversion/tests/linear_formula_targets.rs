@@ -32,8 +32,23 @@ fn registered_growth_routes_preserve_source_identity_and_do_not_retry_lossy_targ
     readback.content = result.candidate.content;
     let restored = registry.convert(&readback).unwrap();
     assert_eq!(restored.candidate.content, "〖〖∫65〗_(0)〗^(1)▒〖x〗 + b");
+    let mut mathml = request.clone();
+    mathml.output = "mathml".into();
+    let result = registry.convert(&mathml).unwrap();
+    assert_eq!(result.backend, "core:builtin");
+    assert_eq!(
+        result.input_sha256,
+        format!("{:x}", Sha256::digest(request.content.as_bytes()))
+    );
+    assert!(result.candidate.content.contains("stretchy=\"false\""));
+    readback.input = "mathml".into();
+    readback.content = result.candidate.content;
+    assert_eq!(
+        registry.convert(&readback).unwrap().candidate.content,
+        "〖〖∫65〗_(0)〗^(1)▒〖x〗 + b"
+    );
     let mut lossy = request.clone();
-    lossy.output = "mathml".into();
+    lossy.output = "typst".into();
     let rejected = registry.convert(&lossy).unwrap_err();
     assert_eq!(rejected.code, ConversionRegistryErrorCode::InputRejected);
     assert!(rejected.message.contains("growth"));

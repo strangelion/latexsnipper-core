@@ -205,6 +205,19 @@ impl DocumentConverter {
         match input {
             FormulaInputFormat::Latex => Self::convert_latex_string(content, output),
             FormulaInputFormat::Mathml | FormulaInputFormat::Omml | FormulaInputFormat::Typst => {
+                if input == FormulaInputFormat::Mathml
+                    && matches!(output, OutputFormat::MathML | OutputFormat::OMML)
+                {
+                    if let Some(node) = crate::mathml_parser::parse_mathml_growth_ast(content)
+                        .map_err(latexsnipper_foundation::SnipperError::Conversion)?
+                    {
+                        return if output == OutputFormat::MathML {
+                            crate::mathml::linear_ast_to_mathml(&node)
+                        } else {
+                            crate::omml::linear_ast_to_omml(&node)
+                        };
+                    }
+                }
                 if input == FormulaInputFormat::Omml && output == OutputFormat::OMML {
                     let node = crate::omml_parser::parse_omml_to_linear_ast(content)
                         .map_err(latexsnipper_foundation::SnipperError::Conversion)?;
@@ -228,6 +241,11 @@ impl DocumentConverter {
                 let node = crate::formula_target::linear_ast(content, input)?;
                 if output == OutputFormat::OMML {
                     return crate::omml::linear_ast_to_omml(&node);
+                }
+                if output == OutputFormat::MathML
+                    && crate::unicodemath_pilot::contains_growth(&node)
+                {
+                    return crate::mathml::linear_ast_to_mathml(&node);
                 }
                 if crate::unicodemath_pilot::contains_growth(&node) {
                     return Err(latexsnipper_foundation::SnipperError::Conversion(

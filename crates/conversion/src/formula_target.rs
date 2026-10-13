@@ -117,6 +117,9 @@ impl DocumentConverter {
             crate::document_converter::guard_formula_input(source, true)?;
             crate::omml_parser::parse_omml_to_linear_ast(source)
                 .map_err(SnipperError::Conversion)?
+        } else if input == FormulaInputFormat::Mathml {
+            crate::mathml_parser::parse_mathml_to_linear_ast(source)
+                .map_err(SnipperError::Conversion)?
         } else {
             let latex = if input == FormulaInputFormat::Markdown {
                 crate::extrema::standalone_math(source)
