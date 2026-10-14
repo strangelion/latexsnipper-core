@@ -1,5 +1,6 @@
 # Build artifacts
 /target/
+.codegraph/
 **/*.rs.bk
 __pycache__/
 *.pyc
