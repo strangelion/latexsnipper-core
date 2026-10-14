@@ -7,6 +7,12 @@ use crate::converter::Converter;
 /// Converts Document AST to HTML format with MathJax rendering.
 pub struct HtmlConverter;
 
+// A structural formula projection needs no remote TeX renderer or source script.
+pub(crate) fn linear_ast_to_html(node: &crate::latex_ast::LatexNode) -> Result<String> {
+    let mathml = crate::mathml::linear_ast_to_mathml(node)?;
+    Ok(format!("<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><title>LaTeXSnipper Formula</title></head>\n<body>\n{mathml}\n</body>\n</html>"))
+}
+
 impl Converter for HtmlConverter {
     fn convert(&self, doc: &Document) -> Result<String> {
         let mut parts = Vec::new();

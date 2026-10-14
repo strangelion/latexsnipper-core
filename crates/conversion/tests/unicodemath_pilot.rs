@@ -266,11 +266,7 @@ fn growth_masks_use_structured_omml_without_fabricating_a_tex_macro() {
             native_roundtrip.contains("<m:grow m:val=\"0\"/>"),
             "{native_roundtrip}"
         );
-        for output in [
-            OutputFormat::LatexDisplay,
-            OutputFormat::Typst,
-            OutputFormat::Html,
-        ] {
+        for output in [OutputFormat::LatexDisplay, OutputFormat::Typst] {
             let error = DocumentConverter::convert_formula_string(
                 source,
                 FormulaInputFormat::UnicodeMath,
@@ -410,7 +406,7 @@ fn mathml_growth_roundtrip_preserves_style_slots_and_owned_operands() {
         )
         .unwrap();
         assert!(omml.contains("<m:grow m:val="), "{omml}");
-        for target in [OutputFormat::Latex, OutputFormat::Typst, OutputFormat::Html] {
+        for target in [OutputFormat::Latex, OutputFormat::Typst] {
             assert!(DocumentConverter::convert_formula_string(
                 &xml,
                 FormulaInputFormat::Mathml,
@@ -534,6 +530,202 @@ fn mathml_growth_rejects_unsupported_properties_and_reserved_bridge_text() {
                 "∫64"
             }
         );
+    }
+}
+
+#[test]
+fn structured_cross_xml_growth_and_html_preserve_modes_and_never_need_source_scripts() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    for (source, growing) in [
+        ("∫65_0^1▒x+b", false),
+        ("∑130_i^n▒x+b", true),
+        ("∫89▒x", false),
+        ("∑154▒x", true),
+        ("∫64▒∑130_i^n▒Foo⁡x", false),
+        ("■(∫64▒x&∑130_i^n▒y)", false),
+        ("(∫128▒x)/y", true),
+        ("√(∫64▒x)", false),
+    ] {
+        let omml = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::OMML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        let mathml = DocumentConverter::convert_formula_string(
+            &omml,
+            FormulaInputFormat::Omml,
+            OutputFormat::MathML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(
+            mathml.contains(if growing {
+                "stretchy=\"true\""
+            } else {
+                "stretchy=\"false\""
+            }),
+            "{source}: {mathml}"
+        );
+        let restored = DocumentConverter::convert_formula_to_target(
+            &mathml,
+            FormulaInputFormat::Mathml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        let rebased = DocumentConverter::convert_formula_string(
+            &mathml,
+            FormulaInputFormat::Mathml,
+            OutputFormat::OMML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        let rebased_mathml = DocumentConverter::convert_formula_string(
+            &rebased,
+            FormulaInputFormat::Omml,
+            OutputFormat::MathML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert_eq!(
+            DocumentConverter::convert_formula_to_target(
+                &rebased,
+                FormulaInputFormat::Omml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap(),
+            DocumentConverter::convert_formula_to_target(
+                &omml,
+                FormulaInputFormat::Omml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .unwrap()
+        );
+        let original_growing = mathml.matches("stretchy=\"true\"").count();
+        let original_fixed = mathml.matches("stretchy=\"false\"").count();
+        let rebased_growing = rebased_mathml.matches("stretchy=\"true\"").count();
+        let rebased_fixed = rebased_mathml.matches("stretchy=\"false\"").count();
+        assert_eq!(
+            rebased_growing, original_growing,
+            "{source}: {rebased_mathml}"
+        );
+        assert_eq!(rebased_fixed, original_fixed, "{source}: {rebased_mathml}");
+        assert!(!restored.contains("LatexSnipperInternal"), "{restored}");
+        for (input, content) in [
+            (FormulaInputFormat::UnicodeMath, source),
+            (FormulaInputFormat::Omml, omml.as_str()),
+            (FormulaInputFormat::Mathml, mathml.as_str()),
+        ] {
+            let html = DocumentConverter::convert_formula_string(
+                content,
+                input,
+                OutputFormat::Html,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert!(html.contains("<math xmlns=") && html.contains("stretchy="));
+            assert!(
+                !html.contains("<script")
+                    && !html.contains("MathJax")
+                    && !html.contains("LatexSnipperInternal")
+            );
+            let start = html.find("<math ").unwrap();
+            let end = html.find("</math>").unwrap() + "</math>".len();
+            assert!(DocumentConverter::convert_formula_to_target(
+                &html[start..end],
+                FormulaInputFormat::Mathml,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort
+            )
+            .is_ok());
+        }
+    }
+    for property in ["<m:grow/>", "<m:grow></m:grow>", "<m:grow m:val=\"true\"/>"] {
+        let xml = format!("<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:nary><m:naryPr><m:chr m:val=\"∫\"/>{property}</m:naryPr><m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary></m:oMath>");
+        let mathml = DocumentConverter::convert_formula_string(
+            &xml,
+            FormulaInputFormat::Omml,
+            OutputFormat::MathML,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(mathml.contains("stretchy=\"true\""));
+    }
+}
+
+#[test]
+fn mathml_explicit_function_application_accepts_bounded_ascii_identifier_runs() {
+    let source = r"\operatorname{ind}T=\dim\ker T-\dim\operatorname{coker}T";
+    let mathml = DocumentConverter::convert_latex_string(source, OutputFormat::MathML).unwrap();
+    assert!(mathml.contains("<mi mathvariant=\"normal\">ind</mi>"));
+    assert!(mathml.contains("<mi mathvariant=\"normal\">coker</mi>"));
+    for target in [
+        OutputFormat::Latex,
+        OutputFormat::Typst,
+        OutputFormat::OMML,
+        OutputFormat::Html,
+    ] {
+        let output = DocumentConverter::convert_formula_string(
+            &mathml,
+            FormulaInputFormat::Mathml,
+            target,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap_or_else(|error| panic!("{target:?}: {error}"));
+        assert!(!output.trim().is_empty(), "{target:?}");
+    }
+}
+
+#[test]
+fn structured_xml_scope_refuses_partial_document_or_equation_extraction() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    let equation = "<m:oMath><m:r><m:t>x</m:t></m:r></m:oMath>";
+    for xml in [
+        format!("<w:document>{equation}</w:document>"),
+        format!("<m:oMathPara>{equation}{equation}</m:oMathPara>"),
+        format!("{equation}{equation}"),
+        format!("prose{equation}"),
+        format!("{equation}prose"),
+        "<m:oMathPara/>".into(),
+        format!("<m:oMath>{equation}</m:oMath>"),
+    ] {
+        for target in [OutputFormat::MathML, OutputFormat::OMML, OutputFormat::Html] {
+            assert!(
+                DocumentConverter::convert_formula_string(
+                    &xml,
+                    FormulaInputFormat::Omml,
+                    target,
+                    FormulaConversionMode::BestEffort
+                )
+                .is_err(),
+                "{xml}"
+            );
+        }
+        assert!(DocumentConverter::convert_formula_to_target(
+            &xml,
+            FormulaInputFormat::Omml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort
+        )
+        .is_err());
+    }
+    for xml in [
+        "<math><mi>x</mi></math><math><mi>y</mi></math>",
+        "<html><math><mi>x</mi></math></html>",
+        "prose<math><mi>x</mi></math>",
+        "<math><math><mi>x</mi></math></math>",
+    ] {
+        assert!(DocumentConverter::convert_formula_to_target(
+            xml,
+            FormulaInputFormat::Mathml,
+            FormulaOutputTarget::UnicodeMath,
+            FormulaConversionMode::BestEffort
+        )
+        .is_err());
     }
 }
 
@@ -804,6 +996,36 @@ fn nary_heads_limits_and_owned_bodies_have_fixed_canonical_structure() {
     };
     assert!(matches!(&body[0], LatexNode::Delimited { .. }));
     assert!(matches!(&nodes[1], LatexNode::Text(text) if text == "z"));
+}
+
+#[test]
+fn nary_ownership_requires_a_boundary_and_xml_keeps_an_empty_body_owned() {
+    assert!(parse_unicodemath("∫64b").is_err());
+    for source in ["∫64 b", "∫64▒b"] {
+        assert!(parse_unicodemath(source).is_ok(), "{source}");
+    }
+
+    let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:nary><m:naryPr><m:chr m:val="∫"/><m:grow m:val="1"/></m:naryPr></m:nary><m:r><m:t>+</m:t></m:r><m:r><m:t>b</m:t></m:r></m:oMath>"#;
+    let mathml = DocumentConverter::convert_formula_string(
+        xml,
+        FormulaInputFormat::Omml,
+        OutputFormat::MathML,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    assert!(mathml.contains("stretchy=\"true\""), "{mathml}");
+    let restored = DocumentConverter::convert_formula_to_target(
+        &mathml,
+        FormulaInputFormat::Mathml,
+        latexsnipper_conversion::FormulaOutputTarget::UnicodeMath,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    assert!(
+        restored.contains("∫") && restored.contains("+ b"),
+        "{restored}"
+    );
+    assert!(!restored.contains("▒+"), "{restored}");
 }
 
 #[test]

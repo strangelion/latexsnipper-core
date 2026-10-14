@@ -74,6 +74,20 @@ pub(crate) fn guard_formula_input(content: &str, xml: bool) -> Result<()> {
     Ok(())
 }
 
+fn structured_formula_output(
+    node: &crate::latex_ast::LatexNode,
+    output: OutputFormat,
+) -> Result<String> {
+    match output {
+        OutputFormat::MathML => crate::mathml::linear_ast_to_mathml(node),
+        OutputFormat::OMML => crate::omml::linear_ast_to_omml(node),
+        OutputFormat::Html => crate::html::linear_ast_to_html(node),
+        _ => Err(latexsnipper_foundation::SnipperError::Conversion(
+            "Target has no structured formula output; retain the original source".into(),
+        )),
+    }
+}
+
 /// Supported output formats.
 ///
 /// NOTE: These are semantic conversion formats, not file export formats.
@@ -206,16 +220,24 @@ impl DocumentConverter {
             FormulaInputFormat::Latex => Self::convert_latex_string(content, output),
             FormulaInputFormat::Mathml | FormulaInputFormat::Omml | FormulaInputFormat::Typst => {
                 if input == FormulaInputFormat::Mathml
-                    && matches!(output, OutputFormat::MathML | OutputFormat::OMML)
+                    && matches!(
+                        output,
+                        OutputFormat::MathML | OutputFormat::OMML | OutputFormat::Html
+                    )
                 {
                     if let Some(node) = crate::mathml_parser::parse_mathml_growth_ast(content)
                         .map_err(latexsnipper_foundation::SnipperError::Conversion)?
                     {
-                        return if output == OutputFormat::MathML {
-                            crate::mathml::linear_ast_to_mathml(&node)
-                        } else {
-                            crate::omml::linear_ast_to_omml(&node)
-                        };
+                        return structured_formula_output(&node, output);
+                    }
+                }
+                if input == FormulaInputFormat::Omml
+                    && matches!(output, OutputFormat::MathML | OutputFormat::Html)
+                {
+                    if let Some(node) = crate::omml_parser::parse_omml_growth_ast(content)
+                        .map_err(latexsnipper_foundation::SnipperError::Conversion)?
+                    {
+                        return structured_formula_output(&node, output);
                     }
                 }
                 if input == FormulaInputFormat::Omml && output == OutputFormat::OMML {
@@ -242,10 +264,10 @@ impl DocumentConverter {
                 if output == OutputFormat::OMML {
                     return crate::omml::linear_ast_to_omml(&node);
                 }
-                if output == OutputFormat::MathML
+                if matches!(output, OutputFormat::MathML | OutputFormat::Html)
                     && crate::unicodemath_pilot::contains_growth(&node)
                 {
-                    return crate::mathml::linear_ast_to_mathml(&node);
+                    return structured_formula_output(&node, output);
                 }
                 if crate::unicodemath_pilot::contains_growth(&node) {
                     return Err(latexsnipper_foundation::SnipperError::Conversion(

@@ -103,12 +103,17 @@ nodes without adding a public enum variant or a source macro. The OMML linear
 adapter reconstructs these annotations; its private intermediate marker cannot
 be supplied in XML text or escape into exported content. The AST Display view
 is diagnostic for growth, not a LaTeX exporter. Formal routes to LaTeX,
-Typst, Markdown and HTML refuse growth rather than manufacture a macro or omit it.
+Typst and Markdown refuse growth rather than manufacture a macro or omit it.
 
 The structured MathML path maps explicit growth to `mo stretchy="true"/"false"`
 and retains `largeop` independently for display-size behavior. Readback keeps
 these explicit settings in UnicodeMath and OMML, including nested operands,
-matrices and empty limit slots. Only finite n-ary leaf operators with canonical
+matrices and empty limit slots. OMML, MathML and generated HTML now have structured
+cross-format routes that retain these settings; the HTML contains generated MathML
+without an external renderer script. These formula XML routes require one standalone
+equation root and reject document wrappers, sibling equations and surrounding prose.
+This guard applies to formula-only APIs; the legacy best-effort OMML document reader
+retains its existing extraction behavior. Only finite n-ary leaf operators with canonical
 `stretchy`, `largeop` and `movablelimits` properties are accepted; unknown glyphs,
 conflicting sizing/CSS, qualified or malformed properties are refused. An absent
 `stretchy` keeps the existing reconstruction path, not an inferred explicit growth
@@ -125,7 +130,7 @@ Explicit true can normalize to the existing Core default on XML readback;
 this is not preservation of the original flag spelling. Unknown, empty explicit
 or duplicate property values fail. The general public XML-to-LaTeX reader cannot
 export explicit no-growth faithfully through this pipeline and reports that limit.
-Other target mappings and actual Word/browser font-height fidelity remain independent work.
+Other semantic targets and actual Word/browser font-height fidelity remain independent work.
 
 ## Empty limit slots
 

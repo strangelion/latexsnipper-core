@@ -207,7 +207,7 @@ pub fn parse_mathml_to_latex(xml: &str) -> Result<String, String> {
 }
 
 pub(crate) fn parse_mathml_to_linear_ast(xml: &str) -> Result<crate::latex_ast::LatexNode, String> {
-    crate::document_converter::guard_formula_input(xml, true).map_err(|e| e.to_string())?;
+    crate::xml_util::guard_single_math_root(xml, crate::xml_util::FormulaXmlKind::Mathml)?;
     let latex = parse_mathml_inner(xml, true)?;
     parse_growth_projection(&latex)
 }
@@ -227,6 +227,7 @@ pub(crate) fn parse_mathml_growth_ast(
     xml: &str,
 ) -> Result<Option<crate::latex_ast::LatexNode>, String> {
     // Preserve the legacy best-effort path for XML with no growth annotation.
+    crate::xml_util::guard_single_math_root(xml, crate::xml_util::FormulaXmlKind::Mathml)?;
     let latex = parse_mathml_inner(xml, true)?;
     if !latex.contains(crate::omml_parser::GROWTH_BRIDGE)
         && !latex.contains(crate::omml_parser::GROWTH_TRUE_BRIDGE)

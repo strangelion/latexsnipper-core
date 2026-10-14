@@ -1662,12 +1662,15 @@ fn render_symbol_ast(
             for (index, node) in nodes.iter().enumerate() {
                 parts.push_str(&render_symbol_ast(node, found, depth + 1)?);
                 if crate::unicodemath_pilot::is_function_head(node)
-                    && nodes.get(index + 1).is_some_and(|argument| match argument {
-                        LatexNode::Relation(_) => false,
-                        LatexNode::Text(text) => {
-                            !matches!(text.trim(), "+" | "-" | "=" | "<" | ">" | "." | ",")
-                        }
-                        _ => true,
+                    && nodes.get(index + 1).is_some_and(|argument| {
+                        !crate::unicodemath_pilot::is_function_head(argument)
+                            && match argument {
+                                LatexNode::Relation(_) => false,
+                                LatexNode::Text(text) => {
+                                    !matches!(text.trim(), "+" | "-" | "=" | "<" | ">" | "." | ",")
+                                }
+                                _ => true,
+                            }
                     })
                 {
                     parts.push_str("<mo>&#x2061;</mo>");

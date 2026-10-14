@@ -5,21 +5,36 @@ use quick_xml::Reader;
 pub fn parse_omml_to_latex(xml: &str) -> Result<String, String> {
     let math_xml = extract_o_math(xml).unwrap_or_else(|| xml.to_string());
     let cleaned = strip_xml_declaration(&math_xml);
-    parse_inner(&cleaned, false)
+    parse_inner(&cleaned, false, false)
 }
 
 pub(crate) const GROWTH_BRIDGE: &str = "LatexSnipperInternalNaryNoGrow";
 pub(crate) const GROWTH_TRUE_BRIDGE: &str = "LatexSnipperInternalNaryGrow";
 
 pub(crate) fn parse_omml_to_linear_ast(xml: &str) -> Result<crate::latex_ast::LatexNode, String> {
-    let math_xml = extract_o_math(xml).unwrap_or_else(|| xml.to_string());
-    let latex = parse_inner(&strip_xml_declaration(&math_xml), true)?;
-    crate::document_converter::guard_formula_input(&latex, false)
+    crate::xml_util::guard_single_math_root(xml, crate::xml_util::FormulaXmlKind::Omml)?;
+    let latex = parse_inner(&strip_xml_declaration(xml), true, false)?;
+    parse_growth_projection(&latex)
+}
+
+pub(crate) fn parse_omml_growth_ast(
+    xml: &str,
+) -> Result<Option<crate::latex_ast::LatexNode>, String> {
+    crate::xml_util::guard_single_math_root(xml, crate::xml_util::FormulaXmlKind::Omml)?;
+    let latex = parse_inner(&strip_xml_declaration(xml), true, true)?;
+    if !latex.contains(GROWTH_BRIDGE) && !latex.contains(GROWTH_TRUE_BRIDGE) {
+        return Ok(None);
+    }
+    parse_growth_projection(&latex).map(Some)
+}
+
+fn parse_growth_projection(latex: &str) -> Result<crate::latex_ast::LatexNode, String> {
+    crate::document_converter::guard_formula_input(latex, false)
         .map_err(|error| error.to_string())?;
-    if let Some(diagnostic) = latexsnipper_syntax::latex::validate_latex_structure(&latex).first() {
+    if let Some(diagnostic) = latexsnipper_syntax::latex::validate_latex_structure(latex).first() {
         return Err(format!("{}: {}", diagnostic.code, diagnostic.message));
     }
-    let mut node = crate::latex_parser::parse_latex(&latex);
+    let mut node = crate::latex_parser::parse_latex(latex);
     restore_growth_nodes(&mut node)?;
     crate::omml::validate_omml_node(&node, 0)?;
     Ok(node)
@@ -206,7 +221,11 @@ fn attribute_value(
     Ok(value)
 }
 
-fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
+fn parse_inner(
+    xml: &str,
+    allow_growth: bool,
+    preserve_explicit_grow: bool,
+) -> Result<String, String> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
@@ -474,6 +493,8 @@ fn parse_inner(xml: &str, allow_growth: bool) -> Result<String, String> {
                                     || !tagged_children.iter().any(|(name, _)| name == "grow"))
                             {
                                 parent.push(("$naryNoGrow".into(), "1".into()));
+                            } else if allow_growth && preserve_explicit_grow {
+                                parent.push(("$naryGrow".into(), "1".into()));
                             }
                         }
                     } else {
@@ -646,19 +667,21 @@ fn build_latex(tag: &str, children: &[(String, String)], _text: &str) -> String 
                     "\\nolimits"
                 });
             }
-            if get_child(children, "$naryNoGrow") == "1" {
+            if get_child(children, "$naryNoGrow") == "1" || get_child(children, "$naryGrow") == "1"
+            {
                 if has_sub {
                     op.push_str(&format!("_{{{sub}}}"));
                 }
                 if has_sup {
                     op.push_str(&format!("^{{{sup}}}"));
                 }
-                let head = format!("\\{GROWTH_BRIDGE}{{{op}}}");
-                return if body.trim().is_empty() {
-                    head
+                let marker = if get_child(children, "$naryGrow") == "1" {
+                    GROWTH_TRUE_BRIDGE
                 } else {
-                    format!("{head}{{{body}}}")
+                    GROWTH_BRIDGE
                 };
+                let head = format!("\\{marker}{{{op}}}");
+                return format!("{{{head}{{{body}}}}}");
             }
             if !has_sub && !has_sup {
                 if body.is_empty() {
@@ -1114,34 +1137,56 @@ pub(crate) fn normalize_scripted_function_head(
     depth: usize,
 ) -> bool {
     use crate::latex_ast::LatexNode;
+    fn identifier_text(node: &LatexNode) -> Option<String> {
+        match node {
+            LatexNode::Text(text)
+                if !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_alphanumeric()) =>
+            {
+                Some(text.clone())
+            }
+            LatexNode::Sequence(nodes) if !nodes.is_empty() => {
+                let mut text = String::new();
+                for node in nodes {
+                    text.push_str(&identifier_text(node)?);
+                    if text.len() > 64 {
+                        return None;
+                    }
+                }
+                Some(text)
+            }
+            LatexNode::Group(nodes) if nodes.len() == 1 => identifier_text(&nodes[0]),
+            _ => None,
+        }
+    }
+    fn normalized_identifier(name: String) -> Option<LatexNode> {
+        if !crate::unicodemath_pilot::is_identifier_name(&name) {
+            return None;
+        }
+        Some(if crate::unicodemath_pilot::is_function_name(&name) {
+            LatexNode::Operator(name)
+        } else {
+            LatexNode::OperatorName {
+                name: "operatorname".into(),
+                args: vec![LatexNode::Text(name)],
+            }
+        })
+    }
     if depth >= 64 {
         return false;
     }
     match node {
         LatexNode::FontModifier { font, content } if font == "mathrm" => {
-            let name = content.to_string();
-            if crate::unicodemath_pilot::is_function_name(&name) {
-                *node = LatexNode::Operator(name);
-                return true;
-            }
-            if !crate::unicodemath_pilot::is_identifier_name(&name) {
+            let Some(name) = identifier_text(content).and_then(normalized_identifier) else {
                 return false;
-            }
-            *node = LatexNode::OperatorName {
-                name: "operatorname".into(),
-                args: vec![LatexNode::Text(name)],
             };
+            *node = name;
             true
         }
-        LatexNode::Text(name) if crate::unicodemath_pilot::is_identifier_name(name) => {
-            *node = if crate::unicodemath_pilot::is_function_name(name) {
-                LatexNode::Operator(name.clone())
-            } else {
-                LatexNode::OperatorName {
-                    name: "operatorname".into(),
-                    args: vec![LatexNode::Text(name.clone())],
-                }
+        LatexNode::Text(_) | LatexNode::Sequence(_) => {
+            let Some(name) = identifier_text(node).and_then(normalized_identifier) else {
+                return false;
             };
+            *node = name;
             true
         }
         LatexNode::Operator(name) => crate::unicodemath_pilot::is_function_name(name),

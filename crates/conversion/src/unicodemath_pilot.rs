@@ -719,6 +719,9 @@ impl Parser<'_> {
         let marker = if nary { Kind::Naryand } else { Kind::Apply };
         let explicit = self.kind() == Some(marker) || (!nary && self.kind() == Some(Kind::Naryand));
         if nary && !explicit && self.pos == saved {
+            if self.starts_factor() {
+                return Err(self.fail("n-ary operands require a blank or explicit operand marker"));
+            }
             return Ok(base);
         }
         if explicit {
@@ -1255,7 +1258,11 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
         }
         LatexNode::Sequence(nodes) => write_sequence(nodes, depth + 1)?,
         LatexNode::Group(nodes) if nodes.len() == 2 && nary_name(&nodes[0]).is_some() => {
-            format!("{}▒〖{}〗", child(&nodes[0])?, child(&nodes[1])?)
+            if nodes[1].is_empty() {
+                child(&nodes[0])?
+            } else {
+                format!("{}▒〖{}〗", child(&nodes[0])?, child(&nodes[1])?)
+            }
         }
         LatexNode::Group(nodes) if nodes.len() == 2 && is_function_head(&nodes[0]) => {
             write_function_application(&nodes[0], &nodes[1], depth + 1)?

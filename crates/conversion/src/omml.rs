@@ -95,13 +95,90 @@ fn latex_to_omml_mode(latex: &str, display: bool) -> String {
 // Linear grammars already own a bounded AST. Do not discard it through TeX text.
 pub(crate) fn linear_ast_to_omml(node: &LatexNode) -> Result<String> {
     validate_omml_node(node, 0).map_err(latexsnipper_foundation::SnipperError::Conversion)?;
-    let body = fix_omml(&ast_to_omml(node));
+    let mut owned = node.clone();
+    preserve_linear_nary_ownership(&mut owned);
+    validate_omml_node(&owned, 0).map_err(latexsnipper_foundation::SnipperError::Conversion)?;
+    let body = fix_omml(&ast_to_omml(&owned));
     let word_namespace = if body.contains("<w:") {
         " xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\""
     } else {
         ""
     };
     Ok(format!("<m:oMathPara xmlns:m=\"{OMML_NAMESPACE}\"{word_namespace}>\n<m:oMath>{body}\n</m:oMath>\n</m:oMathPara>"))
+}
+
+// Linear/XML readers declare owners; legacy TeX inference must not absorb siblings.
+fn preserve_linear_nary_ownership(node: &mut LatexNode) {
+    fn head_children(node: &mut LatexNode) {
+        match node {
+            LatexNode::Subscript { base, sub } => {
+                head_children(base);
+                preserve_linear_nary_ownership(sub);
+            }
+            LatexNode::Superscript { base, exp } => {
+                head_children(base);
+                preserve_linear_nary_ownership(exp);
+            }
+            LatexNode::Group(nodes) | LatexNode::Command { args: nodes, .. } => {
+                for node in nodes {
+                    head_children(node);
+                }
+            }
+            _ => {}
+        }
+    }
+    if let LatexNode::Group(nodes) = node {
+        if nodes.len() == 2 && crate::unicodemath_pilot::nary_limits(&nodes[0]).is_some() {
+            head_children(&mut nodes[0]);
+            preserve_linear_nary_ownership(&mut nodes[1]);
+            return;
+        }
+    }
+    if crate::unicodemath_pilot::nary_limits(node).is_some() {
+        head_children(node);
+        let head = std::mem::replace(node, LatexNode::Text(String::new()));
+        *node = LatexNode::Group(vec![head, LatexNode::Group(vec![])]);
+        return;
+    }
+    match node {
+        LatexNode::Sequence(nodes)
+        | LatexNode::Group(nodes)
+        | LatexNode::Delimited { content: nodes, .. }
+        | LatexNode::Math { content: nodes, .. }
+        | LatexNode::Command { args: nodes, .. }
+        | LatexNode::OperatorName { args: nodes, .. } => {
+            for node in nodes {
+                preserve_linear_nary_ownership(node);
+            }
+        }
+        LatexNode::Subscript { base, sub } => {
+            preserve_linear_nary_ownership(base);
+            preserve_linear_nary_ownership(sub);
+        }
+        LatexNode::Superscript { base, exp } => {
+            preserve_linear_nary_ownership(base);
+            preserve_linear_nary_ownership(exp);
+        }
+        LatexNode::Fraction { num, den } => {
+            preserve_linear_nary_ownership(num);
+            preserve_linear_nary_ownership(den);
+        }
+        LatexNode::SquareRoot { index, content } => {
+            if let Some(index) = index {
+                preserve_linear_nary_ownership(index);
+            }
+            preserve_linear_nary_ownership(content);
+        }
+        LatexNode::Matrix { rows, .. } | LatexNode::Array { rows, .. } | LatexNode::Cases(rows) => {
+            for node in rows.iter_mut().flatten() {
+                preserve_linear_nary_ownership(node);
+            }
+        }
+        LatexNode::FontModifier { content, .. } | LatexNode::Accent { content, .. } => {
+            preserve_linear_nary_ownership(content)
+        }
+        _ => {}
+    }
 }
 
 /// Conservative opt-in validation for workflows that replace original source.
