@@ -3,7 +3,7 @@
 更新：2026-10-15。
 
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
-`latexsnipper_conversion::formula_completion`。Rust、C 与 JSONL 路线已有；Python/WASM-JS
+`latexsnipper_conversion::formula_completion`。Rust、C、Python 与 JSONL 路线已有；WASM-JS
 公共绑定与实际编辑器接入仍待完成。
 
 ## 使用
@@ -118,7 +118,21 @@ Core 重新生成被选 ID 的编辑和占位符，返回载荷里的替换范�
 补全结果 `data` 单独限制为 1 MiB，不改变旧转换的 256 KiB 预算。
 旧 `latexsnipper_formula_capabilities()` 数组和 session ABI v1 不变；先探测新增符号，
 不能假设旧 DLL 已支持。`crates/ffi/examples/python_session.py` 提供零依赖 ctypes 示例；
-它是 C 参考调用者，不代表正式 PyO3 wheel 的补全接口已完成。
+它是 C 参考调用者，不能和下面的正式 PyO3 接口混用。
+
+## Python 公共绑定
+
+正式 wheel 新增 `complete_formula`、`apply_formula_completion` 与
+`formula_completion_capabilities`；无需 Session/FormulaRegistry，复用相同 Core 请求及校验。
+调用参数 `revision` 为 `0..2**64-1` 的 Python 整数，拒绝 bool/浮点/字符串；
+返回的 snapshot/context 版本仍为规范十进制字符串，能力投影分别说明两种编码。
+`cursor` 及范围仍为 UTF-8 字节；接受时直接传回 `result["snapshot"]` 字典与实际当前状态。
+
+Core 计算与结果序列化释放 GIL；结果 JSON 预算为 1 MiB，快照 JSON 为 4 KiB。
+未知参数由 Python 绑定拒绝，格式/版本/快照错误为 `INVALID_ARGUMENT`，
+过期/无效光标/超限/未知候选保持 Core 错误，不重试或写宿主文档。
+Windows 构建 wheel 的实际导入、并发调用及会话兼容已验证；其他平台包仍依各自 CI 验收，
+不据本地结果宣称发布或全部平台完成。用法见 [Python 文档](../crates/python/README.md#structured-formula-completion)。
 
 相关资料：[辅助路线图](formula-assistance-roadmap.md)、
 [收尾清单](closing-issue-ledger.md)。

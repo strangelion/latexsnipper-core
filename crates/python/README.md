@@ -84,6 +84,57 @@ conversions, including the strict route), invalid arguments, failure isolation
 and resource limits, alongside the existing persistent-session tests. It does
 not measure visual fidelity or real Office host compatibility.
 
+## Structured formula completion
+
+```python
+from latexsnipper_core import (
+    complete_formula, apply_formula_completion, formula_completion_capabilities,
+)
+
+source = r"\fr"
+revision = 42  # An unsigned 64-bit Python integer owned by the editor.
+cursor = len(source.encode("utf-8"))
+result = complete_formula(source, cursor=cursor, revision=revision)
+selected = apply_formula_completion(
+    source, cursor=cursor, revision=revision,
+    snapshot=result["snapshot"], candidate_id="builtin:frac",
+)
+assert selected["source"] == r"\frac{}{}"
+assert selected["cursor"] == 6
+```
+
+These are formal PyO3 functions, independent of `Session` and `FormulaRegistry`.
+The finite grammar accepts only exact `input_format="latex"` (the default).
+Cursor, replacement ranges and tab stops are **UTF-8 byte offsets**, not Python
+character counts or JavaScript UTF-16 positions. Query data has `snapshot` and
+`completion` (context/candidates); acceptance returns source, cursor and absolute
+tabStops. Requests and edits use the same Core implementation as Rust/C/JSONL.
+
+Python `revision` arguments must be integers from 0 through `2**64-1`; bools,
+strings, floats, negatives and overflow are refused. Serialized revisions in
+snapshot/context remain canonical decimal **strings**, preserving all bits
+across transports. Capabilities distinguish `revisionArgumentEncoding` from
+`revisionEncoding`. Echo the returned snapshot unchanged; provide the actual
+current source/cursor/revision, not stale values copied from the snapshot.
+
+Core rechecks schema/hash/revision/cursor and regenerates the canonical edit by
+candidate ID. No client-supplied insert/replace fields, unknown snapshot fields,
+or automatic writes are accepted. The snapshot is not an authorization token;
+the host owns explicit acceptance, revision increments, undo and document writes.
+An edit is not proof of mathematical, rendering or conversion validity.
+
+Core calculation and result serialization release the GIL. Input is limited to
+64 KiB, editing nodes to 4096, depth below 64, and candidates to 128; result data
+is at most 1 MiB after UTF-8 JSON serialization. Snapshot JSON is at most 4 KiB.
+These are transfer/work budgets, not peak allocation or hard deadline guarantees.
+Wrong binding argument types/unknown keywords use Python TypeError/OverflowError;
+invalid revisions/formats/snapshot schemas use `LaTeXSnipperError` with
+`INVALID_ARGUMENT`. Core editing failures retain `INVALID_CURSOR`,
+`LIMIT_EXCEEDED`, `STALE_CONTEXT`, `UNKNOWN_CANDIDATE` and `OUTPUT_TOO_LARGE`,
+with no implicit retry, fallback, network, macro execution or session changes.
+
+See [Core grammar and editing boundaries](../../docs/formula-completion.md).
+
 ## Explicit registered conversion
 
 `FormulaRegistry` is the formal PyO3 interface to the same native registry used by

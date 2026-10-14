@@ -255,6 +255,12 @@ attached to the GitHub Release. Other supported Python versions can build from
 source with maturin; broader prebuilt-wheel coverage remains a release-policy
 decision rather than an ABI claim.
 
+The formal Python wheel also exposes `complete_formula`,
+`apply_formula_completion` and `formula_completion_capabilities` independently
+of sessions/registries. Core editing calls release the GIL, use UTF-8 byte offsets,
+and accept unsigned Python integer revisions while preserving decimal-string
+revisions in snapshots/results. See [Python completion](../crates/python/README.md#structured-formula-completion).
+
 ## JSONL application worker
 
 `crates/worker` builds the `latexsnipper-worker` executable for applications

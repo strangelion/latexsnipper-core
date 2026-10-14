@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import tempfile
 from pathlib import Path
 
 from latexsnipper_core import (
     CancellationToken, LaTeXSnipperError, Session, __version__,
     convert_formula, formula_conversion_capabilities,
+    complete_formula, apply_formula_completion, formula_completion_capabilities,
 )
 
 
@@ -88,8 +90,97 @@ def formula_smoke() -> None:
     assert "<m:f>" in convert_formula(samples["latex"], input_format=" LaTeX ", output_format="OMML")
 
 
+def completion_smoke() -> None:
+    caps = formula_completion_capabilities()
+    assert caps["inputFormats"] == ["latex"]
+    assert caps["offsetEncoding"] == "utf-8-bytes"
+    assert caps["revisionEncoding"] == "canonical-decimal-u64-string"
+    assert caps["revisionArgumentEncoding"] == "python-int-u64"
+    assert caps["maxResultDataBytes"] == 1024 * 1024
+    source = "中\\fr"
+    cursor = len(source.encode("utf-8"))
+    for revision in (0, 2**53 + 1, 2**64 - 1):
+        result = complete_formula(source, cursor=cursor, revision=revision)
+        assert result["snapshot"]["revision"] == str(revision)
+        assert result["completion"]["context"]["revision"] == str(revision)
+        assert any(item["id"] == "builtin:frac" for item in result["completion"]["candidates"])
+        selected = apply_formula_completion(
+            source, cursor=cursor, revision=revision, snapshot=result["snapshot"],
+            candidate_id="builtin:frac",
+        )
+        assert selected == {
+            "source": "中\\frac{}{}", "cursor": 9,
+            "tabStops": [{"start": 9, "end": 9}, {"start": 11, "end": 11}],
+        }
+    valid = dict(source=source, cursor=cursor, revision=2**64 - 1)
+    for override, code in [
+        ({"revision": True}, "INVALID_ARGUMENT"),
+        ({"revision": -1}, "INVALID_ARGUMENT"),
+        ({"revision": 2**64}, "INVALID_ARGUMENT"),
+        ({"revision": "1"}, "INVALID_ARGUMENT"),
+        ({"revision": 1.0}, "INVALID_ARGUMENT"),
+        ({"input_format": "typst"}, "INVALID_ARGUMENT"),
+        ({"cursor": 1}, "INVALID_CURSOR"),
+        ({"source": "x" * 65_537}, "LIMIT_EXCEEDED"),
+        ({"source": "x" * 4096}, "LIMIT_EXCEEDED"),
+        ({"source": "{" * 64 + "x"}, "LIMIT_EXCEEDED"),
+    ]:
+        try:
+            complete_formula(**{**valid, **override})
+        except LaTeXSnipperError as error:
+            assert error.code == code, (code, error.code)
+            assert error.retryable is False
+        else:
+            raise AssertionError(f"expected completion error {code}")
+    result = complete_formula(**valid)
+    apply = {**valid, "snapshot": result["snapshot"], "candidate_id": "builtin:frac"}
+    for override, code in [
+        ({"source": "中\\sr"}, "STALE_CONTEXT"),
+        ({"cursor": cursor - 1}, "STALE_CONTEXT"),
+        ({"revision": 0}, "STALE_CONTEXT"),
+        ({"candidate_id": "external:untrusted"}, "UNKNOWN_CANDIDATE"),
+        ({"snapshot": {**result["snapshot"], "insert": "untrusted"}}, "INVALID_ARGUMENT"),
+        ({"snapshot": {**result["snapshot"], "revision": 1}}, "INVALID_ARGUMENT"),
+        ({"snapshot": {**result["snapshot"], "revision": "01"}}, "INVALID_ARGUMENT"),
+        ({"snapshot": {**result["snapshot"], "sourceSha256": "x" * 4096}}, "INVALID_ARGUMENT"),
+    ]:
+        try:
+            apply_formula_completion(**{**apply, **override})
+        except LaTeXSnipperError as error:
+            assert error.code == code, (code, error.code)
+        else:
+            raise AssertionError(f"expected acceptance error {code}")
+    for parameters in ({**valid, "insert": "untrusted"}, {**apply, "replace": {}}):
+        try:
+            if "snapshot" in parameters:
+                apply_formula_completion(**parameters)
+            else:
+                complete_formula(**parameters)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("unknown keyword argument succeeded")
+    for literal in (r"\text{\fr", r"%\fr", r"\verb|\fr"):
+        assert not complete_formula(literal, cursor=len(literal), revision=0)["completion"]["candidates"]
+    matrix = r"\begin{matrix}a&\fr"
+    matrix_result = complete_formula(matrix, cursor=len(matrix), revision=1)
+    assert matrix_result["completion"]["context"]["cell"] == {"environment": "matrix", "row": 0, "column": 1}
+
+    def isolated(index: int) -> None:
+        item = complete_formula(r"x^", cursor=2, revision=index)
+        assert item["snapshot"]["revision"] == str(index)
+        assert apply_formula_completion(
+            r"x^", cursor=2, revision=index, snapshot=item["snapshot"],
+            candidate_id="slot:power-two",
+        )["source"] == "x^2"
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(isolated, range(64)))
+
+
 def main() -> None:
     formula_smoke()
+    completion_smoke()
     with tempfile.TemporaryDirectory() as first_root, tempfile.TemporaryDirectory() as second_root:
         first = Session(Path(first_root))
         second = Session(Path(second_root), runtime_preference="cpu")
@@ -104,6 +195,8 @@ def main() -> None:
         second_warmup = first.warmup("formula")
         assert first_warmup["alreadyWarm"] is False
         assert second_warmup["alreadyWarm"] is True
+        assert complete_formula(r"\fr", cursor=3, revision=0)["completion"]["candidates"]
+        assert first.warmup("formula")["alreadyWarm"] is True
 
         try:
             first.recognize_bytes(memoryview(b"not-an-image"), format_hint="png")

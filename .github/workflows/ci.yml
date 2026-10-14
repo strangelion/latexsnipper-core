@@ -135,7 +135,22 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: ${{ matrix.command }}
+      - name: Run focused regression and retain diagnostics
+        shell: bash
+        env:
+          FOCUSED_TEST_COMMAND: ${{ matrix.command }}
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/focused
+          bash -c "$FOCUSED_TEST_COMMAND" 2>&1 | tee artifacts/focused/test.log
+      - name: Upload focused diagnostics even after failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: focused-test-${{ strategy.job-index }}-${{ github.run_id }}
+          path: artifacts/focused/test.log
+          if-no-files-found: warn
+          retention-days: 7
 
   benchmark-smoke:
     name: Benchmark smoke

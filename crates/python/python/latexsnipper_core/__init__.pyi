@@ -13,6 +13,17 @@ def convert_formula(
 
 def formula_conversion_capabilities() -> list[dict[str, Any]]: ...
 
+def formula_completion_capabilities() -> dict[str, Any]: ...
+
+def complete_formula(
+    source: str, *, cursor: int, revision: int, input_format: str = "latex",
+) -> dict[str, Any]: ...
+
+def apply_formula_completion(
+    source: str, *, cursor: int, revision: int, snapshot: dict[str, Any],
+    candidate_id: str, input_format: str = "latex",
+) -> dict[str, Any]: ...
+
 class LaTeXSnipperError(Exception):
     code: str
     detail: str | None
