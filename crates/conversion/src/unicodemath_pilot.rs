@@ -396,7 +396,7 @@ impl Parser<'_> {
         }
         Ok(sequence(nodes))
     }
-    fn run(&mut self) -> Result<Vec<LatexNode>, UnicodeMathError> {
+    fn run(&mut self, allow_identifier: bool) -> Result<Vec<LatexNode>, UnicodeMathError> {
         let start = self.pos;
         let mut nodes = Vec::new();
         let mut word = String::new();
@@ -404,7 +404,7 @@ impl Parser<'_> {
             if ch.is_ascii_alphabetic() {
                 word.push(ch);
             } else {
-                if FUNCTIONS.contains(&word.as_str()) {
+                if !allow_identifier && FUNCTIONS.contains(&word.as_str()) {
                     return Err(error(
                         UnicodeMathErrorKind::UnsupportedSyntax,
                         self.tokens[start].offset,
@@ -449,7 +449,7 @@ impl Parser<'_> {
                 self.pos += 1;
             }
         }
-        if FUNCTIONS.contains(&word.as_str()) {
+        if !allow_identifier && FUNCTIONS.contains(&word.as_str()) {
             return Err(error(
                 UnicodeMathErrorKind::UnsupportedSyntax,
                 self.tokens[start].offset,
@@ -458,7 +458,11 @@ impl Parser<'_> {
         }
         Ok(nodes)
     }
-    fn atom(&mut self, depth: usize) -> Result<LatexNode, UnicodeMathError> {
+    fn atom(
+        &mut self,
+        depth: usize,
+        allow_identifier: bool,
+    ) -> Result<LatexNode, UnicodeMathError> {
         self.depth(depth)?;
         // Recognize complete names only, never substrings of variable runs.
         let mut end = self.pos;
@@ -479,10 +483,13 @@ impl Parser<'_> {
                 self.tokens.get(end).map(|token| token.kind),
                 Some(Kind::Operand(_))
             ) {
-                return Err(self.fail("function name needs an application or operand boundary"));
+                if !allow_identifier {
+                    return Err(self.fail("function name needs an application or operand boundary"));
+                }
+            } else {
+                self.pos = end;
+                return Ok(LatexNode::Operator(name));
             }
-            self.pos = end;
-            return Ok(LatexNode::Operator(name));
         }
         match self.kind() {
             Some(Kind::Nary(glyph)) => {
@@ -574,7 +581,7 @@ impl Parser<'_> {
                     args: vec![LatexNode::Text(encoded)],
                 })
             }
-            Some(Kind::Operand(_)) => Ok(sequence(self.run()?)),
+            Some(Kind::Operand(_)) => Ok(sequence(self.run(allow_identifier)?)),
             Some(Kind::Open(open)) => {
                 self.pos += 1;
                 let content = self.expression(depth + 1)?;
@@ -637,12 +644,52 @@ impl Parser<'_> {
             _ => Err(self.fail("expected an operand or grouping")),
         }
     }
+    fn ambiguous_builtin_run(&self) -> bool {
+        let mut word = String::new();
+        let mut index = self.pos;
+        while let Some(token) = self.tokens.get(index) {
+            match token.kind {
+                Kind::Operand(ch) if ch.is_ascii_alphabetic() => word.push(ch),
+                Kind::Operand(_) => {
+                    if FUNCTIONS.contains(&word.as_str()) {
+                        return true;
+                    }
+                    word.clear();
+                }
+                Kind::Other('.' | ',')
+                    if matches!(index.checked_sub(1).and_then(|i| self.tokens.get(i)).map(|t| t.kind),
+                        Some(Kind::Operand(ch)) if ch.is_ascii_digit())
+                        && matches!(self.tokens.get(index + 1).map(|t| t.kind),
+                        Some(Kind::Operand(ch)) if ch.is_ascii_digit()) =>
+                {
+                    word.clear();
+                }
+                _ => break,
+            }
+            index += 1;
+        }
+        FUNCTIONS.contains(&word.as_str())
+    }
+
     fn factor(&mut self, depth: usize) -> Result<LatexNode, UnicodeMathError> {
         self.depth(depth)?;
         let is_run = matches!(self.kind(), Some(Kind::Operand(_)));
-        let base = self.atom(depth)?;
+        let ambiguous_builtin = self.ambiguous_builtin_run();
+        let base = self.atom(depth, true)?;
         let mut base = self.scripts(base, is_run, depth)?;
         let nary = nary_name(&base).is_some();
+        let before_spaces = self.pos;
+        self.spaces();
+        if is_run
+            && !nary
+            && !is_function_head(&base)
+            && matches!(self.kind(), Some(Kind::Apply | Kind::Naryand))
+        {
+            if let Some(promoted) = promote_function_head(&base) {
+                base = promoted;
+            }
+        }
+        self.pos = before_spaces;
         if nary && nary_limits(&base).is_none() {
             return Err(error(
                 UnicodeMathErrorKind::UnsupportedSyntax,
@@ -651,6 +698,13 @@ impl Parser<'_> {
             ));
         }
         if !is_function_head(&base) && !nary {
+            if ambiguous_builtin {
+                return Err(error(
+                    UnicodeMathErrorKind::UnsupportedSyntax,
+                    self.offset(),
+                    "named functions require a separate application grammar",
+                ));
+            }
             if matches!(self.kind(), Some(Kind::Apply | Kind::Naryand)) {
                 return Err(error(
                     UnicodeMathErrorKind::UnsupportedSyntax,
@@ -671,7 +725,10 @@ impl Parser<'_> {
             self.pos += 1;
             // UTN 28 moves scripts immediately after Apply onto the name.
             if !nary && matches!(self.kind(), Some(Kind::Sub | Kind::Sup)) {
-                if !matches!(base, LatexNode::Operator(_)) {
+                if !matches!(
+                    base,
+                    LatexNode::Operator(_) | LatexNode::OperatorName { .. }
+                ) {
                     return Err(self.fail("repeated function-head scripts require grouping"));
                 }
                 base = self.scripts(base, false, depth + 1)?;
@@ -803,7 +860,7 @@ impl Parser<'_> {
             None
         };
         let is_run = matches!(self.kind(), Some(Kind::Operand(_)));
-        let mut value = consume_round(self.atom(depth + 1)?);
+        let mut value = consume_round(self.atom(depth + 1, false)?);
         if self.kind() == Some(mark) {
             self.pos += 1;
             let rhs = self.script_operand(mark, depth + 1)?;
@@ -1018,7 +1075,7 @@ fn check_ast_budget(node: &LatexNode) -> Result<(), UnicodeMathError> {
                     }
                 }
             }
-            LatexNode::Command { args, .. } => {
+            LatexNode::Command { args, .. } | LatexNode::OperatorName { args, .. } => {
                 if args.len() > MAX_NODES - count {
                     return Err(error(
                         UnicodeMathErrorKind::LimitExceeded,
@@ -1201,7 +1258,7 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
             format!("{}▒〖{}〗", child(&nodes[0])?, child(&nodes[1])?)
         }
         LatexNode::Group(nodes) if nodes.len() == 2 && is_function_head(&nodes[0]) => {
-            format!("{}\u{2061}〖{}〗", child(&nodes[0])?, child(&nodes[1])?)
+            write_function_application(&nodes[0], &nodes[1], depth + 1)?
         }
         LatexNode::Group(nodes) if !nodes.is_empty() => write_sequence(nodes, depth + 1)?,
         LatexNode::Fraction { num, den } => format!("({})/({})", child(num)?, child(den)?),
@@ -1220,6 +1277,11 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
             .map(|(glyph, _)| glyph.to_string())
             .ok_or_else(unsupported)?,
         LatexNode::Operator(name) if FUNCTIONS.contains(&name.as_str()) => name.clone(),
+        LatexNode::OperatorName { .. } if custom_function_name(node).is_some() => {
+            custom_function_name(node)
+                .expect("checked identifier")
+                .into()
+        }
         LatexNode::Operator(name) => NARY
             .iter()
             .find(|(_, mapped)| *mapped == name)
@@ -1303,7 +1365,12 @@ fn write_sequence(nodes: &[LatexNode], depth: usize) -> Result<String, UnicodeMa
                         "\u{2061}"
                     };
                     write_node(node, depth).and_then(|head| {
-                        write_node(argument, depth).map(|body| format!("{head}{marker}〖{body}〗"))
+                        if is_custom_function_head(node) {
+                            write_function_application(node, argument, depth)
+                        } else {
+                            write_node(argument, depth)
+                                .map(|body| format!("{head}{marker}〖{body}〗"))
+                        }
                     })
                 } else {
                     write_node(node, depth)
@@ -1322,12 +1389,151 @@ pub(crate) fn function_name(node: &LatexNode) -> Option<&str> {
     // Callers validate depth/node budgets before external AST traversal.
     match node {
         LatexNode::Operator(name) if is_function_name(name) => Some(name),
+        LatexNode::OperatorName { .. } => custom_function_name(node),
         LatexNode::Subscript { base, .. } | LatexNode::Superscript { base, .. } => {
             function_name(base)
         }
         LatexNode::Group(nodes) if nodes.len() == 1 => function_name(&nodes[0]),
         _ => None,
     }
+}
+
+pub(crate) fn is_identifier_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name.as_bytes()[0].is_ascii_alphabetic()
+        && name.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        && !name.starts_with("LatexSnipperInternal")
+}
+
+pub(crate) fn custom_function_name(node: &LatexNode) -> Option<&str> {
+    fn literal(node: &LatexNode) -> Option<&str> {
+        match node {
+            LatexNode::Text(name) if is_identifier_name(name) => Some(name),
+            LatexNode::Group(nodes) if nodes.len() == 1 => literal(&nodes[0]),
+            _ => None,
+        }
+    }
+    match node {
+        LatexNode::OperatorName { name, args } if name == "operatorname" && args.len() == 1 => {
+            literal(&args[0])
+        }
+        LatexNode::Subscript { base, .. } | LatexNode::Superscript { base, .. } => {
+            custom_function_name(base)
+        }
+        LatexNode::Group(nodes) if nodes.len() == 1 => custom_function_name(&nodes[0]),
+        _ => None,
+    }
+}
+
+pub(crate) fn is_custom_function_head(node: &LatexNode) -> bool {
+    custom_function_name(node).is_some()
+}
+
+// Promotion happens only after an explicit Apply, with no speculative parsing.
+fn promote_function_head(node: &LatexNode) -> Option<LatexNode> {
+    fn plain(node: &LatexNode, name: &mut String) -> Option<()> {
+        match node {
+            LatexNode::Text(text) if text.bytes().all(|byte| byte.is_ascii_alphanumeric()) => {
+                if name.len() + text.len() > 64 {
+                    return None;
+                }
+                name.push_str(text);
+            }
+            LatexNode::Group(nodes) | LatexNode::Sequence(nodes) => {
+                for node in nodes {
+                    plain(node, name)?;
+                }
+            }
+            _ => return None,
+        }
+        Some(())
+    }
+    fn replace_head(node: &LatexNode, prefix: &str) -> Option<LatexNode> {
+        match node {
+            LatexNode::Subscript { base, sub } => Some(LatexNode::Subscript {
+                base: Box::new(replace_head(base, prefix)?),
+                sub: sub.clone(),
+            }),
+            LatexNode::Superscript { base, exp } => Some(LatexNode::Superscript {
+                base: Box::new(replace_head(base, prefix)?),
+                exp: exp.clone(),
+            }),
+            LatexNode::Group(nodes) if nodes.len() == 1 => replace_head(&nodes[0], prefix),
+            LatexNode::Group(nodes) | LatexNode::Sequence(nodes) if !nodes.is_empty() => {
+                let mut name = prefix.to_string();
+                for node in &nodes[..nodes.len() - 1] {
+                    plain(node, &mut name)?;
+                }
+                replace_head(nodes.last()?, &name)
+            }
+            _ => {
+                let mut name = prefix.to_string();
+                plain(node, &mut name)?;
+                if !is_identifier_name(&name) {
+                    return None;
+                }
+                Some(LatexNode::OperatorName {
+                    name: "operatorname".into(),
+                    args: vec![LatexNode::Text(name)],
+                })
+            }
+        }
+    }
+    replace_head(node, "")
+}
+
+fn write_function_application(
+    head: &LatexNode,
+    argument: &LatexNode,
+    depth: usize,
+) -> Result<String, UnicodeMathError> {
+    fn custom_head(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError> {
+        if depth > MAX_DEPTH {
+            return Err(error(
+                UnicodeMathErrorKind::LimitExceeded,
+                0,
+                "function head exceeds depth budget",
+            ));
+        }
+        match node {
+            LatexNode::Subscript { base, sub } => Ok(format!(
+                "{}_({})",
+                custom_head(base, depth + 1)?,
+                write_node(sub, depth + 1)?
+            )),
+            LatexNode::Superscript { base, exp } => Ok(format!(
+                "{}^({})",
+                custom_head(base, depth + 1)?,
+                write_node(exp, depth + 1)?
+            )),
+            LatexNode::Group(nodes) if nodes.len() == 1 => custom_head(&nodes[0], depth + 1),
+            _ => custom_function_name(node)
+                .map(|name| format!("{name}\u{2061}"))
+                .ok_or_else(|| {
+                    error(
+                        UnicodeMathErrorKind::UnsupportedSyntax,
+                        0,
+                        "unsupported custom function head",
+                    )
+                }),
+        }
+    }
+    let custom = is_custom_function_head(head);
+    let head = if custom {
+        custom_head(head, depth)?
+    } else {
+        format!("{}\u{2061}", write_node(head, depth)?)
+    };
+    let separator = if custom && !head.ends_with('\u{2061}') {
+        " "
+    } else {
+        ""
+    };
+    Ok(format!(
+        "{head}{separator}〖{}〗",
+        write_node(argument, depth)?
+    ))
 }
 
 pub(crate) fn is_function_name(name: &str) -> bool {

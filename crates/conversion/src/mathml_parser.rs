@@ -105,12 +105,14 @@ impl MathmlFrame {
                             .filter(|byte| matches!(byte, b'\\' | b'^' | b'_'))
                             .count()
                             > 64
-                        || !crate::unicodemath_pilot::is_function_head(
-                            &crate::latex_parser::parse_latex(&head),
-                        )
                     {
                         return Err("MathML function name is outside the finite named-function subset; retain the original XML".into());
                     }
+                    let mut normalized = crate::latex_parser::parse_latex(&head);
+                    if !crate::omml_parser::normalize_scripted_function_head(&mut normalized, 0) {
+                        return Err("MathML function name is outside the bounded identifier subset; retain the original XML".into());
+                    }
+                    let head = normalized.to_string();
                     fragments.push(format!("{{{head}{{{argument}}}}}"));
                 } else {
                     fragments.push(source);

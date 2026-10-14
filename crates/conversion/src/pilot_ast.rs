@@ -19,6 +19,17 @@ pub(super) fn unicode_shape(node: &LatexNode) -> Vec<Shape> {
 fn shape_impl(node: &LatexNode, ignore_spaces: bool) -> Vec<Shape> {
     let child = |node: &LatexNode| shape_impl(node, ignore_spaces);
     if ignore_spaces {
+        if matches!(
+            node,
+            LatexNode::Operator(_) | LatexNode::OperatorName { .. }
+        ) {
+            if let Some(name) = crate::unicodemath_pilot::function_name(node) {
+                return vec![Shape {
+                    name: format!("function:{name}"),
+                    children: vec![],
+                }];
+            }
+        }
         if let Some(head) = crate::unicodemath_pilot::nary_limits(node) {
             return vec![Shape {
                 name: format!("nary:{}:{:?}:{:?}", head.name, head.limits, head.grow),

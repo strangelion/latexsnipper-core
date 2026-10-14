@@ -1109,7 +1109,10 @@ fn map_function_name(name: &str) -> String {
     }
 }
 
-fn normalize_scripted_function_head(node: &mut crate::latex_ast::LatexNode, depth: usize) -> bool {
+pub(crate) fn normalize_scripted_function_head(
+    node: &mut crate::latex_ast::LatexNode,
+    depth: usize,
+) -> bool {
     use crate::latex_ast::LatexNode;
     if depth >= 64 {
         return false;
@@ -1117,13 +1120,34 @@ fn normalize_scripted_function_head(node: &mut crate::latex_ast::LatexNode, dept
     match node {
         LatexNode::FontModifier { font, content } if font == "mathrm" => {
             let name = content.to_string();
-            if !crate::unicodemath_pilot::is_function_name(&name) {
+            if crate::unicodemath_pilot::is_function_name(&name) {
+                *node = LatexNode::Operator(name);
+                return true;
+            }
+            if !crate::unicodemath_pilot::is_identifier_name(&name) {
                 return false;
             }
-            *node = LatexNode::Operator(name);
+            *node = LatexNode::OperatorName {
+                name: "operatorname".into(),
+                args: vec![LatexNode::Text(name)],
+            };
+            true
+        }
+        LatexNode::Text(name) if crate::unicodemath_pilot::is_identifier_name(name) => {
+            *node = if crate::unicodemath_pilot::is_function_name(name) {
+                LatexNode::Operator(name.clone())
+            } else {
+                LatexNode::OperatorName {
+                    name: "operatorname".into(),
+                    args: vec![LatexNode::Text(name.clone())],
+                }
+            };
             true
         }
         LatexNode::Operator(name) => crate::unicodemath_pilot::is_function_name(name),
+        LatexNode::OperatorName { .. } => {
+            crate::unicodemath_pilot::custom_function_name(node).is_some()
+        }
         LatexNode::Superscript { base, .. } | LatexNode::Subscript { base, .. } => {
             normalize_scripted_function_head(base, depth + 1)
         }

@@ -833,7 +833,6 @@ fn nary_projection_keeps_integrand_inside_and_following_terms_outside() {
         "∫1 x",
         "∑192 x",
         "▒x",
-        "x▒y",
         "∫▒",
         "∫▒^2 x",
         "∫⁡x",
@@ -994,17 +993,7 @@ fn function_projection_owns_grouped_operand_and_does_not_guess_unknown_names() {
     assert!(omml[..end].contains("<m:t>y</m:t>"), "{omml}");
     assert!(!omml[..end].contains("<m:t>b</m:t>"));
     assert!(omml[end..].contains("<m:t>b</m:t>"));
-    for source in [
-        "f⁡x",
-        "sine⁡x",
-        "asin⁡x",
-        "sin⁡",
-        "sin⁡+x",
-        "sin⁡()",
-        "sin2x",
-        "sin^2⁡^3 x",
-        "sin⁡⁡x",
-    ] {
+    for source in ["sin⁡", "sin⁡+x", "sin⁡()", "sin2x", "sin^2⁡^3 x", "sin⁡⁡x"] {
         assert!(parse_unicodemath(source).is_err(), "{source}");
     }
     assert_eq!(
@@ -1041,6 +1030,110 @@ fn function_projection_owns_grouped_operand_and_does_not_guess_unknown_names() {
     )
     .unwrap();
     assert!(log.contains("<msub>") && !log.contains("<munder>"));
+}
+
+#[test]
+fn explicit_identifier_functions_preserve_names_scripts_and_owned_arguments() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    for (source, expected) in [
+        ("f⁡x", "f⁡〖x〗"),
+        ("sine⁡x", "sine⁡〖x〗"),
+        ("asin⁡x", "asin⁡〖x〗"),
+        ("sin2_i⁡x", "sin2⁡_(i) 〖x〗"),
+        ("arctan2⁡_y x", "arctan2⁡_(y) 〖x〗"),
+        ("CDF42⁡(x)b", "CDF42⁡〖(x)〗 b"),
+        ("Foo_i^n⁡〖x+y〗+b", "Foo⁡_(i)^(n) 〖x + y〗 + b"),
+        ("Foo⁡_i^n 〖x+y〗+b", "Foo⁡_(i)^(n) 〖x + y〗 + b"),
+        ("Foo▒x", "Foo⁡〖x〗"),
+        ("x▒y", "x⁡〖y〗"),
+        ("int⁡x", "int⁡〖x〗"),
+        ("sqrt⁡x", "sqrt⁡〖x〗"),
+        ("Foo⁡Bar⁡x", "Foo⁡〖Bar⁡〖x〗〗"),
+    ] {
+        assert_eq!(canonical(source), expected, "{source}");
+        assert_eq!(canonical(expected), expected);
+        let latex = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::Latex,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(latex.contains("\\operatorname{"), "{latex}");
+        for (target, input) in [
+            (OutputFormat::MathML, FormulaInputFormat::Mathml),
+            (OutputFormat::OMML, FormulaInputFormat::Omml),
+        ] {
+            let xml = DocumentConverter::convert_formula_string(
+                source,
+                FormulaInputFormat::UnicodeMath,
+                target,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            let restored = DocumentConverter::convert_formula_to_target(
+                &xml,
+                input,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap_or_else(|e| panic!("{source}: {e}; {xml}"));
+            assert_eq!(restored, expected, "{source}: {xml}");
+        }
+    }
+    let xml = DocumentConverter::convert_formula_string(
+        "Foo⁡〖x+y〗+b",
+        FormulaInputFormat::UnicodeMath,
+        OutputFormat::OMML,
+        FormulaConversionMode::BestEffort,
+    )
+    .unwrap();
+    let end = xml.find("</m:func>").unwrap();
+    assert!(xml[..end].contains("<m:nor/>") && xml[..end].contains("Foo"));
+    assert!(xml[..end].contains("<m:t>y</m:t>") && !xml[..end].contains("<m:t>b</m:t>"));
+    assert!(xml[end..].contains("<m:t>b</m:t>"));
+    assert!(matches!(
+        parse_unicodemath("Foo x").unwrap(),
+        LatexNode::Sequence(_)
+    ));
+    assert!(!parse_unicodemath("Foo x")
+        .unwrap()
+        .to_string()
+        .contains("operatorname"));
+}
+
+#[test]
+fn identifier_function_limits_and_ambiguous_names_are_explicitly_refused() {
+    for source in [
+        "Foo⁡",
+        "Foo⁡()",
+        "Foo⁡+x",
+        "Foo⁡⁡x",
+        "〖a+b〗⁡x",
+        "42⁡x",
+        "α⁡x",
+        "〖a b〗⁡x",
+        "〖ab〗⁡x",
+        "Foo^2⁡^3 x",
+        "LatexSnipperInternalNaryGrow⁡x",
+    ] {
+        assert!(parse_unicodemath(source).is_err(), "{source}");
+    }
+    assert!(parse_unicodemath(&format!("{}⁡x", "f".repeat(64))).is_ok());
+    assert!(parse_unicodemath(&format!("{}⁡x", "f".repeat(65))).is_err());
+    assert!(parse_unicodemath(&format!("{}x", "Foo⁡".repeat(80))).is_err());
+    let mut name = LatexNode::Text("Foo".into());
+    for _ in 0..70 {
+        name = LatexNode::Group(vec![name]);
+    }
+    let node = LatexNode::OperatorName {
+        name: "operatorname".into(),
+        args: vec![name],
+    };
+    assert_eq!(
+        write_unicodemath(&node).unwrap_err().kind,
+        UnicodeMathErrorKind::LimitExceeded
+    );
 }
 
 #[test]
@@ -1091,7 +1184,7 @@ fn finite_function_xml_readback_retains_owned_arguments_and_refuses_stray_apply(
     for xml in ["<math><mo>&#x2061;</mo><mi>x</mi></math>",
         "<math><mi mathvariant=\"normal\">sin</mi><mrow>&#x2061;</mrow><mi>x</mi></math>",
         "<math><mi mathvariant=\"normal\">sin</mi><mo>&#x2061;</mo></math>",
-        "<math><mi>f</mi><mo>&#x2061;</mo><mi>x</mi></math>",
+        "<math><mi>42</mi><mo>&#x2061;</mo><mi>x</mi></math>",
         "<math><mfrac><mi mathvariant=\"normal\">sin</mi><mo>&#x2061;</mo><mi>x</mi></mfrac></math>"] {
         assert!(latexsnipper_conversion::mathml_parser::parse_mathml_to_latex(xml).is_err());
     }
@@ -1205,7 +1298,7 @@ fn versioned_fixture_has_fixed_expected_structure_and_output() {
     let fixtures: serde_json::Value =
         serde_json::from_str(include_str!("fixtures/unicodemath-pilot-v1.json")).unwrap();
     assert_eq!(fixtures["schemaVersion"], 1);
-    assert_eq!(fixtures["accepted"].as_array().unwrap().len(), 16);
+    assert_eq!(fixtures["accepted"].as_array().unwrap().len(), 18);
     assert_eq!(fixtures["rejected"].as_array().unwrap().len(), 8);
     for fixture in fixtures["accepted"].as_array().unwrap() {
         let source = fixture["source"].as_str().unwrap();
@@ -1217,6 +1310,7 @@ fn versioned_fixture_has_fixed_expected_structure_and_output() {
             LatexNode::Subscript { .. } => "subscript",
             LatexNode::Superscript { .. } => "superscript",
             LatexNode::Sequence(_) => "sequence",
+            LatexNode::Group(_) => "group",
             _ => panic!("unlisted fixture root"),
         };
         assert_eq!(root, fixture["root"].as_str().unwrap(), "{source}");
@@ -1380,11 +1474,9 @@ fn unsupported_and_malformed_sources_never_return_partial_success() {
         "a∕b",
         "a¦b",
         "a/b#1",
-        "sine⁡x",
         "x\t+y",
         "x\n+y",
         "𝑥+y",
-        "a⁡b",
         "x̂",
         "a^b(c)",
     ] {

@@ -49,6 +49,19 @@ for (const [source, location] of [["∫1_0^1▒x+b", "undOvr"], ["∑2_i^n▒x+b
   assert.equal(restored.data.content, canonical.data.content);
 }
 const noGrow = "∫65_0^1▒x+b";
+for (const [source, expected] of [["f⁡x", "f⁡〖x〗"], ["Foo_i^n⁡〖x+y〗+b", "Foo⁡_(i)^(n) 〖x + y〗 + b"],
+  ["sin2_i⁡x", "sin2⁡_(i) 〖x〗"], ["int⁡x", "int⁡〖x〗"]]) {
+  const canonical = api.convert_formula_v3(source, "unicode-math", "unicode-math", "best-effort");
+  assert.equal(canonical.ok, true);
+  assert.equal(canonical.data.content, expected);
+  for (const [output, input] of [["omml", "omml"], ["mathml", "mathml"]]) {
+    const xml = api.convert_formula_v3(source, "unicode-math", output, "best-effort");
+    assert.equal(xml.ok, true);
+    const restored = api.convert_formula_v3(xml.data.content, input, "unicode-math", "best-effort");
+    assert.equal(restored.ok, true);
+    assert.equal(restored.data.content, expected);
+  }
+}
 const noGrowCanonical = api.convert_formula_v3(noGrow, "unicode-math", "unicode-math", "best-effort");
 assert.equal(noGrowCanonical.ok, true);
 assert.equal(noGrowCanonical.data.content, "〖〖∫65〗_(0)〗^(1)▒〖x〗 + b");

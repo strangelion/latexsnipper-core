@@ -1613,6 +1613,18 @@ fn render_symbol_ast(
                 ))
             }
         }
+        LatexNode::OperatorName { .. }
+            if crate::unicodemath_pilot::custom_function_name(node).is_some() =>
+        {
+            *found = true;
+            Some(format!(
+                "<mi mathvariant=\"normal\">{}</mi>",
+                xml_escape(
+                    crate::unicodemath_pilot::custom_function_name(node)
+                        .expect("checked identifier")
+                )
+            ))
+        }
         LatexNode::Greek(name) | LatexNode::Relation(name) => {
             let command = format!("\\{name}");
             let xml = map_symbol_mathml(&command)?;

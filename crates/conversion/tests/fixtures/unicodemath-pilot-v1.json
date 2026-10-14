@@ -18,11 +18,13 @@
     { "source": "■(a&b@c)", "canonical": "■(a&b@c&)", "root": "matrix" },
     { "source": "⒨(x@y)", "canonical": "⒨(x@y)", "root": "matrix" },
     { "source": "■(a&&b@c&d&e)", "canonical": "■(a&&b@c&d&e)", "root": "matrix" },
-    { "source": "α×β≤∞", "canonical": "α × β ≤ ∞", "root": "sequence" }
+    { "source": "α×β≤∞", "canonical": "α × β ≤ ∞", "root": "sequence" },
+    { "source": "f⁡x", "canonical": "f⁡〖x〗", "root": "group" },
+    { "source": "Foo_i^n⁡x", "canonical": "Foo⁡_(i)^(n) 〖x〗", "root": "group" }
   ],
   "rejected": [
     { "source": "∫1 x", "kind": "UnsupportedSyntax" },
-    { "source": "f⁡x", "kind": "UnsupportedSyntax" },
+    { "source": "f⁡", "kind": "UnexpectedToken" },
     { "source": "a⁄b", "kind": "UnsupportedSyntax" },
     { "source": "x̂", "kind": "UnsupportedSyntax" },
     { "source": "a/", "kind": "UnexpectedToken" },

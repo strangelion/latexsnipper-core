@@ -44,7 +44,22 @@ repository-authored; no renderer/parser source or dependency is vendored.
   use U+2061 plus invisible argument grouping. Function-head scripts and scripts
   immediately after U+2061 are supported; already-scripted heads followed by
   more scripts after U+2061 require explicit grouping. Bare known names remain
-  operators. Unknown names with U+2061, aliases and substring guessing fail.
+  operators. Substring guessing remains unsupported.
+- Other names use explicit U+2061 (or the contextual `▒` alias), not a bare
+  blank/parenthesis heuristic. Names are ASCII identifiers matching
+  `[A-Za-z][A-Za-z0-9]*`, at most 64 bytes; the internal marker namespace is
+  reserved. Existing OperatorName nodes retain the literal name; it is not a
+  control word, declaration or executable macro. `int⁡x` therefore differs from
+  `∫▒x`. Name scripts work before Apply or immediately after it, including names
+  sharing a built-in prefix, such as `sin2_i⁡x`. Canonical custom calls place
+  Apply before name scripts, then a blank before the owned argument; for example
+  `Foo⁡_(i)^(n) 〖x + y〗`. Ordinary `Foo x` remains a variable expression.
+  Grouped name expressions, non-ASCII/spaced names and rich-text properties are
+  not inferred; malformed or oversized names/arguments fail. MathML explicit
+  Apply and OMML function owners reconstruct bounded names and scripts without
+  turning ordinary unowned XML text into functions. AsciiMath cannot express
+  these custom heads and refuses them. A bare custom head without an argument
+  is not silently rewritten as variables in a linear target.
 - Nine n-ary glyphs (`∫`, `∬`, `∭`, `∮`, `∑`, `∏`, `∐`, `⋃`, `⋂`) use Operator
   heads with at most one lower and one upper limit. A blank or `▒` binds the
   following operand; canonical bodies use `▒〖...〗`. Bracketed bodies retain

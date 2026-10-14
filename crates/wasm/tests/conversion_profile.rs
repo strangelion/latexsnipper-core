@@ -77,6 +77,36 @@ fn unicode_function_arguments_keep_the_formula_only_envelope() {
 }
 
 #[wasm_bindgen_test]
+fn identifier_function_names_and_scripts_roundtrip_through_xml() {
+    let source = "Foo_i^n⁡〖x+y〗+b";
+    let canonical = json(convert_formula_v3(
+        source,
+        "unicode-math",
+        "unicode-math",
+        Some("best-effort".into()),
+    ));
+    assert_eq!(canonical["ok"], true);
+    assert_eq!(canonical["data"]["content"], "Foo⁡_(i)^(n) 〖x + y〗 + b");
+    for format in ["mathml", "omml"] {
+        let xml = json(convert_formula_v3(
+            source,
+            "unicode-math",
+            format,
+            Some("best-effort".into()),
+        ));
+        assert_eq!(xml["ok"], true);
+        let restored = json(convert_formula_v3(
+            xml["data"]["content"].as_str().unwrap(),
+            format,
+            "unicode-math",
+            Some("best-effort".into()),
+        ));
+        assert_eq!(restored["ok"], true);
+        assert_eq!(restored["data"]["content"], canonical["data"]["content"]);
+    }
+}
+
+#[wasm_bindgen_test]
 fn unicode_nary_scope_keeps_the_formula_only_envelope() {
     let result = json(convert_formula_v3(
         "∫_0^1▒〖x+y〗+b",

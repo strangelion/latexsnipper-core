@@ -494,6 +494,9 @@ fn ast_to_omml(node: &LatexNode) -> String {
         }
 
         LatexNode::OperatorName { args, .. } => {
+            if let Some(name) = crate::unicodemath_pilot::custom_function_name(node) {
+                return wrap_normal_mtext(name);
+            }
             // \operatorname{Spec} — render as upright text
             let name = args.first().map(|a| extract_text_from_omml(&ast_to_omml(a))).unwrap_or_default();
             format!(
@@ -980,8 +983,8 @@ fn function_sequence_to_omml(nodes: &[LatexNode]) -> String {
                 |next| !matches!(&nodes[*next], LatexNode::Text(text) if text.trim().is_empty()),
             );
             if let Some(argument) = argument.filter(|next| {
-                !is_limit_operator(name)
-                    && NaryOperator::from_name(name).is_none()
+                (crate::unicodemath_pilot::is_custom_function_head(&nodes[index])
+                    || (!is_limit_operator(name) && NaryOperator::from_name(name).is_none()))
                     && !is_nary_operand_boundary(&nodes[*next])
             }) {
                 let head = if matches!(&nodes[index], LatexNode::Operator(_)) {

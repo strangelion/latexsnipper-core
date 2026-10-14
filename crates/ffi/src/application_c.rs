@@ -696,6 +696,29 @@ mod tests {
     }
 
     #[test]
+    fn unicode_identifier_function_is_literal_in_the_existing_c_envelope() {
+        let request = json!({"content": "int_i⁡〖x+y〗+b", "inputFormat": "unicode-math",
+            "outputFormat": "omml", "mode": "best-effort"})
+        .to_string();
+        // SAFETY: one live UTF-8 request buffer with its explicit byte length.
+        let result = unsafe {
+            take_json(latexsnipper_formula_convert(
+                request.as_ptr(),
+                request.len(),
+            ))
+        };
+        assert_eq!(result["ok"], true);
+        let content = result["data"]["content"].as_str().unwrap();
+        let end = content.find("</m:func>").unwrap();
+        assert!(content[..end].contains("<m:nor/>") && content[..end].contains("<m:t>int</m:t>"));
+        assert!(
+            content[..end].contains("<m:t>y</m:t>") && !content[..end].contains("<m:t>b</m:t>")
+        );
+        assert!(content[end..].contains("<m:t>b</m:t>"));
+        assert!(!content.contains("<m:nary>"));
+    }
+
+    #[test]
     fn unicode_nary_scope_uses_existing_c_envelope() {
         let request = json!({"content": "∫_0^1▒〖x+y〗+b", "inputFormat": "unicode-math",
             "outputFormat": "omml", "mode": "best-effort"})
