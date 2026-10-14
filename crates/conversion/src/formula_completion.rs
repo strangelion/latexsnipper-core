@@ -18,14 +18,25 @@ use sha2::{Digest, Sha256};
 #[path = "formula_completion_candidates.rs"]
 mod candidates;
 pub use candidates::{
-    apply_formula_completion, complete_formula, AppliedFormulaCompletion,
+    apply_formula_candidate, apply_formula_completion, complete_formula, AppliedFormulaCompletion,
     FormulaCompletionCandidate, FormulaCompletionResult,
+};
+#[path = "formula_completion_wire.rs"]
+mod wire;
+pub use wire::{
+    FormulaCompletionApplyRequest, FormulaCompletionInputFormat, FormulaCompletionReply,
+    FormulaCompletionRequest, FormulaCompletionSnapshot,
 };
 
 pub const FORMULA_COMPLETION_VERSION: u16 = 1;
-const MAX_BYTES: usize = 65_536;
-const MAX_NODES: usize = 4096;
-const MAX_DEPTH: usize = 64;
+pub const FORMULA_COMPLETION_MAX_BYTES: usize = 65_536;
+pub const FORMULA_COMPLETION_MAX_NODES: usize = 4096;
+/// Recursion depth must remain below this value.
+pub const FORMULA_COMPLETION_MAX_DEPTH: usize = 64;
+pub const FORMULA_COMPLETION_MAX_CANDIDATES: usize = 128;
+const MAX_BYTES: usize = FORMULA_COMPLETION_MAX_BYTES;
+const MAX_NODES: usize = FORMULA_COMPLETION_MAX_NODES;
+const MAX_DEPTH: usize = FORMULA_COMPLETION_MAX_DEPTH;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,6 +124,7 @@ pub struct FormulaCellContext {
 pub struct FormulaCompletionContext {
     pub schema_version: u16,
     pub source_sha256: String,
+    #[serde(with = "wire::revision_decimal")]
     pub revision: u64,
     pub cursor: usize,
     pub slot: FormulaSlot,
@@ -125,6 +137,18 @@ pub struct FormulaCompletionContext {
     pub command_prefix: Option<FormulaCommandPrefix>,
     pub nodes: Vec<FormulaEditNode>,
     pub diagnostics: Vec<FormulaEditDiagnostic>,
+}
+
+impl FormulaCompletionContext {
+    /// A concise stale-response token, not an authorization credential.
+    pub fn snapshot(&self) -> FormulaCompletionSnapshot {
+        FormulaCompletionSnapshot {
+            schema_version: self.schema_version,
+            source_sha256: self.source_sha256.clone(),
+            revision: self.revision,
+            cursor: self.cursor,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

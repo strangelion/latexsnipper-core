@@ -13,6 +13,11 @@ use std::time::Duration;
 use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3, RecognitionProfile};
 use latexsnipper_ast::{Diagnostic, ImportOptions};
 use latexsnipper_conversion::{
+    formula_completion::{
+        FormulaCompletionApplyRequest, FormulaCompletionError, FormulaCompletionRequest,
+        FORMULA_COMPLETION_MAX_BYTES, FORMULA_COMPLETION_MAX_CANDIDATES,
+        FORMULA_COMPLETION_MAX_DEPTH, FORMULA_COMPLETION_MAX_NODES, FORMULA_COMPLETION_VERSION,
+    },
     CapabilityRegistry, CapabilityTarget, DocumentConverter, FormulaConversionMode,
     FormulaInputFormat, FormulaOutputTarget, OutputFormat,
 };
@@ -33,6 +38,8 @@ pub const MAX_TIMEOUT_MS: u64 = 10 * 60 * 1_000;
 pub const MAX_FORMULA_INPUT_BYTES: usize = 64 * 1024;
 /// Maximum serialized formula result data, excluding the transport envelope.
 pub const MAX_FORMULA_RESULT_BYTES: usize = 256 * 1024;
+/// Editing trees use a separate budget, without raising conversion limits.
+pub const MAX_COMPLETION_RESULT_BYTES: usize = 1024 * 1024;
 const MAX_THREADS: usize = 256;
 
 #[derive(Debug, Deserialize)]
@@ -264,6 +271,18 @@ impl Worker {
                         "underlyingOutputFormat": "latex_display",
                         "contentKind": "latex-fragment"
                     }],
+                    "completion": {
+                        "schemaVersion": FORMULA_COMPLETION_VERSION,
+                        "inputFormats": ["latex"],
+                        "actions": ["formula.complete", "formula.completion.apply"],
+                        "offsetEncoding": "utf-8-bytes",
+                        "revisionEncoding": "canonical-decimal-u64-string",
+                        "maxInputBytes": FORMULA_COMPLETION_MAX_BYTES,
+                        "maxResultDataBytes": MAX_COMPLETION_RESULT_BYTES,
+                        "maxNodes": FORMULA_COMPLETION_MAX_NODES,
+                        "maxDepthExclusive": FORMULA_COMPLETION_MAX_DEPTH,
+                        "maxCandidates": FORMULA_COMPLETION_MAX_CANDIDATES
+                    },
                     "limits": {
                         "maxInputBytes": MAX_FORMULA_INPUT_BYTES,
                         "maxResultDataBytes": MAX_FORMULA_RESULT_BYTES,
@@ -272,6 +291,16 @@ impl Worker {
                 })))
             }
             "formula.convert" => self.convert_formula(request.params),
+            "formula.complete" => {
+                let params: FormulaCompletionRequest = decode_params(request.params)?;
+                let reply = params.execute().map_err(completion_error)?;
+                bound_completion_result(to_value(reply)?).map(DispatchOutcome::data)
+            }
+            "formula.completion.apply" => {
+                let params: FormulaCompletionApplyRequest = decode_params(request.params)?;
+                let reply = params.execute().map_err(completion_error)?;
+                bound_completion_result(to_value(reply)?).map(DispatchOutcome::data)
+            }
             "session.create" => self.create_session(request.params),
             "session.health" => self.session_health(request.params),
             "session.capabilities" => self.session_capabilities(request.params),
@@ -834,6 +863,29 @@ fn session_not_found(session_id: u64) -> WorkerError {
     )
 }
 
+fn completion_error(error: FormulaCompletionError) -> WorkerError {
+    let code = match error {
+        FormulaCompletionError::InvalidCursor => "INVALID_CURSOR",
+        FormulaCompletionError::LimitExceeded => "LIMIT_EXCEEDED",
+        FormulaCompletionError::StaleContext => "STALE_CONTEXT",
+        FormulaCompletionError::UnknownCandidate => "UNKNOWN_CANDIDATE",
+    };
+    WorkerError::protocol(code, error.to_string())
+}
+
+fn bound_completion_result(data: Value) -> Result<Value, WorkerError> {
+    let bytes = serde_json::to_vec(&data).map_err(|_| {
+        WorkerError::protocol("INTERNAL", "Completion result could not be serialized.")
+    })?;
+    if bytes.len() > MAX_COMPLETION_RESULT_BYTES {
+        return Err(WorkerError::protocol(
+            "OUTPUT_TOO_LARGE",
+            "Serialized completion result data exceeds the 1 MiB limit.",
+        ));
+    }
+    Ok(data)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -852,6 +904,30 @@ mod tests {
     fn response_data(response: &WorkerResponse) -> &Value {
         assert!(response.envelope.ok, "{:?}", response.envelope.error);
         response.envelope.data.as_ref().unwrap()
+    }
+
+    #[test]
+    fn completion_result_budget_is_serialized_and_separate_from_conversion() {
+        let overhead = serde_json::to_vec(&json!({ "source": "" })).unwrap().len();
+        let exact = json!({ "source": "x".repeat(MAX_COMPLETION_RESULT_BYTES - overhead) });
+        assert_eq!(
+            serde_json::to_vec(&exact).unwrap().len(),
+            MAX_COMPLETION_RESULT_BYTES
+        );
+        assert!(bound_completion_result(exact.clone()).is_ok());
+        assert_eq!(
+            bound_formula_result(exact).unwrap_err().code,
+            "OUTPUT_TOO_LARGE"
+        );
+        let oversized = json!({ "source": "x".repeat(MAX_COMPLETION_RESULT_BYTES - overhead + 1) });
+        assert_eq!(
+            bound_completion_result(oversized).unwrap_err().code,
+            "OUTPUT_TOO_LARGE"
+        );
+        assert!(bound_completion_result(
+            json!({ "source": "\"".repeat(MAX_COMPLETION_RESULT_BYTES / 2) })
+        )
+        .is_err());
     }
 
     fn formula_params(content: &str, input: &str, output: &str) -> Value {
@@ -1002,7 +1078,7 @@ mod tests {
     }
 
     #[test]
-    fn formula_conversion_preserves_existing_recognition_session() {
+    fn formula_conversion_and_completion_preserve_existing_recognition_session() {
         let models = tempfile::tempdir().unwrap();
         let mut worker = Worker::default();
         let (created, _) = worker.process_line(&request(
@@ -1023,6 +1099,24 @@ mod tests {
             formula_params("x", "mtef", "omml"),
         ));
         assert!(!failed.envelope.ok);
+        let (completed, _) = worker.process_line(&request(
+            "complete",
+            "formula.complete",
+            json!({ "source": "\\fr", "inputFormat": "latex", "cursor": 3, "revision": "42" }),
+        ));
+        let snapshot = response_data(&completed)["snapshot"].clone();
+        let params = json!({ "source": "\\fr", "inputFormat": "latex", "cursor": 3,
+            "revision": "42", "snapshot": snapshot, "candidateId": "builtin:frac" });
+        let (applied, _) = worker.process_line(&request(
+            "apply",
+            "formula.completion.apply",
+            params.clone(),
+        ));
+        assert_eq!(response_data(&applied)["source"], r"\frac{}{}");
+        let mut stale = params;
+        stale["revision"] = json!("43");
+        let (failed, _) = worker.process_line(&request("stale", "formula.completion.apply", stale));
+        assert_eq!(failed.envelope.error.unwrap().code, "STALE_CONTEXT");
         let (healthy, _) = worker.process_line(&request(
             "health",
             "session.health",

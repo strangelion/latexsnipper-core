@@ -4,6 +4,93 @@ use latexsnipper_conversion::formula_completion::{
 };
 use sha2::{Digest, Sha256};
 
+#[test]
+fn completion_wire_preserves_all_revision_bits_and_rejects_ambiguous_requests() {
+    use latexsnipper_conversion::formula_completion::{
+        FormulaCompletionApplyRequest, FormulaCompletionRequest,
+    };
+    use serde_json::json;
+    for revision in ["0", "9007199254740993", "18446744073709551615"] {
+        let request =
+            json!({"source": "\\fr", "cursor": 3, "revision": revision, "inputFormat": "latex"});
+        let request: FormulaCompletionRequest = serde_json::from_value(request).unwrap();
+        let reply = request.execute().unwrap();
+        let value = serde_json::to_value(&reply).unwrap();
+        assert_eq!(value["snapshot"]["revision"], revision);
+        assert_eq!(value["completion"]["context"]["revision"], revision);
+        let apply = json!({"source": "\\fr", "cursor": 3, "revision": revision,
+            "inputFormat": "latex", "snapshot": value["snapshot"], "candidateId": "builtin:frac"});
+        let request: FormulaCompletionApplyRequest = serde_json::from_value(apply.clone()).unwrap();
+        assert_eq!(request.execute().unwrap().source, r"\frac{}{}");
+        for extra in ["insert", "replace", "timeoutMs", "backend"] {
+            let mut invalid = apply.clone();
+            invalid[extra] = json!("untrusted");
+            assert!(serde_json::from_value::<FormulaCompletionApplyRequest>(invalid).is_err());
+        }
+        let mut invalid = apply;
+        invalid["snapshot"]["extra"] = json!(true);
+        assert!(serde_json::from_value::<FormulaCompletionApplyRequest>(invalid).is_err());
+    }
+    for revision in [
+        json!(0),
+        json!(1.5),
+        json!(null),
+        json!(""),
+        json!("01"),
+        json!("-1"),
+        json!("+1"),
+        json!("1e3"),
+        json!(" 1"),
+        json!("１"),
+        json!("18446744073709551616"),
+    ] {
+        let request =
+            json!({"source": "\\fr", "cursor": 3, "revision": revision, "inputFormat": "latex"});
+        assert!(serde_json::from_value::<FormulaCompletionRequest>(request).is_err());
+    }
+    for input in ["typst", "unicode-math", "LATEX"] {
+        assert!(serde_json::from_value::<FormulaCompletionRequest>(json!({
+            "source": "x", "cursor": 1, "revision": "0", "inputFormat": input
+        }))
+        .is_err());
+    }
+}
+
+#[test]
+fn concise_snapshots_bind_source_cursor_version_and_revision() {
+    use latexsnipper_conversion::formula_completion::{apply_formula_candidate, complete_formula};
+    let source = "中\\fr";
+    let reply = complete_formula(source, source.len(), u64::MAX).unwrap();
+    let token = reply.context.snapshot();
+    assert_eq!(
+        apply_formula_candidate(source, source.len(), u64::MAX, &token, "builtin:frac")
+            .unwrap()
+            .source,
+        "中\\frac{}{}"
+    );
+    for field in ["source", "cursor", "revision", "schemaVersion"] {
+        let mut changed = token.clone();
+        match field {
+            "source" => changed.source_sha256 = "0".repeat(64),
+            "cursor" => changed.cursor -= 1,
+            "revision" => changed.revision -= 1,
+            _ => changed.schema_version += 1,
+        }
+        assert_eq!(
+            apply_formula_candidate(source, source.len(), u64::MAX, &changed, "builtin:frac"),
+            Err(FormulaCompletionError::StaleContext)
+        );
+    }
+    assert_eq!(
+        apply_formula_candidate(source, 1, u64::MAX, &token, "builtin:frac"),
+        Err(FormulaCompletionError::InvalidCursor)
+    );
+    assert_eq!(
+        apply_formula_candidate(source, source.len(), u64::MAX, &token, "arbitrary"),
+        Err(FormulaCompletionError::UnknownCandidate)
+    );
+}
+
 fn context(marked: &str) -> FormulaCompletionContext {
     assert_eq!(marked.matches('▮').count(), 1);
     let cursor = marked.find('▮').unwrap();

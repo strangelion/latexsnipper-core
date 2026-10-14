@@ -46,6 +46,8 @@ or `error`). A successful recognition keeps the authoritative `document` in
 | `session.close` | Close one session; duplicate close is a successful no-op. |
 | `formula.capabilities` | Query model-free native conversion capabilities and projection limits. |
 | `formula.convert` | Convert a declared formula string without creating or changing recognition sessions. |
+| `formula.complete` | Query bounded LaTeX editing structure and candidate edits without a model. |
+| `formula.completion.apply` | Revalidate a snapshot and return an explicitly selected canonical edit. |
 | `worker.status` | Read live and maximum session counts. |
 | `worker.shutdown` | Close all sessions, flush the response, and exit successfully. |
 
@@ -70,7 +72,8 @@ Capability data has `schemaVersion: 1`, `target: "native"`, the shared Core
 output format: `latex-fragment` uses the underlying `latex_display` capability.
 Check each route's `available`, `mode`, limitations and unavailable reason before
 offering it. Input labels include unsupported formats for diagnostic purposes;
-their presence does not enable MTEF, UnicodeMath or AsciiMath conversion.
+their presence does not enable MTEF conversion. UnicodeMath/AsciiMath have finite
+single-formula best-effort routes; query the actual source/target capability.
 
 Conversion parameters are `content`, `inputFormat`, `outputFormat`, and optional
 `mode` (`strict` by default, or explicit `best-effort`). Unknown fields, including
@@ -88,6 +91,39 @@ semantics. Bare shape checks do not prove renderer support or visual fidelity.
 fallback results. A failed request does not stop the process or clear recognition
 sessions. No implicit best-effort, retry, output file or document replacement occurs.
 
+## Model-free formula completion
+
+These additive protocol-v1 actions call the shared Core editing API, not the
+conversion parser. `formula.capabilities.data.completion` reports its grammar,
+actions, offset/revision encodings and limits. Only exact `inputFormat: "latex"`
+is accepted; other conversion inputs do not imply editing support.
+
+```json
+{"version":1,"id":"suggest","action":"formula.complete","params":{"source":"\\fr","inputFormat":"latex","cursor":3,"revision":"42"}}
+```
+
+Success `data` contains `snapshot` and `completion` (context and candidates).
+All offsets and tab stops use UTF-8 bytes. Convert UTF-16 editor positions before
+calling. Revisions are canonical decimal **strings**, including the context and
+snapshot: `"0"` through `"18446744073709551615"`. Numeric values, leading zeros,
+signs, exponent notation and overflow are rejected, preventing JS precision loss.
+
+To accept, call `formula.completion.apply` with the **current** source,
+inputFormat, cursor and revision, the previous response's `snapshot` verbatim,
+and `candidateId` (e.g. `builtin:frac`). This snapshot includes schemaVersion,
+sourceSha256, revision and cursor; it is a stale-response token, not authorization.
+Do not send the candidate's `insert`/`replace` or the entire result tree.
+Core checks the snapshot and regenerates the canonical edit. Unknown fields in
+requests or snapshots are rejected. Success data contains source, cursor and
+absolute tabStops. The host owns explicit acceptance, revision updates and undo.
+
+`INVALID_PARAMS`, `INVALID_CURSOR`, `LIMIT_EXCEEDED`, `STALE_CONTEXT`,
+`UNKNOWN_CANDIDATE` and `OUTPUT_TOO_LARGE` are failures, with no edits, retries,
+file writes or recognition-session changes. Completion results are data only;
+finite structural closure does not prove mathematical or rendering validity.
+This is not a learned ranker, a macro interpreter, or a generation service.
+More grammar and the remaining language bindings are tracked separately.
+
 ## Limits and concurrency
 
 - at most 32 live sessions by default;
@@ -97,12 +133,14 @@ sessions. No implicit best-effort, retry, output file or document replacement oc
 - formula source is at most 64 KiB UTF-8, with Core depth/token/reconstruction guards;
 - formula result `data` is at most 256 KiB after JSON serialization (not including
   protocol fields, echoed ID or error envelope); this is not a peak allocation limit;
+- completion uses the same 64 KiB source cap, at most 4096 editing nodes, depth
+  below 64 and 128 candidates; its serialized `data` has a separate 1 MiB cap;
 - requests on one stdin/stdout stream execute serially.
 
 Run multiple supervised worker processes when parallel inference or hard
 cancellation is required. A request timeout is cooperative at Core pipeline
 boundaries; the supervisor remains responsible for a hard process deadline.
-Formula conversion is synchronous and has no in-process interruption or deadline
+Formula conversion and completion are synchronous and have no in-process interruption or deadline
 parameter. Hard cancellation requires terminating the child; all process-local
 recognition sessions then disappear. The supervisor must correlate IDs, discard
 stale replies and explicitly recreate any sessions; it must not automatically

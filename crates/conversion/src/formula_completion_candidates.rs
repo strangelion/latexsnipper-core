@@ -242,7 +242,7 @@ pub fn complete_formula(
             // Omit an unavailable candidate rather than fail all available choices.
             match candidate(source, &context, id, label, replace, insert) {
                 Ok(value) => {
-                    if candidates.len() < 128
+                    if candidates.len() < FORMULA_COMPLETION_MAX_CANDIDATES
                         && !candidates.iter().any(|old: &FormulaCompletionCandidate| {
                             old.replace == value.replace && old.insert == value.insert
                         })
@@ -418,20 +418,37 @@ pub fn apply_formula_completion(
     result: &FormulaCompletionResult,
     candidate_id: &str,
 ) -> EditResult<AppliedFormulaCompletion> {
+    apply_formula_candidate(
+        source,
+        cursor,
+        revision,
+        &result.context.snapshot(),
+        candidate_id,
+    )
+}
+
+/// Apply a candidate using a concise snapshot, re-generating the canonical edit.
+pub fn apply_formula_candidate(
+    source: &str,
+    cursor: usize,
+    revision: u64,
+    snapshot: &FormulaCompletionSnapshot,
+    candidate_id: &str,
+) -> EditResult<AppliedFormulaCompletion> {
     if source.len() > MAX_BYTES {
         return Err(FormulaCompletionError::LimitExceeded);
     }
     if cursor > source.len() || !source.is_char_boundary(cursor) {
         return Err(FormulaCompletionError::InvalidCursor);
     }
-    if result.context.schema_version != FORMULA_COMPLETION_VERSION
-        || result.context.revision != revision
-        || result.context.cursor != cursor
-        || result.context.source_sha256 != format!("{:x}", Sha256::digest(source.as_bytes()))
+    if snapshot.schema_version != FORMULA_COMPLETION_VERSION
+        || snapshot.revision != revision
+        || snapshot.cursor != cursor
+        || snapshot.source_sha256 != format!("{:x}", Sha256::digest(source.as_bytes()))
     {
         return Err(FormulaCompletionError::StaleContext);
     }
-    let current = complete_formula(source, result.context.cursor, revision)?;
+    let current = complete_formula(source, cursor, revision)?;
     let selected = current
         .candidates
         .iter()

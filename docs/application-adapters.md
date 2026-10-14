@@ -35,6 +35,9 @@
 
 JSONL 的 `formula.capabilities` 和 `formula.convert` 复用原生 Core 门禁，
 不创建、加载或清空识别会话；普通转换错误后可处理下一条请求。
+新增 `formula.complete` 和 `formula.completion.apply` 复用 Core 结构化补全，
+仅接受有限 LaTeX、UTF-8 光标及精确十进制版本字符串；简明快照防止迟到编辑，
+不执行宿主写入。补全 `data` 独立限制为 1 MiB，详见 [补全接口](formula-completion.md)。
 输入最多 64 KiB UTF-8，序列化结果 `data` 最多 256 KiB；
 协议外壳、回显 ID 和错误信息不包含在结果数据预算内。
 旧无句柄 C 公式转换采用同样的 256 KiB 序列化 `data` 预算；Python 返回纯字符串，

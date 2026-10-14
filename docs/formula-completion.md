@@ -3,8 +3,8 @@
 更新：2026-10-15。
 
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
-`latexsnipper_conversion::formula_completion`。Rust 路线已有；C/Python/JSONL/WASM-JS
-公共绑定与实际编辑器接入仍待完成，不能把 serde 数据类型当作已经发布的跨绑定协议。
+`latexsnipper_conversion::formula_completion`。Rust 与 JSONL 路线已有；C/Python/WASM-JS
+公共绑定与实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -41,7 +41,9 @@ fn main() -> Result<(), FormulaCompletionError> {
 源码和光标位置使用 UTF-8 字节；范围为 `[start, end)`，空槽位使用零长度范围。
 JavaScript 编辑器若使用 UTF-16，须在绑定层转换位置，不能直接传递字符串字符数。
 上下文带原输入 SHA-256、调用方版本、光标、父节点路径和编辑结构树；原输入不做归一化。
-`schemaVersion` 当前为 1；Rust 的 `revision` 为 `u64`，未来绑定须保留整数精度。
+`schemaVersion` 当前为 1；Rust 的 `revision` 为 `u64`，JSON 一律使用规范十进制字符串，
+包括请求、快照及结果上下文；拒绝数值、前导零、符号、空白、指数与溢出。
+这是首次补全传输协议；未发布的 Rust serde 上下文数值版本改为字符串，不影响 Rust 函数签名。
 
 树保留命令、参数、组、上/下标、注释、环境、单元格和分隔符的源码范围。
 上下标记录其基底节点；分式上下文区分分子/分母，根式区分指数/被开方项。
@@ -76,6 +78,31 @@ Core 重新生成被选 ID 的编辑和占位符，返回载荷里的替换范�
 字符/空白也计入节点预算，超限分析返回 `LIMIT_EXCEEDED`，不返回半棵树。
 若某候选插入后超预算，该候选不列出，其余可用候选仍可返回。
 构造候选需要分析拟议源码；真实编辑延迟与 IME/宿主交互仍须独立评估。
+
+## 独立进程调用
+
+`formula.complete` 与 `formula.completion.apply` 是 JSONL v1 的新增动作，
+无需模型、识别会话或文件访问。查询使用共享 `FormulaCompletionRequest`，返回
+`FormulaCompletionReply { snapshot, completion }`；接受候选使用共享
+`FormulaCompletionApplyRequest`。Rust 也可直接调用这两个请求的 `execute()`。
+
+```json
+{"version":1,"id":"suggest","action":"formula.complete","params":{"source":"\\fr","inputFormat":"latex","cursor":3,"revision":"9007199254740993"}}
+```
+
+接受时发送当前 `source/inputFormat/cursor/revision`，回显查询返回的简明 `snapshot`，
+并指定 `candidateId`，例如 `builtin:frac`。不发送整棵树或编辑文本；未知请求/快照字段拒绝。
+当前 `inputFormat` 仅接受精确 `latex`，转换能力矩阵中的其他输入不代表可补全。
+`apply_formula_candidate` 也可直接接受 `context.snapshot()`；返回新源码、光标和绝对占位符，
+不替宿主写入文档或递增版本。
+
+快照用于检测迟到结果，不是签名或授权凭据。宿主仍须读取真正的当前编辑状态，
+显式接受并实现一次撤销；不能用旧状态冒充当前状态，也不能把补全结构闭合当排版验证。
+输入/树预算同上，JSONL 补全序列化 `data` 最多 1 MiB，转换仍为 256 KiB，
+请求行仍为 1 MiB。超限/无效光标/过期/未知候选明确失败，同一进程可以继续处理后续请求。
+同步执行的硬取消、队列、节流和子进程生命周期由宿主负责，不在每次按键重启进程。
+
+详见 [JSONL 动作与错误边界](../crates/worker/README.md#model-free-formula-completion)。
 
 相关资料：[辅助路线图](formula-assistance-roadmap.md)、
 [收尾清单](closing-issue-ledger.md)。

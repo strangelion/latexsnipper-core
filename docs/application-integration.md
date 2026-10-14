@@ -275,6 +275,13 @@ cap excludes the transport envelope and is not a peak allocation guarantee.
 There is no conversion deadline parameter or automatic fallback: synchronous
 conversion hard cancellation remains a supervising process responsibility.
 
+Additive `formula.complete` and `formula.completion.apply` expose the finite
+Core LaTeX editing tree and canonical candidates. Requests use UTF-8 byte offsets
+and canonical decimal revision strings; acceptance rechecks a concise snapshot
+against the current source/revision/cursor and regenerates the edit by ID.
+They return data only, do not touch recognition sessions or documents, and have
+a separate 1 MiB serialized data cap. See [completion boundaries](formula-completion.md).
+
 One stream is deliberately serial. The registry has 32 live-session slots,
 request lines are capped at 1 MiB, recognized files at 100 MiB, timeouts at ten
 minutes, and every response is flushed before the next request. EOF, shutdown,

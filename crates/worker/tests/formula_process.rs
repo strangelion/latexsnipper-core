@@ -154,3 +154,82 @@ fn formula_rpc_real_process_exits_successfully_on_eof() {
     worker.input.take();
     worker.successful_exit();
 }
+
+#[test]
+fn completion_rpc_uses_lossless_revisions_and_survives_invalid_or_stale_edits() {
+    let mut worker = Process::start();
+    let capabilities = worker.call(json!("caps"), "formula.capabilities", json!({}));
+    assert_eq!(
+        capabilities["data"]["completion"]["inputFormats"],
+        json!(["latex"])
+    );
+    assert_eq!(
+        capabilities["data"]["completion"]["offsetEncoding"],
+        "utf-8-bytes"
+    );
+    let source = "中\\fr";
+    let revision = "18446744073709551615";
+    let params = json!({"source": source, "cursor": source.len(), "revision": revision, "inputFormat": "latex"});
+    let response = worker.call(json!("complete"), "formula.complete", params.clone());
+    assert_eq!(response["ok"], true, "{response}");
+    assert_eq!(response["data"]["snapshot"]["revision"], revision);
+    assert_eq!(
+        response["data"]["completion"]["context"]["revision"],
+        revision
+    );
+    assert!(response["data"]["completion"]["candidates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|candidate| candidate["id"] == "builtin:frac"));
+    let mut apply = params.clone();
+    apply["snapshot"] = response["data"]["snapshot"].clone();
+    apply["candidateId"] = json!("builtin:frac");
+    for (field, value, code) in [
+        ("revision", json!("0"), "STALE_CONTEXT"),
+        ("source", json!("中\\sr"), "STALE_CONTEXT"),
+        ("cursor", json!(source.len() - 1), "STALE_CONTEXT"),
+        ("cursor", json!(1), "INVALID_CURSOR"),
+        (
+            "candidateId",
+            json!("external:arbitrary"),
+            "UNKNOWN_CANDIDATE",
+        ),
+        ("insert", json!("untrusted"), "INVALID_PARAMS"),
+    ] {
+        let mut invalid = apply.clone();
+        invalid[field] = value;
+        let failed = worker.call(json!(field), "formula.completion.apply", invalid);
+        assert_eq!(failed["error"]["code"], code, "{failed}");
+    }
+    for (field, value, code) in [
+        ("revision", json!(18446744073709551615u64), "INVALID_PARAMS"),
+        ("revision", json!("01"), "INVALID_PARAMS"),
+        ("inputFormat", json!("typst"), "INVALID_PARAMS"),
+        ("source", json!("x".repeat(65_537)), "LIMIT_EXCEEDED"),
+        ("source", json!("x".repeat(4096)), "LIMIT_EXCEEDED"),
+        (
+            "source",
+            json!(format!("{}x", "{".repeat(64))),
+            "LIMIT_EXCEEDED",
+        ),
+    ] {
+        let mut invalid = params.clone();
+        invalid[field] = value;
+        let failed = worker.call(json!(field), "formula.complete", invalid);
+        assert_eq!(failed["error"]["code"], code, "{failed}");
+    }
+    let applied = worker.call(json!("apply"), "formula.completion.apply", apply);
+    assert_eq!(applied["ok"], true, "{applied}");
+    assert_eq!(applied["data"]["source"], "中\\frac{}{}");
+    assert_eq!(applied["data"]["cursor"], 9);
+    assert_eq!(
+        applied["data"]["tabStops"],
+        json!([{"start":9,"end":9},{"start":11,"end":11}])
+    );
+    let healthy = worker.call(json!("status"), "worker.status", json!({}));
+    assert_eq!(healthy["data"]["liveSessions"], 0);
+    let shutdown = worker.call(json!("stop"), "worker.shutdown", json!({}));
+    assert_eq!(shutdown["ok"], true);
+    worker.successful_exit();
+}
