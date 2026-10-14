@@ -1137,27 +1137,6 @@ pub(crate) fn normalize_scripted_function_head(
     depth: usize,
 ) -> bool {
     use crate::latex_ast::LatexNode;
-    fn identifier_text(node: &LatexNode) -> Option<String> {
-        match node {
-            LatexNode::Text(text)
-                if !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_alphanumeric()) =>
-            {
-                Some(text.clone())
-            }
-            LatexNode::Sequence(nodes) if !nodes.is_empty() => {
-                let mut text = String::new();
-                for node in nodes {
-                    text.push_str(&identifier_text(node)?);
-                    if text.len() > 64 {
-                        return None;
-                    }
-                }
-                Some(text)
-            }
-            LatexNode::Group(nodes) if nodes.len() == 1 => identifier_text(&nodes[0]),
-            _ => None,
-        }
-    }
     fn normalized_identifier(name: String) -> Option<LatexNode> {
         if !crate::unicodemath_pilot::is_identifier_name(&name) {
             return None;
@@ -1176,14 +1155,18 @@ pub(crate) fn normalize_scripted_function_head(
     }
     match node {
         LatexNode::FontModifier { font, content } if font == "mathrm" => {
-            let Some(name) = identifier_text(content).and_then(normalized_identifier) else {
+            let Some(name) = crate::unicodemath_pilot::function_identifier_text(content)
+                .and_then(normalized_identifier)
+            else {
                 return false;
             };
             *node = name;
             true
         }
-        LatexNode::Text(_) | LatexNode::Sequence(_) => {
-            let Some(name) = identifier_text(node).and_then(normalized_identifier) else {
+        LatexNode::Text(_) | LatexNode::Sequence(_) | LatexNode::Greek(_) => {
+            let Some(name) = crate::unicodemath_pilot::function_identifier_text(node)
+                .and_then(normalized_identifier)
+            else {
                 return false;
             };
             *node = name;

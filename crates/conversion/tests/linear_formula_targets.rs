@@ -132,33 +132,41 @@ fn registered_named_functions_use_existing_routes_and_remain_best_effort() {
 fn registered_identifier_functions_keep_source_identity_and_loss_boundaries() {
     use sha2::{Digest, Sha256};
     let registry = SemanticConversionRegistry::default();
-    let source = "CDF42_i⁡〖x+y〗+b";
-    for output in ["unicode-math", "omml", "mathml"] {
-        let request = RegisteredConversionRequest {
-            schema_version: 1,
-            input: "unicode-math".into(),
-            output: output.into(),
-            mode: Mode::BestEffort,
-            backend: None,
-            content: source.into(),
-            context_sha256: "a".repeat(64),
-        };
-        let result = registry.convert(&request).unwrap();
-        assert_eq!(
-            result.input_sha256,
-            format!("{:x}", Sha256::digest(source.as_bytes()))
-        );
-        assert_eq!(result.backend, "core:builtin");
-        assert!(result.candidate.content.contains("CDF42"));
-        assert!(!result.candidate.losses.is_empty());
-        let rejected = registry
-            .convert(&RegisteredConversionRequest {
-                output: "ascii-math".into(),
-                ..request.clone()
-            })
-            .unwrap_err();
-        assert_eq!(rejected.code, ConversionRegistryErrorCode::InputRejected);
-        assert_eq!(request.content, source);
+    for source in [
+        "CDF42_i⁡〖x+y〗+b",
+        "条件\u{00a0}概率_i⁡〖x+y〗+b",
+        "α2⁡〖x+y〗+b",
+    ] {
+        for output in ["unicode-math", "omml", "mathml"] {
+            let request = RegisteredConversionRequest {
+                schema_version: 1,
+                input: "unicode-math".into(),
+                output: output.into(),
+                mode: Mode::BestEffort,
+                backend: None,
+                content: source.into(),
+                context_sha256: "a".repeat(64),
+            };
+            let result = registry.convert(&request).unwrap();
+            assert_eq!(
+                result.input_sha256,
+                format!("{:x}", Sha256::digest(source.as_bytes()))
+            );
+            assert_eq!(result.backend, "core:builtin");
+            assert!(result
+                .candidate
+                .content
+                .contains(source.split(['_', '⁡']).next().unwrap()));
+            assert!(!result.candidate.losses.is_empty());
+            let rejected = registry
+                .convert(&RegisteredConversionRequest {
+                    output: "ascii-math".into(),
+                    ..request.clone()
+                })
+                .unwrap_err();
+            assert_eq!(rejected.code, ConversionRegistryErrorCode::InputRejected);
+            assert_eq!(request.content, source);
+        }
     }
 }
 

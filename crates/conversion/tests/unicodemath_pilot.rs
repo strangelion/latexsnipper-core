@@ -7,7 +7,8 @@ use latexsnipper_conversion::{
 };
 
 fn canonical(source: &str) -> String {
-    write_unicodemath(&parse_unicodemath(source).unwrap()).unwrap()
+    let ast = parse_unicodemath(source).unwrap_or_else(|error| panic!("{source:?}: {error}"));
+    write_unicodemath(&ast).unwrap_or_else(|error| panic!("{source:?}: {error}"))
 }
 
 #[test]
@@ -1325,6 +1326,146 @@ fn explicit_identifier_functions_preserve_names_scripts_and_owned_arguments() {
 }
 
 #[test]
+fn unicode_and_no_break_space_function_names_roundtrip_with_owned_arguments() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    for (source, expected, name) in [
+        ("α⁡x", "α⁡〖x〗", "α"),
+        ("CDFα2⁡(x)b", "CDFα2⁡〖(x)〗 b", "CDFα2"),
+        ("概率⁡〖x+y〗+b", "概率⁡〖x + y〗 + b", "概率"),
+        ("Écart_i^n⁡x", "Écart⁡_(i)^(n) 〖x〗", "Écart"),
+        ("قياس⁡_i x", "قياس⁡_(i) 〖x〗", "قياس"),
+        ("arg\u{00a0}max⁡x", "arg\u{00a0}max⁡〖x〗", "arg\u{00a0}max"),
+        (
+            "条件\u{00a0}概率_i⁡〖x+y〗+b",
+            "条件\u{00a0}概率⁡_(i) 〖x + y〗 + b",
+            "条件\u{00a0}概率",
+        ),
+        ("α\u{00a0}β⁡x", "α\u{00a0}β⁡〖x〗", "α\u{00a0}β"),
+    ] {
+        assert_eq!(canonical(source), expected, "{source}");
+        assert_eq!(canonical(expected), expected, "{source}");
+        let latex = DocumentConverter::convert_formula_string(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            OutputFormat::LatexDisplay,
+            FormulaConversionMode::BestEffort,
+        )
+        .unwrap();
+        assert!(
+            latex.contains(&format!("\\operatorname{{{name}}}")),
+            "{latex}"
+        );
+        assert_eq!(
+            DocumentConverter::convert_formula_to_target(
+                &latex,
+                FormulaInputFormat::Latex,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap(),
+            expected,
+            "{source}: {latex}"
+        );
+        for (target, input) in [
+            (OutputFormat::MathML, FormulaInputFormat::Mathml),
+            (OutputFormat::OMML, FormulaInputFormat::Omml),
+        ] {
+            let xml = DocumentConverter::convert_formula_string(
+                source,
+                FormulaInputFormat::UnicodeMath,
+                target,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert!(xml.contains(name), "{xml}");
+            let restored = DocumentConverter::convert_formula_to_target(
+                &xml,
+                input,
+                FormulaOutputTarget::UnicodeMath,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap_or_else(|error| panic!("{source}: {error}; {xml}"));
+            assert_eq!(restored, expected, "{source}: {xml}");
+        }
+    }
+    for source in [
+        "α⁡概率⁡x",
+        "■(概率⁡x&arg\u{00a0}max⁡y@a&b)",
+        "x^(条件\u{00a0}概率⁡y)",
+        "(概率⁡x)/y",
+    ] {
+        let expected = canonical(source);
+        assert_eq!(canonical(&expected), expected);
+        for (target, input) in [
+            (OutputFormat::MathML, FormulaInputFormat::Mathml),
+            (OutputFormat::OMML, FormulaInputFormat::Omml),
+        ] {
+            let xml = DocumentConverter::convert_formula_string(
+                source,
+                FormulaInputFormat::UnicodeMath,
+                target,
+                FormulaConversionMode::BestEffort,
+            )
+            .unwrap();
+            assert_eq!(
+                DocumentConverter::convert_formula_to_target(
+                    &xml,
+                    input,
+                    FormulaOutputTarget::UnicodeMath,
+                    FormulaConversionMode::BestEffort,
+                )
+                .unwrap(),
+                expected,
+                "{source}: {xml}"
+            );
+        }
+    }
+}
+
+#[test]
+fn extended_function_names_keep_byte_limits_and_explicit_application_gate() {
+    use latexsnipper_conversion::FormulaOutputTarget;
+    for source in [
+        "arg\u{00a0}max x",
+        "arg\u{00a0}max(x)",
+        "\u{00a0}Foo⁡x",
+        "Foo\u{00a0}⁡x",
+        "Foo\u{00a0}\u{00a0}Bar⁡x",
+        "Foo\u{00a0}2⁡x",
+        "条件⁡",
+        "条件⁡()",
+        "〖条件〗⁡x",
+        "x_arg\u{00a0}max",
+        "f\u{0301}⁡x",
+        "f\u{200b}⁡x",
+        "f\u{202e}⁡x",
+        "LatexSnipperInternal\u{00a0}函数⁡x",
+    ] {
+        let error = parse_unicodemath(source).unwrap_err();
+        assert!(source.is_char_boundary(error.offset), "{source}: {error}");
+    }
+    for name in ["函".repeat(21), "α".repeat(32), "A\u{00a0}B".into()] {
+        assert!(parse_unicodemath(&format!("{name}⁡x")).is_ok());
+    }
+    for name in ["函".repeat(22), "α".repeat(33)] {
+        assert!(parse_unicodemath(&format!("{name}⁡x")).is_err());
+    }
+    for source in ["条件 x", "α x", "arg max⁡x"] {
+        let latex = parse_unicodemath(source).unwrap().to_string();
+        assert!(!latex.contains("operatorname"), "{source}: {latex}");
+    }
+    for source in ["概率⁡x", "arg\u{00a0}max⁡x"] {
+        assert!(DocumentConverter::convert_formula_to_target(
+            source,
+            FormulaInputFormat::UnicodeMath,
+            FormulaOutputTarget::AsciiMath,
+            FormulaConversionMode::BestEffort,
+        )
+        .is_err());
+    }
+}
+
+#[test]
 fn identifier_function_limits_and_ambiguous_names_are_explicitly_refused() {
     for source in [
         "Foo⁡",
@@ -1333,7 +1474,6 @@ fn identifier_function_limits_and_ambiguous_names_are_explicitly_refused() {
         "Foo⁡⁡x",
         "〖a+b〗⁡x",
         "42⁡x",
-        "α⁡x",
         "〖a b〗⁡x",
         "〖ab〗⁡x",
         "Foo^2⁡^3 x",
@@ -1520,8 +1660,8 @@ fn versioned_fixture_has_fixed_expected_structure_and_output() {
     let fixtures: serde_json::Value =
         serde_json::from_str(include_str!("fixtures/unicodemath-pilot-v1.json")).unwrap();
     assert_eq!(fixtures["schemaVersion"], 1);
-    assert_eq!(fixtures["accepted"].as_array().unwrap().len(), 18);
-    assert_eq!(fixtures["rejected"].as_array().unwrap().len(), 8);
+    assert_eq!(fixtures["accepted"].as_array().unwrap().len(), 21);
+    assert_eq!(fixtures["rejected"].as_array().unwrap().len(), 9);
     for fixture in fixtures["accepted"].as_array().unwrap() {
         let source = fixture["source"].as_str().unwrap();
         let node = parse_unicodemath(source).unwrap();

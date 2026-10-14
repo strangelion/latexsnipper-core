@@ -20,11 +20,15 @@
     { "source": "■(a&&b@c&d&e)", "canonical": "■(a&&b@c&d&e)", "root": "matrix" },
     { "source": "α×β≤∞", "canonical": "α × β ≤ ∞", "root": "sequence" },
     { "source": "f⁡x", "canonical": "f⁡〖x〗", "root": "group" },
-    { "source": "Foo_i^n⁡x", "canonical": "Foo⁡_(i)^(n) 〖x〗", "root": "group" }
+    { "source": "Foo_i^n⁡x", "canonical": "Foo⁡_(i)^(n) 〖x〗", "root": "group" },
+    { "source": "α⁡x", "canonical": "α⁡〖x〗", "root": "group" },
+    { "source": "概率⁡x", "canonical": "概率⁡〖x〗", "root": "group" },
+    { "source": "arg\u00a0max_i⁡x", "canonical": "arg\u00a0max⁡_(i) 〖x〗", "root": "group" }
   ],
   "rejected": [
     { "source": "∫1 x", "kind": "UnsupportedSyntax" },
     { "source": "f⁡", "kind": "UnexpectedToken" },
+    { "source": "arg\u00a0max x", "kind": "UnsupportedSyntax" },
     { "source": "a⁄b", "kind": "UnsupportedSyntax" },
     { "source": "x̂", "kind": "UnsupportedSyntax" },
     { "source": "a/", "kind": "UnexpectedToken" },

@@ -10,8 +10,9 @@ repository-authored; no renderer/parser source or dependency is vendored.
 
 ## Finite syntax and mapping
 
-- ASCII letters/digits and the explicit Greek/symbol inventories in
-  `unicodemath_pilot.rs`; alphabetic runs consist of separate variable nodes.
+- Unicode Alphabetic characters outside the styled Letterlike Symbols and
+  Mathematical Alphanumeric Symbols blocks, ASCII digits and the explicit
+  Greek/symbol inventories in `unicodemath_pilot.rs`; alphabetic runs consist of separate variable nodes.
   Digit runs with one internal period/comma are numeric Text nodes.
 - Fractions consume adjacent factors, stop at operators/blanks, and associate
   left-to-right. `abc/d` includes all `abc` in the numerator; `a/b/c` nests left.
@@ -46,16 +47,23 @@ repository-authored; no renderer/parser source or dependency is vendored.
   more scripts after U+2061 require explicit grouping. Bare known names remain
   operators. Substring guessing remains unsupported.
 - Other names use explicit U+2061 (or the contextual `▒` alias), not a bare
-  blank/parenthesis heuristic. Names are ASCII identifiers matching
-  `[A-Za-z][A-Za-z0-9]*`, at most 64 bytes; the internal marker namespace is
+  blank/parenthesis heuristic. Each name word starts with a supported Alphabetic
+  character and contains those characters or ASCII digits, at most 64 UTF-8 bytes
+  for the entire name. U+00A0 connects words, following UTN 28 section 3.5;
+  ordinary ASCII spaces keep their operand boundary. Leading, trailing or repeated
+  U+00A0 and a word starting with a digit are refused. The internal marker namespace is
   reserved. Existing OperatorName nodes retain the literal name; it is not a
   control word, declaration or executable macro. `int⁡x` therefore differs from
   `∫▒x`. Name scripts work before Apply or immediately after it, including names
   sharing a built-in prefix, such as `sin2_i⁡x`. Canonical custom calls place
   Apply before name scripts, then a blank before the owned argument; for example
   `Foo⁡_(i)^(n) 〖x + y〗`. Ordinary `Foo x` remains a variable expression.
-  Grouped name expressions, non-ASCII/spaced names and rich-text properties are
-  not inferred; malformed or oversized names/arguments fail. MathML explicit
+  Greek, accented Latin, CJK and other supported Alphabetic names are literal,
+  without Unicode normalization or a change to case. For example `概率⁡x` and
+  `arg max⁡x` retain one upright name and one owned argument, including scripts
+  and use inside matrices/fractions. Styled math alphabets, unsupported combining
+  marks, punctuation, grouped name expressions and rich-text properties remain
+  outside this grammar; malformed or oversized names/arguments fail. MathML explicit
   Apply and OMML function owners reconstruct bounded names and scripts without
   turning ordinary unowned XML text into functions. AsciiMath cannot express
   these custom heads and refuses them. A bare custom head without an argument

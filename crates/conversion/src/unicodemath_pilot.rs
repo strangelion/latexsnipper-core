@@ -10,6 +10,10 @@ const NARY_PLACEMENT_BITS: u16 = 7;
 const NARY_GROWTH_BITS: u16 = 64 | 128;
 const NARY_ALLOWED_BITS: u16 = NARY_PLACEMENT_BITS | 8 | 16 | NARY_GROWTH_BITS;
 
+fn is_plain_name_letter(ch: char) -> bool {
+    ch.is_alphabetic() && !matches!(ch as u32, 0x2100..=0x214f | 0x1d400..=0x1d7ff)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnicodeMathErrorKind {
     UnexpectedToken,
@@ -233,7 +237,9 @@ fn lex(source: &str) -> Result<Vec<Token>, UnicodeMathError> {
             '√' | '∛' | '∜' => Kind::Root(ch),
             ch if MATRICES.iter().any(|(glyph, _)| *glyph == ch) => Kind::Matrix(ch),
             ch if NARY.iter().any(|(glyph, _)| *glyph == ch) => Kind::Nary(ch),
-            ch if ch.is_ascii_alphanumeric()
+            ch if is_plain_name_letter(ch)
+                || ch.is_ascii_digit()
+                || ch == '\u{00a0}'
                 || GREEK.iter().any(|(glyph, _)| *glyph == ch)
                 || matches!(ch, '∞' | 'ⅆ') =>
             {
@@ -456,6 +462,17 @@ impl Parser<'_> {
                 "named functions require a separate application grammar",
             ));
         }
+        if !allow_identifier
+            && self.tokens[start..self.pos]
+                .iter()
+                .any(|token| token.kind == Kind::Operand('\u{00a0}'))
+        {
+            return Err(error(
+                UnicodeMathErrorKind::UnsupportedSyntax,
+                self.tokens[start].offset,
+                "a spaced function in a script operand needs explicit grouping and application",
+            ));
+        }
         Ok(nodes)
     }
     fn atom(
@@ -675,7 +692,12 @@ impl Parser<'_> {
         self.depth(depth)?;
         let is_run = matches!(self.kind(), Some(Kind::Operand(_)));
         let ambiguous_builtin = self.ambiguous_builtin_run();
+        let start = self.pos;
         let base = self.atom(depth, true)?;
+        let spaced_name = is_run
+            && self.tokens[start..self.pos]
+                .iter()
+                .any(|token| token.kind == Kind::Operand('\u{00a0}'));
         let mut base = self.scripts(base, is_run, depth)?;
         let nary = nary_name(&base).is_some();
         let before_spaces = self.pos;
@@ -698,6 +720,13 @@ impl Parser<'_> {
             ));
         }
         if !is_function_head(&base) && !nary {
+            if spaced_name {
+                return Err(error(
+                    UnicodeMathErrorKind::UnsupportedSyntax,
+                    self.tokens[start].offset,
+                    "a no-break-space name requires explicit function application",
+                ));
+            }
             if ambiguous_builtin {
                 return Err(error(
                     UnicodeMathErrorKind::UnsupportedSyntax,
@@ -1241,9 +1270,9 @@ fn write_node(node: &LatexNode, depth: usize) -> Result<String, UnicodeMathError
                 return Ok(String::new());
             }
             if text.is_empty()
-                || !text
-                    .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || "+-=<>., ⅆ".contains(ch))
+                || !text.chars().all(|ch| {
+                    is_plain_name_letter(ch) || ch.is_ascii_digit() || "+-=<>., ⅆ".contains(ch)
+                })
             {
                 return Err(unsupported());
             }
@@ -1408,9 +1437,52 @@ pub(crate) fn function_name(node: &LatexNode) -> Option<&str> {
 pub(crate) fn is_identifier_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
-        && name.as_bytes()[0].is_ascii_alphabetic()
-        && name.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        && name.split('\u{00a0}').all(|word| {
+            word.chars().next().is_some_and(is_plain_name_letter)
+                && word
+                    .chars()
+                    .all(|ch| is_plain_name_letter(ch) || ch.is_ascii_digit())
+        })
         && !name.starts_with("LatexSnipperInternal")
+}
+
+// Collect literal name pieces before promotion, never TeX commands or scripts.
+pub(crate) fn function_identifier_text(node: &LatexNode) -> Option<String> {
+    fn collect(node: &LatexNode, text: &mut String, depth: usize) -> Option<()> {
+        if depth >= MAX_DEPTH {
+            return None;
+        }
+        match node {
+            LatexNode::Text(piece)
+                if !piece.is_empty()
+                    && piece.chars().all(|ch| {
+                        is_plain_name_letter(ch) || ch.is_ascii_digit() || ch == '\u{00a0}'
+                    }) =>
+            {
+                if text.len() + piece.len() > 64 {
+                    return None;
+                }
+                text.push_str(piece);
+            }
+            LatexNode::Greek(name) => {
+                let glyph = GREEK.iter().find(|(_, mapped)| *mapped == name)?.0;
+                if text.len() + glyph.len_utf8() > 64 {
+                    return None;
+                }
+                text.push(glyph);
+            }
+            LatexNode::Sequence(nodes) | LatexNode::Group(nodes) if !nodes.is_empty() => {
+                for node in nodes {
+                    collect(node, text, depth + 1)?;
+                }
+            }
+            _ => return None,
+        }
+        Some(())
+    }
+    let mut text = String::new();
+    collect(node, &mut text, 0)?;
+    Some(text)
 }
 
 pub(crate) fn custom_function_name(node: &LatexNode) -> Option<&str> {
@@ -1440,20 +1512,11 @@ pub(crate) fn is_custom_function_head(node: &LatexNode) -> bool {
 // Promotion happens only after an explicit Apply, with no speculative parsing.
 fn promote_function_head(node: &LatexNode) -> Option<LatexNode> {
     fn plain(node: &LatexNode, name: &mut String) -> Option<()> {
-        match node {
-            LatexNode::Text(text) if text.bytes().all(|byte| byte.is_ascii_alphanumeric()) => {
-                if name.len() + text.len() > 64 {
-                    return None;
-                }
-                name.push_str(text);
-            }
-            LatexNode::Group(nodes) | LatexNode::Sequence(nodes) => {
-                for node in nodes {
-                    plain(node, name)?;
-                }
-            }
-            _ => return None,
+        let piece = function_identifier_text(node)?;
+        if name.len() + piece.len() > 64 {
+            return None;
         }
+        name.push_str(&piece);
         Some(())
     }
     fn replace_head(node: &LatexNode, prefix: &str) -> Option<LatexNode> {
