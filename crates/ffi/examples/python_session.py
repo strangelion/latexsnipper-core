@@ -154,6 +154,37 @@ class Library:
     def health(self, handle: int) -> dict[str, Any]:
         return self._decode(self._dll.latexsnipper_session_health(handle))
 
+    def completion_capabilities(self) -> dict[str, Any]:
+        # Additive symbols are resolved lazily for compatibility with older DLLs.
+        function = self._dll.latexsnipper_formula_completion_capabilities
+        function.argtypes = []
+        function.restype = ctypes.c_void_p
+        return self._decode(function())
+
+    def _completion_request(self, symbol: str, request: dict[str, Any]) -> dict[str, Any]:
+        function = getattr(self._dll, symbol)
+        function.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+        function.restype = ctypes.c_void_p
+        encoded = self._encode(request)
+        buffer = ctypes.create_string_buffer(encoded)
+        return self._decode(function(ctypes.cast(buffer, ctypes.c_void_p), len(encoded)))
+
+    def complete_formula(self, source: str, *, cursor: int, revision: int) -> dict[str, Any]:
+        """Cursor is a UTF-8 byte offset; revisions remain exact decimal strings."""
+        return self._completion_request("latexsnipper_formula_complete", {
+            "source": source, "inputFormat": "latex", "cursor": cursor, "revision": str(revision),
+        })
+
+    def apply_formula_completion(
+        self, source: str, *, cursor: int, revision: int,
+        snapshot: dict[str, Any], candidate_id: str,
+    ) -> dict[str, Any]:
+        """Return one explicitly selected edit; this never changes a host document."""
+        return self._completion_request("latexsnipper_formula_completion_apply", {
+            "source": source, "inputFormat": "latex", "cursor": cursor, "revision": str(revision),
+            "snapshot": snapshot, "candidateId": candidate_id,
+        })
+
     def warmup(self, handle: int, profile: str) -> dict[str, Any]:
         request_bytes = self._encode({"profile": profile})
         request_buffer = ctypes.create_string_buffer(request_bytes)

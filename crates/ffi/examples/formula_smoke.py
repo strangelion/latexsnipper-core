@@ -109,15 +109,67 @@ def main() -> None:
         raise AssertionError("invalid UTF-8 succeeded")
 
     # New symbols must not alter persistent sessions or ownership/close behavior.
+    completion_caps = library.completion_capabilities()
+    assert completion_caps["inputFormats"] == ["latex"]
+    assert completion_caps["offsetEncoding"] == "utf-8-bytes"
+    assert completion_caps["maxResultDataBytes"] == 1024 * 1024
+    source = "中\\fr"
+    cursor = len(source.encode("utf-8"))
+    revision = 2**64 - 1
+    for _ in range(32):
+        completion = library.complete_formula(source, cursor=cursor, revision=revision)
+        assert completion["snapshot"]["revision"] == str(revision)
+        assert completion["completion"]["context"]["revision"] == str(revision)
+        applied = library.apply_formula_completion(
+            source, cursor=cursor, revision=revision,
+            snapshot=completion["snapshot"], candidate_id="builtin:frac",
+        )
+        assert applied == {
+            "source": "中\\frac{}{}", "cursor": 9,
+            "tabStops": [{"start": 9, "end": 9}, {"start": 11, "end": 11}],
+        }
+    for override, code in [
+        ({"revision": 0}, "STALE_CONTEXT"),
+        ({"source": "中\\sr"}, "STALE_CONTEXT"),
+        ({"cursor": 1}, "INVALID_CURSOR"),
+        ({"candidate_id": "external:untrusted"}, "UNKNOWN_CANDIDATE"),
+    ]:
+        try:
+            library.apply_formula_completion(**{
+                "source": source, "cursor": cursor, "revision": revision,
+                "snapshot": completion["snapshot"], "candidate_id": "builtin:frac", **override,
+            })
+        except CoreError as error:
+            assert error.code == code, (code, error.code)
+        else:
+            raise AssertionError(f"expected completion error {code}")
+    for symbol in ("latexsnipper_formula_complete", "latexsnipper_formula_completion_apply"):
+        function = getattr(library._dll, symbol)
+        for length in (0, 1, 1024 * 1024 + 1):
+            try:
+                library._decode(function(None, length))
+            except CoreError as error:
+                assert error.code == "INVALID_ARGUMENT"
+            else:
+                raise AssertionError("null completion request succeeded")
+        invalid = ctypes.create_string_buffer(b"\xff")
+        try:
+            library._decode(function(ctypes.cast(invalid, ctypes.c_void_p), 1))
+        except CoreError as error:
+            assert error.code == "INVALID_JSON"
+        else:
+            raise AssertionError("invalid completion UTF-8 succeeded")
     with tempfile.TemporaryDirectory() as models:
         with Session(library, models, max_threads=1) as session:
             assert isinstance(session.health(), dict)
             assert session.warmup("formula")["alreadyWarm"] is False
             assert session.warmup("formula")["alreadyWarm"] is True
             assert "<m:f>" in library.convert_formula(samples["latex"], input_format="latex", output_format="omml")["content"]
+            assert library.complete_formula("\\fr", cursor=3, revision=0)["completion"]["candidates"]
+            assert session.warmup("formula")["alreadyWarm"] is True
             assert isinstance(session.health(), dict)
         assert session.closed
-    print(f"C formula smoke: {successful} converted, {rejected} explicitly rejected; errors and sessions passed")
+    print(f"C formula smoke: {successful} converted, {rejected} explicitly rejected; completion, errors and sessions passed")
 
 
 if __name__ == "__main__":

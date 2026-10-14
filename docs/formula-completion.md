@@ -3,7 +3,7 @@
 更新：2026-10-15。
 
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
-`latexsnipper_conversion::formula_completion`。Rust 与 JSONL 路线已有；C/Python/WASM-JS
+`latexsnipper_conversion::formula_completion`。Rust、C 与 JSONL 路线已有；Python/WASM-JS
 公共绑定与实际编辑器接入仍待完成。
 
 ## 使用
@@ -103,6 +103,22 @@ Core 重新生成被选 ID 的编辑和占位符，返回载荷里的替换范�
 同步执行的硬取消、队列、节流和子进程生命周期由宿主负责，不在每次按键重启进程。
 
 详见 [JSONL 动作与错误边界](../crates/worker/README.md#model-free-formula-completion)。
+
+## C 公共绑定
+
+`latexsnipper_session.h` 新增 `latexsnipper_formula_completion_capabilities()`、
+`latexsnipper_formula_complete(request_json, request_json_len)` 和
+`latexsnipper_formula_completion_apply(request_json, request_json_len)`。
+查询/接受的请求与 JSONL `params` 一致，返回原 v3 envelope，`data` 形状也一致。
+未知字段、无效 UTF-8 或版本编码使用既有 C `INVALID_JSON`；空指针、零长度或
+请求超过 1 MiB 为 `INVALID_ARGUMENT`，其他补全错误代码同 JSONL。
+
+每个返回指针恰好用 `latexsnipper_string_free` 释放一次，指针输入仍须由宿主
+保证可读且在调用期间有效。函数同步且无句柄，不持有识别会话锁，
+补全结果 `data` 单独限制为 1 MiB，不改变旧转换的 256 KiB 预算。
+旧 `latexsnipper_formula_capabilities()` 数组和 session ABI v1 不变；先探测新增符号，
+不能假设旧 DLL 已支持。`crates/ffi/examples/python_session.py` 提供零依赖 ctypes 示例；
+它是 C 参考调用者，不代表正式 PyO3 wheel 的补全接口已完成。
 
 相关资料：[辅助路线图](formula-assistance-roadmap.md)、
 [收尾清单](closing-issue-ledger.md)。

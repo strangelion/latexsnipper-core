@@ -296,6 +296,13 @@ the action schema and examples.
 
 ## Opaque C application sessions
 
+The additive `latexsnipper_formula_completion_capabilities`,
+`latexsnipper_formula_complete`, and `latexsnipper_formula_completion_apply`
+symbols expose the same Core completion requests/snapshots as JSONL. Feature-detect
+them before using older libraries. They are stateless, use v3 envelopes and
+`latexsnipper_string_free`, and retain the session ABI and conversion capability
+array. See [completion boundaries](formula-completion.md#c-公共绑定).
+
 `crates/ffi/include/latexsnipper_session.h` declares the stable v1 C session
 ABI. It creates process-local `u64` handles rather than returning Rust pointers,
 serializes calls per handle, bounds the registry to 64 live sessions, catches

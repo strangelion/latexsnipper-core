@@ -46,6 +46,29 @@ LATEXSNIPPER_API char *latexsnipper_formula_convert(
     const uint8_t *request_json,
     size_t request_json_len);
 
+/* Additive, model-free structured completion. Feature-detect these symbols;
+ * existing session ABI v1 and formula_capabilities array are unchanged.
+ * Complete request: {"source":"\\fr","inputFormat":"latex","cursor":3,
+ * "revision":"42"}. Only finite LaTeX editing grammar is supported.
+ * Offsets/ranges are UTF-8 bytes, not UTF-16 editor positions. Revisions are
+ * canonical decimal u64 strings (no JSON numbers, leading zeros or exponent).
+ * Complete data has snapshot and completion (context/candidates).
+ * Apply sends CURRENT source/inputFormat/cursor/revision, the previous snapshot
+ * verbatim, and candidateId; do not send insert/replace or the result tree.
+ * Core rechecks schema/hash/revision/cursor and regenerates the selected edit.
+ * Apply data has source/cursor/absolute tabStops. Snapshot is not authorization.
+ * The host owns explicit acceptance, undo, revision updates and document writes.
+ * No model/session/file access; no retries, network, macro execution or deadline.
+ * Request <=1 MiB, source <=64 KiB, editing nodes <=4096, depth <64,
+ * candidates <=128, serialized data <=1 MiB (excluding envelope).
+ * Failures: INVALID_ARGUMENT (buffer/length), INVALID_JSON (closed schema),
+ * INVALID_CURSOR, LIMIT_EXCEEDED, STALE_CONTEXT, UNKNOWN_CANDIDATE,
+ * OUTPUT_TOO_LARGE. Free every response once using latexsnipper_string_free.
+ */
+LATEXSNIPPER_API char *latexsnipper_formula_completion_capabilities(void);
+LATEXSNIPPER_API char *latexsnipper_formula_complete(const uint8_t *request_json, size_t request_json_len);
+LATEXSNIPPER_API char *latexsnipper_formula_completion_apply(const uint8_t *request_json, size_t request_json_len);
+
 /* Additive instance-local registered conversion ABI v1, distinct from OCR
  * session handles. Every response uses the v3 envelope and string_free.
  * Create JSON: {"schemaVersion":1}, or the same plus "pluginStore" (existing
