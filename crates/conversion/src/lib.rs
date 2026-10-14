@@ -13,6 +13,7 @@ pub mod document_converter;
 pub mod docx_reader;
 pub mod export_format;
 mod extrema;
+pub mod formula_completion;
 pub mod formula_fragment;
 #[cfg(feature = "formula-layout")]
 pub mod formula_layout_adapter;
