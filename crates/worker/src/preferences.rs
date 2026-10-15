@@ -141,7 +141,7 @@ fn key(raw: &str) -> Result<[u8; 32]> {
         return Err(invalid());
     }
     let mut key = [0; 32];
-    for (i, pair) in raw.as_bytes().chunks_exact(2).enumerate() {
+    for (i, pair) in raw.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         key[i] = digit(pair[0])
             .zip(digit(pair[1]))
             .map(|(a, b)| a * 16 + b)

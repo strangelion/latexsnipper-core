@@ -140,7 +140,7 @@ fn key(encoded: &str) -> Result<[u8; 32]> {
         ));
     }
     let mut key = [0; 32];
-    for (index, pair) in encoded.as_bytes().chunks_exact(2).enumerate() {
+    for (index, pair) in encoded.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         key[index] = digit(pair[0])
             .zip(digit(pair[1]))
             .map(|(high, low)| high * 16 + low)
@@ -181,12 +181,18 @@ fn stale() -> AdapterError {
 }
 
 fn next_token(counter: &AtomicU64) -> Result<u64> {
-    counter
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-            value.checked_add(1)
-        })
-        .map(|value| value + 1)
-        .map_err(|_| error("LIMIT_EXCEEDED", "Preference token space exhausted."))
+    // Keep the 1.88 MSRV without using fetch_update (deprecated in 1.99) or
+    // its newer replacement. Relaxed ordering only allocates routing identities.
+    let mut current = counter.load(Ordering::Relaxed);
+    loop {
+        let next = current
+            .checked_add(1)
+            .ok_or_else(|| error("LIMIT_EXCEEDED", "Preference token space exhausted."))?;
+        match counter.compare_exchange_weak(current, next, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return Ok(next),
+            Err(actual) => current = actual,
+        }
+    }
 }
 
 impl State {
@@ -380,6 +386,43 @@ mod tests {
         let counter = AtomicU64::new(u64::MAX - 1);
         assert_eq!(next_token(&counter).unwrap(), u64::MAX);
         assert!(next_token(&counter).is_err());
+        assert_eq!(counter.load(Ordering::Relaxed), u64::MAX);
+    }
+    #[test]
+    fn token_counter_stays_unique_under_concurrent_allocation_and_exhaustion() {
+        let counter = AtomicU64::new(0);
+        let mut allocated = std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        (0..128)
+                            .map(|_| next_token(&counter).unwrap())
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .flat_map(|worker| worker.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+        allocated.sort_unstable();
+        assert_eq!(allocated, (1..=1024u64).collect::<Vec<_>>());
+        let counter = AtomicU64::new(u64::MAX - 10);
+        let mut final_tokens = std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..32)
+                .map(|_| scope.spawn(|| next_token(&counter).ok()))
+                .collect();
+            workers
+                .into_iter()
+                .filter_map(|worker| worker.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+        final_tokens.sort_unstable();
+        assert_eq!(
+            final_tokens,
+            ((u64::MAX - 9)..=u64::MAX).collect::<Vec<_>>()
+        );
         assert_eq!(counter.load(Ordering::Relaxed), u64::MAX);
     }
     #[test]
