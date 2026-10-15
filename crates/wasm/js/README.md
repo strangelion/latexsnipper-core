@@ -167,7 +167,31 @@ the genuine current policy/catalog when accepting. Clear/reset must advance the
 scope generation. Full/slim generated Node packages and a real slim browser
 Worker cover private filtering, sensitive allow, Unicode edits, stale refusal,
 hard abort/timeout, no acceptance replay and recovery; actual editors/mobile
-hosts and preference storage/ranking remain separate work.
+hosts and persistent preference storage remain separate work. Explicit in-memory
+preference ranking is available through the separate opt-in API below.
+
+## Owned preference feedback
+
+Both full and conversion-only WASM packages export
+`create_formula_preferences_v1` and `formula_preference_capabilities_v3`.
+`FormulaPreferences` owns a synchronous WASM object; use
+`WasmWorkerClient.createFormulaPreferences(configuration)` for the bounded
+asynchronous `WorkerFormulaPreferences` route. Call `close()` explicitly.
+
+Configuration is `{schemaVersion:1,scope,keyHex}`; the host supplies the exact
+completion scope and a fresh private random 32-byte key encoded as lowercase hex.
+Web Crypto is also required for instance-isolated feedback identities.
+Ranking and feedback default to off. There is no automatic capture, persistence,
+network IO or model dependency. Explicit commands support capture/discard,
+validated acceptance/undo, deterministic ranking and clear with a newer scope
+generation and different key. All u64 values remain decimal strings.
+
+Each module allows 64 open owners, each owner 128 pending captures and 1024 events.
+Metadata is capped at 4 KiB, editing commands/data at 1 MiB. Worker requests own
+their input; hard cancellation, timeout or lost oversized responses invalidate
+old owners and queued feedback without recreation or replay. Queued cancellation
+does not restart active work. These identities are not permission credentials.
+See [the lifecycle and command contract](../../../docs/formula-preferences-wasm.md).
 
 ## Model-free formula conversion
 

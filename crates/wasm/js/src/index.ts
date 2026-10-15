@@ -6,4 +6,6 @@ export * from "./formula.js";
 export * from "./completion.js";
 export * from "./registry.js";
 export * from "./worker-registry.js";
+export * from "./preferences.js";
+export * from "./worker-preferences.js";
 export * from "./types.js";

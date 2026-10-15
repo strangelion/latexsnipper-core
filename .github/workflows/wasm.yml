@@ -113,6 +113,8 @@ jobs:
           node scripts/conversion-profile-smoke.mjs --full-prefix=wasm
           node scripts/registry-package-smoke.mjs wasm-conversion-nodejs
           node scripts/linear-package-smoke.mjs wasm-conversion-nodejs
+          node scripts/preference-package-smoke.mjs wasm-conversion-nodejs
+          node scripts/preference-package-smoke.mjs wasm-nodejs
       - name: Upload browser package
         uses: actions/upload-artifact@v7
         with:

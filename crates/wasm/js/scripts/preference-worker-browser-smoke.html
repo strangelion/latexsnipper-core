@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Preference Worker conformance</title>
+<link rel="icon" href="data:,">
+<pre id="result">Running real preference Worker checks...</pre>
+<script type="module">
+import { WasmWorkerClient } from "../dist/index.js";
+import { preferenceProof } from "./preference-proof.mjs";
+const verify = (condition, message) => { if (!condition) throw new Error(message); };
+const workerUrl = new URL("../dist/worker-entry.js", import.meta.url);
+const profile = new URL(location.href).searchParams.get("profile") ?? "conversion";
+if (!["conversion", "full"].includes(profile)) throw new Error("Unsupported preference profile");
+const moduleUrl = new URL(`../../../../target/wasm-${profile}-web/latexsnipper_wasm.js`, import.meta.url).href;
+const workers = [], clients = [];
+let entered;
+window.preferenceWorkerProof = (async () => {
+  try {
+    const client = new WasmWorkerClient({ workerUrl, moduleUrl }); clients.push(client);
+    await client.ready();
+    const functional = await preferenceProof((configuration) => client.createFormulaPreferences(configuration),
+      (input) => client.completeFormulaFragments(input));
+    const lifecycle = new WasmWorkerClient({ workerUrl,
+      moduleUrl: new URL(`./formula-worker-browser-fixture.mjs?profile=${profile}`, import.meta.url).href,
+      workerFactory() {
+        const worker = new Worker(workerUrl, { type: "module" });
+        const sent = []; workers.push(sent);
+        worker.addEventListener("message", (event) => { if (event.data.stage === "fixture-spin") entered?.(); });
+        return {
+          postMessage(message) { sent.push(message.type); worker.postMessage(message); },
+          terminate() { worker.terminate(); },
+          set onmessage(callback) { worker.onmessage = callback; },
+          set onerror(callback) { worker.onerror = callback; },
+          set onmessageerror(callback) { worker.onmessageerror = callback; } };
+      } });
+    clients.push(lifecycle); await lifecycle.ready();
+    const configuration = { schemaVersion: 1, scope: { userSha256: "a".repeat(64), projectSha256: null, documentSha256: null, generation: "0" }, keyHex: "ab".repeat(32) };
+    const request = { source: "fixture:infinite", cursor: 0, revision: "0", inputFormat: "latex",
+      catalog: { commands: { scope: configuration.scope, definitions: [] }, policy: { retrievalEnabled: false, sensitiveDocument: false, allowInSensitiveDocument: false }, fragments: [] } };
+    for (const mode of ["abort", "acceptance-timeout"]) {
+      const owner = await lifecycle.createFormulaPreferences(configuration);
+      const capture = await owner.captureContext(); verify(capture.ok, "capture before dispatch");
+      const controller = new AbortController();
+      const spun = new Promise((resolve) => { entered = resolve; });
+      const command = mode === "abort" ? { kind: "rank-fragments", request } : { kind: "record-acceptance", captureId: capture.data.captureId,
+        eventId: "1", request: { ...request, snapshot: { schemaVersion: 3, sourceSha256: "a".repeat(64), catalogSha256: "b".repeat(64), revision: "0", cursor: 0 }, candidateId: "fragment:missing" } };
+      const pending = owner.command(command, { signal: controller.signal, timeoutMillis: 1000 });
+      const failed = pending.then(() => { throw new Error("Stalled preference unexpectedly completed"); }, (cause) => cause);
+      await spun;
+      const queued = owner.command({ kind: "undo", receiptId: "old-feedback" }).then(() => { throw new Error("Queued feedback was replayed"); }, (cause) => cause);
+      const count = workers.length;
+      if (mode === "abort") controller.abort();
+      const reason = await failed;
+      verify(reason.detail.code === (mode === "abort" ? "CANCELLED" : "WORKER_TASK_TIMEOUT"), "hard interruption");
+      verify((await queued).detail.code === "WORKER_PREFERENCES_STALE", "queued stateful feedback refused");
+      await lifecycle.ready();
+      verify(workers.length === count + 1 && !workers.at(-1).some((type) => type.startsWith("formula-preferences-")), "no implicit recreation or replay");
+      const stale = await owner.info().then(() => { throw new Error("Old owner survived restart"); }, (cause) => cause);
+      verify(stale.detail.code === "WORKER_PREFERENCES_STALE", "old object invalidation");
+      const fresh = await lifecycle.createFormulaPreferences(configuration);
+      const info = await fresh.info(); verify(info.ok && info.data.eventCount === 0 && !info.data.policy.feedbackEnabled, "fresh disabled state");
+      await fresh.close();
+    }
+    const result = { profile, ...functional, hardAbort: true, acceptanceTimeout: true, noFeedbackReplay: true, oldOwnersInvalidated: true };
+    document.querySelector("#result").textContent = JSON.stringify(result, null, 2);
+    return result;
+  } catch (cause) {
+    document.querySelector("#result").textContent = cause.stack ?? String(cause); throw cause;
+  } finally { for (const client of clients) client.terminate(); }
+})();
+</script>

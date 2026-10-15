@@ -6,7 +6,7 @@
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
 公共绑定均有 v1 及独立的定义驱动签名/作用域 v2 接口；
 Rust/C/Python/JSONL/WASM-JS 另有独立的私有片段编辑 schema 3；
-Rust/C/Python/JSONL 另有显式内存态偏好/重置与频率排序基础，WASM-JS 偏好绑定、持久化及实际编辑器接入仍待完成。
+Rust/C/Python/JSONL/WASM-JS 另有显式内存态偏好/重置与频率排序基础，持久化及实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -159,7 +159,7 @@ JSONL 新增 `formula.complete.scoped` / `formula.completion.apply.scoped`，传
 无效声明返回 `INVALID_CATALOG`，未知 JSON 字段仍为 `INVALID_PARAMS`，超预算明确失败。
 
 此签名接口不读取符号资产、保存偏好或上传公式；该声明不授予渲染/转换/插件执行权限。
-独立 Rust/C/Python/JSONL 偏好模块已有显式开关与内存态清空；WASM-JS 偏好绑定、持久化及私有存储检索宿主仍是后续工作；显式传入片段的边界见下节。
+独立 Rust/C/Python/JSONL/WASM-JS 偏好模块已有显式开关与内存态清空；持久化及私有存储检索宿主仍是后续工作；显式传入片段的边界见下节。
 
 ## 显式私有片段
 
@@ -204,7 +204,7 @@ label 为不含控制字符的单行非空文字，最多 128 字节。源码保
 
 此片段接口不读取数据库、目录或私人历史，不保存公式、偏好或学习反馈，不联网。宿主先取得检索授权再提供目录；
 这些布尔策略和哈希只供确定性隔离与复验，不能替代用户同意或授予插件权限。
-本片段接口不自动记录偏好；Rust/C/Python/JSONL 的独立内存态反馈/排序基础见 [偏好边界](formula-completion-preferences.md)，WASM-JS 偏好绑定、学习和实际编辑器接入仍独立待办。
+本片段接口不自动记录偏好；Rust/C/Python/JSONL/WASM-JS 的独立内存态反馈/排序基础见 [偏好边界](formula-completion-preferences.md)，持久学习和实际编辑器接入仍独立待办。
 存储/检索失败或有效目录不合法时，宿主仍可独立查询 v1/v2 的确定性候选；接受必须使用产生该候选的原协议和当前快照，
 不得将失败的片段接受降级为其他协议或自动写入。裸源码形状检查也可单独使用 `formula_fragment::validate_latex_fragment_source`，不会替调用方剥壳或改写输入。
 

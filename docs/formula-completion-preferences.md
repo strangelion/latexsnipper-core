@@ -1,6 +1,6 @@
 # Core 补全偏好边界
 
-更新：2026-10-15。当前是 `formula_completion::preferences` 的 Rust 进程内基础、C ABI、正式 Python 对象及 JSONL 绑定，
+更新：2026-10-15。当前是 `formula_completion::preferences` 的 Rust 进程内基础、C ABI、正式 Python 对象、JSONL 及 WASM-JS 绑定，
 不是已接入应用的学习器。现有各绑定的补全接口均不自动记录反馈。
 
 ## 能力与接入顺序
@@ -85,8 +85,11 @@ C ABI 另有显式创建/命令/关闭及有限句柄和反馈标识，复用同
 JSONL 另提供显式偏好创建/命令/关闭，使用原始 JSON 验证和随机 worker 实例命名空间；
 退出、EOF、异常及关闭均释放状态，重启后旧 owner/反馈不能别名到新对象，见 [JSONL 绑定](../crates/worker/README.md#explicit-volatile-preference-owners)。
 
-当前没有 WASM-JS 偏好接口、状态导出/导入、跨进程持久句柄、磁盘存储、用户/项目层级合并或云端模型。
-后续先补宿主授权检索与绑定、持久存储的清空/恢复边界，再比较排序后端与实际编辑体验。
+WASM-JS 另有完整/精简包共用的拥有对象及 Worker 路线；实例隔离、默认关闭、撤销/清空边界与 Core 一致，
+重启或丢失有界响应时不重放反馈，见 [WASM / JS 接口](formula-preferences-wasm.md)。
+
+当前没有状态导出/导入、跨进程持久句柄、磁盘存储、用户/项目层级合并或云端模型。
+后续先补宿主授权检索、持久存储的清空/恢复边界，再比较排序后端与实际编辑体验。
 在完成固定基准和真实反馈授权前，不宣称 Top-1、接受率或节省输入的提升。
 
 相关资料：[补全接口](formula-completion.md)、[辅助计划](formula-assistance-roadmap.md)。

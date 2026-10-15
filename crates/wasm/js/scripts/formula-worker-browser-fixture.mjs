@@ -32,6 +32,21 @@ export function convert_formula_v3(content, input, output, mode) {
 
 export const convert_formula_fragment_v3 = core.convert_formula_fragment_v3;
 
+export function create_formula_preferences_v1(configurationJson) {
+  const owner = core.create_formula_preferences_v1(configurationJson);
+  return {
+    close: () => owner.close(), free: () => owner.free(),
+    command(commandJson) {
+      const command = JSON.parse(commandJson);
+      if (command.request?.source === "fixture:infinite") {
+        postMessage({ protocolVersion: 1, type: "progress", requestId: "fixture:probe", stage: "fixture-spin", progress: 0 });
+        spin();
+      }
+      return owner.command(commandJson);
+    },
+  };
+}
+
 export function complete_formula_v3(requestJson) {
   const request = JSON.parse(requestJson);
   if (request.source === "fixture:infinite") {

@@ -7,8 +7,10 @@ import { validateWorkerRequest } from "./worker-request-validation.js";
 import type { WasmFormulaApi, WasmFormulaFragmentApi } from "./formula.js";
 import { MAX_COMPLETION_ENVELOPE_BYTES, type WasmFormulaCompletionApi, type WasmScopedFormulaCompletionApi, type WasmFragmentFormulaCompletionApi } from "./completion.js";
 import { registryJson, type NativeFormulaRegistry, type WasmFormulaRegistryApi } from "./registry.js";
+import { preferenceJson, preferenceCommandBudget, type NativeFormulaPreferences, type WasmFormulaPreferenceApi } from "./preferences.js";
 
 interface WasmApi {
+  create_formula_preferences_v1?: WasmFormulaPreferenceApi["create_formula_preferences_v1"];
   complete_formula_fragments_v3?: WasmFragmentFormulaCompletionApi["complete_formula_fragments_v3"];
   apply_formula_completion_fragments_v3?: WasmFragmentFormulaCompletionApi["apply_formula_completion_fragments_v3"];
   complete_formula_scoped_v3?: WasmScopedFormulaCompletionApi["complete_formula_scoped_v3"];
@@ -42,6 +44,8 @@ let api: WasmApi | undefined;
 let queue = Promise.resolve();
 const registries = new Map<string, NativeFormulaRegistry>();
 let registrySequence = 0;
+const preferences = new Map<string, NativeFormulaPreferences>();
+let preferenceSequence = 0;
 
 function respond(message: WorkerResponse): void {
   scope.postMessage(message);
@@ -64,8 +68,9 @@ async function handle(request: WorkerRequest): Promise<void> {
     }
     if (request.type === "initialize") {
       api = undefined;
-      const previous = [...registries.values()];
+      const previous = [...registries.values(), ...preferences.values()];
       registries.clear();
+      preferences.clear();
       let cleanupFailed = false;
       for (const registry of previous) {
         try { try { registry.close(); } finally { registry.free(); } }
@@ -82,6 +87,33 @@ async function handle(request: WorkerRequest): Promise<void> {
     if (!api) {
       error(request.requestId, "WORKER_NOT_INITIALIZED", "Initialize the worker before use");
       return;
+    }
+    if (request.type === "formula-preferences-create") {
+      if (!api.create_formula_preferences_v1) { error(request.requestId, "WORKER_PREFERENCES_UNAVAILABLE", "Loaded package lacks a preference factory"); return; }
+      if (preferences.size >= 64 || !Number.isSafeInteger(preferenceSequence + 1)) {
+        error(request.requestId, "WORKER_PREFERENCES_LIMIT", "Preference owner or identifier limit reached"); return;
+      }
+      let owner: NativeFormulaPreferences;
+      try { owner = api.create_formula_preferences_v1(preferenceJson(request.configuration)); }
+      catch { error(request.requestId, "WORKER_PREFERENCES_CREATE_FAILED", "Preference creation was refused; check configuration and Web Crypto availability"); return; }
+      const ownerId = `preferences:${++preferenceSequence}`;
+      preferences.set(ownerId, owner);
+      respond({ protocolVersion: 1, type: "result", requestId: request.requestId, data: { ownerId } }); return;
+    }
+    if (request.type === "formula-preferences-command") {
+      const owner = preferences.get(request.ownerId);
+      if (!owner) { error(request.requestId, "WORKER_PREFERENCES_STALE", "Preference owner is unknown or was lost on restart"); return; }
+      const command = request.command;
+      let data: unknown;
+      if (command.kind === "close") {
+        const closed = owner.close();
+        if (closed.ok) { preferences.delete(request.ownerId); owner.free(); }
+        data = closed;
+      } else data = owner.command(preferenceJson(command, preferenceCommandBudget(command)));
+      if (new TextEncoder().encode(JSON.stringify(data)).byteLength > MAX_COMPLETION_ENVELOPE_BYTES) {
+        error(request.requestId, "WORKER_RESULT_LIMIT", "Preference envelope exceeds its result budget"); return;
+      }
+      respond({ protocolVersion: 1, type: "result", requestId: request.requestId, data }); return;
     }
     if (request.type === "formula-registry-create") {
       if (!api.create_formula_registry_v1) { error(request.requestId, "WORKER_REGISTRY_UNAVAILABLE", "Loaded package lacks a registry factory"); return; }

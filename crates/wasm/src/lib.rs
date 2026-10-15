@@ -8,6 +8,10 @@ pub use formula_completion::{
 };
 mod formula_registry;
 pub use formula_registry::{create_formula_registry_v1, FormulaRegistryWasm};
+mod formula_preferences;
+pub use formula_preferences::{
+    create_formula_preferences_v1, formula_preference_capabilities_v3, FormulaPreferencesWasm,
+};
 
 pub use formula_api::{
     api_info_v3, convert_formula_fragment_v3, convert_formula_v3, formula_capabilities_v3,

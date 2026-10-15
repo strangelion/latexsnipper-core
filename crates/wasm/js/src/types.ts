@@ -127,6 +127,8 @@ export interface ProgressEvent {
 }
 
 export type WorkerRequest =
+  | { protocolVersion: typeof WORKER_PROTOCOL_VERSION; type: "formula-preferences-create"; requestId: string; configuration: import("./preferences.js").FormulaPreferenceConfiguration }
+  | { protocolVersion: typeof WORKER_PROTOCOL_VERSION; type: "formula-preferences-command"; requestId: string; ownerId: string; command: import("./preferences.js").PreferenceWorkerCommand }
   | { protocolVersion: typeof WORKER_PROTOCOL_VERSION; type: "complete-formula-fragments"; requestId: string; input: import("./completion.js").FormulaFragmentCompletionRequest }
   | { protocolVersion: typeof WORKER_PROTOCOL_VERSION; type: "apply-formula-completion-fragments"; requestId: string; input: import("./completion.js").FormulaFragmentCompletionApplyRequest }
   | { protocolVersion: typeof WORKER_PROTOCOL_VERSION; type: "complete-formula-scoped"; requestId: string; input: import("./completion.js").ScopedFormulaCompletionRequest }

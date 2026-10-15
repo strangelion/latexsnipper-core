@@ -57,7 +57,7 @@ fn request<T: DeserializeOwned>(source: &str) -> Result<T, ApiErrorV3> {
     })
 }
 
-fn scoped_completion_error(value: ScopedFormulaCompletionError) -> ApiErrorV3 {
+pub(super) fn scoped_completion_error(value: ScopedFormulaCompletionError) -> ApiErrorV3 {
     error(
         match value {
             ScopedFormulaCompletionError::InvalidCatalog => "INVALID_CATALOG",

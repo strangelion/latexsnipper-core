@@ -27,6 +27,8 @@ CONTRACT_FILES = (
     "crates/wasm/js/src/client.ts",
     "crates/wasm/js/src/registry.ts",
     "crates/wasm/js/src/worker-registry.ts",
+    "crates/wasm/js/src/preferences.ts",
+    "crates/wasm/js/src/worker-preferences.ts",
     "crates/ffi/include/latexsnipper_session.h",
     "crates/ffi/include/latexsnipper_legacy.h",
     "crates/ffi/java/com/latexsnipper/core/NativeSessionBridge.java",

@@ -18,6 +18,7 @@ export interface WorkerRequestValidationOptions {
 }
 
 import { completionInputError, scopedCompletionInputError, fragmentCompletionInputError } from "./completion.js";
+import { preferenceConfigurationError, preferenceCommandError, preferenceCommandBudget, preferenceJson, type PreferenceWorkerCommand } from "./preferences.js";
 
 const MAX_REQUEST_ID_LENGTH = 256;
 const MAX_NAME_LENGTH = 256;
@@ -210,6 +211,23 @@ function validateRegistry(value: Record<string, unknown>): WorkerRequestValidati
   return { ok: true, request: value as unknown as WorkerRequest };
 }
 
+function validatePreferences(value: Record<string, unknown>): WorkerRequestValidationResult {
+  try {
+    if (value.type === "formula-preferences-create") {
+      if (!closed(value, ["protocolVersion", "type", "requestId", "configuration"]) || preferenceConfigurationError(value.configuration)) {
+        return invalid(value, "Invalid preference creation request");
+      }
+      preferenceJson(value.configuration);
+    } else {
+      if (!closed(value, ["protocolVersion", "type", "requestId", "ownerId", "command"]) || !isNonEmptyString(value.ownerId, 96) || preferenceCommandError(value.command)) {
+        return invalid(value, "Invalid preference command request");
+      }
+      preferenceJson(value.command, preferenceCommandBudget(value.command as PreferenceWorkerCommand));
+    }
+    return { ok: true, request: value as unknown as WorkerRequest };
+  } catch { return invalid(value, "Preference transfer budget or JSON encoding is invalid"); }
+}
+
 export function validateWorkerRequest(
   value: unknown,
   options: WorkerRequestValidationOptions = {},
@@ -250,6 +268,9 @@ export function validateWorkerRequest(
         value.type === "apply-formula-completion" || value.type === "apply-formula-completion-scoped" || value.type === "apply-formula-completion-fragments");
       return cause ? invalid(value, cause) : { ok: true, request: value as unknown as WorkerRequest };
     }
+    case "formula-preferences-create":
+    case "formula-preferences-command":
+      return validatePreferences(value);
     case "formula-registry-create":
     case "formula-registry-command":
       return validateRegistry(value);
