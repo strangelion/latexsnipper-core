@@ -49,6 +49,7 @@ or `error`). A successful recognition keeps the authoritative `document` in
 | `formula.complete` | Query bounded LaTeX editing structure and candidate edits without a model. |
 | `formula.completion.apply` | Revalidate a snapshot and return an explicitly selected canonical edit. |
 | `formula.preferences.create` | Create an independent, default-off volatile preference owner. |
+| `formula.preferences.restore` | Explicitly authenticate a checkpoint and create a NEW default-off owner. |
 | `formula.preferences.command` | Query ranking or explicitly capture/record/undo/reset feedback. |
 | `formula.preferences.close` | Release one owner and invalidate its feedback tokens. |
 | `worker.status` | Read live and maximum session counts. |
@@ -201,6 +202,7 @@ new worker's owners. This is identity isolation, not authentication or consent.
 | `record-acceptance` | `captureId, eventId, request` | `{receiptId:string|null}` |
 | `undo` | `receiptId` | `{undone:true}` |
 | `clear` | `generation, keyHex` | cleared info |
+| `export-checkpoint` | `storageKeyHex, checkpoint, permission` | `{snapshotJson, checkpoint}` |
 
 Policy explicitly requires `rankingEnabled`, `feedbackEnabled`, and
 `allowSensitiveFeedback` booleans. Sensitive template retrieval is not permission
@@ -227,7 +229,7 @@ EOF, shutdown, error unwind and handler-panic cleanup release owners together wi
 recognition sessions. Clear-all never resets a live instance's identity sequence.
 `worker.status` adds `livePreferenceOwners/maxPreferenceOwners`, independently of
 recognition session counts. No original source, symbol name or timestamp is stored
-in feedback; there is no disk save, state import/export, cross-document merge or model.
+in feedback; there is no automatic disk save/restore, cross-document merge or model.
 These are logical cleanup claims, not secure heap/backup erasure guarantees.
 
 Limits: 64 owners, 128 pending captures per owner, 1024 events including undos per
@@ -244,6 +246,42 @@ The supervisor owns timeouts/hard cancellation and MUST discard all owners/token
 after restart. Never replay old acceptance/undo commands during recovery. This
 trusted local interface must not be forwarded directly to untrusted plugins/MCP.
 See [Core preference boundaries](../../docs/formula-completion-preferences.md).
+
+### Explicit authenticated checkpoints
+
+Capabilities advertise `authenticatedCheckpoints: true` separately from
+`persistence: false` and `automaticStorage: false`. Core performs no disk IO,
+secret storage, consent restoration or automatic replay. The trusted supervisor
+may explicitly export/restore bounded authenticated data after independent consent.
+
+`export-checkpoint` requires a separate, nonzero random `storageKeyHex` (32 bytes,
+64 lowercase hex characters), a strictly increasing positive canonical-decimal
+u64 `checkpoint`, and a closed `permission` with both `storageEnabled` and
+`allowSensitiveStorage` booleans. Feedback/retrieval consent does not grant storage
+consent; turning learning off does not remove existing sensitive-storage gates.
+Export advances the owner's checkpoint. On a host write failure, explicitly retry
+saving the SAME returned bytes, not exporting an old sequence or replaying feedback.
+
+`formula.preferences.restore` parameters are `{schemaVersion:1, scope, keyHex,
+storageKeyHex, expectedCheckpoint, snapshotJson, permission}`. The snapshot string
+is at most 256 KiB UTF-8; the ENTIRE request LINE still has the 1 MiB limit.
+Restore parameters are exempt from the 4 KiB metadata limit, not from closed raw
+JSON parsing or the checkpoint budget. Scope and expected checkpoint MUST come
+from current trusted supervisor state, never from the untrusted snapshot body.
+HMAC, feedback-key binding, exact scope/checkpoint and sensitive-storage consent
+are rechecked. Restore creates a fresh owner in the current worker namespace,
+with every learning switch OFF, no captures/receipts and preserved event/checkpoint
+high-water marks. It does not mutate an existing owner or resurrect old tokens
+after process restart. The 64-owner limit also covers restored owners.
+
+Storage-disabled, authentication, freshness and sensitive-permission failures use
+`PREFERENCE_STORAGE_DISABLED`, `AUTHENTICATION_FAILED`, `STALE_CHECKPOINT` and
+`SENSITIVE_STORAGE_DENIED`; malformed snapshots use `INVALID_SNAPSHOT`, malformed
+closed parameters/revisions use `INVALID_PARAMS`, and scope/key/budget failures
+retain their existing explicit codes. Errors never echo private metadata.
+HMAC is not encryption or independent rollback protection: the supervisor owns
+protected keys/freshness, reset generations, single-writer/CAS, atomic commits and
+backup cleanup. See [checkpoint boundaries](../../docs/formula-preference-checkpoints.md).
 
 ## Limits and concurrency
 

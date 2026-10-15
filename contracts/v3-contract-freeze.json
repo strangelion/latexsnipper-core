@@ -65,7 +65,7 @@
     "crates/syntax/src": "f636808624324eb3702cd50914fed9dc1c185b3cd130cb1f0dc650491cd63bed",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
     "crates/wasm/src": "153e0f47ef65329f8469ea6b3521055de7c2677f03be66dcdf0df293d9f7e34d",
-    "crates/worker/src": "4af1a667116621d85e55bdc025ef194223f093b1415a2a8c6ccb21e7b8442a2b"
+    "crates/worker/src": "6ce21738ed78df6bf1b63fde1abebaeecd966e1cc6c1295a9c18cd4f34b35d55"
   },
   "schemaVersion": 1
 }

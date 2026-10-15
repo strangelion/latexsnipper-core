@@ -1,5 +1,6 @@
 //! Trusted, stream-owned volatile feedback. No session, global store or disk IO.
 use super::{bound_completion_result, WorkerError};
+use latexsnipper_conversion::formula_completion::preferences::persistence::*;
 use latexsnipper_conversion::formula_completion::{fragments::*, preferences::*, scoped::*};
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 use serde_json::{json, value::RawValue, Value};
@@ -33,6 +34,17 @@ struct Create {
     schema_version: u16,
     scope: FormulaDefinitionScope,
     key_hex: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Restore {
+    schema_version: u16,
+    scope: FormulaDefinitionScope,
+    key_hex: String,
+    storage_key_hex: String,
+    expected_checkpoint: Decimal,
+    snapshot_json: String,
+    permission: FormulaPreferenceStoragePermission,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -92,6 +104,11 @@ enum Command {
     Clear {
         generation: Decimal,
         key_hex: String,
+    },
+    ExportCheckpoint {
+        storage_key_hex: String,
+        checkpoint: Decimal,
+        permission: FormulaPreferenceStoragePermission,
     },
 }
 fn invalid() -> WorkerError {
@@ -164,6 +181,21 @@ fn core_error(value: FormulaPreferenceError) -> WorkerError {
         ),
     }
 }
+fn storage_error(value: FormulaPreferenceStorageError) -> WorkerError {
+    WorkerError::protocol(
+        match value {
+            FormulaPreferenceStorageError::Disabled => "PREFERENCE_STORAGE_DISABLED",
+            FormulaPreferenceStorageError::InvalidKey => "INVALID_ARGUMENT",
+            FormulaPreferenceStorageError::InvalidSnapshot => "INVALID_SNAPSHOT",
+            FormulaPreferenceStorageError::AuthenticationFailed => "AUTHENTICATION_FAILED",
+            FormulaPreferenceStorageError::ScopeMismatch => "SCOPE_MISMATCH",
+            FormulaPreferenceStorageError::StaleCheckpoint => "STALE_CHECKPOINT",
+            FormulaPreferenceStorageError::SensitiveStorageDenied => "SENSITIVE_STORAGE_DENIED",
+            FormulaPreferenceStorageError::LimitExceeded => "LIMIT_EXCEEDED",
+        },
+        value.to_string(),
+    )
+}
 fn valid_token(value: &str) -> Result<()> {
     if value.is_empty() || value.len() > 96 {
         Err(invalid())
@@ -173,7 +205,9 @@ fn valid_token(value: &str) -> Result<()> {
 }
 
 pub(super) fn capabilities() -> Value {
-    json!({"schemaVersion":1,"actions":["formula.preferences.create","formula.preferences.command","formula.preferences.close"],
+    json!({"schemaVersion":1,"actions":["formula.preferences.create","formula.preferences.restore","formula.preferences.command","formula.preferences.close"],
+        "authenticatedCheckpoints":true,"automaticStorage":false,"storagePermissionRequired":true,
+        "maxSnapshotBytes":FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES,
         "defaultEnabled":false,"automaticCapture":false,"persistence":false,"maxOwners":MAX_OWNERS,"maxCaptures":MAX_CAPTURES,
         "maxEvents":FORMULA_PREFERENCE_MAX_EVENTS,"maxMetadataBytes":MAX_METADATA,"maxResultDataBytes":super::MAX_COMPLETION_RESULT_BYTES,
         "identityEncoding":"opaque-worker-instance-token","revisionEncoding":"canonical-decimal-u64-string"})
@@ -204,6 +238,20 @@ impl Registry {
             self.namespace.as_ref().ok_or_else(not_found)?
         ))
     }
+    fn register(&mut self, core: FormulaPreferenceStore) -> Result<Value> {
+        if self.entries.len() >= MAX_OWNERS {
+            return Err(limit());
+        }
+        let id = self.next_id()?;
+        let state = State {
+            core,
+            captures: BTreeMap::new(),
+            receipts: BTreeMap::new(),
+        };
+        let info = state.info();
+        self.entries.insert(id.clone(), state);
+        Ok(json!({"ownerId":id,"info":info}))
+    }
     pub(super) fn dispatch(&mut self, action: &str, line: &str) -> Result<Value> {
         // The legacy envelope validates routing; parse params AGAIN from raw JSON
         // so duplicate private keys are never erased through serde_json::Value.
@@ -224,15 +272,29 @@ impl Registry {
                 }
                 let core = FormulaPreferenceStore::new(request.scope, key(&request.key_hex)?)
                     .map_err(core_error)?;
-                let id = self.next_id()?;
-                let state = State {
-                    core,
-                    captures: BTreeMap::new(),
-                    receipts: BTreeMap::new(),
-                };
-                let info = state.info();
-                self.entries.insert(id.clone(), state);
-                Ok(json!({"ownerId":id,"info":info}))
+                self.register(core)
+            }
+            "formula.preferences.restore" => {
+                let request: Restore = decode(raw)?;
+                if request.schema_version != 1 {
+                    return Err(WorkerError::protocol(
+                        "VERSION_MISMATCH",
+                        "Unsupported preference schema.",
+                    ));
+                }
+                if self.entries.len() >= MAX_OWNERS {
+                    return Err(limit());
+                }
+                let core = FormulaPreferenceStore::restore_checkpoint(
+                    request.scope,
+                    key(&request.key_hex)?,
+                    &key(&request.storage_key_hex)?,
+                    request.expected_checkpoint.0,
+                    &request.snapshot_json,
+                    request.permission,
+                )
+                .map_err(storage_error)?;
+                self.register(core)
             }
             "formula.preferences.close" => {
                 metadata(raw)?;
@@ -279,7 +341,8 @@ impl State {
     fn info(&self) -> Value {
         json!({"schemaVersion":1,"scope":self.core.scope(),"policy":self.core.policy(),
         "eventCount":self.core.event_count(),"captureCount":self.captures.len(),"receiptCount":self.receipts.len(),
-        "inMemory":true,"persistence":false,"automaticCapture":false})
+        "inMemory":true,"persistence":false,"automaticCapture":false,
+        "authenticatedCheckpoints":true,"automaticStorage":false})
     }
     fn execute(&mut self, command: Command, reserved: Option<String>) -> Result<Value> {
         match command {
@@ -349,6 +412,19 @@ impl State {
                 self.captures.clear();
                 self.receipts.clear();
                 Ok(self.info())
+            }
+            Command::ExportCheckpoint {
+                storage_key_hex,
+                checkpoint,
+                permission,
+            } => {
+                let snapshot = self
+                    .core
+                    .export_checkpoint(&key(&storage_key_hex)?, checkpoint.0, permission)
+                    .map_err(storage_error)?;
+                bound_completion_result(
+                    json!({"snapshotJson":snapshot,"checkpoint":checkpoint.0.to_string()}),
+                )
             }
         }
     }

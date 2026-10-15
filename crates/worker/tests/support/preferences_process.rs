@@ -69,6 +69,237 @@ fn stop(worker: &mut Process) {
     worker.successful_exit();
 }
 
+fn export(worker: &mut Process, owner: &Value, checkpoint: &str, sensitive: bool) -> Value {
+    command(
+        worker,
+        owner,
+        json!({"kind":"export-checkpoint","storageKeyHex":"cd".repeat(32),
+        "checkpoint":checkpoint,"permission":{"storageEnabled":true,"allowSensitiveStorage":sensitive}}),
+    )
+}
+fn restore_params(snapshot: &str, checkpoint: &str, sensitive: bool) -> Value {
+    let mut params = create_params();
+    params["storageKeyHex"] = json!("cd".repeat(32));
+    params["expectedCheckpoint"] = json!(checkpoint);
+    params["snapshotJson"] = json!(snapshot);
+    params["permission"] = json!({"storageEnabled":true,"allowSensitiveStorage":sensitive});
+    params
+}
+
+#[test]
+fn preference_checkpoints_restore_across_real_process_restart_without_consent_or_token_replay() {
+    let mut worker = Process::start();
+    let owner = new(&mut worker);
+    command(&mut worker, &owner, enabled(false));
+    let input = input();
+    let accepted = accepted(&mut worker, &input);
+    let old_capture = capture(&mut worker, &owner);
+    let token = capture(&mut worker, &owner);
+    let recorded = record(
+        &mut worker,
+        &owner,
+        token,
+        &accepted,
+        "18446744073709551615",
+    );
+    assert_eq!(recorded["ok"], true);
+    let receipt = recorded["data"]["receiptId"].clone();
+    let exported = export(&mut worker, &owner, "18446744073709551615", false);
+    assert_eq!(exported["ok"], true, "{exported}");
+    assert_eq!(exported["data"]["checkpoint"], "18446744073709551615");
+    let params = restore_params(
+        exported["data"]["snapshotJson"].as_str().unwrap(),
+        "18446744073709551615",
+        false,
+    );
+    stop(&mut worker);
+
+    let mut replacement = Process::start();
+    let caps = replacement.call(json!("caps"), "formula.capabilities", json!({}));
+    assert_eq!(
+        caps["data"]["preferences"]["authenticatedCheckpoints"],
+        true
+    );
+    assert_eq!(caps["data"]["preferences"]["persistence"], false);
+    assert_eq!(
+        command(&mut replacement, &owner, json!({"kind":"info"}))["error"]["code"],
+        "PREFERENCE_NOT_FOUND"
+    );
+    let restored = replacement.call(json!("restore"), "formula.preferences.restore", params);
+    assert_eq!(restored["ok"], true, "{restored}");
+    assert_eq!(restored["data"]["info"]["eventCount"], 1);
+    assert_eq!(restored["data"]["info"]["captureCount"], 0);
+    assert_eq!(restored["data"]["info"]["receiptCount"], 0);
+    assert_eq!(
+        restored["data"]["info"]["policy"],
+        json!({"rankingEnabled":false,"feedbackEnabled":false,"allowSensitiveFeedback":false})
+    );
+    let current = restored["data"]["ownerId"].clone();
+    assert_ne!(current, owner);
+    assert_eq!(
+        command(
+            &mut replacement,
+            &current,
+            json!({"kind":"rank-fragments","request":input})
+        )["data"]["order"],
+        json!([0, 1])
+    );
+    command(&mut replacement, &current, enabled(false));
+    let ranked = command(
+        &mut replacement,
+        &current,
+        json!({"kind":"rank-fragments","request":input}),
+    );
+    assert_eq!(ranked["data"]["order"], json!([1, 0]));
+    assert_eq!(
+        ranked["data"]["features"][1]["lastAcceptedEvent"],
+        "18446744073709551615"
+    );
+    assert_eq!(
+        command(
+            &mut replacement,
+            &current,
+            json!({"kind":"undo","receiptId":receipt})
+        )["error"]["code"],
+        "STALE_FEEDBACK"
+    );
+    assert_eq!(
+        record(&mut replacement, &current, old_capture, &accepted, "1")["error"]["code"],
+        "STALE_FEEDBACK"
+    );
+    let token = capture(&mut replacement, &current);
+    assert_eq!(
+        record(
+            &mut replacement,
+            &current,
+            token,
+            &accepted,
+            "18446744073709551615"
+        )["error"]["code"],
+        "STALE_FEEDBACK"
+    );
+    assert_eq!(
+        export(&mut replacement, &current, "18446744073709551615", false)["error"]["code"],
+        "STALE_CHECKPOINT"
+    );
+    stop(&mut replacement);
+}
+
+#[test]
+fn preference_checkpoint_transport_is_closed_bounded_and_independently_authorized() {
+    let mut worker = Process::start();
+    let owner = new(&mut worker);
+    command(&mut worker, &owner, enabled(true));
+    let mut input = input();
+    input["catalog"]["policy"]["sensitiveDocument"] = json!(true);
+    input["catalog"]["policy"]["allowInSensitiveDocument"] = json!(true);
+    let accepted = accepted(&mut worker, &input);
+    let token = capture(&mut worker, &owner);
+    assert_eq!(
+        record(&mut worker, &owner, token, &accepted, "1")["ok"],
+        true
+    );
+    command(
+        &mut worker,
+        &owner,
+        json!({"kind":"set-policy","policy":{"rankingEnabled":false,"feedbackEnabled":false,"allowSensitiveFeedback":false}}),
+    );
+    assert_eq!(
+        export(&mut worker, &owner, "1", false)["error"]["code"],
+        "SENSITIVE_STORAGE_DENIED"
+    );
+    let exported = export(&mut worker, &owner, "1", true);
+    assert_eq!(exported["ok"], true);
+    let snapshot = exported["data"]["snapshotJson"].as_str().unwrap();
+    let base = restore_params(snapshot, "1", true);
+    for (field, value, code) in [
+        ("expectedCheckpoint", json!(1), "INVALID_PARAMS"),
+        ("expectedCheckpoint", json!("01"), "INVALID_PARAMS"),
+        ("expectedCheckpoint", json!("2"), "STALE_CHECKPOINT"),
+        (
+            "permission",
+            json!({"storageEnabled":false,"allowSensitiveStorage":true}),
+            "PREFERENCE_STORAGE_DISABLED",
+        ),
+        (
+            "permission",
+            json!({"storageEnabled":true,"allowSensitiveStorage":false}),
+            "SENSITIVE_STORAGE_DENIED",
+        ),
+        (
+            "permission",
+            json!({"storageEnabled":true}),
+            "INVALID_PARAMS",
+        ),
+        (
+            "permission",
+            json!({"storageEnabled":true,"allowSensitiveStorage":1}),
+            "INVALID_PARAMS",
+        ),
+        (
+            "permission",
+            json!({"storageEnabled":true,"allowSensitiveStorage":true,"PRIVATE_SECRET":true}),
+            "INVALID_PARAMS",
+        ),
+        ("storageKeyHex", json!("ab".repeat(32)), "INVALID_ARGUMENT"),
+        (
+            "storageKeyHex",
+            json!("ef".repeat(32)),
+            "AUTHENTICATION_FAILED",
+        ),
+        ("keyHex", json!("ef".repeat(32)), "AUTHENTICATION_FAILED"),
+        (
+            "snapshotJson",
+            json!(" ".repeat(256 * 1024 + 1)),
+            "LIMIT_EXCEEDED",
+        ),
+        (
+            "snapshotJson",
+            json!("{\"PRIVATE_SECRET\":true}"),
+            "INVALID_SNAPSHOT",
+        ),
+        ("schemaVersion", json!(2), "VERSION_MISMATCH"),
+    ] {
+        let mut invalid = base.clone();
+        invalid[field] = value;
+        let reply = worker.call(json!("refused"), "formula.preferences.restore", invalid);
+        assert_eq!(reply["error"]["code"], code, "{reply}");
+        assert!(!reply.to_string().contains("PRIVATE_SECRET"));
+        assert!(reply["error"]["details"].is_null());
+    }
+    let mut changed = base.clone();
+    changed["scope"]["generation"] = json!("1");
+    assert_eq!(
+        worker.call(json!("scope"), "formula.preferences.restore", changed)["error"]["code"],
+        "SCOPE_MISMATCH"
+    );
+    let mut tampered: Value = serde_json::from_str(snapshot).unwrap();
+    tampered["body"]["events"][0]["undone"] = json!(true);
+    let mut changed = base.clone();
+    changed["snapshotJson"] = json!(tampered.to_string());
+    assert_eq!(
+        worker.call(json!("tamper"), "formula.preferences.restore", changed)["error"]["code"],
+        "AUTHENTICATION_FAILED"
+    );
+    let duplicate = base.to_string().replacen(
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":1,\"schemaVersion\":1",
+        1,
+    );
+    let raw = format!(
+        r#"{{"version":1,"id":"duplicate","action":"formula.preferences.restore","params":{duplicate}}}"#
+    );
+    assert_eq!(worker.raw(&raw)["error"]["code"], "INVALID_PARAMS");
+    assert_eq!(
+        worker.call(json!("count"), "worker.status", json!({}))["data"]["livePreferenceOwners"],
+        1
+    );
+    let reply = worker.call(json!("valid"), "formula.preferences.restore", base);
+    assert_eq!(reply["ok"], true);
+    assert_eq!(reply["data"]["info"]["eventCount"], 1);
+    stop(&mut worker);
+}
+
 #[test]
 fn preference_owner_reuses_actual_process_and_preserves_core_edit_and_old_routes() {
     let mut worker = Process::start();
@@ -374,6 +605,19 @@ fn preference_limits_sensitive_allow_output_refusal_and_recovery_are_explicit() 
         command(&mut worker, owner, json!({"kind":"info"}))["data"]["eventCount"],
         1024
     );
+    let exported = export(&mut worker, owner, "1", true);
+    assert_eq!(exported["ok"], true);
+    let snapshot = exported["data"]["snapshotJson"].as_str().unwrap();
+    assert!(snapshot.len() > 4096 && snapshot.len() <= 256 * 1024);
+    let params = restore_params(snapshot, "1", true);
+    assert_eq!(
+        worker.call(
+            json!("restore-full"),
+            "formula.preferences.restore",
+            params.clone()
+        )["error"]["code"],
+        "LIMIT_EXCEEDED"
+    );
     for owner in owners {
         assert_eq!(
             worker.call(
@@ -389,5 +633,12 @@ fn preference_limits_sensitive_allow_output_refusal_and_recovery_are_explicit() 
         0
     );
     assert!(new(&mut worker).is_string());
+    let restored = worker.call(
+        json!("restore-capacity"),
+        "formula.preferences.restore",
+        params,
+    );
+    assert_eq!(restored["ok"], true, "{restored}");
+    assert_eq!(restored["data"]["info"]["eventCount"], 1024);
     stop(&mut worker);
 }

@@ -93,7 +93,7 @@ HMAC 不是加密。宿主仍需保护密钥、单写者/CAS、新鲜度及清�
 这些入口是可信宿主接口，不是插件可自批的权限机制。详见 [检查点边界](formula-preference-checkpoints.md)。
 
 真实 Windows DLL 和 MSVC C11/C++17 头文件/链接已验证；其他平台和发布包仍以 CI/实际产物验证为准。
-JSONL/WASM-JS 已有独立内存态偏好接口；检查点绑定仍待接入。
+JSONL 已有检查点绑定，WASM-JS 已有独立内存态偏好接口、检查点绑定仍待接入。
 磁盘/受保护存储、跨文档合并及学习效果验收仍开放。
 
 相关资料：[Core 偏好边界](formula-completion-preferences.md)、[补全接口](formula-completion.md)。
