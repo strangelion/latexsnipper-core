@@ -283,7 +283,7 @@ the actual catalog epoch and query a new snapshot before further acceptance.
 It clears only this owner's logical state, not host databases/backups or secure
 heap erasure. Disabling is not clearing. The host owns consent, key isolation,
 cache cleanup and actual editor acceptance/undo; opaque objects are not permission
-tokens. There is no cross-document merge, export/import, disk persistence or model.
+tokens. There is no cross-document merge, automatic disk persistence or model.
 
 Instances support `with`, idempotent `close()` and `closed`. Closed owners refuse
 with `PREFERENCE_CLOSED`; remaining opaque objects do not keep their store alive.
@@ -302,6 +302,39 @@ At capacity, ordinary deterministic completion remains independently usable.
 
 This binding implements the [Core preference boundary](../../docs/formula-completion-preferences.md),
 not learned ranking or a claimed user-productivity improvement.
+
+### Explicit preference checkpoints
+
+Feature-detect `FormulaPreferences.restore_checkpoint` and
+`info()["authenticatedCheckpoints"]` on older wheels. `persistence: false` and
+`automaticStorage: false` still mean Core does not read/write files or restore
+consent. The host owns protected storage, independent keys and freshness state.
+
+`preferences.export_checkpoint(*, storage_key: bytes, checkpoint: int,
+permission: dict) -> str` returns authenticated JSON of at most 256 KiB UTF-8.
+`permission` must explicitly contain exactly the booleans `storageEnabled` and
+`allowSensitiveStorage`; retrieval/feedback consent does not imply storage consent.
+Use a separate nonzero random 32-byte storage key, not the owner's feedback key.
+Checkpoint is a strictly increasing positive Python u64 integer, never bool,
+float or string. Successful export advances its sequence; on a host write failure
+explicitly retry saving the same returned bytes, not exporting an old checkpoint.
+
+`FormulaPreferences.restore_checkpoint(*, scope, key: bytes, storage_key: bytes,
+expected_checkpoint: int, snapshot_json: str, permission: dict) -> FormulaPreferences`
+creates a NEW default-off owner. Scope and expected checkpoint MUST come from the
+current trusted host state, never from the untrusted snapshot. Authentication,
+key binding, exact scope/checkpoint and sensitive-storage consent are rechecked.
+Event/checkpoint sequence high-water marks survive; captures, receipts and consent
+do not. The original owner is not mutated, and old opaque feedback cannot be used
+on the restored owner. Hosts must coordinate single-writer/CAS and atomic commits.
+
+All Core work releases the GIL and existing fast busy/closed behavior remains.
+Errors retain `PREFERENCE_STORAGE_DISABLED`, `INVALID_SNAPSHOT`,
+`AUTHENTICATION_FAILED`, `STALE_CHECKPOINT`, `SENSITIVE_STORAGE_DENIED`,
+`SCOPE_MISMATCH`, `LIMIT_EXCEEDED` or `INVALID_ARGUMENT`; they do not echo metadata.
+HMAC is not encryption, secure erasure or independent rollback prevention.
+See [checkpoint storage/clear boundaries](../../docs/formula-preference-checkpoints.md)
+before implementing a durable host provider; no provider is included here.
 
 ## Explicit registered conversion
 

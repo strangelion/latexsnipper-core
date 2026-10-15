@@ -11,7 +11,8 @@ type Result<T> = std::result::Result<T, FormulaPreferenceStorageError>;
 type HmacSha256 = Hmac<Sha256>;
 
 /// Neither feedback consent nor a snapshot can enable durable storage implicitly.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FormulaPreferenceStoragePermission {
     pub storage_enabled: bool,
     pub allow_sensitive_storage: bool,

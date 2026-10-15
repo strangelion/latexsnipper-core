@@ -184,12 +184,26 @@ LATEXSNIPPER_API char *latexsnipper_formula_registry_approval(uint64_t handle, c
  * create/metadata 4 KiB, editing command/result data 1 MiB, source/tree unchanged.
  * Busy is prompt PREFERENCE_BUSY without removal/replay; close only succeeds when
  * it can remove the owner. Repeated close/unknown handle: PREFERENCE_NOT_FOUND.
- * Discard all handles after library unload or process restart. This is not
- * persistence, secure heap erasure, user-level merging, model ranking or OLE IO.
+ * Discard all handles after library unload or process restart. Explicit
+ * authenticated checkpoints are separate below; no automatic persistence,
+ * secure heap erasure, user-level merging, model ranking or OLE IO is provided.
  * Feature-detect these additive symbols in older libraries.
  */
 LATEXSNIPPER_API char *latexsnipper_formula_preferences_capabilities(void);
 LATEXSNIPPER_API char *latexsnipper_formula_preferences_create(const uint8_t *request_json, size_t request_json_len);
+/* Explicit authenticated restore creates a NEW default-off owner. Request:
+ * {schemaVersion:1, scope, keyHex, storageKeyHex, expectedCheckpoint, snapshotJson,
+ *  permission:{storageEnabled,allowSensitiveStorage}}.
+ * Scope/checkpoint MUST come from current trusted host state, not the snapshot.
+ * Keys must be separate nonzero host keys (64 lowercase hex characters).
+ * Canonical decimal-u64 expectedCheckpoint; snapshotJson <=256 KiB UTF-8;
+ * entire restore request <=1 MiB. Captures/receipts/consent are never restored.
+ * command export-checkpoint takes storageKeyHex, checkpoint and permission;
+ * returns {snapshotJson,checkpoint}. Save explicitly in host-protected storage.
+ * HMAC is not encryption. No file IO, automatic retry or rollback protection
+ * independent of host freshness. persistence:false continues to mean no disk IO.
+ */
+LATEXSNIPPER_API char *latexsnipper_formula_preferences_restore(const uint8_t *request_json, size_t request_json_len);
 LATEXSNIPPER_API char *latexsnipper_formula_preferences_command(uint64_t handle, const uint8_t *request_json, size_t request_json_len);
 LATEXSNIPPER_API char *latexsnipper_formula_preferences_close(uint64_t handle);
 

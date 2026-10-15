@@ -1,14 +1,15 @@
 # C ABI 补全偏好对象
 
-更新：2026-10-15。正式 C 传输复用 Rust 的默认关闭、有限内存态偏好基础，
-不自动采集输入，不写磁盘或宿主文档，不提供模型或跨进程持久化。
+更新：2026-10-16。正式 C 传输复用 Rust 的默认关闭、有限偏好与显式认证检查点，
+不自动采集输入、写磁盘、恢复授权或修改宿主文档，不提供模型。
 
 ## 入口与所有权
 
-公开声明在 `crates/ffi/include/latexsnipper_session.h`，四个新增符号：
+公开声明在 `crates/ffi/include/latexsnipper_session.h`，五个新增符号：
 
 - `latexsnipper_formula_preferences_capabilities()`：查询独立 schema 1 和实际限制。
 - `latexsnipper_formula_preferences_create(json, length)`：创建默认关闭的独立对象。
+- `latexsnipper_formula_preferences_restore(json, length)`：认证检查点并创建默认关闭的新对象。
 - `latexsnipper_formula_preferences_command(handle, json, length)`：执行显式命令。
 - `latexsnipper_formula_preferences_close(handle)`：关闭并释放对象。
 
@@ -30,6 +31,7 @@
 | `record-acceptance` | `captureId, eventId, request` | `{receiptId:string|null}` |
 | `undo` | `receiptId` | `{undone:true}` |
 | `clear` | `generation, keyHex` | 清空后的 info |
+| `export-checkpoint` | `storageKeyHex, checkpoint, permission` | `{snapshotJson, checkpoint}` |
 
 `policy` 必须显式给出 `rankingEnabled/feedbackEnabled/allowSensitiveFeedback` 三个布尔值；
 默认全 false。`request` 分别沿用片段编辑 schema 3 的查询或接受请求，所有既有源码/快照/目录检查保留。
@@ -67,7 +69,31 @@ busy close 不删除对象，可在协调并发后明确再关闭。成功 close
 旧句柄不复用；重复 close/未知句柄为 `PREFERENCE_NOT_FOUND`。close 不撤销已返回的历史编辑数据。
 mutex 中毒不自动复位或恢复偏好，返回 `INTERNAL`，由可信宿主决定恢复方式。
 
+## 显式检查点
+
+能力探测的 `authenticatedCheckpoints:true` 表示支持认证数据导出/恢复；
+`persistence:false`、`automaticStorage:false` 表示 Core 仍不做磁盘 IO 或自动恢复。
+`export-checkpoint` 的 `permission` 必须显式提供 `storageEnabled/allowSensitiveStorage` 两个布尔值，
+它独立于反馈/检索同意，缺字段、非布尔或额外字段均拒绝。
+`storageKeyHex` 是另一把独立、非零的宿主私有随机 key，不能复用反馈 key。
+`checkpoint` 是严格递增的正 u64 十进制字符串；成功导出会推进本实例序号。
+存储失败时只能显式重试保存同一返回数据，不能重新导出旧序号或自动重放。
+
+恢复请求为 `{schemaVersion:1, scope, keyHex, storageKeyHex, expectedCheckpoint, snapshotJson, permission}`。
+完整请求最多 1 MiB；`snapshotJson` 最多 256 KiB UTF-8，其他字段仍严格闭合。
+`scope/expectedCheckpoint` 必须来自当前可信宿主的新鲜度记录，不得取自待导入文件。
+恢复会检查 HMAC、反馈 key 绑定、完整作用域、精确检查点及敏感存储许可，
+只新建 owner，不修改旧 owner；策略全关闭，capture/receipt 数量为零，旧反馈令牌不能重放。
+64 个 owner 的上限也适用于恢复，失败不占用新句柄。
+
+存储关闭为 `PREFERENCE_STORAGE_DISABLED`；无效检查点内容为 `INVALID_SNAPSHOT`，
+认证失败为 `AUTHENTICATION_FAILED`，序号不符为 `STALE_CHECKPOINT`，
+敏感许可不足为 `SENSITIVE_STORAGE_DENIED`；作用域/预算错误沿用既有错误码，均不回显私有内容。
+HMAC 不是加密。宿主仍需保护密钥、单写者/CAS、新鲜度及清空代数、原子提交与备份恢复路径；
+这些入口是可信宿主接口，不是插件可自批的权限机制。详见 [检查点边界](formula-preference-checkpoints.md)。
+
 真实 Windows DLL 和 MSVC C11/C++17 头文件/链接已验证；其他平台和发布包仍以 CI/实际产物验证为准。
-本次未提供 JSONL/WASM-JS 偏好接口、磁盘恢复、跨文档合并或学习效果声明。
+JSONL/WASM-JS 已有独立内存态偏好接口；检查点绑定仍待接入。
+磁盘/受保护存储、跨文档合并及学习效果验收仍开放。
 
 相关资料：[Core 偏好边界](formula-completion-preferences.md)、[补全接口](formula-completion.md)。

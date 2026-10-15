@@ -73,6 +73,227 @@ fn record(owner: &Owner, capture: Value, request: &Value, event: &str) -> Value 
     )
 }
 
+fn export(owner: &Owner, checkpoint: &str, sensitive: bool) -> Value {
+    owner.call(json!({"kind":"export-checkpoint", "storageKeyHex":"cd".repeat(32),
+        "checkpoint":checkpoint,"permission":{"storageEnabled":true,"allowSensitiveStorage":sensitive}}))
+}
+fn restore_request(snapshot: &str, checkpoint: &str) -> Value {
+    let mut value = create_json();
+    value["storageKeyHex"] = json!("cd".repeat(32));
+    value["expectedCheckpoint"] = json!(checkpoint);
+    value["snapshotJson"] = json!(snapshot);
+    value["permission"] = json!({"storageEnabled":true,"allowSensitiveStorage":false});
+    value
+}
+fn restore(value: Value) -> Value {
+    let bytes = value.to_string();
+    take(unsafe { latexsnipper_formula_preferences_restore(bytes.as_ptr(), bytes.len()) })
+}
+
+#[test]
+fn c_checkpoint_roundtrip_is_default_off_precise_and_never_recovers_feedback_tokens() {
+    let _serial = SERIAL.lock().unwrap();
+    let original = Owner::new();
+    original.enable(false);
+    let input = request();
+    let accept = accepted(&input);
+    let old_capture = original.capture();
+    let old_receipt =
+        record(&original, original.capture(), &accept, "9")["data"]["receiptId"].clone();
+    let receipt = record(&original, original.capture(), &accept, "10")["data"]["receiptId"].clone();
+    assert_eq!(owner_undo(&original, receipt)["ok"], true);
+    let exported = export(&original, "18446744073709551615", false);
+    assert_eq!(exported["ok"], true, "{exported}");
+    assert_eq!(exported["data"]["checkpoint"], "18446744073709551615");
+    let snapshot = exported["data"]["snapshotJson"].as_str().unwrap();
+    for private in [
+        "fragment:second",
+        "Second",
+        "keyHex",
+        "captureId",
+        "receiptId",
+        r"\frac",
+    ] {
+        assert!(!snapshot.contains(private));
+    }
+    let reply = restore(restore_request(snapshot, "18446744073709551615"));
+    assert_eq!(reply["ok"], true, "{reply}");
+    let restored = Owner(reply["data"]["handle"].as_str().unwrap().parse().unwrap());
+    assert_ne!(restored.0, original.0);
+    let info = &reply["data"]["info"];
+    assert_eq!(info["eventCount"], 2);
+    assert_eq!(info["captureCount"], 0);
+    assert_eq!(info["receiptCount"], 0);
+    assert_eq!(info["authenticatedCheckpoints"], true);
+    assert_eq!(
+        info["policy"],
+        json!({"rankingEnabled":false,"feedbackEnabled":false,"allowSensitiveFeedback":false})
+    );
+    assert_eq!(rank(&restored, &input)["data"]["order"], json!([0, 1]));
+    restored.enable(false);
+    assert_eq!(
+        rank(&restored, &input)["data"]["features"][1],
+        json!({"accepted":2,"undone":1,"lastAcceptedEvent":"9"})
+    );
+    assert_eq!(
+        owner_undo(&restored, old_receipt)["error"]["code"],
+        "STALE_FEEDBACK"
+    );
+    assert_eq!(
+        record(&restored, old_capture, &accept, "11")["error"]["code"],
+        "STALE_FEEDBACK"
+    );
+    let capture = restored.capture();
+    assert_eq!(
+        record(&restored, capture.clone(), &accept, "10")["error"]["code"],
+        "STALE_FEEDBACK"
+    );
+    assert_eq!(record(&restored, capture, &accept, "11")["ok"], true);
+    assert_eq!(
+        export(&restored, "18446744073709551615", false)["error"]["code"],
+        "STALE_CHECKPOINT"
+    );
+    assert_eq!(
+        export(&original, "18446744073709551615", false)["error"]["code"],
+        "STALE_CHECKPOINT"
+    );
+}
+
+#[test]
+fn c_checkpoint_requires_separate_storage_consent_and_trusted_scope_freshness() {
+    let _serial = SERIAL.lock().unwrap();
+    let owner = Owner::new();
+    owner.enable(true);
+    let mut input = request();
+    input["catalog"]["policy"]["sensitiveDocument"] = json!(true);
+    input["catalog"]["policy"]["allowInSensitiveDocument"] = json!(true);
+    assert_eq!(
+        record(&owner, owner.capture(), &accepted(&input), "1")["ok"],
+        true
+    );
+    // Disabling learning does not remove the sensitive-storage consent gate.
+    owner.call(json!({"kind":"set-policy","policy":{"rankingEnabled":false,"feedbackEnabled":false,"allowSensitiveFeedback":false}}));
+    assert_eq!(
+        export(&owner, "1", false)["error"]["code"],
+        "SENSITIVE_STORAGE_DENIED"
+    );
+    let exported = export(&owner, "1", true);
+    assert_eq!(exported["ok"], true);
+    let snapshot = exported["data"]["snapshotJson"].as_str().unwrap();
+    let base = restore_request(snapshot, "1");
+    assert_eq!(
+        restore(base.clone())["error"]["code"],
+        "SENSITIVE_STORAGE_DENIED"
+    );
+    let mut allowed = base;
+    allowed["permission"]["allowSensitiveStorage"] = json!(true);
+    for (field, value, code) in [
+        (
+            "permission",
+            json!({"storageEnabled":false,"allowSensitiveStorage":true}),
+            "PREFERENCE_STORAGE_DISABLED",
+        ),
+        ("storageKeyHex", json!("ab".repeat(32)), "INVALID_ARGUMENT"),
+        (
+            "storageKeyHex",
+            json!("ef".repeat(32)),
+            "AUTHENTICATION_FAILED",
+        ),
+        ("keyHex", json!("ef".repeat(32)), "AUTHENTICATION_FAILED"),
+        ("expectedCheckpoint", json!("2"), "STALE_CHECKPOINT"),
+    ] {
+        let mut invalid = allowed.clone();
+        invalid[field] = value;
+        assert_eq!(restore(invalid)["error"]["code"], code);
+    }
+    let mut changed = allowed.clone();
+    changed["scope"]["generation"] = json!("1");
+    assert_eq!(restore(changed)["error"]["code"], "SCOPE_MISMATCH");
+    let mut tampered: Value = serde_json::from_str(snapshot).unwrap();
+    tampered["body"]["events"][0]["undone"] = json!(true);
+    let mut changed = allowed.clone();
+    changed["snapshotJson"] = json!(tampered.to_string());
+    assert_eq!(restore(changed)["error"]["code"], "AUTHENTICATION_FAILED");
+    let valid = restore(allowed);
+    assert_eq!(valid["ok"], true);
+    let restored = Owner(valid["data"]["handle"].as_str().unwrap().parse().unwrap());
+    assert_eq!(
+        restored.call(json!({"kind":"info"}))["data"]["eventCount"],
+        1
+    );
+}
+
+#[test]
+fn c_checkpoint_wire_rejects_coercion_duplicate_fields_and_oversize_without_leaking_data() {
+    let _serial = SERIAL.lock().unwrap();
+    let owner = Owner::new();
+    let caps = take(latexsnipper_formula_preferences_capabilities());
+    assert_eq!(caps["data"]["authenticatedCheckpoints"], true);
+    assert_eq!(caps["data"]["maxSnapshotBytes"], 256 * 1024);
+    assert_eq!(caps["data"]["persistence"], false);
+    let exported = export(&owner, "1", false);
+    let snapshot = exported["data"]["snapshotJson"].as_str().unwrap();
+    let base = restore_request(snapshot, "1");
+    for (field, value, code) in [
+        ("expectedCheckpoint", json!(1), "INVALID_JSON"),
+        ("expectedCheckpoint", json!("01"), "INVALID_JSON"),
+        ("permission", json!({"storageEnabled":true}), "INVALID_JSON"),
+        (
+            "permission",
+            json!({"storageEnabled":1,"allowSensitiveStorage":false}),
+            "INVALID_JSON",
+        ),
+        (
+            "permission",
+            json!({"storageEnabled":true,"allowSensitiveStorage":false,"PRIVATE_SECRET":true}),
+            "INVALID_JSON",
+        ),
+        (
+            "snapshotJson",
+            json!(" ".repeat(256 * 1024 + 1)),
+            "LIMIT_EXCEEDED",
+        ),
+        (
+            "snapshotJson",
+            json!("{\"PRIVATE_SECRET\":true}"),
+            "INVALID_SNAPSHOT",
+        ),
+        ("schemaVersion", json!(2), "VERSION_MISMATCH"),
+    ] {
+        let mut invalid = base.clone();
+        invalid[field] = value;
+        let reply = restore(invalid);
+        assert_eq!(reply["error"]["code"], code);
+        assert!(!reply.to_string().contains("PRIVATE_SECRET"));
+    }
+    let raw = base.to_string().replacen(
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":1,\"schemaVersion\":1",
+        1,
+    );
+    assert_eq!(
+        take(unsafe { latexsnipper_formula_preferences_restore(raw.as_ptr(), raw.len()) })["error"]
+            ["code"],
+        "INVALID_JSON"
+    );
+    assert_eq!(
+        take(unsafe { latexsnipper_formula_preferences_restore(std::ptr::null(), 0) })["error"]
+            ["code"],
+        "INVALID_ARGUMENT"
+    );
+    let over = vec![b' '; 1024 * 1024 + 1];
+    assert_eq!(
+        take(unsafe { latexsnipper_formula_preferences_restore(over.as_ptr(), over.len()) })
+            ["error"]["code"],
+        "INVALID_ARGUMENT"
+    );
+    assert_eq!(owner.call(json!({"kind":"export-checkpoint","storageKeyHex":"cd".repeat(32),"checkpoint":"2", "permission":{"storageEnabled":false,"allowSensitiveStorage":false}}))["error"]["code"], "PREFERENCE_STORAGE_DISABLED");
+    assert_eq!(export(&owner, "2", false)["ok"], true);
+    let owners: Vec<_> = (0..63).map(|_| Owner::new()).collect();
+    assert_eq!(restore(base)["error"]["code"], "LIMIT_EXCEEDED");
+    drop(owners);
+}
+
 #[test]
 fn c_preferences_default_off_guarded_feedback_and_undo_preserve_core_candidates() {
     let _serial = SERIAL.lock().unwrap();
@@ -272,11 +493,25 @@ fn c_capacity_is_bounded_and_explicit_discard_and_close_release_resources() {
         owner.call(json!({"kind":"info"}))["data"]["eventCount"],
         1024
     );
+    let exported = export(owner, "1", false);
+    assert_eq!(exported["ok"], true);
+    let snapshot = exported["data"]["snapshotJson"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(snapshot.len() > 4096 && snapshot.len() <= 256 * 1024);
     drop(owners);
     let reopened = Owner::new();
     assert_eq!(
         reopened.call(json!({"kind":"info"}))["data"]["eventCount"],
         0
+    );
+    let reply = restore(restore_request(&snapshot, "1"));
+    assert_eq!(reply["ok"], true, "{reply}");
+    let restored = Owner(reply["data"]["handle"].as_str().unwrap().parse().unwrap());
+    assert_eq!(
+        restored.call(json!({"kind":"info"}))["data"]["eventCount"],
+        1024
     );
 }
 

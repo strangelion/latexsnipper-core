@@ -4,6 +4,7 @@ use std::ffi::c_char;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 
+use latexsnipper_conversion::formula_completion::preferences::persistence::*;
 use latexsnipper_conversion::formula_completion::{fragments::*, preferences::*, scoped::*};
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
@@ -38,6 +39,18 @@ struct Create {
     schema_version: u16,
     scope: FormulaDefinitionScope,
     key_hex: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Restore {
+    schema_version: u16,
+    scope: FormulaDefinitionScope,
+    key_hex: String,
+    storage_key_hex: String,
+    expected_checkpoint: Decimal,
+    snapshot_json: String,
+    permission: FormulaPreferenceStoragePermission,
 }
 
 struct Decimal(u64);
@@ -89,6 +102,11 @@ enum Command {
         generation: Decimal,
         key_hex: String,
     },
+    ExportCheckpoint {
+        storage_key_hex: String,
+        checkpoint: Decimal,
+        permission: FormulaPreferenceStoragePermission,
+    },
 }
 
 fn error(code: &str, message: &str) -> AdapterError {
@@ -107,6 +125,19 @@ fn core_error(value: FormulaPreferenceError) -> AdapterError {
             ScopedFormulaCompletionError::StaleContext => "STALE_CONTEXT",
             ScopedFormulaCompletionError::UnknownCandidate => "UNKNOWN_CANDIDATE",
         },
+    };
+    error(code, &value.to_string())
+}
+fn storage_error(value: FormulaPreferenceStorageError) -> AdapterError {
+    let code = match value {
+        FormulaPreferenceStorageError::Disabled => "PREFERENCE_STORAGE_DISABLED",
+        FormulaPreferenceStorageError::InvalidKey => "INVALID_ARGUMENT",
+        FormulaPreferenceStorageError::InvalidSnapshot => "INVALID_SNAPSHOT",
+        FormulaPreferenceStorageError::AuthenticationFailed => "AUTHENTICATION_FAILED",
+        FormulaPreferenceStorageError::ScopeMismatch => "SCOPE_MISMATCH",
+        FormulaPreferenceStorageError::StaleCheckpoint => "STALE_CHECKPOINT",
+        FormulaPreferenceStorageError::SensitiveStorageDenied => "SENSITIVE_STORAGE_DENIED",
+        FormulaPreferenceStorageError::LimitExceeded => "LIMIT_EXCEEDED",
     };
     error(code, &value.to_string())
 }
@@ -199,7 +230,8 @@ impl State {
     fn info(&self) -> Value {
         json!({"schemaVersion":1, "scope":self.core.scope(), "policy":self.core.policy(),
             "eventCount":self.core.event_count(), "captureCount":self.captures.len(), "receiptCount":self.receipts.len(),
-            "inMemory":true, "persistence":false, "automaticCapture":false})
+            "inMemory":true, "persistence":false, "authenticatedCheckpoints":true,
+            "automaticStorage":false, "automaticCapture":false})
     }
     fn execute(&mut self, command: Command) -> Result<Value> {
         match command {
@@ -270,16 +302,54 @@ impl State {
                 self.receipts.clear();
                 Ok(self.info())
             }
+            Command::ExportCheckpoint {
+                storage_key_hex,
+                checkpoint,
+                permission,
+            } => {
+                let snapshot = self
+                    .core
+                    .export_checkpoint(&key(&storage_key_hex)?, checkpoint.0, permission)
+                    .map_err(storage_error)?;
+                bounded(json!({"snapshotJson":snapshot,"checkpoint":checkpoint.0.to_string()}))
+            }
         }
     }
 }
 
-/// Discover the additive volatile owner protocol. Free the returned envelope once.
+fn register(core: FormulaPreferenceStore) -> Result<Value> {
+    let state = State {
+        core,
+        captures: BTreeMap::new(),
+        receipts: BTreeMap::new(),
+    };
+    let mut owners = lock(&OWNERS)?;
+    if owners.entries.len() >= MAX_STORES {
+        return Err(error(
+            "LIMIT_EXCEEDED",
+            "Preference owner budget exhausted.",
+        ));
+    }
+    let handle = owners
+        .next
+        .checked_add(1)
+        .ok_or_else(|| error("LIMIT_EXCEEDED", "Preference handle space exhausted."))?;
+    let info = state.info();
+    owners
+        .entries
+        .insert(handle, Arc::new(Mutex::new(Some(state))));
+    owners.next = handle;
+    Ok(json!({"handle":handle.to_string(), "info":info}))
+}
+
+/// Discover owner and explicit checkpoint support. No automatic disk storage.
 #[no_mangle]
 pub extern "C" fn latexsnipper_formula_preferences_capabilities() -> *mut c_char {
     ffi_response(|| {
         Ok::<_, AdapterError>(
             json!({"schemaVersion":1, "inMemory":true, "persistence":false,
+        "authenticatedCheckpoints":true,"automaticStorage":false,
+        "maxSnapshotBytes":FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES,"storagePermissionRequired":true,
         "automaticCapture":false, "maxStores":MAX_STORES, "maxCaptures":MAX_CAPTURES,
         "maxEvents":FORMULA_PREFERENCE_MAX_EVENTS, "maxMetadataBytes":MAX_METADATA_BYTES,
         "maxRequestBytes":MAX_JSON_BYTES, "maxResultDataBytes":MAX_JSON_BYTES,
@@ -303,28 +373,34 @@ pub unsafe extern "C" fn latexsnipper_formula_preferences_create(
         }
         let core = FormulaPreferenceStore::new(request.scope, key(&request.key_hex)?)
             .map_err(core_error)?;
-        let state = State {
-            core,
-            captures: BTreeMap::new(),
-            receipts: BTreeMap::new(),
-        };
-        let mut owners = lock(&OWNERS)?;
-        if owners.entries.len() >= MAX_STORES {
-            return Err(error(
-                "LIMIT_EXCEEDED",
-                "Preference owner budget exhausted.",
-            ));
+        register(core)
+    })
+}
+
+/// Restore a NEW default-off owner. Scope/checkpoint must come from trusted host
+/// freshness state, not from the snapshot. Never restores captures or receipts.
+/// # Safety
+/// The buffer must contain `length` readable bytes for this call.
+#[no_mangle]
+pub unsafe extern "C" fn latexsnipper_formula_preferences_restore(
+    pointer: *const u8,
+    length: usize,
+) -> *mut c_char {
+    ffi_response(|| {
+        let request: Restore = unsafe { decode(pointer, length, MAX_JSON_BYTES) }?;
+        if request.schema_version != 1 {
+            return Err(error("VERSION_MISMATCH", "Unsupported preference schema."));
         }
-        let handle = owners
-            .next
-            .checked_add(1)
-            .ok_or_else(|| error("LIMIT_EXCEEDED", "Preference handle space exhausted."))?;
-        let info = state.info();
-        owners
-            .entries
-            .insert(handle, Arc::new(Mutex::new(Some(state))));
-        owners.next = handle;
-        Ok(json!({"handle":handle.to_string(), "info":info}))
+        let core = FormulaPreferenceStore::restore_checkpoint(
+            request.scope,
+            key(&request.key_hex)?,
+            &key(&request.storage_key_hex)?,
+            request.expected_checkpoint.0,
+            &request.snapshot_json,
+            request.permission,
+        )
+        .map_err(storage_error)?;
+        register(core)
     })
 }
 

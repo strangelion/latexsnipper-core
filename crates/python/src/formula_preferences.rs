@@ -1,6 +1,7 @@
 //! Explicit owned preference objects. No process-global registry or disk IO.
 use std::sync::{Mutex, MutexGuard, TryLockError};
 
+use latexsnipper_conversion::formula_completion::preferences::persistence::*;
 use latexsnipper_conversion::formula_completion::{
     fragments::*, preferences::*, scoped::FormulaDefinitionScope,
 };
@@ -32,6 +33,21 @@ fn preference_error(value: FormulaPreferenceError) -> BindingError {
             FormulaPreferenceError::StaleFeedback => "STALE_FEEDBACK",
             FormulaPreferenceError::LimitExceeded => "LIMIT_EXCEEDED",
             FormulaPreferenceError::Completion(_) => unreachable!(),
+        },
+        &value.to_string(),
+    )
+}
+fn storage_error(value: FormulaPreferenceStorageError) -> BindingError {
+    error(
+        match value {
+            FormulaPreferenceStorageError::Disabled => "PREFERENCE_STORAGE_DISABLED",
+            FormulaPreferenceStorageError::InvalidKey => "INVALID_ARGUMENT",
+            FormulaPreferenceStorageError::InvalidSnapshot => "INVALID_SNAPSHOT",
+            FormulaPreferenceStorageError::AuthenticationFailed => "AUTHENTICATION_FAILED",
+            FormulaPreferenceStorageError::ScopeMismatch => "SCOPE_MISMATCH",
+            FormulaPreferenceStorageError::StaleCheckpoint => "STALE_CHECKPOINT",
+            FormulaPreferenceStorageError::SensitiveStorageDenied => "SENSITIVE_STORAGE_DENIED",
+            FormulaPreferenceStorageError::LimitExceeded => "LIMIT_EXCEEDED",
         },
         &value.to_string(),
     )
@@ -122,6 +138,71 @@ impl FormulaPreferences {
         })
     }
 
+    /// Explicit restore never reads files or recovers old authorization/tokens.
+    #[staticmethod]
+    #[pyo3(signature = (*, scope, key, storage_key, expected_checkpoint, snapshot_json, permission))]
+    #[allow(clippy::too_many_arguments)]
+    fn restore_checkpoint(
+        py: Python<'_>,
+        scope: &Bound<'_, PyDict>,
+        key: &Bound<'_, PyBytes>,
+        storage_key: &Bound<'_, PyBytes>,
+        expected_checkpoint: &Bound<'_, PyAny>,
+        snapshot_json: String,
+        permission: &Bound<'_, PyDict>,
+    ) -> PyResult<Self> {
+        if snapshot_json.len() > FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES {
+            return Err(python_error(
+                py,
+                storage_error(FormulaPreferenceStorageError::LimitExceeded),
+            ));
+        }
+        let scope = dict_json_utf8(scope)?;
+        let key = host_key(key)?;
+        let storage_key = host_key(storage_key)?;
+        let expected_checkpoint =
+            revision(expected_checkpoint).map_err(|cause| python_error(py, cause))?;
+        let permission = dict_json_utf8(permission)?;
+        let state = py
+            .detach(move || {
+                FormulaPreferenceStore::restore_checkpoint(
+                    decode::<FormulaDefinitionScope>(&scope)?,
+                    key,
+                    &storage_key,
+                    expected_checkpoint,
+                    &snapshot_json,
+                    decode::<FormulaPreferenceStoragePermission>(&permission)?,
+                )
+                .map_err(storage_error)
+            })
+            .map_err(|cause| python_error(py, cause))?;
+        Ok(Self {
+            state: Mutex::new(Some(state)),
+        })
+    }
+
+    #[pyo3(signature = (*, storage_key, checkpoint, permission))]
+    fn export_checkpoint(
+        &self,
+        py: Python<'_>,
+        storage_key: &Bound<'_, PyBytes>,
+        checkpoint: &Bound<'_, PyAny>,
+        permission: &Bound<'_, PyDict>,
+    ) -> PyResult<String> {
+        let storage_key = host_key(storage_key)?;
+        let checkpoint = revision(checkpoint).map_err(|cause| python_error(py, cause))?;
+        let permission = dict_json_utf8(permission)?;
+        py.detach(move || {
+            let permission = decode::<FormulaPreferenceStoragePermission>(&permission)?;
+            self.with_store(|state| {
+                state
+                    .export_checkpoint(&storage_key, checkpoint, permission)
+                    .map_err(storage_error)
+            })
+        })
+        .map_err(|cause| python_error(py, cause))
+    }
+
     #[getter]
     fn closed(&self, py: Python<'_>) -> PyResult<bool> {
         self.lock()
@@ -136,6 +217,8 @@ impl FormulaPreferences {
             "schemaVersion": 1, "scope": state.scope(), "policy": state.policy(),
             "eventCount": state.event_count(), "maxEvents": FORMULA_PREFERENCE_MAX_EVENTS,
             "inMemory": true, "persistence": false, "automaticCapture": false,
+            "authenticatedCheckpoints": true, "automaticStorage": false,
+            "maxSnapshotBytes": FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES,
             "opaqueFeedbackObjects": true, "maxCatalogBytes": 1024 * 1024,
             "maxResultDataBytes": 1024 * 1024, "maxMetadataBytes": 4096
         })))

@@ -3,6 +3,9 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import pickle
 import secrets
+import json
+import subprocess
+import sys
 
 import latexsnipper_core as package
 from latexsnipper_core import (
@@ -134,4 +137,109 @@ def preference_smoke():
             return local.rank_fragments(**query)["features"][1]["accepted"]
     with ThreadPoolExecutor(max_workers=4) as pool:
         assert list(pool.map(independent, range(16))) == list(range(1, 17))
+    checkpoint_smoke(scope, query, accepted, enabled)
     print("Python preferences: owned opaque objects, policy/reset guards, precise events and isolated concurrency passed")
+
+
+def checkpoint_smoke(scope, query, accepted, enabled):
+    key, storage_key = secrets.token_bytes(32), secrets.token_bytes(32)
+    permission = dict(storageEnabled=True, allowSensitiveStorage=False)
+    disabled = dict(permission, storageEnabled=False)
+    maximum = 2**64 - 1
+    with FormulaPreferences(scope=scope, key=key) as original:
+        assert original.info()["authenticatedCheckpoints"]
+        assert not original.info()["automaticStorage"]
+        original.set_policy(enabled)
+        old_capture = original.capture_context()
+        old_receipt = original.record_acceptance_at(original.capture_context(), **accepted, event_id=9)
+        undone = original.record_acceptance_at(original.capture_context(), **accepted, event_id=10)
+        original.record_undo(undone)
+        def export(checkpoint=maximum, **overrides):
+            fields = dict(storage_key=storage_key, checkpoint=checkpoint, permission=permission)
+            fields.update(overrides)
+            return original.export_checkpoint(**fields)
+        expect_error("PREFERENCE_STORAGE_DISABLED", lambda: export(permission=disabled))
+        expect_error("INVALID_ARGUMENT", lambda: export(storage_key=key))
+        expect_error("INVALID_ARGUMENT", lambda: export(storage_key=bytes(32)))
+        for invalid in (True, -1, 1.5, "1", 2**64):
+            expect_error("INVALID_ARGUMENT", lambda: export(checkpoint=invalid))
+        for invalid in (dict(storageEnabled=True), dict(permission, storageEnabled=1), dict(permission, PRIVATE_SECRET=True)):
+            expect_error("INVALID_ARGUMENT", lambda: export(permission=invalid))
+        snapshot = export()
+        assert isinstance(snapshot, str) and len(snapshot.encode("utf-8")) <= 256 * 1024
+        for private in ("PRIVATE_SECRET", "fragment:second", "captureId", "receiptId", key.hex(), storage_key.hex()):
+            assert private not in snapshot
+        assert json.loads(snapshot)["body"]["checkpoint"] == str(maximum)
+        # Restore in a fresh interpreter using trusted parent-supplied scope and
+        # freshness, not values copied out of the untrusted snapshot body.
+        child = """import json, sys
+from latexsnipper_core import FormulaPreferences
+data = json.load(sys.stdin)
+with FormulaPreferences.restore_checkpoint(scope=data['scope'], key=bytes.fromhex(data['key']),
+    storage_key=bytes.fromhex(data['storageKey']), expected_checkpoint=data['checkpoint'],
+    snapshot_json=data['snapshot'], permission=data['permission']) as restored:
+    assert restored.info()['eventCount'] == 2
+    assert not any(restored.info()['policy'].values())
+    restored.set_policy(data['policy'])
+    assert restored.rank_fragments(**data['query'])['order'] == [1, 0]
+print('Fresh-process checkpoint restore passed')
+"""
+        result = subprocess.run([sys.executable, "-c", child], input=json.dumps(dict(
+            scope=scope, key=key.hex(), storageKey=storage_key.hex(), checkpoint=maximum,
+            snapshot=snapshot, permission=permission, policy=enabled, query=query)),
+            capture_output=True, text=True, timeout=60, check=True)
+        assert result.stdout.strip() == "Fresh-process checkpoint restore passed"
+        def restore(**overrides):
+            fields = dict(scope=scope, key=key, storage_key=storage_key,
+                expected_checkpoint=maximum, snapshot_json=snapshot, permission=permission)
+            fields.update(overrides)
+            return FormulaPreferences.restore_checkpoint(**fields)
+        expect_error("STALE_CHECKPOINT", export)
+        expect_error("PREFERENCE_STORAGE_DISABLED", lambda: restore(permission=disabled))
+        expect_error("AUTHENTICATION_FAILED", lambda: restore(storage_key=secrets.token_bytes(32)))
+        expect_error("AUTHENTICATION_FAILED", lambda: restore(key=secrets.token_bytes(32)))
+        expect_error("STALE_CHECKPOINT", lambda: restore(expected_checkpoint=maximum-1))
+        expect_error("SCOPE_MISMATCH", lambda: restore(scope=dict(scope, generation="1")))
+        for invalid in (True, -1, 1.5, "1", 2**64):
+            expect_error("INVALID_ARGUMENT", lambda: restore(expected_checkpoint=invalid))
+        expect_error("LIMIT_EXCEEDED", lambda: restore(snapshot_json=" " * (256 * 1024 + 1)))
+        expect_error("INVALID_SNAPSHOT", lambda: restore(snapshot_json='{"PRIVATE_SECRET":true}'))
+        duplicate = snapshot.replace('"schemaVersion":1', '"schemaVersion":1,"schemaVersion":1', 1)
+        expect_error("INVALID_SNAPSHOT", lambda: restore(snapshot_json=duplicate))
+        changed = json.loads(snapshot); changed["body"]["events"][0]["undone"] = True
+        expect_error("AUTHENTICATION_FAILED", lambda: restore(snapshot_json=json.dumps(changed)))
+        with restore() as restored:
+            assert restored.info()["eventCount"] == 2
+            assert not any(restored.info()["policy"].values())
+            assert restored.rank_fragments(**query)["order"] == [0, 1]
+            restored.set_policy(enabled)
+            assert restored.rank_fragments(**query)["features"][1] == dict(accepted=2, undone=1, lastAcceptedEvent="9")
+            expect_error("STALE_FEEDBACK", lambda: restored.record_undo(old_receipt))
+            expect_error("STALE_FEEDBACK", lambda: restored.record_acceptance_at(old_capture, **accepted, event_id=11))
+            capture = restored.capture_context()
+            expect_error("STALE_FEEDBACK", lambda: restored.record_acceptance_at(capture, **accepted, event_id=10))
+            restored.record_acceptance_at(capture, **accepted, event_id=11)
+            expect_error("STALE_CHECKPOINT", lambda: restored.export_checkpoint(
+                storage_key=storage_key, checkpoint=maximum, permission=permission))
+        expect_error("PREFERENCE_CLOSED", lambda: restored.export_checkpoint(
+            storage_key=storage_key, checkpoint=1, permission=permission))
+    # A different, explicitly authorized sensitive-storage decision is required.
+    with FormulaPreferences(scope=scope, key=key) as sensitive:
+        sensitive.set_policy(dict(enabled, allowSensitiveFeedback=True))
+        private_query = deepcopy(query)
+        private_query["catalog"]["policy"].update(sensitiveDocument=True, allowInSensitiveDocument=True)
+        private_accept = dict(private_query, snapshot=complete_formula_fragments(**private_query)["snapshot"], candidate_id="fragment:second")
+        sensitive.record_acceptance_at(sensitive.capture_context(), **private_accept, event_id=1)
+        sensitive.set_policy(dict(rankingEnabled=False, feedbackEnabled=False, allowSensitiveFeedback=False))
+        expect_error("SENSITIVE_STORAGE_DENIED", lambda: sensitive.export_checkpoint(
+            storage_key=storage_key, checkpoint=1, permission=permission))
+        snapshot = sensitive.export_checkpoint(storage_key=storage_key, checkpoint=1,
+            permission=dict(permission, allowSensitiveStorage=True))
+        fields = dict(scope=scope, key=key, storage_key=storage_key, expected_checkpoint=1,
+            snapshot_json=snapshot, permission=permission)
+        expect_error("SENSITIVE_STORAGE_DENIED", lambda: FormulaPreferences.restore_checkpoint(**fields))
+        fields["permission"] = dict(permission, allowSensitiveStorage=True)
+        with FormulaPreferences.restore_checkpoint(**fields) as restored:
+            assert not any(restored.info()["policy"].values())
+            assert restored.info()["eventCount"] == 1
+    print("Python checkpoints: explicit consent, authenticated restore, fresh owners, precise sequences and sensitive-storage gates passed")

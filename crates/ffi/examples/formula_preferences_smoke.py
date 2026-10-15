@@ -18,6 +18,7 @@ def main():
     functions = {}
     for name, signature in {
         "preferences_capabilities": [], "preferences_create": [ctypes.c_void_p, ctypes.c_size_t],
+        "preferences_restore": [ctypes.c_void_p, ctypes.c_size_t],
         "preferences_command": [ctypes.c_uint64, ctypes.c_void_p, ctypes.c_size_t],
         "preferences_close": [ctypes.c_uint64], "complete_fragments": [ctypes.c_void_p, ctypes.c_size_t],
     }.items():
@@ -44,10 +45,12 @@ def main():
 
     scope = dict(userSha256="a" * 64, projectSha256=None, documentSha256="c" * 64, generation="0")
     owners = []
+    keys = {}
     def new():
-        result = call("preferences_create", body=dict(schemaVersion=1, scope=scope, keyHex=secrets.token_hex(32)))
+        key = secrets.token_hex(32)
+        result = call("preferences_create", body=dict(schemaVersion=1, scope=scope, keyHex=key))
         assert result["ok"], result
-        handle = int(result["data"]["handle"]); owners.append(handle); return handle
+        handle = int(result["data"]["handle"]); owners.append(handle); keys[handle] = key; return handle
     def command(owner, kind, **fields):
         return call("preferences_command", owner, body=dict(kind=kind, **fields))
     policy = dict(rankingEnabled=True, feedbackEnabled=True, allowSensitiveFeedback=False)
@@ -74,6 +77,24 @@ def main():
         assert rank["data"]["features"][0]["lastAcceptedEvent"] == "18446744073709551615"
         assert command(first, "undo", receiptId=receipt)["ok"]
         assert command(first, "undo", receiptId=receipt)["error"]["code"] == "STALE_FEEDBACK"
+        storage_key = secrets.token_hex(32)
+        permission = dict(storageEnabled=True, allowSensitiveStorage=False)
+        exported = command(first, "export-checkpoint", storageKeyHex=storage_key,
+            checkpoint="18446744073709551615", permission=permission)
+        assert exported["ok"], exported
+        assert call("preferences_capabilities")["data"]["authenticatedCheckpoints"]
+        restored_reply = call("preferences_restore", body=dict(schemaVersion=1, scope=scope,
+            keyHex=keys[first], storageKeyHex=storage_key, expectedCheckpoint="18446744073709551615",
+            snapshotJson=exported["data"]["snapshotJson"], permission=permission))
+        assert restored_reply["ok"], restored_reply
+        restored = int(restored_reply["data"]["handle"]); owners.append(restored)
+        assert restored not in (first, second)
+        assert not any(restored_reply["data"]["info"]["policy"].values())
+        assert command(restored, "set-policy", policy=policy)["ok"]
+        assert command(restored, "rank-fragments", request=query)["data"]["features"][0]["undone"] == 1
+        assert command(restored, "undo", receiptId=receipt)["error"]["code"] == "STALE_FEEDBACK"
+        assert command(restored, "export-checkpoint", storageKeyHex=storage_key,
+            checkpoint="18446744073709551615", permission=permission)["error"]["code"] == "STALE_CHECKPOINT"
         capture = command(first, "capture")["data"]["captureId"]
         assert command(first, "set-policy", policy=dict(policy, rankingEnabled=False))["ok"]
         assert command(first, "set-policy", policy=policy)["ok"]
@@ -90,7 +111,7 @@ def main():
     finally:
         for owner in owners:
             call("preferences_close", owner)
-    print("Actual preference C ABI: precise IDs, opaque owner isolation, policy/reset, undo and string ownership passed")
+    print("Actual preference C ABI: precise IDs, authenticated checkpoints, owner isolation, reset, undo and string ownership passed")
 
 
 if __name__ == "__main__":

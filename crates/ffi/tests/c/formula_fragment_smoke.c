@@ -31,6 +31,7 @@ static int preference_owner_smoke(void) {
     unsigned long long parsed;
     uint64_t handle;
     if (!expect_and_free(latexsnipper_formula_preferences_capabilities(), "\"maxStores\":64")) return 20;
+    if (!expect_and_free(latexsnipper_formula_preferences_restore(NULL, 0), "INVALID_ARGUMENT")) return 26;
     response = latexsnipper_formula_preferences_create((const uint8_t *)create, strlen(create));
     if (response == NULL) return 21;
     start = strstr(response, "\"handle\":\"");
