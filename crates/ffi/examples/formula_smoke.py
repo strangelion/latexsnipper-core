@@ -169,6 +169,8 @@ def main() -> None:
     assert scoped_caps["schemaVersion"] == 2
     assert scoped_caps["maxDefinitions"] == 64
     assert scoped_caps["persistence"] is False
+    assert scoped_caps["argumentKinds"] == ["math", "text", "optional-math", "optional-text"]
+    assert scoped_caps["maxLeadingOptionalArguments"] == 1
     catalog = {
         "scope": {"userSha256": "a" * 64, "projectSha256": "b" * 64,
                   "documentSha256": "c" * 64, "generation": str(revision)},
@@ -177,6 +179,13 @@ def main() -> None:
     }
     custom_source = "中\\cust"
     custom_cursor = len(custom_source.encode("utf-8"))
+    for kind in ("optional-math", "optional-text"):
+        optional_catalog = deepcopy(catalog)
+        optional_catalog["definitions"][0]["arguments"].insert(0, kind)
+        optional = library.complete_formula_scoped(custom_source, cursor=custom_cursor, revision=revision, catalog=optional_catalog)
+        optional_edit = library.apply_formula_completion_scoped(custom_source, cursor=custom_cursor, revision=revision,
+            catalog=optional_catalog, snapshot=optional["snapshot"], candidate_id="definition:pair:optional")
+        assert optional_edit["source"] == "中\\custompair[]{}{}" and len(optional_edit["tabStops"]) == 3
     for _ in range(32):
         scoped = library.complete_formula_scoped(custom_source, cursor=custom_cursor, revision=revision, catalog=catalog)
         assert scoped["context"]["schemaVersion"] == 2

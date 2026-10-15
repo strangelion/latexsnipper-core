@@ -30,9 +30,21 @@ export function completionSmoke(api) {
   assert.equal(scopedCaps.data.schemaVersion, 2);
   assert.equal(scopedCaps.data.maxDefinitions, 64);
   assert.equal(scopedCaps.data.persistence, false);
+  assert.deepEqual(scopedCaps.data.argumentKinds, ["math", "text", "optional-math", "optional-text"]);
+  assert.equal(scopedCaps.data.maxLeadingOptionalArguments, 1);
   const catalog = { scope: { userSha256: "a".repeat(64), projectSha256: "b".repeat(64), documentSha256: "c".repeat(64), generation: "18446744073709551615" },
     definitions: [{ id: "pair", revision: "18446744073709551615", userSha256: "a".repeat(64), projectSha256: "b".repeat(64), command: "custompair", arguments: ["math", "text"] }] };
   const scopedInput = { source: "中😀\\cust", cursor: 12, revision: "18446744073709551615", inputFormat: "latex", catalog };
+  for (const kind of ["optional-math", "optional-text"]) {
+    const optionalCatalog = structuredClone(catalog);
+    optionalCatalog.definitions[0].arguments.unshift(kind);
+    const optionalInput = { ...scopedInput, catalog: optionalCatalog };
+    const optional = api.complete_formula_scoped_v3(JSON.stringify(optionalInput));
+    assert.equal(optional.ok, true, JSON.stringify(optional));
+    const accepted = api.apply_formula_completion_scoped_v3(JSON.stringify({ ...optionalInput, snapshot: optional.data.snapshot, candidateId: "definition:pair:optional" }));
+    assert.equal(accepted.data.source, "中😀\\custompair[]{}{}");
+    assert.equal(accepted.data.tabStops.length, 3);
+  }
   const scoped = api.complete_formula_scoped_v3(JSON.stringify(scopedInput));
   assert.equal(scoped.ok, true, JSON.stringify(scoped));
   assert.equal(scoped.data.context.schemaVersion, 2);

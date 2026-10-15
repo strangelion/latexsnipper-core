@@ -3,8 +3,9 @@ use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3};
 use latexsnipper_conversion::formula_completion::{
     scoped::{
         ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletionError,
-        ScopedFormulaCompletionRequest, FORMULA_COMPLETION_MAX_DEFINITIONS,
-        FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS, SCOPED_FORMULA_COMPLETION_VERSION,
+        ScopedFormulaCompletionRequest, FORMULA_COMPLETION_ARGUMENT_KINDS,
+        FORMULA_COMPLETION_MAX_DEFINITIONS, FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+        SCOPED_FORMULA_COMPLETION_VERSION,
     },
     FormulaCompletionApplyRequest, FormulaCompletionError, FormulaCompletionRequest,
     FORMULA_COMPLETION_MAX_BYTES, FORMULA_COMPLETION_MAX_CANDIDATES, FORMULA_COMPLETION_MAX_DEPTH,
@@ -155,6 +156,8 @@ pub fn formula_scoped_completion_capabilities_v3() -> JsValue {
         "maxRequestBytes": MAX_REQUEST_BYTES, "maxResultDataBytes": MAX_DATA_BYTES,
         "maxDefinitions": FORMULA_COMPLETION_MAX_DEFINITIONS,
         "maxDefinitionArguments": FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+        "argumentKinds": FORMULA_COMPLETION_ARGUMENT_KINDS,
+        "maxLeadingOptionalArguments": 1,
         "macroExpansion": false, "persistence": false
     })))
 }

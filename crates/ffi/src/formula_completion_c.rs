@@ -4,8 +4,9 @@ use std::ffi::c_char;
 use latexsnipper_conversion::formula_completion::{
     scoped::{
         ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletionError,
-        ScopedFormulaCompletionRequest, FORMULA_COMPLETION_MAX_DEFINITIONS,
-        FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS, SCOPED_FORMULA_COMPLETION_VERSION,
+        ScopedFormulaCompletionRequest, FORMULA_COMPLETION_ARGUMENT_KINDS,
+        FORMULA_COMPLETION_MAX_DEFINITIONS, FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+        SCOPED_FORMULA_COMPLETION_VERSION,
     },
     FormulaCompletionApplyRequest, FormulaCompletionError, FormulaCompletionRequest,
     FORMULA_COMPLETION_MAX_BYTES, FORMULA_COMPLETION_MAX_CANDIDATES, FORMULA_COMPLETION_MAX_DEPTH,
@@ -128,6 +129,8 @@ pub extern "C" fn latexsnipper_formula_scoped_completion_capabilities() -> *mut 
             "maxResultDataBytes": MAX_COMPLETION_DATA_BYTES,
             "maxDefinitions": FORMULA_COMPLETION_MAX_DEFINITIONS,
             "maxDefinitionArguments": FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+            "argumentKinds": FORMULA_COMPLETION_ARGUMENT_KINDS,
+            "maxLeadingOptionalArguments": 1,
             "macroExpansion": false,
             "persistence": false
         }))

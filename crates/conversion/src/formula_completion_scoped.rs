@@ -9,6 +9,8 @@ use std::collections::BTreeSet;
 pub const SCOPED_FORMULA_COMPLETION_VERSION: u16 = 2;
 pub const FORMULA_COMPLETION_MAX_DEFINITIONS: usize = 64;
 pub const FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS: usize = 4;
+pub const FORMULA_COMPLETION_ARGUMENT_KINDS: [&str; 4] =
+    ["math", "text", "optional-math", "optional-text"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -25,6 +27,21 @@ pub struct FormulaDefinitionScope {
 pub enum FormulaDefinitionArgument {
     Math,
     Text,
+    OptionalMath,
+    OptionalText,
+}
+
+impl FormulaDefinitionArgument {
+    fn optional(self) -> bool {
+        matches!(self, Self::OptionalMath | Self::OptionalText)
+    }
+
+    fn slot(self) -> FormulaSlot {
+        match self {
+            Self::Math | Self::OptionalMath => FormulaSlot::MathArgument,
+            Self::Text | Self::OptionalText => FormulaSlot::Text,
+        }
+    }
 }
 
 /// A TeX control word without a leading backslash. Bodies/expansion are absent.
@@ -192,6 +209,11 @@ fn prepare(catalog: &FormulaDefinitionCatalog) -> ScopedResult<PreparedCatalog<'
                 .all(|byte| byte.is_ascii_alphabetic())
             || !valid_optional_hash(&definition.project_sha256)
             || reserved(&definition.command)
+            || definition
+                .arguments
+                .iter()
+                .skip(1)
+                .any(|argument| argument.optional())
             || !ids.insert(&definition.id)
             || !commands.insert(&definition.command)
         {
@@ -205,13 +227,16 @@ fn prepare(catalog: &FormulaDefinitionCatalog) -> ScopedResult<PreparedCatalog<'
         .iter()
         .map(|definition| CommandSignature {
             command: definition.command.clone(),
+            optional: definition
+                .arguments
+                .first()
+                .filter(|arg| arg.optional())
+                .map(|arg| arg.slot()),
             slots: definition
                 .arguments
                 .iter()
-                .map(|arg| match arg {
-                    FormulaDefinitionArgument::Math => FormulaSlot::MathArgument,
-                    FormulaDefinitionArgument::Text => FormulaSlot::Text,
-                })
+                .filter(|arg| !arg.optional())
+                .map(|arg| arg.slot())
                 .collect(),
         })
         .collect();
@@ -264,36 +289,61 @@ fn complete_prepared(
                 .iter()
                 .filter(|entry| entry.command.starts_with(&prefix.prefix))
             {
-                let mut insert = format!("\\{}", definition.command);
+                let optional = definition
+                    .arguments
+                    .first()
+                    .is_some_and(|arg| arg.optional());
                 // An existing argument list is preserved as a whole. Partial
                 // lists remain incomplete instead of guessing/duplicating args.
-                if !candidates::existing_group(source, prefix.replace.end, false) {
-                    for _ in &definition.arguments {
-                        insert.push_str("{}");
+                let existing = candidates::existing_group(source, prefix.replace.end, optional);
+                for include_optional in
+                    [false, true]
+                        .into_iter()
+                        .take(if optional && !existing { 2 } else { 1 })
+                {
+                    let mut insert = format!("\\{}", definition.command);
+                    if !existing {
+                        for argument in &definition.arguments {
+                            if argument.optional() {
+                                if include_optional {
+                                    insert.push_str("[]");
+                                }
+                            } else {
+                                insert.push_str("{}");
+                            }
+                        }
                     }
-                }
-                let edit = candidates::candidate(
-                    source,
-                    &context,
-                    &format!("definition:{}", definition.id),
-                    &format!("\\{}", definition.command),
-                    prefix.replace,
-                    &insert,
-                    &prepared.signatures,
-                );
-                match edit {
-                    Ok(mut edit) => {
-                        edit.source = "core:definition".into();
-                        candidates.push(ScopedFormulaCandidate {
-                            edit,
-                            definition: Some(FormulaDefinitionReference {
-                                id: definition.id.clone(),
-                                revision: definition.revision,
-                            }),
-                        });
+                    let edit = candidates::candidate(
+                        source,
+                        &context,
+                        &format!(
+                            "definition:{}{}",
+                            definition.id,
+                            if include_optional { ":optional" } else { "" }
+                        ),
+                        &format!(
+                            "\\{}{}",
+                            definition.command,
+                            if include_optional { "[]" } else { "" }
+                        ),
+                        prefix.replace,
+                        &insert,
+                        &prepared.signatures,
+                    );
+                    match edit {
+                        Ok(mut edit) => {
+                            edit.source = "core:definition".into();
+                            candidates.push(ScopedFormulaCandidate {
+                                edit,
+                                definition: Some(FormulaDefinitionReference {
+                                    id: definition.id.clone(),
+                                    revision: definition.revision,
+                                }),
+                            });
+                        }
+                        Err(FormulaCompletionError::LimitExceeded) => {}
+                        Err(error) => return Err(error.into()),
                     }
-                    Err(FormulaCompletionError::LimitExceeded) => {}
-                    Err(error) => return Err(error.into()),
                 }
             }
         }

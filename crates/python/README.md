@@ -165,7 +165,12 @@ Scope hashes above are illustrative opaque identities, not credentials. The host
 must supply authorized user/project definitions, actual document identity, and a
 generation advanced on clear/reset. A definition has a 1–64 byte ASCII ID
 (letters/digits/`-_.`), an ASCII-letter control word without backslash/digits, and
-at most four required math/text arguments (empty for zero-argument symbols).
+at most four arguments (empty for zero-argument symbols). Required kinds are
+`math`/`text`; one leading `optional-math`/`optional-text` is supported when
+capabilities advertise it in `argumentKinds` and `maxLeadingOptionalArguments`.
+`definition:<id>` omits that optional argument; `definition:<id>:optional` inserts
+`[]` and required arguments with typed tab stops. Existing lists are not duplicated,
+and Core never expands default values.
 Other user/project items are filtered; effective duplicate IDs/commands and
 builtin collisions are refused. Core binds actual effective content as well as
 claimed versions, user/project/document and reset epoch. Stale scoped contexts

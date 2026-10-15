@@ -187,6 +187,26 @@ test("scoped queue owns catalog and snapshot, discards old responses and bounds 
   client.terminate();
 });
 
+test("optional signature kinds cross the Worker while active-shape policy remains in Core", async () => {
+  const worker = new FakeWorker();
+  const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => worker });
+  await client.ready();
+  for (const kind of ["optional-math", "optional-text"] as const) {
+    const request = structuredClone(scopedInput);
+    request.catalog.definitions[0]!.arguments.unshift(kind);
+    assert.equal(validateWorkerRequest({ protocolVersion: 1, requestId: "optional", type: "complete-formula-scoped", input: request }).ok, true);
+    const pending = client.completeFormulaScoped(request); await tick();
+    const wire = worker.requests.at(-1)!;
+    assert.equal(wire.type, "complete-formula-scoped");
+    if (wire.type === "complete-formula-scoped") assert.deepEqual(wire.input.catalog, request.catalog);
+    worker.emit(wire.requestId, failure); await pending;
+    // Ordering is semantic, so foreign catalogs are filtered before Core checks it.
+    request.catalog.definitions[0]!.arguments.push(kind);
+    assert.equal(validateWorkerRequest({ protocolVersion: 1, requestId: "optional-shape", type: "complete-formula-scoped", input: request }).ok, true);
+  }
+  client.terminate();
+});
+
 test("scoped timeout never replays an edit and queued abort does not terminate active work", async () => {
   const workers: FakeWorker[] = [];
   const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => {

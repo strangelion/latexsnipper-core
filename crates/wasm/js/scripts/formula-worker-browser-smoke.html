@@ -74,6 +74,15 @@ window.formulaWorkerProof = (async () => {
     const scopedApply = { ...scopedInput, snapshot: scoped.data.snapshot, candidateId: "definition:pair" };
     const scopedAccepted = await client.applyFormulaCompletionScoped(scopedApply);
     verify(scopedAccepted.ok && scopedAccepted.data.source === "中😀\\custompair{}{}" && scopedAccepted.data.cursor === 19, "scoped canonical edit");
+    for (const kind of ["optional-math", "optional-text"]) {
+      const optionalCatalog = structuredClone(catalog);
+      optionalCatalog.definitions[0].arguments.unshift(kind);
+      const optionalInput = { ...scopedInput, catalog: optionalCatalog };
+      const optional = await client.completeFormulaScoped(optionalInput);
+      verify(optional.ok, "optional signature query");
+      const accepted = await client.applyFormulaCompletionScoped({ ...optionalInput, snapshot: optional.data.snapshot, candidateId: "definition:pair:optional" });
+      verify(accepted.ok && accepted.data.source === "中😀\\custompair[]{}{}" && accepted.data.tabStops.length === 3, "optional signature acceptance");
+    }
     const changed = structuredClone(catalog); changed.scope.generation = "0";
     const scopedStale = await client.applyFormulaCompletionScoped({ ...scopedApply, catalog: changed });
     verify(!scopedStale.ok && scopedStale.error.code === "STALE_CONTEXT", "scoped reset guard");

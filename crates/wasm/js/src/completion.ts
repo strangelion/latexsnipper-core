@@ -49,8 +49,9 @@ export interface FormulaDefinitionScope {
 }
 export interface FormulaCommandDefinition {
   id: string; revision: string; userSha256: string; projectSha256: string | null;
-  command: string; arguments: ("math" | "text")[];
+  command: string; arguments: FormulaDefinitionArgument[];
 }
+export type FormulaDefinitionArgument = "math" | "text" | "optional-math" | "optional-text";
 export interface FormulaDefinitionCatalog { scope: FormulaDefinitionScope; definitions: FormulaCommandDefinition[] }
 export interface ScopedFormulaSnapshot extends FormulaCompletionSnapshot { schemaVersion: 2; definitionsSha256: string }
 export interface ScopedFormulaCandidate { edit: FormulaCompletionCandidate; definition: { id: string; revision: string } | null }
@@ -63,6 +64,8 @@ export interface ScopedFormulaCompletionCapabilities extends FormulaCompletionCa
   schemaVersion: 2; scopeIdentityEncoding: "opaque-lowercase-sha256";
   definitionRevisionEncoding: "canonical-decimal-u64-string"; generationEncoding: "canonical-decimal-u64-string";
   maxDefinitions: number; maxDefinitionArguments: number; macroExpansion: false; persistence: false;
+  /** Older Core builds omit these; feature-detect before sending optional kinds. */
+  argumentKinds?: FormulaDefinitionArgument[]; maxLeadingOptionalArguments?: number;
 }
 export interface WasmScopedFormulaCompletionApi {
   formula_scoped_completion_capabilities_v3(): ApiEnvelopeV3<ScopedFormulaCompletionCapabilities>;
@@ -140,7 +143,7 @@ function catalogError(value: unknown): string | undefined {
     if (!record(entry) || !closed(entry, ["id", "revision", "userSha256", "projectSha256", "command", "arguments"]) ||
         typeof entry.id !== "string" || !revision(entry.revision) || typeof entry.userSha256 !== "string" ||
         !(entry.projectSha256 === null || entry.projectSha256 === undefined || typeof entry.projectSha256 === "string") || typeof entry.command !== "string" ||
-        !Array.isArray(entry.arguments) || !entry.arguments.every((arg) => arg === "math" || arg === "text")) return "Invalid closed completion definition";
+        !Array.isArray(entry.arguments) || !entry.arguments.every((arg) => arg === "math" || arg === "text" || arg === "optional-math" || arg === "optional-text")) return "Invalid closed completion definition";
   }
   try { if (new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_COMPLETION_CATALOG_BYTES) return "Completion catalog exceeds 64 KiB JSON"; }
   catch { return "Completion catalog must be JSON-serializable"; }

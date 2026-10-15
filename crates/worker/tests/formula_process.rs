@@ -83,6 +83,14 @@ fn scoped_completion_rpc_filters_definitions_and_rejects_cross_scope_edits() {
     let mut worker = Process::start();
     let caps = worker.call(json!("caps-scoped"), "formula.capabilities", json!({}));
     assert_eq!(caps["data"]["scopedCompletion"]["schemaVersion"], 2);
+    assert_eq!(
+        caps["data"]["scopedCompletion"]["argumentKinds"],
+        json!(["math", "text", "optional-math", "optional-text"])
+    );
+    assert_eq!(
+        caps["data"]["scopedCompletion"]["maxLeadingOptionalArguments"],
+        1
+    );
     let catalog = json!({
         "scope": {"userSha256": "a".repeat(64), "projectSha256": "b".repeat(64),
             "documentSha256": "c".repeat(64), "generation": "18446744073709551615"},
@@ -92,6 +100,21 @@ fn scoped_completion_rpc_filters_definitions_and_rejects_cross_scope_edits() {
     });
     let params = json!({"source": "中\\cust", "cursor": 8,
         "revision": "18446744073709551615", "inputFormat": "latex", "catalog": catalog});
+    for kind in ["optional-math", "optional-text"] {
+        let mut optional = params.clone();
+        optional["catalog"]["definitions"][0]["arguments"] = json!([kind, "math", "text"]);
+        let result = worker.call(json!(kind), "formula.complete.scoped", optional.clone());
+        assert_eq!(result["ok"], true, "{result}");
+        optional["snapshot"] = result["data"]["snapshot"].clone();
+        optional["candidateId"] = json!("definition:pair:optional");
+        let applied = worker.call(
+            json!(format!("apply-{kind}")),
+            "formula.completion.apply.scoped",
+            optional,
+        );
+        assert_eq!(applied["data"]["source"], "中\\custompair[]{}{}");
+        assert_eq!(applied["data"]["tabStops"].as_array().unwrap().len(), 3);
+    }
     let completed = worker.call(
         json!("scoped-query"),
         "formula.complete.scoped",

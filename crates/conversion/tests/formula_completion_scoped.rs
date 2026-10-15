@@ -128,6 +128,325 @@ fn zero_argument_symbols_are_data_not_macro_expansion() {
 }
 
 #[test]
+fn optional_signatures_keep_omission_incomplete_arguments_and_typed_slots_distinct() {
+    let mut catalog = catalog();
+    catalog.definitions[0]
+        .arguments
+        .insert(0, FormulaDefinitionArgument::OptionalMath);
+    for (source, slot, text) in [
+        (
+            r"\custompair[▮]{x}{caption}",
+            FormulaSlot::MathArgument,
+            false,
+        ),
+        (
+            r"\custompair[\frac{a}{▮b}]{x}{caption}",
+            FormulaSlot::FractionDenominator,
+            false,
+        ),
+        (
+            r"\custompair{▮x}{caption}",
+            FormulaSlot::MathArgument,
+            false,
+        ),
+        (r"\custompair[2]{x}{\fr▮}", FormulaSlot::Text, true),
+    ] {
+        let reply = query(source, &catalog);
+        assert_eq!(reply.context.slot, slot, "{source}");
+        assert_eq!(reply.context.in_text, text, "{source}");
+        assert!(reply.context.diagnostics.is_empty(), "{source}");
+    }
+    let unfinished = query(r"\custompair[\fr▮", &catalog);
+    assert!(unfinished
+        .context
+        .diagnostics
+        .iter()
+        .any(|item| item.code == "UNCLOSED_GROUP"));
+    assert!(!unfinished
+        .context
+        .nodes
+        .iter()
+        .any(|node| node.slot == Some(FormulaSlot::Text)));
+    catalog.definitions[0].arguments[0] = FormulaDefinitionArgument::OptionalText;
+    let literal = query(r"\custompair[\fr▮]{x}{caption}", &catalog);
+    assert!(literal.context.in_text && literal.candidates.is_empty());
+    assert_eq!(literal.context.slot, FormulaSlot::Text);
+}
+
+#[test]
+fn optional_candidates_offer_explicit_brackets_without_duplicating_existing_lists() {
+    let mut catalog = catalog();
+    catalog.definitions[0]
+        .arguments
+        .insert(0, FormulaDefinitionArgument::OptionalMath);
+    let source = "中\\cust";
+    let reply = complete_formula_scoped(source, source.len(), 7, &catalog).unwrap();
+    for (id, suffix, stops) in [
+        ("definition:custom-pair", r"\custompair{}{}", 2),
+        ("definition:custom-pair:optional", r"\custompair[]{}{}", 3),
+    ] {
+        let applied =
+            apply_formula_candidate_scoped(source, source.len(), 7, &catalog, &reply.snapshot, id)
+                .unwrap();
+        assert_eq!(applied.source, format!("中{suffix}"));
+        assert_eq!(applied.tab_stops.len(), stops);
+        assert!(applied
+            .tab_stops
+            .iter()
+            .all(|stop| applied.source.is_char_boundary(stop.start) && stop.start == stop.end));
+        assert_eq!(applied.cursor, applied.tab_stops[0].start);
+    }
+    for source in [
+        r"\cust[2]{x}{caption}",
+        r"\cust[",
+        r"\cust{x}",
+        "\\cust % header\n[2]",
+    ] {
+        let reply = complete_formula_scoped(source, 5, 7, &catalog).unwrap();
+        let custom: Vec<_> = reply
+            .candidates
+            .iter()
+            .filter(|item| item.definition.is_some())
+            .collect();
+        assert_eq!(custom.len(), 1, "{source}");
+        assert_eq!(custom[0].edit.insert, r"\custompair");
+        let applied = apply_formula_candidate_scoped(
+            source,
+            5,
+            7,
+            &catalog,
+            &reply.snapshot,
+            &custom[0].edit.id,
+        )
+        .unwrap();
+        assert_eq!(applied.source, source.replacen(r"\cust", r"\custompair", 1));
+        assert!(applied.tab_stops.is_empty());
+    }
+    catalog.definitions[0].arguments = vec![FormulaDefinitionArgument::OptionalText];
+    let reply = query(r"\cust▮", &catalog);
+    assert!(reply
+        .candidates
+        .iter()
+        .any(|item| item.edit.insert == r"\custompair" && item.edit.tab_stops.is_empty()));
+    assert!(reply
+        .candidates
+        .iter()
+        .any(|item| item.edit.insert == r"\custompair[]" && item.edit.tab_stops.len() == 1));
+}
+
+#[test]
+fn optional_arguments_respect_tex_token_boundaries_and_do_not_expand_macros() {
+    let mut catalog = catalog();
+    catalog.definitions[0].arguments = vec![
+        FormulaDefinitionArgument::OptionalMath,
+        FormulaDefinitionArgument::Math,
+    ];
+    for marked in [
+        r"\custompair[{[x]}]{▮y}",
+        r"\custompair[\]x]{▮y}",
+        "\\custompair[x % ignored ] }\n]{▮y}",
+        r"\custompair[\text{]}]{▮y}",
+    ] {
+        let reply = query(marked, &catalog);
+        assert!(
+            reply.context.diagnostics.is_empty(),
+            "{marked}: {:?}",
+            reply.context.diagnostics
+        );
+        assert_eq!(reply.context.slot, FormulaSlot::MathArgument, "{marked}");
+    }
+    for (source, expected) in [
+        (r"\custompair[[x]]{y}", "[x"),
+        (r"\custompair[\left(x\right]]{y}", r"\left(x\right"),
+        (r"\custompair[\verb|]|]{y}", r"\verb|"),
+    ] {
+        let reply = complete_formula_scoped(source, 0, 7, &catalog).unwrap();
+        let node = reply
+            .context
+            .nodes
+            .iter()
+            .find(|node| {
+                node.range.start == r"\custompair".len()
+                    && node.slot == Some(FormulaSlot::MathArgument)
+            })
+            .unwrap();
+        assert_eq!(
+            &source[node.content.start..node.content.end],
+            expected,
+            "{source}"
+        );
+        assert!(node.closed);
+        assert!(!reply.context.diagnostics.is_empty(), "{source}");
+    }
+    let reply = query(r"\frac{\custompair[x}{▮y}", &catalog);
+    assert_eq!(reply.context.slot, FormulaSlot::FractionDenominator);
+    assert!(reply
+        .context
+        .diagnostics
+        .iter()
+        .any(|item| item.code == "UNCLOSED_GROUP"));
+}
+
+#[test]
+fn optional_signature_shapes_are_bounded_filtered_and_bound_to_the_snapshot() {
+    let mut catalog = catalog();
+    for arguments in [
+        vec![
+            FormulaDefinitionArgument::Math,
+            FormulaDefinitionArgument::OptionalMath,
+        ],
+        vec![
+            FormulaDefinitionArgument::OptionalMath,
+            FormulaDefinitionArgument::OptionalText,
+        ],
+    ] {
+        catalog.definitions[0].arguments = arguments;
+        assert_eq!(
+            complete_formula_scoped("", 0, 7, &catalog),
+            Err(ScopedFormulaCompletionError::InvalidCatalog)
+        );
+        let mut foreign = catalog.definitions[0].clone();
+        foreign.user_sha256 = "f".repeat(64);
+        catalog.definitions[0].arguments = vec![FormulaDefinitionArgument::Math];
+        catalog.definitions.push(foreign);
+        assert!(complete_formula_scoped("", 0, 7, &catalog).is_ok());
+        catalog.definitions.pop();
+    }
+    catalog.definitions[0].arguments = vec![
+        FormulaDefinitionArgument::OptionalMath,
+        FormulaDefinitionArgument::Math,
+    ];
+    let reply = query(r"\cust▮", &catalog);
+    catalog.definitions[0].arguments[0] = FormulaDefinitionArgument::OptionalText;
+    assert_eq!(
+        apply_formula_candidate_scoped(
+            r"\cust",
+            5,
+            u64::MAX,
+            &catalog,
+            &reply.snapshot,
+            "definition:custom-pair:optional"
+        ),
+        Err(ScopedFormulaCompletionError::StaleContext)
+    );
+    let encoded = serde_json::to_value(&catalog).unwrap();
+    assert_eq!(
+        encoded["definitions"][0]["arguments"],
+        json!(["optional-text", "math"])
+    );
+    assert_eq!(
+        serde_json::from_value::<FormulaDefinitionCatalog>(encoded).unwrap(),
+        catalog
+    );
+}
+
+#[test]
+fn optional_candidate_expansion_respects_the_global_ceiling() {
+    let mut catalog = catalog();
+    let definition = catalog.definitions[0].clone();
+    catalog.definitions = (0..64)
+        .map(|index| {
+            let mut entry = definition.clone();
+            entry.id = format!("entry-{index}");
+            entry.command = format!(
+                "custom{}{}",
+                (b'a' + index / 26) as char,
+                (b'a' + index % 26) as char
+            );
+            entry.arguments = vec![
+                FormulaDefinitionArgument::OptionalMath,
+                FormulaDefinitionArgument::Math,
+            ];
+            entry
+        })
+        .collect();
+    let reply = query(r"\▮", &catalog);
+    assert_eq!(reply.candidates.len(), FORMULA_COMPLETION_MAX_CANDIDATES);
+    assert!(reply
+        .candidates
+        .iter()
+        .all(|entry| entry.definition.is_some()));
+    assert_eq!(
+        reply
+            .candidates
+            .iter()
+            .filter(|entry| entry.edit.id.ends_with(":optional"))
+            .count(),
+        64
+    );
+}
+
+#[test]
+fn optional_argument_scanning_keeps_bounded_unicode_source_ranges() {
+    let mut catalog = catalog();
+    catalog.definitions[0].arguments = vec![
+        FormulaDefinitionArgument::OptionalMath,
+        FormulaDefinitionArgument::Math,
+    ];
+    let source = format!("{}x", r"\custompair[".repeat(70));
+    assert_eq!(
+        complete_formula_scoped(&source, 0, 7, &catalog),
+        Err(ScopedFormulaCompletionError::LimitExceeded)
+    );
+    let pieces = [
+        r"\custompair[",
+        r"\sqrt[",
+        r"\cfrac[",
+        "[",
+        "]",
+        "{",
+        "}",
+        r"\left[",
+        r"\right]",
+        r"\]",
+        "% ] }\n",
+        "α😀",
+        r"\frac",
+        "x^",
+        " & ",
+    ];
+    let mut state: usize = 42;
+    for _ in 0..80 {
+        let mut source = String::new();
+        for _ in 0..12 {
+            state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+            source.push_str(pieces[state % pieces.len()]);
+        }
+        for cursor in source
+            .char_indices()
+            .map(|(index, _)| index)
+            .chain([source.len()])
+            .step_by(3)
+        {
+            let reply = complete_formula_scoped(&source, cursor, 7, &catalog).unwrap();
+            assert_eq!(reply.context.nodes[0].range.end, source.len());
+            for (index, node) in reply.context.nodes.iter().enumerate() {
+                assert!(
+                    node.range.start <= node.content.start
+                        && node.content.start <= node.content.end
+                        && node.content.end <= node.range.end
+                );
+                for offset in [
+                    node.range.start,
+                    node.range.end,
+                    node.content.start,
+                    node.content.end,
+                ] {
+                    assert!(offset <= source.len() && source.is_char_boundary(offset));
+                }
+                if let Some(parent) = node.parent {
+                    assert!(parent < index);
+                    assert!(
+                        reply.context.nodes[parent].range.start <= node.range.start
+                            && node.range.end <= reply.context.nodes[parent].range.end
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn scoped_signatures_and_fences_keep_nested_math_and_literal_ownership_separate() {
     let catalog = catalog();
     let reply = query(r"\custompair{\left(\sqrt[3]{▮x}\right)}{caption}", &catalog);

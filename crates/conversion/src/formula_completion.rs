@@ -184,6 +184,7 @@ struct EditingParser<'a> {
 
 struct CommandSignature {
     command: String,
+    optional: Option<FormulaSlot>,
     slots: Vec<FormulaSlot>,
 }
 
@@ -327,6 +328,35 @@ impl EditingParser<'_> {
         Ok(id)
     }
 
+    fn optional_argument(
+        &mut self,
+        parent: usize,
+        slot: FormulaSlot,
+        depth: usize,
+        text: bool,
+    ) -> EditResult<usize> {
+        let start = self.pos;
+        self.pos += 1;
+        let id = self.add(Some(parent), FormulaEditKind::Group, Some(slot), start)?;
+        self.nodes[id].content.start = self.pos;
+        let (end, closed) = commands::optional_end(self.source, self.pos);
+        // A TeX bracket-delimited argument ends at the first unbraced ].
+        // Bound nested parsing so a presentation fence or command cannot eat it.
+        let source = self.source;
+        self.source = &source[..end];
+        let parsed = self.sequence(id, None, depth + 1, text);
+        self.source = source;
+        parsed?;
+        if closed {
+            self.pos += 1;
+        }
+        self.finish(id, end, closed);
+        if !closed {
+            self.diagnostic("UNCLOSED_GROUP", self.nodes[id].range);
+        }
+        Ok(id)
+    }
+
     fn atom(&mut self, parent: usize, depth: usize, text: bool) -> EditResult<()> {
         self.atom_token(parent, depth, text, true)
     }
@@ -444,11 +474,9 @@ impl EditingParser<'_> {
         }
         let builtin_slots = commands::slots(&name);
         // Copy the bounded signature so recursive parsing can mutably borrow self.
-        let declared_slots = self
-            .signatures
-            .iter()
-            .find(|entry| entry.command == name)
-            .map_or(builtin_slots, |entry| entry.slots.as_slice());
+        let signature = self.signatures.iter().find(|entry| entry.command == name);
+        let declared_slots = signature.map_or(builtin_slots, |entry| entry.slots.as_slice());
+        let optional = signature.and_then(|entry| entry.optional);
         let count = declared_slots.len();
         let mut slots =
             [FormulaSlot::MathArgument; scoped::FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS];
@@ -463,10 +491,19 @@ impl EditingParser<'_> {
         if delimiters::single_marker(&name) {
             closed &= self.sized_marker(id, depth)?;
         }
+        if let Some(slot) = optional {
+            self.trivia(id)?;
+            if self.ch() == Some('[') {
+                let argument =
+                    self.optional_argument(id, slot, depth, slot == FormulaSlot::Text)?;
+                closed &= self.nodes[argument].closed;
+            }
+        }
         if name == "cfrac" {
             self.trivia(id)?;
             if self.ch() == Some('[') {
-                let alignment = self.group(id, FormulaSlot::FractionAlignment, ']', depth, true)?;
+                let alignment =
+                    self.optional_argument(id, FormulaSlot::FractionAlignment, depth, true)?;
                 if !self.nodes[alignment].closed {
                     self.finish(id, name_end, false);
                     return Ok(());
@@ -476,7 +513,7 @@ impl EditingParser<'_> {
         if name == "sqrt" {
             self.trivia(id)?;
             if self.ch() == Some('[') {
-                let index = self.group(id, FormulaSlot::RadicalIndex, ']', depth, false)?;
+                let index = self.optional_argument(id, FormulaSlot::RadicalIndex, depth, false)?;
                 closed &= self.nodes[index].closed;
             }
             if closed {
@@ -520,6 +557,9 @@ impl EditingParser<'_> {
         }
         let mut environment = None;
         for slot in &slots[..count] {
+            if !closed {
+                break;
+            }
             let arg = self.argument(
                 id,
                 *slot,

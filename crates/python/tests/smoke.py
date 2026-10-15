@@ -208,6 +208,8 @@ def scoped_completion_smoke() -> None:
     assert caps["maxCatalogBytes"] == 65536
     assert caps["revisionArgumentEncoding"] == "python-int-u64"
     assert not caps["macroExpansion"] and not caps["persistence"]
+    assert caps["argumentKinds"] == ["math", "text", "optional-math", "optional-text"]
+    assert caps["maxLeadingOptionalArguments"] == 1
     catalog = {
         "scope": {"userSha256": "a" * 64, "projectSha256": "b" * 64,
                   "documentSha256": "c" * 64, "generation": str(2**64 - 1)},
@@ -215,6 +217,14 @@ def scoped_completion_smoke() -> None:
                          "projectSha256": "b" * 64, "command": "custompair", "arguments": ["math", "text"]}],
     }
     params = dict(source="中\\cust", cursor=8, revision=2**64 - 1, catalog=catalog)
+    for kind in ("optional-math", "optional-text"):
+        optional_catalog = deepcopy(catalog)
+        optional_catalog["definitions"][0]["arguments"].insert(0, kind)
+        optional_params = {**params, "catalog": optional_catalog}
+        optional = complete_formula_scoped(**optional_params)
+        optional_edit = apply_formula_completion_scoped(**optional_params,
+            snapshot=optional["snapshot"], candidate_id="definition:pair:optional")
+        assert optional_edit["source"] == "中\\custompair[]{}{}" and len(optional_edit["tabStops"]) == 3
     reply = complete_formula_scoped(**params)
     assert reply["snapshot"]["revision"] == str(2**64 - 1)
     assert reply["candidates"][0]["definition"] == {"id": "pair", "revision": str(2**64 - 1)}

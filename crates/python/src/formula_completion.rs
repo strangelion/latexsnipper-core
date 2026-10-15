@@ -3,8 +3,8 @@ use latexsnipper_conversion::formula_completion::{
     scoped::{
         FormulaDefinitionCatalog, ScopedFormulaCompletionApplyRequest,
         ScopedFormulaCompletionError, ScopedFormulaCompletionRequest, ScopedFormulaSnapshot,
-        FORMULA_COMPLETION_MAX_DEFINITIONS, FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
-        SCOPED_FORMULA_COMPLETION_VERSION,
+        FORMULA_COMPLETION_ARGUMENT_KINDS, FORMULA_COMPLETION_MAX_DEFINITIONS,
+        FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS, SCOPED_FORMULA_COMPLETION_VERSION,
     },
     FormulaCompletionApplyRequest, FormulaCompletionError, FormulaCompletionInputFormat,
     FormulaCompletionRequest, FormulaCompletionSnapshot, FORMULA_COMPLETION_MAX_BYTES,
@@ -221,6 +221,8 @@ pub(super) fn formula_scoped_completion_capabilities(py: Python<'_>) -> PyResult
         "maxResultDataBytes": MAX_COMPLETION_DATA_BYTES, "maxSnapshotBytes": MAX_SNAPSHOT_BYTES,
         "maxCatalogBytes": MAX_CATALOG_BYTES, "maxDefinitions": FORMULA_COMPLETION_MAX_DEFINITIONS,
         "maxDefinitionArguments": FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+        "argumentKinds": FORMULA_COMPLETION_ARGUMENT_KINDS,
+        "maxLeadingOptionalArguments": 1,
         "macroExpansion": false, "persistence": false
     })).map_err(|error| python_error(py, error))?;
     json_to_python(py, json)

@@ -218,7 +218,9 @@ fn presentation_fences_never_swallow_matrix_or_lexical_argument_boundaries() {
         );
     }
     assert_eq!(context(r"\sqrt[(x]{▮y}").slot, FormulaSlot::RadicalBody);
-    assert!(context(r"\sqrt[[x]]{▮y}").diagnostics.is_empty());
+    assert!(context(r"\sqrt[{[x]}]{▮y}").diagnostics.is_empty());
+    // A raw ] ends a TeX optional argument; presentation pairing cannot hide it.
+    assert!(!context(r"\sqrt[[x]]{▮y}").diagnostics.is_empty());
     for (source, slot) in [
         (r"\frac(x)y", FormulaSlot::FractionNumerator),
         (r"x^(y)", FormulaSlot::Superscript),

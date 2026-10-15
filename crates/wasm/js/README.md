@@ -89,7 +89,12 @@ Worker actions are additive `complete-formula-scoped` and
 Query input adds the current `catalog: {scope, definitions}`. Scope has opaque
 `userSha256`, nullable `projectSha256/documentSha256`, and `generation`.
 Definitions have `id/revision/userSha256/projectSha256/command/arguments`, with at
-most 64 items and four required `math`/`text` arguments each (empty for symbols).
+most 64 items and four arguments each (empty for symbols). Required kinds are
+`math`/`text`; one leading `optional-math`/`optional-text` is also supported.
+Feature-detect `argumentKinds` and `maxLeadingOptionalArguments` before sending
+optional kinds to older builds. The usual `definition:<id>` candidate omits the
+optional argument; `definition:<id>:optional` explicitly inserts `[]` and typed
+tab stops. Existing bracket/braced lists are preserved. No defaults are expanded.
 Commands are 1–64 ASCII letters without backslash/digits; IDs allow ASCII
 letters/digits/`-_.` up to 64 bytes. All revisions/generations are exact canonical
 decimal strings, including `"18446744073709551615"`. Scope hashes must be 64
