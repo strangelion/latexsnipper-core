@@ -157,6 +157,32 @@ fn scoped_completion_rpc_filters_definitions_and_rejects_cross_scope_edits() {
 }
 
 #[test]
+fn delimiter_ownership_and_closure_survive_the_real_jsonl_transport() {
+    let mut worker = Process::start();
+    let source = "中\\left(x";
+    let params = json!({"source": source, "cursor": source.len(), "revision": "18446744073709551615", "inputFormat": "latex"});
+    let reply = worker.call(json!("fence-query"), "formula.complete", params.clone());
+    assert_eq!(reply["ok"], true);
+    assert_eq!(reply["data"]["completion"]["context"]["slot"], "group");
+    let mut apply = params;
+    apply["snapshot"] = reply["data"]["snapshot"].clone();
+    apply["candidateId"] = json!("structure:close-delimiter");
+    let accepted = worker.call(json!("fence-apply"), "formula.completion.apply", apply);
+    assert_eq!(accepted["data"]["source"], "中\\left(x\\right)");
+    let template = worker.call(
+        json!("fence-template"),
+        "formula.complete",
+        json!({"source": "\\lang", "cursor": 5, "revision": "0", "inputFormat": "latex"}),
+    );
+    let applied = worker.call(json!("fence-template-apply"), "formula.completion.apply",
+        json!({"source": "\\lang", "cursor": 5, "revision": "0", "inputFormat": "latex", "snapshot": template["data"]["snapshot"], "candidateId": "builtin:langle"}));
+    assert_eq!(applied["data"]["source"], r"\langle\rangle");
+    assert_eq!(applied["data"]["cursor"], 7);
+    worker.call(json!("fence-stop"), "worker.shutdown", json!({}));
+    worker.successful_exit();
+}
+
+#[test]
 fn formula_rpc_reuses_real_process_after_error_and_flushes_before_shutdown() {
     let mut worker = Process::start();
     let capabilities = worker.call(json!(1), "formula.capabilities", json!({}));

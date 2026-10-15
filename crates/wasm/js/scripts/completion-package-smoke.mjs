@@ -4,6 +4,19 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export function completionSmoke(api) {
+  const fenceSource = "中\\left(x";
+  const fenceInput = { source: fenceSource, cursor: new TextEncoder().encode(fenceSource).byteLength, revision: "42", inputFormat: "latex" };
+  const fence = api.complete_formula_v3(JSON.stringify(fenceInput));
+  assert.equal(fence.data.completion.context.slot, "group");
+  assert.equal(api.apply_formula_completion_v3(JSON.stringify({ ...fenceInput, snapshot: fence.data.snapshot, candidateId: "structure:close-delimiter" })).data.source, "中\\left(x\\right)");
+  const paired = api.complete_formula_v3(JSON.stringify({ source: "\\lang", cursor: 5, revision: "0", inputFormat: "latex" }));
+  const pairedEdit = api.apply_formula_completion_v3(JSON.stringify({ source: "\\lang", cursor: 5, revision: "0", inputFormat: "latex", snapshot: paired.data.snapshot, candidateId: "builtin:langle" }));
+  assert.equal(pairedEdit.data.source, "\\langle\\rangle");
+  assert.equal(pairedEdit.data.cursor, 7);
+  for (const source of ["\\left(x^\\ri", "\\left(\\frac\\ri"]) {
+    const query = api.complete_formula_v3(JSON.stringify({ source, cursor: source.length, revision: "0", inputFormat: "latex" }));
+    assert.equal(query.data.completion.candidates.some((item) => item.id === "structure:close-delimiter-prefix"), false);
+  }
   const scopedCaps = api.formula_scoped_completion_capabilities_v3();
   assert.equal(scopedCaps.data.schemaVersion, 2);
   assert.equal(scopedCaps.data.maxDefinitions, 64);

@@ -128,6 +128,36 @@ fn zero_argument_symbols_are_data_not_macro_expansion() {
 }
 
 #[test]
+fn scoped_signatures_and_fences_keep_nested_math_and_literal_ownership_separate() {
+    let catalog = catalog();
+    let reply = query(r"\custompair{\left(\sqrt[3]{▮x}\right)}{caption}", &catalog);
+    assert_eq!(reply.context.slot, FormulaSlot::RadicalBody);
+    assert!(reply
+        .context
+        .owner_path
+        .iter()
+        .any(|id| reply.context.nodes[*id].slot == Some(FormulaSlot::MathArgument)));
+    let reply = query(r"\custompair{x}{\left(▮}", &catalog);
+    assert!(reply.context.in_text && reply.candidates.is_empty());
+    for name in [
+        "langle",
+        "rangle",
+        "lceil",
+        "rvert",
+        "vert",
+        "Vert",
+        "backslash",
+    ] {
+        let mut invalid = catalog.clone();
+        invalid.definitions[0].command = name.into();
+        assert_eq!(
+            complete_formula_scoped("", 0, 0, &invalid),
+            Err(ScopedFormulaCompletionError::InvalidCatalog)
+        );
+    }
+}
+
+#[test]
 fn all_snapshot_dimensions_reject_old_edits_and_v1_downgrade() {
     let catalog = catalog();
     let source = r"\cust";

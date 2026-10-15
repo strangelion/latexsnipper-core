@@ -125,6 +125,7 @@ fn valid_optional_hash(value: &Option<String>) -> bool {
 // not a compiler allowlist; a valid declaration never authorizes TeX execution.
 fn reserved(command: &str) -> bool {
     candidates::builtin_command(command)
+        || delimiters::builtin_command(command)
         || matches!(
             command,
             "dbinom"

@@ -111,6 +111,17 @@ def main() -> None:
 
     # New symbols must not alter persistent sessions or ownership/close behavior.
     completion_caps = library.completion_capabilities()
+    fence_source = "中\\left(x"
+    fence_cursor = len(fence_source.encode("utf-8"))
+    fence = library.complete_formula(fence_source, cursor=fence_cursor, revision=42)
+    assert fence["completion"]["context"]["slot"] == "group"
+    assert library.apply_formula_completion(
+        fence_source, cursor=fence_cursor, revision=42, snapshot=fence["snapshot"],
+        candidate_id="structure:close-delimiter",
+    )["source"] == "中\\left(x\\right)"
+    token_argument = r"\left(x^\ri"
+    assert not any(item["id"] == "structure:close-delimiter-prefix" for item in
+        library.complete_formula(token_argument, cursor=len(token_argument), revision=0)["completion"]["candidates"])
     assert completion_caps["inputFormats"] == ["latex"]
     assert completion_caps["offsetEncoding"] == "utf-8-bytes"
     assert completion_caps["maxResultDataBytes"] == 1024 * 1024

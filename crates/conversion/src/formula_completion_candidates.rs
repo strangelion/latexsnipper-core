@@ -106,6 +106,11 @@ const SYMBOLS: &[&str] = &[
     "prod",
 ];
 const STRUCTURES: &[(&str, &str)] = &[
+    ("langle", "\\langle\\rangle"),
+    ("lceil", "\\lceil\\rceil"),
+    ("lfloor", "\\lfloor\\rfloor"),
+    ("lvert", "\\lvert\\rvert"),
+    ("lVert", "\\lVert\\rVert"),
     ("frac", "\\frac{}{}"),
     ("dfrac", "\\dfrac{}{}"),
     ("tfrac", "\\tfrac{}{}"),
@@ -180,7 +185,7 @@ pub(super) fn candidate(
                     !matches!(
                         slot,
                         FormulaSlot::Formula | FormulaSlot::Group | FormulaSlot::EnvironmentName
-                    )
+                    ) || slot == FormulaSlot::Group && delimiters::is_fence(&proposed, node)
                 })
                 && replace.start <= node.content.start
                 && node.content.end <= inserted_end
@@ -272,6 +277,14 @@ pub(super) fn complete_with_signatures(
             }
             Ok(())
         };
+    if let Some((replace, insert)) = delimiters::prefix_closure(source, &context) {
+        add(
+            "structure:close-delimiter-prefix",
+            &insert,
+            replace,
+            &insert,
+        )?;
+    }
     if context.slot == FormulaSlot::EnvironmentName {
         let slot = &context.nodes[*context.owner_path.last().expect("root path")];
         if !slot.closed && cursor == source.len() && slot.content.start <= cursor {
@@ -317,7 +330,9 @@ pub(super) fn complete_with_signatures(
                 continue;
             }
             let bare = format!("\\{name}");
-            let insert = if existing_group(source, prefix.replace.end, name == "sqrt") {
+            let insert = if existing_group(source, prefix.replace.end, name == "sqrt")
+                || delimiters::opening_command(name) && prefix.replace.end < source.len()
+            {
                 bare.as_str()
             } else {
                 scaffold
@@ -392,33 +407,13 @@ pub(super) fn complete_with_signatures(
             add("structure:cell", "&", at_cursor, "&")?;
             add("structure:row", "\\\\", at_cursor, "\\\\")?;
         }
-        if cursor == source.len() {
-            for owner in context.owner_path.iter().rev() {
-                let node = &context.nodes[*owner];
-                if node.closed {
-                    continue;
-                }
-                if node.kind == FormulaEditKind::Group {
-                    let closing = if source[node.range.start..].starts_with('[') {
-                        "]"
-                    } else {
-                        "}"
-                    };
-                    add("structure:close-group", closing, at_cursor, closing)?;
-                    break;
-                }
-                if let FormulaEditKind::Environment { name } = &node.kind {
-                    let insert = format!("\\end{{{name}}}");
-                    add(
-                        &format!("close-environment:{name}"),
-                        &insert,
-                        at_cursor,
-                        &insert,
-                    )?;
-                    break;
-                }
-            }
-        }
+    }
+    if let Some((id, insert)) = delimiters::closure(source, &context) {
+        let at_cursor = FormulaSourceRange {
+            start: cursor,
+            end: cursor,
+        };
+        add(&id, &insert, at_cursor, &insert)?;
     }
     Ok(FormulaCompletionResult {
         context,

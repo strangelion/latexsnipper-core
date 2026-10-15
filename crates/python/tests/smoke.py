@@ -92,6 +92,17 @@ def formula_smoke() -> None:
 
 
 def completion_smoke() -> None:
+    fence_source = "中\\left(x"
+    fence_cursor = len(fence_source.encode("utf-8"))
+    fence = complete_formula(fence_source, cursor=fence_cursor, revision=42)
+    assert fence["completion"]["context"]["slot"] == "group"
+    assert apply_formula_completion(
+        fence_source, cursor=fence_cursor, revision=42, snapshot=fence["snapshot"],
+        candidate_id="structure:close-delimiter",
+    )["source"] == "中\\left(x\\right)"
+    token_argument = r"\left(x^\ri"
+    assert not any(item["id"] == "structure:close-delimiter-prefix" for item in
+        complete_formula(token_argument, cursor=len(token_argument), revision=0)["completion"]["candidates"])
     caps = formula_completion_capabilities()
     assert caps["inputFormats"] == ["latex"]
     assert caps["offsetEncoding"] == "utf-8-bytes"

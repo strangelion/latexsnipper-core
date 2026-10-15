@@ -51,6 +51,12 @@ window.formulaWorkerProof = (async () => {
     verify(selected.ok && selected.data.source === "中😀\\frac{}{}" && selected.data.cursor === 13, "completion canonical edit/UTF-8 selection");
     const stale = await client.applyFormulaCompletion({ ...completionApply, revision: "0" });
     verify(!stale.ok && stale.error.code === "STALE_CONTEXT", "stale completion accepted");
+    const fenceSource = "中\\left(x";
+    const fenceInput = { source: fenceSource, cursor: utf16ToFormulaByteOffset(fenceSource, fenceSource.length), revision: "42", inputFormat: "latex" };
+    const fence = await client.completeFormula(fenceInput);
+    verify(fence.ok && fence.data.completion.context.slot === "group", "fence owner metadata");
+    const fenceClosed = await client.applyFormulaCompletion({ ...fenceInput, snapshot: fence.data.snapshot, candidateId: "structure:close-delimiter" });
+    verify(fenceClosed.ok && fenceClosed.data.source === "中\\left(x\\right)", "fence closure transport");
     const catalog = { scope: { userSha256: "a".repeat(64), projectSha256: "b".repeat(64), documentSha256: "c".repeat(64), generation: completionInput.revision },
       definitions: [{ id: "pair", revision: completionInput.revision, userSha256: "a".repeat(64), projectSha256: "b".repeat(64), command: "custompair", arguments: ["math", "text"] }] };
     const scopedInput = { ...completionInput, source: "中😀\\cust", cursor: 12, catalog };

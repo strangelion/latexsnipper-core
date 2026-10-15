@@ -17,6 +17,8 @@ use sha2::{Digest, Sha256};
 
 #[path = "formula_completion_candidates.rs"]
 mod candidates;
+#[path = "formula_completion_delimiters.rs"]
+mod delimiters;
 pub use candidates::{
     apply_formula_candidate, apply_formula_completion, complete_formula, AppliedFormulaCompletion,
     FormulaCompletionCandidate, FormulaCompletionResult,
@@ -315,15 +317,30 @@ impl EditingParser<'_> {
             self.finish(id, start, false);
             self.diagnostic("MISSING_ARGUMENT", self.nodes[id].range);
         } else {
-            self.atom(id, depth + 1, text)?;
+            // Presentation fences do not turn an unbraced TeX token argument
+            // into a braced argument or consume its following source tokens.
+            self.atom_token(id, depth + 1, text, false)?;
             self.finish(id, self.pos, true);
         }
         Ok(id)
     }
 
     fn atom(&mut self, parent: usize, depth: usize, text: bool) -> EditResult<()> {
+        self.atom_token(parent, depth, text, true)
+    }
+
+    fn atom_token(
+        &mut self,
+        parent: usize,
+        depth: usize,
+        text: bool,
+        fences: bool,
+    ) -> EditResult<()> {
         if depth >= MAX_DEPTH {
             return Err(FormulaCompletionError::LimitExceeded);
+        }
+        if !text && fences && self.fence(parent, depth)? {
+            return Ok(());
         }
         match self.ch().expect("remaining source") {
             '{' => {
@@ -737,7 +754,10 @@ fn analyze_with_signatures(
     let mut selected = 0;
     let mut depth = 0;
     for (id, node) in parser.nodes.iter().enumerate() {
-        if node.slot.is_none() || cursor < node.content.start || cursor > node.content.end {
+        let in_content = node.content.start <= cursor && cursor <= node.content.end;
+        if node.slot.is_none()
+            || (!in_content && !delimiters::owns_closing_header(source, node, cursor))
+        {
             continue;
         }
         let mut node_depth = 0;
