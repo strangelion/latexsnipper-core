@@ -230,6 +230,79 @@ encoding and result construction do not. These serialized budgets do not promise
 peak object memory limits. No private storage, history, preferences or learning
 is introduced. See the [shared fragment contract](../../docs/formula-completion.md).
 
+### Owned preference feedback
+
+`FormulaPreferences` is an explicit volatile owner of the shared Core preference
+store, independent of `Session` and `FormulaRegistry`. `FormulaPreferenceCapture`
+and `FormulaPreferenceReceipt` are opaque native objects: callers cannot construct,
+modify, pickle or serialize their internals. Nothing is recorded by the existing
+completion functions. Feature-detect the three new classes on older wheels.
+
+```python
+import secrets
+from latexsnipper_core import FormulaPreferences
+
+def open_preferences_after_consent(current_catalog):
+    preferences = FormulaPreferences(
+        scope=current_catalog["commands"]["scope"], key=secrets.token_bytes(32),
+    )
+    preferences.set_policy({
+        "rankingEnabled": True, "feedbackEnabled": True,
+        "allowSensitiveFeedback": False,
+    })
+    return preferences
+```
+
+Defaults are all disabled. `info()` reports policy, exact scope/generation, event
+count, limits and `persistence: false`, never the key or event internals.
+`rank_fragments(source, *, cursor, revision, catalog, input_format="latex")`
+returns `{completion, order, features}`; `completion` is freshly validated Core
+profile-3 data, `order` is only an index permutation, and features align with
+the original candidates. It cannot inject candidates or apply an editor change.
+
+Capture `capture = preferences.capture_context()` BEFORE dispatching an acceptance
+or feedback job. After a real host edit has succeeded, report its pre-edit request:
+`preferences.record_acceptance_at(capture, source, cursor=..., revision=...,
+catalog=..., snapshot=..., candidate_id=..., event_id=...)`. The `event_id` is a
+strictly increasing positive Python `int` up to `2**64-1`, not bool/float/string.
+Source offsets use UTF-8 bytes and editor revisions use the existing Python-u64
+contract; nested catalog/snapshot revisions remain canonical decimal strings.
+The returned receipt is `None` when capture is disabled; otherwise report a real
+undo using `record_undo(receipt)` exactly once. Feedback failure must never undo
+a successful document transaction, block editing, or trigger an automatic retry.
+
+Scope/epoch and actual candidate/catalog are revalidated. Other-instance capture
+or receipt, late feedback after policy ABA, duplicate events, and stale snapshots
+refuse explicitly. Do not mint a new capture inside a late job to bypass its age.
+Allowing sensitive template retrieval does not permit feedback: the separate
+`allowSensitiveFeedback` flag gates sensitive ranking/capture.
+
+`clear(generation=..., key=secrets.token_bytes(32))` requires a strictly newer
+scope generation and a different nonzero 32-byte key, even when disabled. Update
+the actual catalog epoch and query a new snapshot before further acceptance.
+It clears only this owner's logical state, not host databases/backups or secure
+heap erasure. Disabling is not clearing. The host owns consent, key isolation,
+cache cleanup and actual editor acceptance/undo; opaque objects are not permission
+tokens. There is no cross-document merge, export/import, disk persistence or model.
+
+Instances support `with`, idempotent `close()` and `closed`. Closed owners refuse
+with `PREFERENCE_CLOSED`; remaining opaque objects do not keep their store alive.
+Concurrent calls to one busy owner fail promptly with retryable `PREFERENCE_BUSY`,
+without waiting or replaying work; the caller coordinates close and retry policy.
+Independent instances can run concurrently. Rust parsing/ranking/recording runs
+with the GIL detached; Python dict encoding and returned-object creation hold it.
+
+Per owner: 1024 events including undos; metadata JSON 4 KiB, catalog UTF-8 JSON
+1 MiB, snapshot 4 KiB and serialized rank data 1 MiB. Source/tree/candidate limits
+remain unchanged. These are serialized-data limits, not peak object-memory
+guarantees. Errors use `LaTeXSnipperError`; key/schema failures are
+`INVALID_ARGUMENT`, identity mismatch `SCOPE_MISMATCH`, old feedback
+`STALE_FEEDBACK`, and Core completion failures preserve their existing codes.
+At capacity, ordinary deterministic completion remains independently usable.
+
+This binding implements the [Core preference boundary](../../docs/formula-completion-preferences.md),
+not learned ranking or a claimed user-productivity improvement.
+
 ## Explicit registered conversion
 
 `FormulaRegistry` is the formal PyO3 interface to the same native registry used by

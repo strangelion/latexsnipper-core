@@ -26,7 +26,7 @@ use serde_json::json;
 // larger transport budget, still bounded independently of Core source limits.
 const MAX_FRAGMENT_CATALOG_BYTES: usize = 1024 * 1024;
 
-fn dict_json_utf8(value: &Bound<'_, PyDict>) -> PyResult<String> {
+pub(super) fn dict_json_utf8(value: &Bound<'_, PyDict>) -> PyResult<String> {
     let options = PyDict::new(value.py());
     // Apply the advertised UTF-8 budget, not an inflated ASCII-escaped size.
     options.set_item("ensure_ascii", false)?;
@@ -41,7 +41,7 @@ fn dict_json_utf8(value: &Bound<'_, PyDict>) -> PyResult<String> {
         })
 }
 
-fn catalog(encoded: &str) -> Result<FormulaFragmentCatalog, BindingError> {
+pub(super) fn catalog(encoded: &str) -> Result<FormulaFragmentCatalog, BindingError> {
     if encoded.len() > MAX_FRAGMENT_CATALOG_BYTES {
         return Err(BindingError::invalid(
             "Fragment catalog JSON exceeds 1 MiB.",
@@ -51,7 +51,7 @@ fn catalog(encoded: &str) -> Result<FormulaFragmentCatalog, BindingError> {
         .map_err(|_| BindingError::invalid("Invalid fragment catalog schema or version encoding."))
 }
 
-fn snapshot(encoded: &str) -> Result<FormulaFragmentSnapshot, BindingError> {
+pub(super) fn snapshot(encoded: &str) -> Result<FormulaFragmentSnapshot, BindingError> {
     if encoded.len() > MAX_SNAPSHOT_BYTES {
         return Err(BindingError::invalid(
             "Fragment completion snapshot exceeds 4 KiB.",

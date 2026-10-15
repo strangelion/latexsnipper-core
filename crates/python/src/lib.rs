@@ -2,6 +2,7 @@
 
 mod formula_completion;
 mod formula_fragments;
+mod formula_preferences;
 mod formula_registry;
 pub use formula_registry::FormulaRegistry;
 
@@ -709,6 +710,9 @@ fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(formula_conversion_capabilities, module)?)?;
     module.add_class::<Session>()?;
     module.add_class::<FormulaRegistry>()?;
+    module.add_class::<formula_preferences::FormulaPreferences>()?;
+    module.add_class::<formula_preferences::PreferenceCapture>()?;
+    module.add_class::<formula_preferences::PreferenceReceipt>()?;
     module.add_class::<CancellationToken>()?;
     module.add("LaTeXSnipperError", py.get_type::<LaTeXSnipperError>())?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;

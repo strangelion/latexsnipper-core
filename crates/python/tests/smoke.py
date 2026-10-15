@@ -14,6 +14,7 @@ from latexsnipper_core import (
     complete_formula_scoped, apply_formula_completion_scoped, formula_scoped_completion_capabilities,
 )
 from fragment_smoke import fragment_completion_smoke
+from preference_smoke import preference_smoke
 
 
 def formula_smoke() -> None:
@@ -303,6 +304,7 @@ def main() -> None:
     completion_smoke()
     scoped_completion_smoke()
     fragment_completion_smoke()
+    preference_smoke()
     with tempfile.TemporaryDirectory() as first_root, tempfile.TemporaryDirectory() as second_root:
         first = Session(Path(first_root))
         second = Session(Path(second_root), runtime_preference="cpu")
