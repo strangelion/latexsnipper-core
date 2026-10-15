@@ -135,6 +135,52 @@ with no implicit retry, fallback, network, macro execution or session changes.
 
 See [Core grammar and editing boundaries](../../docs/formula-completion.md).
 
+### Scoped command signatures
+
+The additive `complete_formula_scoped`, `apply_formula_completion_scoped` and
+`formula_scoped_completion_capabilities` expose editing schema 2, leaving v1
+functions and capability shapes unchanged. Pass the **current** `catalog` dict
+to both query and acceptance; query returns `snapshot/context/candidates`
+(not the v1 nested completion shape). Candidates contain `edit` and nullable
+`definition` (ID and exact revision). Acceptance also takes snapshot/candidate_id.
+
+```python
+from latexsnipper_core import complete_formula_scoped, apply_formula_completion_scoped
+
+catalog = {
+    "scope": {"userSha256": "a" * 64, "projectSha256": None,
+              "documentSha256": None, "generation": "0"},
+    "definitions": [{"id": "custom-pair", "revision": "1", "userSha256": "a" * 64,
+                     "projectSha256": None, "command": "custompair", "arguments": ["math", "text"]}],
+}
+result = complete_formula_scoped(r"\cust", cursor=5, revision=42, catalog=catalog)
+selected = apply_formula_completion_scoped(
+    r"\cust", cursor=5, revision=42, catalog=catalog,
+    snapshot=result["snapshot"], candidate_id="definition:custom-pair",
+)
+assert selected["source"] == r"\custompair{}{}"
+```
+
+Scope hashes above are illustrative opaque identities, not credentials. The host
+must supply authorized user/project definitions, actual document identity, and a
+generation advanced on clear/reset. A definition has a 1–64 byte ASCII ID
+(letters/digits/`-_.`), an ASCII-letter control word without backslash/digits, and
+at most four required math/text arguments (empty for zero-argument symbols).
+Other user/project items are filtered; effective duplicate IDs/commands and
+builtin collisions are refused. Core binds actual effective content as well as
+claimed versions, user/project/document and reset epoch. Stale scoped contexts
+cannot be accepted via v1. These guards do not authorize macro or document writes.
+
+Editor `revision` remains a Python integer; **catalog definition revisions and
+generation remain canonical decimal strings**, as do returned snapshots. Catalog
+JSON is at most 64 KiB, snapshots 4 KiB, and serialized result data 1 MiB; source,
+tree and candidate budgets are unchanged. Unknown nested keys and malformed
+encodings are INVALID_ARGUMENT; invalid effective declarations are INVALID_CATALOG,
+and Core errors retain their codes. Wrong dict/keyword types use Python errors.
+Core work/serialization release the GIL; Python dict encoding/result decoding do
+not. No global registry, IO, macro expansion, preferences, learning or history is
+introduced. Hosts still own consent, acceptance, revisions and undo.
+
 ## Explicit registered conversion
 
 `FormulaRegistry` is the formal PyO3 interface to the same native registry used by

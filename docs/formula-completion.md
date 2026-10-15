@@ -4,8 +4,8 @@
 
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
-公共绑定已有。定义驱动签名/作用域接口先提供 Rust、C 与 JSONL；
-其他绑定的作用域扩展、更广语法及实际编辑器接入仍待完成。
+公共绑定已有。定义驱动签名/作用域接口先提供 Rust、C、Python 与 JSONL；
+WASM-JS 的作用域扩展、更广语法及实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -81,7 +81,7 @@ v1 没有自定义定义注册；v2 显式传入有界签名，不保存注册�
 若某候选插入后超预算，该候选不列出，其余可用候选仍可返回。
 构造候选需要分析拟议源码；真实编辑延迟与 IME/宿主交互仍须独立评估。
 
-## 自定义命令签名与作用域（Rust / C / JSONL）
+## 自定义命令签名与作用域（Rust / C / Python / JSONL）
 
 `formula_completion::scoped` 是新增的 v2 编辑协议，不替换 v1。
 `complete_formula_scoped(source, cursor, revision, &catalog)` 返回
@@ -119,7 +119,7 @@ JSONL 新增 `formula.complete.scoped` / `formula.completion.apply.scoped`，传
 无效声明返回 `INVALID_CATALOG`，未知 JSON 字段仍为 `INVALID_PARAMS`，超预算明确失败。
 
 Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲染/转换/插件执行权限。
-敏感文档的学习开关、偏好清空、私有片段检索及正式 Python/WASM-JS 作用域接入仍是后续工作。
+敏感文档的学习开关、偏好清空、私有片段检索及 WASM-JS 作用域接入仍是后续工作。
 
 ## 独立进程调用
 
@@ -182,6 +182,13 @@ Core 计算与结果序列化释放 GIL；结果 JSON 预算为 1 MiB，快照 J
 过期/无效光标/超限/未知候选保持 Core 错误，不重试或写宿主文档。
 Windows 构建 wheel 的实际导入、并发调用及会话兼容已验证；其他平台包仍依各自 CI 验收，
 不据本地结果宣称发布或全部平台完成。用法见 [Python 文档](../crates/python/README.md#structured-formula-completion)。
+
+正式 wheel 另提供 `complete_formula_scoped`、`apply_formula_completion_scoped` 与
+`formula_scoped_completion_capabilities`；查询/接受都传当前 `catalog` 字典，
+结果形状沿用 scoped JSONL。编辑版本仍为 Python 整数，定义版本和重置代数仍为字典中的规范十进制字符串。
+目录 JSON 单独限制 64 KiB，快照 4 KiB，Core 计算/结果序列化释放 GIL；无持久注册表。
+schema/编码错误为 `INVALID_ARGUMENT`，声明语义错误为 `INVALID_CATALOG`，其余保持 Core 错误。
+Windows wheel 的实际导入、隔离并发和会话兼容已有验证；不替代其他平台或真实编辑器验收。
 
 ## WASM/JS 公共绑定
 

@@ -669,6 +669,18 @@ impl Drop for Session {
 #[pymodule]
 fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(
+        formula_completion::complete_formula_scoped,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        formula_completion::apply_formula_completion_scoped,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        formula_completion::formula_scoped_completion_capabilities,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
         formula_completion::complete_formula,
         module
     )?)?;

@@ -11,6 +11,7 @@ from latexsnipper_core import (
     CancellationToken, LaTeXSnipperError, Session, __version__,
     convert_formula, formula_conversion_capabilities,
     complete_formula, apply_formula_completion, formula_completion_capabilities,
+    complete_formula_scoped, apply_formula_completion_scoped, formula_scoped_completion_capabilities,
 )
 
 
@@ -178,9 +179,97 @@ def completion_smoke() -> None:
         list(executor.map(isolated, range(64)))
 
 
+def scoped_completion_smoke() -> None:
+    from copy import deepcopy
+
+    caps = formula_scoped_completion_capabilities()
+    assert caps["schemaVersion"] == 2 and caps["maxDefinitions"] == 64
+    assert caps["maxCatalogBytes"] == 65536
+    assert caps["revisionArgumentEncoding"] == "python-int-u64"
+    assert not caps["macroExpansion"] and not caps["persistence"]
+    catalog = {
+        "scope": {"userSha256": "a" * 64, "projectSha256": "b" * 64,
+                  "documentSha256": "c" * 64, "generation": str(2**64 - 1)},
+        "definitions": [{"id": "pair", "revision": str(2**64 - 1), "userSha256": "a" * 64,
+                         "projectSha256": "b" * 64, "command": "custompair", "arguments": ["math", "text"]}],
+    }
+    params = dict(source="中\\cust", cursor=8, revision=2**64 - 1, catalog=catalog)
+    reply = complete_formula_scoped(**params)
+    assert reply["snapshot"]["revision"] == str(2**64 - 1)
+    assert reply["candidates"][0]["definition"] == {"id": "pair", "revision": str(2**64 - 1)}
+    apply = {**params, "snapshot": reply["snapshot"], "candidate_id": "definition:pair"}
+    assert apply_formula_completion_scoped(**apply) == {
+        "source": "中\\custompair{}{}", "cursor": 15,
+        "tabStops": [{"start": 15, "end": 15}, {"start": 17, "end": 17}],
+    }
+    for field in ("generation", "projectSha256", "documentSha256", "signature", "definitionRevision"):
+        changed = deepcopy(catalog)
+        if field == "signature":
+            changed["definitions"][0]["arguments"] = []
+        elif field == "definitionRevision":
+            changed["definitions"][0]["revision"] = "0"
+        else:
+            changed["scope"][field] = "0" if field == "generation" else "d" * 64
+        try:
+            apply_formula_completion_scoped(**{**apply, "catalog": changed})
+        except LaTeXSnipperError as error:
+            assert error.code == "STALE_CONTEXT"
+        else:
+            raise AssertionError("stale scoped edit succeeded")
+    for override, code in [({"revision": value}, "INVALID_ARGUMENT") for value in (True, -1, 2**64, "1", 1.0)] + [
+        ({"cursor": 1}, "INVALID_CURSOR"), ({"source": "x" * 65537}, "LIMIT_EXCEEDED"),
+        ({"input_format": "typst"}, "INVALID_ARGUMENT"),
+        ({"catalog": {**catalog, "body": "untrusted"}}, "INVALID_ARGUMENT"),
+        ({"catalog": {**catalog, "extra": "x" * 65536}}, "INVALID_ARGUMENT"),
+    ]:
+        try:
+            complete_formula_scoped(**{**params, **override})
+        except LaTeXSnipperError as error:
+            assert error.code == code and not error.retryable
+        else:
+            raise AssertionError(f"invalid scoped query succeeded: {code}")
+    for override, code in [
+        ({"candidate_id": "unknown"}, "UNKNOWN_CANDIDATE"),
+        ({"snapshot": {**reply["snapshot"], "revision": 0}}, "INVALID_ARGUMENT"),
+        ({"snapshot": {**reply["snapshot"], "insert": "untrusted"}}, "INVALID_ARGUMENT"),
+        ({"snapshot": {**reply["snapshot"], "definitionsSha256": "x" * 4096}}, "INVALID_ARGUMENT"),
+    ]:
+        try:
+            apply_formula_completion_scoped(**{**apply, **override})
+        except LaTeXSnipperError as error:
+            assert error.code == code
+        else:
+            raise AssertionError(f"invalid scoped acceptance succeeded: {code}")
+    foreign = deepcopy(catalog)
+    foreign["scope"]["userSha256"] = "d" * 64
+    hidden = complete_formula_scoped(**{**params, "catalog": foreign})
+    assert hidden["candidates"] == [] and "custompair" not in str(hidden)
+    literal = r"\custompair{x}{\fr"
+    assert complete_formula_scoped(literal, cursor=len(literal), revision=0, catalog=catalog)["context"]["inText"]
+    for function, arguments in [(complete_formula_scoped, {**params, "insert": "untrusted"}),
+                                (apply_formula_completion_scoped, {**apply, "replace": {}})]:
+        try:
+            function(**arguments)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("unknown scoped keyword succeeded")
+
+    def isolated(index: int) -> None:
+        local = deepcopy(catalog)
+        local["scope"]["generation"] = str(index)
+        queried = complete_formula_scoped(**{**params, "catalog": local, "revision": index})
+        selected = apply_formula_completion_scoped(**{**apply, "catalog": local,
+            "revision": index, "snapshot": queried["snapshot"]})
+        assert selected["source"] == "中\\custompair{}{}"
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(isolated, range(64)))
+
+
 def main() -> None:
     formula_smoke()
     completion_smoke()
+    scoped_completion_smoke()
     with tempfile.TemporaryDirectory() as first_root, tempfile.TemporaryDirectory() as second_root:
         first = Session(Path(first_root))
         second = Session(Path(second_root), runtime_preference="cpu")
