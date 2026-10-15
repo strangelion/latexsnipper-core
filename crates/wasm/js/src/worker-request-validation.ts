@@ -17,6 +17,8 @@ export interface WorkerRequestValidationOptions {
   assetBaseUrl?: string;
 }
 
+import { completionInputError } from "./completion.js";
+
 const MAX_REQUEST_ID_LENGTH = 256;
 const MAX_NAME_LENGTH = 256;
 const MAX_URL_LENGTH = 8_192;
@@ -235,6 +237,12 @@ export function validateWorkerRequest(
       return validateRecognize(value);
     case "convert-formula":
       return validateFormula(value);
+    case "complete-formula":
+    case "apply-formula-completion": {
+      if (!closed(value, ["type", "protocolVersion", "requestId", "input"])) return invalid(value, "Unknown completion message fields");
+      const cause = completionInputError(value.input, value.type === "apply-formula-completion");
+      return cause ? invalid(value, cause) : { ok: true, request: value as unknown as WorkerRequest };
+    }
     case "formula-registry-create":
     case "formula-registry-command":
       return validateRegistry(value);

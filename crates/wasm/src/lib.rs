@@ -2,6 +2,10 @@
 use wasm_bindgen::prelude::*;
 mod api;
 mod formula_api;
+mod formula_completion;
+pub use formula_completion::{
+    apply_formula_completion_v3, complete_formula_v3, formula_completion_capabilities_v3,
+};
 mod formula_registry;
 pub use formula_registry::{create_formula_registry_v1, FormulaRegistryWasm};
 

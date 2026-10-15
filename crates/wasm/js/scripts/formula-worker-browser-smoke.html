@@ -4,7 +4,7 @@
 <link rel="icon" href="data:,">
 <pre id="result">Running real browser Worker conversion checks...</pre>
 <script type="module">
-import { WasmWorkerClient } from "../dist/index.js";
+import { WasmWorkerClient, utf16ToFormulaByteOffset } from "../dist/index.js";
 
 const verify = (condition, message) => { if (!condition) throw new Error(message); };
 const clients = [];
@@ -41,6 +41,16 @@ window.formulaWorkerProof = (async () => {
     verify(!malformed.ok && malformed.error.code === "CONVERSION_FAILED", "document splice refusal");
     const unavailable = await client.convertFormula({ content: "x", inputFormat: "mtef", outputFormat: "omml" });
     verify(!unavailable.ok && unavailable.error.code === "UNSUPPORTED_FORMAT", "unsupported route remains explicit");
+    const source = "中😀\\fr";
+    const completionInput = { source, inputFormat: "latex", cursor: utf16ToFormulaByteOffset(source, source.length), revision: "18446744073709551615" };
+    const suggested = await client.completeFormula(completionInput);
+    verify(suggested.ok && suggested.data.snapshot.revision === completionInput.revision, "completion revision precision");
+    verify(suggested.data.completion.context.nodes[0].parent === null, "completion null metadata changed");
+    const completionApply = { ...completionInput, snapshot: suggested.data.snapshot, candidateId: "builtin:frac" };
+    const selected = await client.applyFormulaCompletion(completionApply);
+    verify(selected.ok && selected.data.source === "中😀\\frac{}{}" && selected.data.cursor === 13, "completion canonical edit/UTF-8 selection");
+    const stale = await client.applyFormulaCompletion({ ...completionApply, revision: "0" });
+    verify(!stale.ok && stale.error.code === "STALE_CONTEXT", "stale completion accepted");
     client.terminate();
 
     let entered;
@@ -75,7 +85,24 @@ window.formulaWorkerProof = (async () => {
       const recovered = await lifecycle.convertFormula({ content: "x^2", inputFormat: "latex", outputFormat: "omml" });
       verify(recovered.ok && recovered.data.content.includes("sSup"), `${cancellation} recovery did not execute Core`);
     }
-    const result = { ok: true, profile, clientReadyWallMillis, projections: 8, refusalCases: 2, workerResultBudget: true, hardCancellation: true, wasmTimeout: true, postRestartCoreConversions: 2, host: "browser-only, not Obsidian" };
+    const completionOversize = await lifecycle.completeFormula({ source: "fixture:oversize", cursor: 0, revision: "0", inputFormat: "latex" }).then(() => { throw new Error("Oversized completion envelope posted"); }, (error) => error);
+    verify(completionOversize.detail.code === "WORKER_RESULT_LIMIT", "completion worker result ceiling");
+    for (const cancellation of ["abort", "timeout"]) {
+      const signal = new AbortController();
+      probe = new Promise((resolve) => { entered = resolve; });
+      const stalled = lifecycle.completeFormula({ source: "fixture:infinite", cursor: 0, revision: "0", inputFormat: "latex" }, { signal: signal.signal, timeoutMillis: 1000 });
+      const failed = stalled.then(() => { throw new Error("Stalled completion unexpectedly finished"); }, (error) => error);
+      await probe;
+      const before = workers.length;
+      if (cancellation === "abort") signal.abort();
+      const reason = await failed;
+      verify(reason.detail.code === (cancellation === "abort" ? "CANCELLED" : "WORKER_TASK_TIMEOUT"), "completion cancellation/timeout");
+      await lifecycle.ready();
+      verify(workers.length === before + 1, "completion did not restart Worker");
+      const resumed = await lifecycle.completeFormula(completionInput);
+      verify(resumed.ok && resumed.data.snapshot.revision === completionInput.revision, "completion recovery did not execute Core");
+    }
+    const result = { ok: true, profile, clientReadyWallMillis, projections: 8, refusalCases: 2, workerResultBudget: true, hardCancellation: true, wasmTimeout: true, postRestartCoreConversions: 2, completion: true, completionUtf8: true, completionStaleGuard: true, completionHardAbort: true, completionWasmTimeout: true, host: "browser-only, not Obsidian" };
     document.querySelector("#result").textContent = JSON.stringify(result, null, 2);
     return result;
   } catch (error) {

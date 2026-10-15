@@ -12,6 +12,8 @@ import {
   type WorkerResponse,
 } from "./types.js";
 import { validateWorkerRequest } from "./worker-request-validation.js";
+import { MAX_COMPLETION_ENVELOPE_BYTES, type FormulaCompletionRequest, type FormulaCompletionApplyRequest, type FormulaCompletionReply, type AppliedFormulaCompletion } from "./completion.js";
+import type { ApiEnvelopeV3 } from "./types.js";
 import { WorkerFormulaRegistry, type RegistryWorkerCommand } from "./worker-registry.js";
 
 interface PendingCall {
@@ -22,7 +24,7 @@ interface PendingCall {
 interface WorkerTask extends PendingCall {
   requestId: string;
   wireRequestId: string;
-  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" | "formula-registry-create" | "formula-registry-command" }>;
+  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" | "complete-formula" | "apply-formula-completion" | "formula-registry-create" | "formula-registry-command" }>;
   durationMillis: number;
   resultBytes: number;
   onProgress?: (event: ProgressEvent) => void;
@@ -52,6 +54,7 @@ export interface WasmWorkerClientOptions extends WorkerInitOptions {
   maxFormulaInputBytes?: number;
   maxFormulaResultBytes?: number;
   maxFormulaDurationMillis?: number;
+  maxCompletionResultBytes?: number;
 }
 
 export interface WorkerCallOptions {
@@ -81,6 +84,7 @@ export class WasmWorkerClient {
   private readonly maxFormulaInputBytes: number;
   private readonly maxFormulaResultBytes: number;
   private readonly maxFormulaDurationMillis: number;
+  private readonly maxCompletionResultBytes: number;
   private restarting?: Promise<void>;
 
   constructor(private readonly options: WasmWorkerClientOptions) {
@@ -96,6 +100,7 @@ export class WasmWorkerClient {
     this.maxFormulaInputBytes = options.maxFormulaInputBytes ?? 64 * 1024;
     this.maxFormulaResultBytes = options.maxFormulaResultBytes ?? 256 * 1024;
     this.maxFormulaDurationMillis = options.maxFormulaDurationMillis ?? 30_000;
+    this.maxCompletionResultBytes = options.maxCompletionResultBytes ?? MAX_COMPLETION_ENVELOPE_BYTES;
     positiveInteger("maxQueueLength", this.maxQueueLength);
     positiveInteger("rpcTimeoutMillis", this.rpcTimeoutMillis);
     positiveInteger("maxTaskDurationMillis", this.maxTaskDurationMillis);
@@ -108,6 +113,8 @@ export class WasmWorkerClient {
     positiveInteger("maxFormulaInputBytes", this.maxFormulaInputBytes);
     positiveInteger("maxFormulaResultBytes", this.maxFormulaResultBytes);
     positiveInteger("maxFormulaDurationMillis", this.maxFormulaDurationMillis);
+    positiveInteger("maxCompletionResultBytes", this.maxCompletionResultBytes);
+    if (this.maxCompletionResultBytes > MAX_COMPLETION_ENVELOPE_BYTES) throw new RangeError("maxCompletionResultBytes exceeds the worker limit");
     if (this.maxFormulaInputBytes > 64 * 1024) throw new RangeError("maxFormulaInputBytes must not exceed Core's 64 KiB limit");
     if (this.maxFormulaResultBytes > 256 * 1024) throw new RangeError("maxFormulaResultBytes must not exceed the worker's 256 KiB envelope limit");
     if (this.maxModelBytes > this.maxTotalModelBytes) {
@@ -200,6 +207,40 @@ export class WasmWorkerClient {
       });
       signal?.addEventListener("abort", abort, { once: true });
       if (signal?.aborted) abort();
+      void this.pump();
+    });
+  }
+
+  completeFormula(input: FormulaCompletionRequest & { requestId?: string }, options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<FormulaCompletionReply>> {
+    return this.completionTask("complete-formula", input, options) as Promise<ApiEnvelopeV3<FormulaCompletionReply>>;
+  }
+
+  applyFormulaCompletion(input: FormulaCompletionApplyRequest & { requestId?: string }, options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<AppliedFormulaCompletion>> {
+    return this.completionTask("apply-formula-completion", input, options) as Promise<ApiEnvelopeV3<AppliedFormulaCompletion>>;
+  }
+
+  private completionTask(type: "complete-formula" | "apply-formula-completion", input: (FormulaCompletionRequest | FormulaCompletionApplyRequest) & { requestId?: string }, options: WorkerCallOptions): Promise<unknown> {
+    if (this.terminated) return Promise.reject(this.runtimeError("WORKER_TERMINATED", "Worker client is terminated"));
+    if (options.signal?.aborted) return Promise.reject(this.runtimeError("CANCELLED", "Completion was aborted"));
+    const { requestId: suppliedId, ...parameters } = input;
+    const requestId = suppliedId ?? this.nextId("completion");
+    const wireRequestId = this.nextId("completion");
+    const request = { protocolVersion: WORKER_PROTOCOL_VERSION, type, requestId: wireRequestId, input: parameters };
+    const validation = validateWorkerRequest({ ...request, requestId });
+    if (!validation.ok) return Promise.reject(this.runtimeError(validation.code, validation.message));
+    if (new TextEncoder().encode(input.source).byteLength > this.maxFormulaInputBytes) return Promise.reject(this.runtimeError("WORKER_FORMULA_INPUT_LIMIT", "Completion source exceeds the configured budget"));
+    const durationMillis = options.timeoutMillis ?? this.maxFormulaDurationMillis;
+    if (!Number.isSafeInteger(durationMillis) || durationMillis <= 0) return Promise.reject(this.runtimeError("WORKER_RPC_INVALID_TIMEOUT", "Completion duration must be a positive safe integer"));
+    if (this.hasRequest(requestId)) return Promise.reject(this.runtimeError("DUPLICATE_REQUEST_ID", "Duplicate completion request ID"));
+    if (this.queue.length >= this.maxQueueLength) return Promise.reject(this.runtimeError("WORKER_QUEUE_FULL", "Worker task queue is full"));
+    const owned = structuredClone(request) as Extract<WorkerRequest, { type: "complete-formula" | "apply-formula-completion" }>;
+    return new Promise((resolve, reject) => {
+      const abort = (): void => { this.cancel(requestId); };
+      const cleanup = (): void => { options.signal?.removeEventListener("abort", abort); };
+      this.queue.push({ requestId, wireRequestId, request: owned, durationMillis, resultBytes: this.maxCompletionResultBytes,
+        generation: this.generation, resolve: (value) => { cleanup(); resolve(value); }, reject: (value) => { cleanup(); reject(value); } });
+      options.signal?.addEventListener("abort", abort, { once: true });
+      if (options.signal?.aborted) abort();
       void this.pump();
     });
   }

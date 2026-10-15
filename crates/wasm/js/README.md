@@ -26,6 +26,55 @@ diagnostics in the `TableBlock`. Browser handwriting mode requires a validated T
 decoder, tokenizer, preprocessing metadata, decoding metadata, and I/O schema before readiness
 is reported. These pipelines are experimental until OCR accuracy gates are available.
 
+## Structured formula completion
+
+Full and `--no-default-features --features conversion-only` packages expose
+`complete_formula_v3(requestJson)`, `apply_formula_completion_v3(requestJson)` and
+`formula_completion_capabilities_v3()`. Feature-detect these additive exports on
+older packages. They use the shared Core closed LaTeX request and snapshot, not
+the conversion grammar or an AI model. The synchronous helpers `completeFormula`
+and `applyFormulaCompletion` return Core v3 envelopes; interactive callers should
+use the corresponding `WasmWorkerClient` methods.
+
+```ts
+import { WasmWorkerClient, utf16ToFormulaByteOffset } from "@latexsnipper/wasm-runtime";
+const client = new WasmWorkerClient({ workerUrl: "/worker-entry.js", moduleUrl: "/pkg/core.js" });
+await client.ready();
+const source = String.raw`\fr`;
+const input = { source, inputFormat: "latex" as const,
+  cursor: utf16ToFormulaByteOffset(source, source.length), revision: "42" };
+const suggestions = await client.completeFormula(input);
+// Display candidates only. Explicit user acceptance must read CURRENT editor
+// source/cursor/revision, echo suggestions.data.snapshot and select candidateId.
+client.terminate();
+```
+
+All ranges and cursors use UTF-8 bytes. `utf16ToFormulaByteOffset` and
+`formulaByteOffsetToUtf16` convert editor positions and reject offsets inside a
+code point or unpaired UTF-16 surrogates; no replacement/normalization occurs.
+Revisions are canonical decimal strings up to `"18446744073709551615"`, never JS
+numbers. Query data contains snapshot and completion (typed tree/candidates);
+acceptance data contains source, cursor and absolute tabStops. Empty slots and
+null metadata preserve the JSONL/C/Python shape. Snapshot is not authorization.
+
+The Worker validates both message and request, clones queued snapshots, and uses
+the existing bounded serial queue, duplicate-ID guard, AbortSignal and active
+execution deadline. Defaults are 32 queued tasks and 30 seconds active execution
+(`maxFormulaDurationMillis`, or per-call `timeoutMillis`); queue time is excluded.
+Queued abort removes only that task. Active abort/timeout terminates and rebuilds
+the Worker, drops old replies, and never replays the active edit. Existing model
+reload behavior is retained when sharing a recognition client.
+
+Core requests/data are each capped at 1 MiB, source at 64 KiB, tree nodes at 4096,
+depth below 64, candidates at 128. The JS Worker completion envelope has a separate
+1 MiB + 64 KiB cap (`maxCompletionResultBytes` can lower it); old conversion limits
+stay 256 KiB. Configured `maxFormulaInputBytes` also constrains completion source.
+Core refusals remain envelopes; transport/validation/termination failures reject
+with WorkerRuntimeError. Missing exports refuse explicitly, with no main-thread
+fallback. The host still rechecks current editor state, owns explicit acceptance,
+undo and writes, and must not treat structural closure as mathematical validity.
+This is not an editor integration, mobile-host acceptance or learned ranking.
+
 ## Model-free formula conversion
 
 The default Rust feature set preserves recognition and every previous export.

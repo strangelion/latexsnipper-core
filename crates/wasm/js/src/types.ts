@@ -127,6 +127,8 @@ export interface ProgressEvent {
 }
 
 export type WorkerRequest =
+  | { protocolVersion: typeof WORKER_PROTOCOL_VERSION; type: "complete-formula"; requestId: string; input: import("./completion.js").FormulaCompletionRequest }
+  | { protocolVersion: typeof WORKER_PROTOCOL_VERSION; type: "apply-formula-completion"; requestId: string; input: import("./completion.js").FormulaCompletionApplyRequest }
   | {
       protocolVersion: typeof WORKER_PROTOCOL_VERSION;
       type: "formula-registry-create";

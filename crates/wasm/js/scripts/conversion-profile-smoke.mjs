@@ -6,6 +6,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
+import { completionSmoke } from "./completion-package-smoke.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const require = createRequire(import.meta.url);
@@ -16,6 +17,9 @@ assert.ok(["--full-prefix=wasm-full", "--full-prefix=wasm"].includes(argument), 
 const fullPrefix = argument.slice("--full-prefix=".length);
 const full = require(resolve(root, `target/${fullPrefix}-nodejs/latexsnipper_wasm.js`));
 const conversion = require(resolve(root, "target/wasm-conversion-nodejs/latexsnipper_wasm.js"));
+completionSmoke(full);
+completionSmoke(conversion);
+assert.deepEqual(full.formula_completion_capabilities_v3(), conversion.formula_completion_capabilities_v3());
 const sample = {
   latex: String.raw`\frac{a}{b}`,
   mathml: "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",

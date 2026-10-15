@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import wasm from "vite-plugin-wasm";
+import { completionSmoke } from "./completion-package-smoke.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../../../..");
@@ -15,6 +16,7 @@ const bundlerEntry = resolve(repositoryRoot, "target/wasm-bundler/latexsnipper_w
 
 const require = createRequire(import.meta.url);
 const nodePackage = require(nodeEntry);
+completionSmoke(nodePackage);
 const apiInfo = nodePackage.api_info_v2();
 if (!apiInfo || apiInfo.ok !== true) {
   throw new Error("Node package did not return a successful API envelope");

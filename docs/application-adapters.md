@@ -41,6 +41,8 @@ JSONL 的 `formula.capabilities` 和 `formula.convert` 复用原生 Core 门禁�
 C 已提供同形的新增补全函数及独立能力入口，保持旧转换能力数组、session ABI 与释放规则；
 正式 Python wheel 也提供同一 Core 的查询/接受候选接口，使用 Python 整数参数与字符串快照版本，
 Core 计算释放 GIL；ctypes 参考客户端是独立 C 示例，不和 wheel API 混用。
+WASM/JS 的直接导出及官方 Worker 同样提供补全，保留 UTF-8 范围和精确版本，
+带代理对/字节边界转换、队列复制、硬取消/超时重建与旧代丢弃；不依赖识别模型或原生进程。
 输入最多 64 KiB UTF-8，序列化结果 `data` 最多 256 KiB；
 协议外壳、回显 ID 和错误信息不包含在结果数据预算内。
 旧无句柄 C 公式转换采用同样的 256 KiB 序列化 `data` 预算；Python 返回纯字符串，

@@ -3,6 +3,7 @@ export * from "./capabilities.js";
 export * from "./client.js";
 export * from "./download.js";
 export * from "./formula.js";
+export * from "./completion.js";
 export * from "./registry.js";
 export * from "./worker-registry.js";
 export * from "./types.js";

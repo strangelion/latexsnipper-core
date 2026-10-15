@@ -3,8 +3,8 @@
 更新：2026-10-15。
 
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
-`latexsnipper_conversion::formula_completion`。Rust、C、Python 与 JSONL 路线已有；WASM-JS
-公共绑定与实际编辑器接入仍待完成。
+`latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
+公共绑定已有；更广语法、定义驱动签名及实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -133,6 +133,25 @@ Core 计算与结果序列化释放 GIL；结果 JSON 预算为 1 MiB，快照 J
 过期/无效光标/超限/未知候选保持 Core 错误，不重试或写宿主文档。
 Windows 构建 wheel 的实际导入、并发调用及会话兼容已验证；其他平台包仍依各自 CI 验收，
 不据本地结果宣称发布或全部平台完成。用法见 [Python 文档](../crates/python/README.md#structured-formula-completion)。
+
+## WASM/JS 公共绑定
+
+完整包与 conversion-only 包均提供 `complete_formula_v3(requestJson)`、
+`apply_formula_completion_v3(requestJson)` 及 `formula_completion_capabilities_v3()`。
+JSON 请求与 JSONL `params` 相同，版本只接受规范十进制字符串；返回 v3 envelope。
+编辑树中的空所有者/槽位保持 JSON `null`，不改成 JS `undefined`。
+
+官方 JS 导出完整的树/候选/快照类型、直接调用包装和 UTF-16/UTF-8 边界转换函数；
+拒绝拆开多字节字符或代理对，不以替换字符掩盖无效源码。
+`WasmWorkerClient.completeFormula/applyFormulaCompletion` 接有界串行队列、请求身份、
+快照复制、AbortSignal、活动执行超时、Worker 重建和旧代响应丢弃。
+排队取消只移除当前请求，活动取消/超时硬终止并重建，不重放活动编辑。
+
+Rust 的请求和 `data` 均为 1 MiB 上限；JS 补全 envelope 单独为 1 MiB + 64 KiB，
+旧转换预算不变。Core 失败保持 envelope，传输/验证/Worker 错误则拒绝 Promise；
+缺少新导出的旧包明确拒绝，不回退主线程。
+已用真实生成的完整/精简 Node 包及精简包的浏览器 Worker 验证，
+不代替实际编辑器、移动 WebView 或所有平台包验收；详见 [JS 使用边界](../crates/wasm/js/README.md#structured-formula-completion)。
 
 相关资料：[辅助路线图](formula-assistance-roadmap.md)、
 [收尾清单](closing-issue-ledger.md)。
