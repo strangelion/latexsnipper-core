@@ -15,6 +15,7 @@ import { validateWorkerRequest } from "./worker-request-validation.js";
 import { MAX_COMPLETION_ENVELOPE_BYTES, type FormulaCompletionRequest, type FormulaCompletionApplyRequest, type FormulaCompletionReply, type AppliedFormulaCompletion } from "./completion.js";
 import type { ApiEnvelopeV3 } from "./types.js";
 import type { ScopedFormulaCompletionRequest, ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletion } from "./completion.js";
+import type { FormulaFragmentCompletionRequest, FormulaFragmentCompletionApplyRequest, FormulaFragmentCompletion } from "./completion.js";
 import { WorkerFormulaRegistry, type RegistryWorkerCommand } from "./worker-registry.js";
 
 interface PendingCall {
@@ -22,7 +23,7 @@ interface PendingCall {
   reject(error: WorkerRuntimeError): void;
 }
 
-type CompletionTaskRequest = Extract<WorkerRequest, { type: "complete-formula" | "apply-formula-completion" | "complete-formula-scoped" | "apply-formula-completion-scoped" }>;
+type CompletionTaskRequest = Extract<WorkerRequest, { type: "complete-formula" | "apply-formula-completion" | "complete-formula-scoped" | "apply-formula-completion-scoped" | "complete-formula-fragments" | "apply-formula-completion-fragments" }>;
 
 interface WorkerTask extends PendingCall {
   requestId: string;
@@ -230,7 +231,15 @@ export class WasmWorkerClient {
     return this.completionTask("apply-formula-completion-scoped", input, options) as Promise<ApiEnvelopeV3<AppliedFormulaCompletion>>;
   }
 
-  private completionTask(type: CompletionTaskRequest["type"], input: (FormulaCompletionRequest | FormulaCompletionApplyRequest | ScopedFormulaCompletionRequest | ScopedFormulaCompletionApplyRequest) & { requestId?: string }, options: WorkerCallOptions): Promise<unknown> {
+  completeFormulaFragments(input: FormulaFragmentCompletionRequest & { requestId?: string }, options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<FormulaFragmentCompletion>> {
+    return this.completionTask("complete-formula-fragments", input, options) as Promise<ApiEnvelopeV3<FormulaFragmentCompletion>>;
+  }
+
+  applyFormulaCompletionFragments(input: FormulaFragmentCompletionApplyRequest & { requestId?: string }, options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<AppliedFormulaCompletion>> {
+    return this.completionTask("apply-formula-completion-fragments", input, options) as Promise<ApiEnvelopeV3<AppliedFormulaCompletion>>;
+  }
+
+  private completionTask(type: CompletionTaskRequest["type"], input: (FormulaCompletionRequest | FormulaCompletionApplyRequest | ScopedFormulaCompletionRequest | ScopedFormulaCompletionApplyRequest | FormulaFragmentCompletionRequest | FormulaFragmentCompletionApplyRequest) & { requestId?: string }, options: WorkerCallOptions): Promise<unknown> {
     if (this.terminated) return Promise.reject(this.runtimeError("WORKER_TERMINATED", "Worker client is terminated"));
     if (options.signal?.aborted) return Promise.reject(this.runtimeError("CANCELLED", "Completion was aborted"));
     const { requestId: suppliedId, ...parameters } = input;

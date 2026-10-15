@@ -122,6 +122,53 @@ main-thread downgrade. Full/slim generated Node packages and real slim browser
 Worker checks cover scoped acceptance, reset rejection, hard abort/timeout and
 post-restart Core recovery; these are not mobile/editor or math-fidelity claims.
 
+### Explicit private fragments
+
+Full and conversion-only WASM add `complete_formula_fragments_v3`,
+`apply_formula_completion_fragments_v3` and
+`formula_fragment_completion_capabilities_v3`. These use editing profile 3;
+v1/v2 capability and snapshot shapes remain unchanged. JS exposes typed direct
+helpers `completeFormulaFragments` / `applyFormulaCompletionFragments` and
+`formulaFragmentCompletionCapabilities`. Interactive hosts use
+`client.completeFormulaFragments` / `client.applyFormulaCompletionFragments`.
+Worker actions are `complete-formula-fragments` and
+`apply-formula-completion-fragments`, still on transport protocol 1.
+
+Pass `catalog: {commands, policy, fragments}`: `commands` is the existing scoped
+catalog, `policy` requires boolean `retrievalEnabled`, `sensitiveDocument` and
+`allowInSensitiveDocument`. Each fragment has `id`, exact decimal `revision`,
+`userSha256`, nullable `projectSha256/documentSha256`, ASCII-letter `trigger`,
+single-line `label` and bare LaTeX `source`. Core accepts at most 64 fragments,
+8 KiB UTF-8 per active source, and matches an explicit control-word prefix.
+Disabled, unapproved sensitive, or foreign-scope fragments are filtered before
+their private semantics are inspected. Built-in candidates remain available.
+
+Query data is `{snapshot, context, candidates}`. Candidates include `edit`,
+nullable `definition`, and nullable `fragment` (ID/revision); accept by
+`fragment:<id>`. Profile-3 snapshots contain `catalogSha256`, not
+`definitionsSha256`. Acceptance rechecks CURRENT editor state, scope/reset epoch,
+effective fragment contents and all policy flags. A failed acceptance must never
+be downgraded to another profile, automatically retried, or applied from cached
+candidate text. The host owns explicit acceptance and undo.
+
+Fragment request JSON is capped at 1 MiB of actual UTF-8 (not ASCII-escaped JSON);
+this includes the source, catalog and acceptance snapshot. The old scoped
+catalog retains its separate 64 KiB cap. Result/source/tree limits are unchanged.
+These are transport budgets, not peak JS-object/serialization-memory promises.
+Both host and Worker validate closed shapes; Core validates active semantics.
+Queued requests own a deep copy of the catalog, policy and snapshot, and retain
+the same cancellation/deadline/restart/result guards. Missing exports refuse
+explicitly without a main-thread or v1/v2 fallback.
+
+This API does no history lookup, storage, learning, network IO or rendering.
+Policy flags and identity hashes bind snapshots; they are not permission tokens.
+Trusted hosts must authorize retrieval BEFORE supplying private data and pass
+the genuine current policy/catalog when accepting. Clear/reset must advance the
+scope generation. Full/slim generated Node packages and a real slim browser
+Worker cover private filtering, sensitive allow, Unicode edits, stale refusal,
+hard abort/timeout, no acceptance replay and recovery; actual editors/mobile
+hosts and preference storage/ranking remain separate work.
+
 ## Model-free formula conversion
 
 The default Rust feature set preserves recognition and every previous export.

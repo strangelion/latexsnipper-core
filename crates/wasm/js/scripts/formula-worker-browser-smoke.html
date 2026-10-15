@@ -5,6 +5,7 @@
 <pre id="result">Running real browser Worker conversion checks...</pre>
 <script type="module">
 import { WasmWorkerClient, utf16ToFormulaByteOffset } from "../dist/index.js";
+import { fragmentWorkerProof } from "./fragment-worker-browser-proof.mjs";
 
 const verify = (condition, message) => { if (!condition) throw new Error(message); };
 const clients = [];
@@ -89,7 +90,6 @@ window.formulaWorkerProof = (async () => {
     const foreign = structuredClone(catalog); foreign.scope.userSha256 = "d".repeat(64);
     const hidden = await client.completeFormulaScoped({ ...scopedInput, catalog: foreign });
     verify(hidden.ok && hidden.data.candidates.length === 0, "foreign definitions leaked");
-    client.terminate();
 
     let entered;
     let probe;
@@ -162,6 +162,7 @@ window.formulaWorkerProof = (async () => {
     result.scopedCompletion = true;
     result.scopedHardAbort = true;
     result.scopedWasmTimeout = true;
+    Object.assign(result, await fragmentWorkerProof(client, lifecycle, workers, (resolve) => { entered = resolve; }));
     document.querySelector("#result").textContent = JSON.stringify(result, null, 2);
     return result;
   } catch (error) {

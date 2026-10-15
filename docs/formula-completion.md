@@ -164,7 +164,7 @@ Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲
 
 `formula_completion::fragments` 的 `complete_formula_fragments` / `apply_formula_candidate_fragments`
 使用独立编辑 schema 3；JSONL 协议仍为 1，动作是 `formula.complete.fragments` 与
-`formula.completion.apply.fragments`。C 与正式 Python 的独立接口见下文；WASM-JS 尚未接入片段接口，不能通过 v1/v2 降级接受。
+`formula.completion.apply.fragments`。C、正式 Python 与 WASM-JS 的独立接口见下文；片段接受不能通过 v1/v2 降级。
 
 查询仍带 source/inputFormat/cursor/revision，catalog 为：
 
@@ -323,6 +323,18 @@ Rust 的请求和 `data` 均为 1 MiB 上限；JS 补全 envelope 单独为 1 Mi
 Worker 包装另限目录 JSON 为 64 KiB，原始 WASM 请求仍为 1 MiB。
 排队时深拷贝目录/快照，活动取消/超时重建不重放编辑，不以旧 v1 或主线程计算降级。
 完整/精简 Node 包及真实精简浏览器 Worker 的作用域接受、过期拒绝、硬取消/超时和恢复已有验证。
+
+完整/精简包另提供 `complete_formula_fragments_v3`、`apply_formula_completion_fragments_v3`
+及 `formula_fragment_completion_capabilities_v3`，编辑 schema 为 3。
+JS 提供相应类型和同步助手；交互宿主使用
+`WasmWorkerClient.completeFormulaFragments/applyFormulaCompletionFragments`。
+请求沿用上文显式片段目录；快照使用 `catalogSha256`，候选含独立可空的 definition/fragment 引用。
+主线程与 Worker 验证闭合形状和规范版本，Core 过滤非活动私有内容后验证有效语义。
+片段完整请求按实际 UTF-8 JSON 限 1 MiB，旧 scoped 目录的 64 KiB 限制不变；不宣称峰值内存受同一预算约束。
+目录、策略和快照排队时深拷贝；接受时复验当前策略/内容/重置代数，失败不降级、不自动重放。
+完整/精简 Node 实际包和真实精简浏览器 Worker 已验证隐私过滤、敏感文档显式放行、Unicode 编辑、
+过期拒绝、结果上限、硬取消/超时及接受不重放和恢复；不代替实际编辑宿主/移动平台验收。
+宿主仍先授权检索，再传真实当前目录；本接口不读取历史、不持久化、不学习，策略字段不是权限凭据。
 
 相关资料：[辅助路线图](formula-assistance-roadmap.md)、
 [收尾清单](closing-issue-ledger.md)。

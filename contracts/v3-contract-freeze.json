@@ -31,11 +31,11 @@
     "crates/plugin/src/signed_registry.rs": "3ab061a24eeb038469170a8d7ec7ffbc9c9ddae5f4748cd70adf1dd62ea09464",
     "crates/python/python/latexsnipper_core/__init__.py": "f1704ca6b50c89a270d88683764dd24938996f8f4950ed574f4effc40b94ed70",
     "crates/python/python/latexsnipper_core/__init__.pyi": "6abe4e54f1517413f9b7f65e20905ef63e0906bec24d45431b4b9c77e76639f9",
-    "crates/wasm/js/src/client.ts": "e5031b60a2aacde8832182ca9c261c84bb1e020413c23e94f561764a5cfb6d6b",
-    "crates/wasm/js/src/completion.ts": "973b38e1bf0b8b3310a2e924f7d417297682636fd947acb0ae7781600750961a",
+    "crates/wasm/js/src/client.ts": "33f5cdb82d210548c0f89e16ffe0d35b36a54820687d89efe3c70f5a930ea7fc",
+    "crates/wasm/js/src/completion.ts": "02ac2dd79c2753612353328d13b0ea62895bdee2799ffbfbb2c0ecc5ef10b26b",
     "crates/wasm/js/src/formula.ts": "db19cfe4eb77b49075c0e128d3bebf008ce9014847af9e156f278e70b95b393e",
     "crates/wasm/js/src/registry.ts": "d9b57bae79fc13dc5916095c5504d6652fcca0a35c4ef49b5c1cf4662e772362",
-    "crates/wasm/js/src/types.ts": "9f01d252aced32094a929cd191a79a8488a86753c0acaf72edd18d37b38aabd5",
+    "crates/wasm/js/src/types.ts": "8da1c4e4e4415839b56102bdb231b82e2cae3cc3e76eb8b5a898304297830acb",
     "crates/wasm/js/src/worker-registry.ts": "9415a59458c48974ddd47a4333a6f96f1a937b808390f55765357bc713e0d012",
     "quality/failure-corpus/candidate.schema.json": "c5a2f6bd1c4098f02fe1faf90f10772a45c61eabbb071b96a42887928e9423ec",
     "quality/int8/thresholds.v1.json": "2dbde09e4e91f13738d237e4467aff20aba82e9f4b13789afaa889ee1b7e3140",
@@ -62,7 +62,7 @@
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
     "crates/syntax/src": "f636808624324eb3702cd50914fed9dc1c185b3cd130cb1f0dc650491cd63bed",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
-    "crates/wasm/src": "16824966397ec588f5788f191c8015c7eb09ce6a79b62e9eb64ec8f1639f338b",
+    "crates/wasm/src": "3bce2735c8842f3a29c8947a21eac774bb389cefdd4306ab377da674423e50e6",
     "crates/worker/src": "d67e96eec948ba3ca313aabe3014d690352f3dc70732def126a09af9ab1285d0"
   },
   "schemaVersion": 1

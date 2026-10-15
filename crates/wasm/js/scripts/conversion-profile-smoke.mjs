@@ -21,6 +21,7 @@ completionSmoke(full);
 completionSmoke(conversion);
 assert.deepEqual(full.formula_completion_capabilities_v3(), conversion.formula_completion_capabilities_v3());
 assert.deepEqual(full.formula_scoped_completion_capabilities_v3(), conversion.formula_scoped_completion_capabilities_v3());
+assert.deepEqual(full.formula_fragment_completion_capabilities_v3(), conversion.formula_fragment_completion_capabilities_v3());
 const sample = {
   latex: String.raw`\frac{a}{b}`,
   mathml: "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",

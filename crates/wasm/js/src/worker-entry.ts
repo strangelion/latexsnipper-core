@@ -5,10 +5,12 @@ import {
 } from "./types.js";
 import { validateWorkerRequest } from "./worker-request-validation.js";
 import type { WasmFormulaApi, WasmFormulaFragmentApi } from "./formula.js";
-import { MAX_COMPLETION_ENVELOPE_BYTES, type WasmFormulaCompletionApi, type WasmScopedFormulaCompletionApi } from "./completion.js";
+import { MAX_COMPLETION_ENVELOPE_BYTES, type WasmFormulaCompletionApi, type WasmScopedFormulaCompletionApi, type WasmFragmentFormulaCompletionApi } from "./completion.js";
 import { registryJson, type NativeFormulaRegistry, type WasmFormulaRegistryApi } from "./registry.js";
 
 interface WasmApi {
+  complete_formula_fragments_v3?: WasmFragmentFormulaCompletionApi["complete_formula_fragments_v3"];
+  apply_formula_completion_fragments_v3?: WasmFragmentFormulaCompletionApi["apply_formula_completion_fragments_v3"];
   complete_formula_scoped_v3?: WasmScopedFormulaCompletionApi["complete_formula_scoped_v3"];
   apply_formula_completion_scoped_v3?: WasmScopedFormulaCompletionApi["apply_formula_completion_scoped_v3"];
   complete_formula_v3?: WasmFormulaCompletionApi["complete_formula_v3"];
@@ -107,10 +109,13 @@ async function handle(request: WorkerRequest): Promise<void> {
       respond({ protocolVersion: 1, type: "result", requestId: request.requestId, data }); return;
     }
     if (request.type === "complete-formula" || request.type === "apply-formula-completion" ||
-        request.type === "complete-formula-scoped" || request.type === "apply-formula-completion-scoped") {
+        request.type === "complete-formula-scoped" || request.type === "apply-formula-completion-scoped" ||
+        request.type === "complete-formula-fragments" || request.type === "apply-formula-completion-fragments") {
       const operation = request.type === "complete-formula" ? api.complete_formula_v3
         : request.type === "apply-formula-completion" ? api.apply_formula_completion_v3
-        : request.type === "complete-formula-scoped" ? api.complete_formula_scoped_v3 : api.apply_formula_completion_scoped_v3;
+        : request.type === "complete-formula-scoped" ? api.complete_formula_scoped_v3
+        : request.type === "apply-formula-completion-scoped" ? api.apply_formula_completion_scoped_v3
+        : request.type === "complete-formula-fragments" ? api.complete_formula_fragments_v3 : api.apply_formula_completion_fragments_v3;
       if (!operation) { error(request.requestId, "WORKER_COMPLETION_UNAVAILABLE", "Loaded WASM package lacks the requested completion export"); return; }
       const data = operation(JSON.stringify(request.input));
       if (new TextEncoder().encode(JSON.stringify(data)).byteLength > MAX_COMPLETION_ENVELOPE_BYTES) {

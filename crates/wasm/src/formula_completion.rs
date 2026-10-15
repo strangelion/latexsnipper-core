@@ -1,6 +1,11 @@
 //! Shared full/conversion-only exports for the Core editing protocol.
 use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3};
 use latexsnipper_conversion::formula_completion::{
+    fragments::{
+        FormulaFragmentCompletionApplyRequest, FormulaFragmentCompletionRequest,
+        FORMULA_COMPLETION_MAX_FRAGMENTS, FORMULA_COMPLETION_MAX_FRAGMENT_BYTES,
+        FRAGMENT_FORMULA_COMPLETION_VERSION,
+    },
     scoped::{
         ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletionError,
         ScopedFormulaCompletionRequest, FORMULA_COMPLETION_ARGUMENT_KINDS,
@@ -75,6 +80,21 @@ fn execute_scoped(source: &str, apply: bool) -> Result<Value, ApiErrorV3> {
     } else {
         data(
             request::<ScopedFormulaCompletionRequest>(source)?
+                .execute()
+                .map_err(scoped_completion_error)?,
+        )
+    }
+}
+fn execute_fragments(source: &str, apply: bool) -> Result<Value, ApiErrorV3> {
+    if apply {
+        data(
+            request::<FormulaFragmentCompletionApplyRequest>(source)?
+                .execute()
+                .map_err(scoped_completion_error)?,
+        )
+    } else {
+        data(
+            request::<FormulaFragmentCompletionRequest>(source)?
                 .execute()
                 .map_err(scoped_completion_error)?,
         )
@@ -170,6 +190,40 @@ pub fn complete_formula_scoped_v3(request_json: &str) -> JsValue {
 #[wasm_bindgen]
 pub fn apply_formula_completion_scoped_v3(request_json: &str) -> JsValue {
     response(execute_scoped(request_json, true))
+}
+
+/// Additive profile 3: explicit host-authorized fragments, never implicit history.
+#[wasm_bindgen]
+pub fn formula_fragment_completion_capabilities_v3() -> JsValue {
+    response(Ok(json!({
+        "schemaVersion": FRAGMENT_FORMULA_COMPLETION_VERSION,
+        "inputFormats": ["latex"], "offsetEncoding": "utf-8-bytes",
+        "revisionEncoding": "canonical-decimal-u64-string",
+        "scopeIdentityEncoding": "opaque-lowercase-sha256",
+        "definitionRevisionEncoding": "canonical-decimal-u64-string",
+        "fragmentRevisionEncoding": "canonical-decimal-u64-string",
+        "generationEncoding": "canonical-decimal-u64-string",
+        "maxInputBytes": FORMULA_COMPLETION_MAX_BYTES, "maxNodes": FORMULA_COMPLETION_MAX_NODES,
+        "maxDepthExclusive": FORMULA_COMPLETION_MAX_DEPTH, "maxCandidates": FORMULA_COMPLETION_MAX_CANDIDATES,
+        "maxRequestBytes": MAX_REQUEST_BYTES, "maxResultDataBytes": MAX_DATA_BYTES,
+        "maxDefinitions": FORMULA_COMPLETION_MAX_DEFINITIONS,
+        "maxDefinitionArguments": FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+        "argumentKinds": FORMULA_COMPLETION_ARGUMENT_KINDS, "maxLeadingOptionalArguments": 1,
+        "maxFragments": FORMULA_COMPLETION_MAX_FRAGMENTS,
+        "maxFragmentBytes": FORMULA_COMPLETION_MAX_FRAGMENT_BYTES,
+        "retrievalSource": "explicit-host-catalog", "sensitiveDocumentRequiresHostAllow": true,
+        "macroExpansion": false, "persistence": false, "learning": false
+    })))
+}
+/// Policy flags bind snapshots; trusted hosts must authorize retrieval first.
+#[wasm_bindgen]
+pub fn complete_formula_fragments_v3(request_json: &str) -> JsValue {
+    response(execute_fragments(request_json, false))
+}
+/// No downgrade or retry: recheck the current catalog and policy before editing.
+#[wasm_bindgen]
+pub fn apply_formula_completion_fragments_v3(request_json: &str) -> JsValue {
+    response(execute_fragments(request_json, true))
 }
 
 #[cfg(test)]

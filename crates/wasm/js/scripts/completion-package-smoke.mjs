@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fragmentCompletionSmoke } from "./fragment-completion-smoke.mjs";
 
 export function completionSmoke(api) {
+  fragmentCompletionSmoke(api);
   const sizedSource = "中\\Bigl(x";
   const sizedInput = { source: sizedSource, cursor: new TextEncoder().encode(sizedSource).byteLength, revision: "42", inputFormat: "latex" };
   const sized = api.complete_formula_v3(JSON.stringify(sizedInput));

@@ -73,6 +73,47 @@ export interface WasmScopedFormulaCompletionApi {
   apply_formula_completion_scoped_v3(requestJson: string): ApiEnvelopeV3<AppliedFormulaCompletion>;
 }
 export const MAX_COMPLETION_CATALOG_BYTES = 64 * 1024;
+export const MAX_FRAGMENT_COMPLETION_REQUEST_BYTES = 1024 * 1024;
+export interface FormulaFragmentPolicy {
+  retrievalEnabled: boolean; sensitiveDocument: boolean; allowInSensitiveDocument: boolean;
+}
+export interface FormulaFragmentDefinition {
+  id: string; revision: string; userSha256: string; projectSha256: string | null; documentSha256: string | null;
+  trigger: string; label: string; source: string;
+}
+export interface FormulaFragmentCatalog {
+  commands: FormulaDefinitionCatalog; policy: FormulaFragmentPolicy; fragments: FormulaFragmentDefinition[];
+}
+export interface FormulaFragmentSnapshot extends FormulaCompletionSnapshot { schemaVersion: 3; catalogSha256: string }
+export interface FormulaFragmentCandidate extends ScopedFormulaCandidate { fragment: { id: string; revision: string } | null }
+export interface FormulaFragmentCompletion {
+  snapshot: FormulaFragmentSnapshot; context: FormulaCompletionContext; candidates: FormulaFragmentCandidate[];
+}
+export interface FormulaFragmentCompletionRequest extends FormulaCompletionRequest { catalog: FormulaFragmentCatalog }
+export interface FormulaFragmentCompletionApplyRequest extends FormulaFragmentCompletionRequest { snapshot: FormulaFragmentSnapshot; candidateId: string }
+export interface FormulaFragmentCompletionCapabilities extends FormulaCompletionCapabilities {
+  schemaVersion: 3; scopeIdentityEncoding: "opaque-lowercase-sha256";
+  definitionRevisionEncoding: "canonical-decimal-u64-string"; fragmentRevisionEncoding: "canonical-decimal-u64-string";
+  generationEncoding: "canonical-decimal-u64-string"; maxDefinitions: number; maxDefinitionArguments: number;
+  argumentKinds: FormulaDefinitionArgument[]; maxLeadingOptionalArguments: 1; maxFragments: number; maxFragmentBytes: number;
+  retrievalSource: "explicit-host-catalog"; sensitiveDocumentRequiresHostAllow: true;
+  macroExpansion: false; persistence: false; learning: false;
+}
+export interface WasmFragmentFormulaCompletionApi {
+  formula_fragment_completion_capabilities_v3(): ApiEnvelopeV3<FormulaFragmentCompletionCapabilities>;
+  complete_formula_fragments_v3(requestJson: string): ApiEnvelopeV3<FormulaFragmentCompletion>;
+  apply_formula_completion_fragments_v3(requestJson: string): ApiEnvelopeV3<AppliedFormulaCompletion>;
+}
+/** Explicit catalogs only. The host authorizes retrieval before passing private data. */
+export function completeFormulaFragments(api: WasmFragmentFormulaCompletionApi, request: FormulaFragmentCompletionRequest): ApiEnvelopeV3<FormulaFragmentCompletion> {
+  return api.complete_formula_fragments_v3(JSON.stringify(request));
+}
+export function applyFormulaCompletionFragments(api: WasmFragmentFormulaCompletionApi, request: FormulaFragmentCompletionApplyRequest): ApiEnvelopeV3<AppliedFormulaCompletion> {
+  return api.apply_formula_completion_fragments_v3(JSON.stringify(request));
+}
+export function formulaFragmentCompletionCapabilities(api: WasmFragmentFormulaCompletionApi): ApiEnvelopeV3<FormulaFragmentCompletionCapabilities> {
+  return api.formula_fragment_completion_capabilities_v3();
+}
 export function completeFormulaScoped(api: WasmScopedFormulaCompletionApi, request: ScopedFormulaCompletionRequest): ApiEnvelopeV3<ScopedFormulaCompletion> {
   return api.complete_formula_scoped_v3(JSON.stringify(request));
 }
@@ -128,11 +169,12 @@ function revision(value: unknown): boolean {
     (value === "0" || value[0] !== "0") && (value.length < 20 || value <= "18446744073709551615");
 }
 /** Validate in both host and worker. Core remains the authoritative parser. */
-export function completionInputError(input: unknown, apply: boolean): string | undefined { return completionError(input, apply, false); }
-export function scopedCompletionInputError(input: unknown, apply: boolean): string | undefined { return completionError(input, apply, true); }
+export function completionInputError(input: unknown, apply: boolean): string | undefined { return completionError(input, apply, 1); }
+export function scopedCompletionInputError(input: unknown, apply: boolean): string | undefined { return completionError(input, apply, 2); }
+export function fragmentCompletionInputError(input: unknown, apply: boolean): string | undefined { return completionError(input, apply, 3); }
 function hash(value: unknown): boolean { return typeof value === "string" && value.length === 64 && !/[^a-f0-9]/.test(value); }
 function optionalHash(value: unknown): boolean { return value === null || value === undefined || hash(value); }
-function catalogError(value: unknown): string | undefined {
+function catalogError(value: unknown, maxBytes = MAX_COMPLETION_CATALOG_BYTES): string | undefined {
   if (!record(value) || !closed(value, ["scope", "definitions"]) || !record(value.scope) ||
       !closed(value.scope, ["userSha256", "projectSha256", "documentSha256", "generation"]) ||
       !hash(value.scope.userSha256) || !optionalHash(value.scope.projectSha256) || !optionalHash(value.scope.documentSha256) ||
@@ -145,23 +187,46 @@ function catalogError(value: unknown): string | undefined {
         !(entry.projectSha256 === null || entry.projectSha256 === undefined || typeof entry.projectSha256 === "string") || typeof entry.command !== "string" ||
         !Array.isArray(entry.arguments) || !entry.arguments.every((arg) => arg === "math" || arg === "text" || arg === "optional-math" || arg === "optional-text")) return "Invalid closed completion definition";
   }
-  try { if (new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_COMPLETION_CATALOG_BYTES) return "Completion catalog exceeds 64 KiB JSON"; }
+  try { if (new TextEncoder().encode(JSON.stringify(value)).byteLength > maxBytes) return "Completion catalog exceeds its JSON byte budget"; }
   catch { return "Completion catalog must be JSON-serializable"; }
   return undefined;
 }
-function completionError(input: unknown, apply: boolean, scoped: boolean): string | undefined {
+function fragmentCatalogError(value: unknown): string | undefined {
+  if (!record(value) || !closed(value, ["commands", "policy", "fragments"]) || !record(value.policy) ||
+      !closed(value.policy, ["retrievalEnabled", "sensitiveDocument", "allowInSensitiveDocument"]) ||
+      ![value.policy.retrievalEnabled, value.policy.sensitiveDocument, value.policy.allowInSensitiveDocument].every((flag) => typeof flag === "boolean") ||
+      !Array.isArray(value.fragments) || value.fragments.length > 64) return "Invalid closed fragment catalog or policy";
+  const cause = catalogError(value.commands, MAX_FRAGMENT_COMPLETION_REQUEST_BYTES);
+  if (cause) return cause;
+  for (const entry of value.fragments) {
+    if (!record(entry) || !closed(entry, ["id", "revision", "userSha256", "projectSha256", "documentSha256", "trigger", "label", "source"]) ||
+        !revision(entry.revision) || ![entry.id, entry.userSha256, entry.trigger, entry.label, entry.source].every((item) => typeof item === "string") ||
+        ![entry.projectSha256, entry.documentSha256].every((item) => item === null || item === undefined || typeof item === "string")) return "Invalid closed fragment definition";
+    // Transport validation only; foreign/inactive private semantics belong to Core.
+    try { for (const item of Object.values(entry)) if (typeof item === "string") wellFormed(item); }
+    catch { return "Fragment strings must contain valid Unicode scalars"; }
+  }
+  return undefined;
+}
+function completionError(input: unknown, apply: boolean, profile: 1 | 2 | 3): string | undefined {
+  const scoped = profile !== 1;
   if (!record(input) || !closed(input, ["source", "inputFormat", "cursor", "revision", ...(scoped ? ["catalog"] : []), ...(apply ? ["snapshot", "candidateId"] : [])]) ||
       typeof input.source !== "string" || input.inputFormat !== "latex" || !revision(input.revision)) return "Invalid closed LaTeX completion request";
   if (input.source.length > 65536 || new TextEncoder().encode(input.source).byteLength > 65536) return "Completion source exceeds 64 KiB UTF-8";
   try { formulaByteOffsetToUtf16(input.source, input.cursor as number); } catch { return "Invalid completion source or UTF-8 cursor"; }
-  if (scoped) { const cause = catalogError(input.catalog); if (cause) return cause; }
+  if (scoped) { const cause = profile === 3 ? fragmentCatalogError(input.catalog) : catalogError(input.catalog); if (cause) return cause; }
   if (apply) {
     const snapshot = input.snapshot;
-    if (!record(snapshot) || !closed(snapshot, ["schemaVersion", "sourceSha256", "revision", "cursor", ...(scoped ? ["definitionsSha256"] : [])]) || snapshot.schemaVersion !== (scoped ? 2 : 1) ||
-        (scoped && !hash(snapshot.definitionsSha256)) ||
+    const digest = profile === 3 ? "catalogSha256" : "definitionsSha256";
+    if (!record(snapshot) || !closed(snapshot, ["schemaVersion", "sourceSha256", "revision", "cursor", ...(scoped ? [digest] : [])]) || snapshot.schemaVersion !== profile ||
+        (scoped && !hash(snapshot[digest])) ||
         !revision(snapshot.revision) || typeof snapshot.sourceSha256 !== "string" || snapshot.sourceSha256.length !== 64 ||
         !/^[a-f0-9]{64}$/.test(snapshot.sourceSha256) || !Number.isSafeInteger(snapshot.cursor) || (snapshot.cursor as number) < 0 ||
         (snapshot.cursor as number) > 65536 || typeof input.candidateId !== "string" || input.candidateId.length === 0 || input.candidateId.length > 256) return "Invalid closed completion snapshot or candidate ID";
+  }
+  if (profile === 3) {
+    try { if (new TextEncoder().encode(JSON.stringify(input)).byteLength > MAX_FRAGMENT_COMPLETION_REQUEST_BYTES) return "Fragment completion request exceeds 1 MiB JSON"; }
+    catch { return "Fragment completion request must be JSON-serializable"; }
   }
   return undefined;
 }

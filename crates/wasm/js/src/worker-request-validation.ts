@@ -17,7 +17,7 @@ export interface WorkerRequestValidationOptions {
   assetBaseUrl?: string;
 }
 
-import { completionInputError, scopedCompletionInputError } from "./completion.js";
+import { completionInputError, scopedCompletionInputError, fragmentCompletionInputError } from "./completion.js";
 
 const MAX_REQUEST_ID_LENGTH = 256;
 const MAX_NAME_LENGTH = 256;
@@ -240,11 +240,14 @@ export function validateWorkerRequest(
     case "complete-formula":
     case "apply-formula-completion":
     case "complete-formula-scoped":
-    case "apply-formula-completion-scoped": {
+    case "apply-formula-completion-scoped":
+    case "complete-formula-fragments":
+    case "apply-formula-completion-fragments": {
       if (!closed(value, ["type", "protocolVersion", "requestId", "input"])) return invalid(value, "Unknown completion message fields");
       const scoped = value.type === "complete-formula-scoped" || value.type === "apply-formula-completion-scoped";
-      const cause = (scoped ? scopedCompletionInputError : completionInputError)(value.input,
-        value.type === "apply-formula-completion" || value.type === "apply-formula-completion-scoped");
+      const fragments = value.type === "complete-formula-fragments" || value.type === "apply-formula-completion-fragments";
+      const cause = (fragments ? fragmentCompletionInputError : scoped ? scopedCompletionInputError : completionInputError)(value.input,
+        value.type === "apply-formula-completion" || value.type === "apply-formula-completion-scoped" || value.type === "apply-formula-completion-fragments");
       return cause ? invalid(value, cause) : { ok: true, request: value as unknown as WorkerRequest };
     }
     case "formula-registry-create":
