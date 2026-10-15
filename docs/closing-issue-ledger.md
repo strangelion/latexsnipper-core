@@ -18,7 +18,7 @@
 | C-07 | 转换扩展与局部修复接口 | Core 转换/插件及应用绑定 | 进行中：Rust、含线性格式的原生 WASI profile、CLI、C ABI、Python 及可信 WASM/JS 的显式选择和报告已有 | 接浏览器不可信 WASI、应用 UI/Office 和二进制/文档路线；各平台特性包仍须验收，执行失败不自动重试；见 EXT-01 至 EXT-04 |
 | C-08 | Core 应用适配与会话兼容 | Core 原生/移动/WASM 接口 | 进行中：跨绑定转换、JNI、旧 iOS 会话迁移及重载失败路径缓存失效已有 | 补 Apple SDK/设备、Android ABI/ART、真实移动运行时、模型缓存身份及监督恢复；宿主打包和写回另行验收 |
 | C-09 | Core/WASI 敏感动作审批 | Core 权限 broker 与调用宿主 | 进行中：有限授权、认证快照、免确认续期、Windows 受保护存储/时钟/实时校验、双进程与终止恢复、限定清理、目录隔离/DACL 复查及基础属性/创建时间/标签/资源属性保留已有 | 继续断电/登录会话持久性、部署隔离、跨平台 provider 与应用 UI；再补审计 SACL/中央策略及多文件事务；进程终止不代表断电或完整多应用验收；默认不启用记住策略，快照不是执行授权；在授权范围及期限内复用明确同意，临时故障恢复不清空同意；只有撤销、到期、身份或策略变化才重新确认；不永久拉黑；native IO 不保证撤销；MCP 后续独立处理 |
-| C-10 | Core 结构化公式补全 | Core 语法/候选与公共绑定 | 进行中：Rust/C/Python/JSONL/WASM-JS v1 和 JS Worker 生命周期已有；Rust/C/Python/JSONL 已有有限定义签名及作用域/版本 v2 | 继续 WASM-JS 的作用域扩展、更多命令/定界符，再接宿主与响应验收；随后评估本地排序与可选 JEV，模型接入与训练不作为当前门禁；见 [接口边界](formula-completion.md) |
+| C-10 | Core 结构化公式补全 | Core 语法/候选与公共绑定 | 进行中：Rust/C/Python/JSONL/WASM-JS 均有有限编辑树/候选 v1 和定义签名/作用域版本 v2，JS Worker 生命周期已有 | 继续更多命令/定界符、私有片段/偏好及排序边界，再接宿主与响应验收；可选 JEV/训练不作为当前门禁；见 [接口边界](formula-completion.md) |
 
 格式扩展见 [FMT-01 至 FMT-08](formula-format-roadmap.md)；
 第三方转换与修复接口见 [EXT-01 至 EXT-04](conversion-extension-roadmap.md)；

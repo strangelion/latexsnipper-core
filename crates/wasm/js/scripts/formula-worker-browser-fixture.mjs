@@ -46,3 +46,18 @@ export function complete_formula_v3(requestJson) {
   return core.complete_formula_v3(requestJson);
 }
 export const apply_formula_completion_v3 = core.apply_formula_completion_v3;
+
+export function complete_formula_scoped_v3(requestJson) {
+  const request = JSON.parse(requestJson);
+  if (request.source === "fixture:infinite") {
+    postMessage({ protocolVersion: 1, type: "progress", requestId: "fixture:probe", stage: "fixture-spin", progress: 0 });
+    spin();
+  }
+  if (request.source === "fixture:oversize") {
+    const result = core.complete_formula_scoped_v3(JSON.stringify({ ...request, source: "\\cust", cursor: 5 }));
+    result.data.candidates[0].edit.insert = "x".repeat(1024 * 1024 + 64 * 1024 + 1);
+    return result;
+  }
+  return core.complete_formula_scoped_v3(requestJson);
+}
+export const apply_formula_completion_scoped_v3 = core.apply_formula_completion_scoped_v3;

@@ -44,6 +44,42 @@ export interface WasmFormulaCompletionApi {
 }
 export const MAX_COMPLETION_ENVELOPE_BYTES = 1024 * 1024 + 64 * 1024;
 
+export interface FormulaDefinitionScope {
+  userSha256: string; projectSha256: string | null; documentSha256: string | null; generation: string;
+}
+export interface FormulaCommandDefinition {
+  id: string; revision: string; userSha256: string; projectSha256: string | null;
+  command: string; arguments: ("math" | "text")[];
+}
+export interface FormulaDefinitionCatalog { scope: FormulaDefinitionScope; definitions: FormulaCommandDefinition[] }
+export interface ScopedFormulaSnapshot extends FormulaCompletionSnapshot { schemaVersion: 2; definitionsSha256: string }
+export interface ScopedFormulaCandidate { edit: FormulaCompletionCandidate; definition: { id: string; revision: string } | null }
+export interface ScopedFormulaCompletion {
+  snapshot: ScopedFormulaSnapshot; context: FormulaCompletionContext; candidates: ScopedFormulaCandidate[];
+}
+export interface ScopedFormulaCompletionRequest extends FormulaCompletionRequest { catalog: FormulaDefinitionCatalog }
+export interface ScopedFormulaCompletionApplyRequest extends ScopedFormulaCompletionRequest { snapshot: ScopedFormulaSnapshot; candidateId: string }
+export interface ScopedFormulaCompletionCapabilities extends FormulaCompletionCapabilities {
+  schemaVersion: 2; scopeIdentityEncoding: "opaque-lowercase-sha256";
+  definitionRevisionEncoding: "canonical-decimal-u64-string"; generationEncoding: "canonical-decimal-u64-string";
+  maxDefinitions: number; maxDefinitionArguments: number; macroExpansion: false; persistence: false;
+}
+export interface WasmScopedFormulaCompletionApi {
+  formula_scoped_completion_capabilities_v3(): ApiEnvelopeV3<ScopedFormulaCompletionCapabilities>;
+  complete_formula_scoped_v3(requestJson: string): ApiEnvelopeV3<ScopedFormulaCompletion>;
+  apply_formula_completion_scoped_v3(requestJson: string): ApiEnvelopeV3<AppliedFormulaCompletion>;
+}
+export const MAX_COMPLETION_CATALOG_BYTES = 64 * 1024;
+export function completeFormulaScoped(api: WasmScopedFormulaCompletionApi, request: ScopedFormulaCompletionRequest): ApiEnvelopeV3<ScopedFormulaCompletion> {
+  return api.complete_formula_scoped_v3(JSON.stringify(request));
+}
+export function applyFormulaCompletionScoped(api: WasmScopedFormulaCompletionApi, request: ScopedFormulaCompletionApplyRequest): ApiEnvelopeV3<AppliedFormulaCompletion> {
+  return api.apply_formula_completion_scoped_v3(JSON.stringify(request));
+}
+export function formulaScopedCompletionCapabilities(api: WasmScopedFormulaCompletionApi): ApiEnvelopeV3<ScopedFormulaCompletionCapabilities> {
+  return api.formula_scoped_completion_capabilities_v3();
+}
+
 /** Synchronous exports: use WasmWorkerClient for interactive hosts. */
 export function completeFormula(api: WasmFormulaCompletionApi, request: FormulaCompletionRequest): ApiEnvelopeV3<FormulaCompletionReply> {
   return api.complete_formula_v3(JSON.stringify(request));
@@ -89,14 +125,37 @@ function revision(value: unknown): boolean {
     (value === "0" || value[0] !== "0") && (value.length < 20 || value <= "18446744073709551615");
 }
 /** Validate in both host and worker. Core remains the authoritative parser. */
-export function completionInputError(input: unknown, apply: boolean): string | undefined {
-  if (!record(input) || !closed(input, ["source", "inputFormat", "cursor", "revision", ...(apply ? ["snapshot", "candidateId"] : [])]) ||
+export function completionInputError(input: unknown, apply: boolean): string | undefined { return completionError(input, apply, false); }
+export function scopedCompletionInputError(input: unknown, apply: boolean): string | undefined { return completionError(input, apply, true); }
+function hash(value: unknown): boolean { return typeof value === "string" && value.length === 64 && !/[^a-f0-9]/.test(value); }
+function optionalHash(value: unknown): boolean { return value === null || value === undefined || hash(value); }
+function catalogError(value: unknown): string | undefined {
+  if (!record(value) || !closed(value, ["scope", "definitions"]) || !record(value.scope) ||
+      !closed(value.scope, ["userSha256", "projectSha256", "documentSha256", "generation"]) ||
+      !hash(value.scope.userSha256) || !optionalHash(value.scope.projectSha256) || !optionalHash(value.scope.documentSha256) ||
+      !revision(value.scope.generation) || !Array.isArray(value.definitions) || value.definitions.length > 64) return "Invalid closed completion catalog";
+  // Match transport shape only. Core filters foreign scopes before inspecting
+  // private names/signatures and remains authoritative for active declarations.
+  for (const entry of value.definitions) {
+    if (!record(entry) || !closed(entry, ["id", "revision", "userSha256", "projectSha256", "command", "arguments"]) ||
+        typeof entry.id !== "string" || !revision(entry.revision) || typeof entry.userSha256 !== "string" ||
+        !(entry.projectSha256 === null || entry.projectSha256 === undefined || typeof entry.projectSha256 === "string") || typeof entry.command !== "string" ||
+        !Array.isArray(entry.arguments) || !entry.arguments.every((arg) => arg === "math" || arg === "text")) return "Invalid closed completion definition";
+  }
+  try { if (new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_COMPLETION_CATALOG_BYTES) return "Completion catalog exceeds 64 KiB JSON"; }
+  catch { return "Completion catalog must be JSON-serializable"; }
+  return undefined;
+}
+function completionError(input: unknown, apply: boolean, scoped: boolean): string | undefined {
+  if (!record(input) || !closed(input, ["source", "inputFormat", "cursor", "revision", ...(scoped ? ["catalog"] : []), ...(apply ? ["snapshot", "candidateId"] : [])]) ||
       typeof input.source !== "string" || input.inputFormat !== "latex" || !revision(input.revision)) return "Invalid closed LaTeX completion request";
   if (input.source.length > 65536 || new TextEncoder().encode(input.source).byteLength > 65536) return "Completion source exceeds 64 KiB UTF-8";
   try { formulaByteOffsetToUtf16(input.source, input.cursor as number); } catch { return "Invalid completion source or UTF-8 cursor"; }
+  if (scoped) { const cause = catalogError(input.catalog); if (cause) return cause; }
   if (apply) {
     const snapshot = input.snapshot;
-    if (!record(snapshot) || !closed(snapshot, ["schemaVersion", "sourceSha256", "revision", "cursor"]) || snapshot.schemaVersion !== 1 ||
+    if (!record(snapshot) || !closed(snapshot, ["schemaVersion", "sourceSha256", "revision", "cursor", ...(scoped ? ["definitionsSha256"] : [])]) || snapshot.schemaVersion !== (scoped ? 2 : 1) ||
+        (scoped && !hash(snapshot.definitionsSha256)) ||
         !revision(snapshot.revision) || typeof snapshot.sourceSha256 !== "string" || snapshot.sourceSha256.length !== 64 ||
         !/^[a-f0-9]{64}$/.test(snapshot.sourceSha256) || !Number.isSafeInteger(snapshot.cursor) || (snapshot.cursor as number) < 0 ||
         (snapshot.cursor as number) > 65536 || typeof input.candidateId !== "string" || input.candidateId.length === 0 || input.candidateId.length > 256) return "Invalid closed completion snapshot or candidate ID";

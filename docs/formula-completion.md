@@ -4,8 +4,8 @@
 
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
-公共绑定已有。定义驱动签名/作用域接口先提供 Rust、C、Python 与 JSONL；
-WASM-JS 的作用域扩展、更广语法及实际编辑器接入仍待完成。
+公共绑定均有 v1 及独立的定义驱动签名/作用域 v2 接口；
+更广语法、私有片段/偏好和实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -81,7 +81,7 @@ v1 没有自定义定义注册；v2 显式传入有界签名，不保存注册�
 若某候选插入后超预算，该候选不列出，其余可用候选仍可返回。
 构造候选需要分析拟议源码；真实编辑延迟与 IME/宿主交互仍须独立评估。
 
-## 自定义命令签名与作用域（Rust / C / Python / JSONL）
+## 自定义命令签名与作用域
 
 `formula_completion::scoped` 是新增的 v2 编辑协议，不替换 v1。
 `complete_formula_scoped(source, cursor, revision, &catalog)` 返回
@@ -119,7 +119,7 @@ JSONL 新增 `formula.complete.scoped` / `formula.completion.apply.scoped`，传
 无效声明返回 `INVALID_CATALOG`，未知 JSON 字段仍为 `INVALID_PARAMS`，超预算明确失败。
 
 Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲染/转换/插件执行权限。
-敏感文档的学习开关、偏好清空、私有片段检索及 WASM-JS 作用域接入仍是后续工作。
+敏感文档的学习开关、偏好清空和私有片段检索仍是后续工作。
 
 ## 独立进程调用
 
@@ -208,6 +208,14 @@ Rust 的请求和 `data` 均为 1 MiB 上限；JS 补全 envelope 单独为 1 Mi
 缺少新导出的旧包明确拒绝，不回退主线程。
 已用真实生成的完整/精简 Node 包及精简包的浏览器 Worker 验证，
 不代替实际编辑器、移动 WebView 或所有平台包验收；详见 [JS 使用边界](../crates/wasm/js/README.md#structured-formula-completion)。
+
+完整/精简包另有 `complete_formula_scoped_v3`、`apply_formula_completion_scoped_v3` 和
+`formula_scoped_completion_capabilities_v3`。JS 提供对应类型和同步助手；
+`WasmWorkerClient.completeFormulaScoped/applyFormulaCompletionScoped` 复用现有队列及生命周期。
+请求/data 形状沿用 scoped JSONL，主线程和 Worker 检查闭合传输结构；
+Worker 包装另限目录 JSON 为 64 KiB，原始 WASM 请求仍为 1 MiB。
+排队时深拷贝目录/快照，活动取消/超时重建不重放编辑，不以旧 v1 或主线程计算降级。
+完整/精简 Node 包及真实精简浏览器 Worker 的作用域接受、过期拒绝、硬取消/超时和恢复已有验证。
 
 相关资料：[辅助路线图](formula-assistance-roadmap.md)、
 [收尾清单](closing-issue-ledger.md)。

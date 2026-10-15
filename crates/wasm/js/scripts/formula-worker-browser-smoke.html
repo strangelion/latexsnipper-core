@@ -51,6 +51,20 @@ window.formulaWorkerProof = (async () => {
     verify(selected.ok && selected.data.source === "中😀\\frac{}{}" && selected.data.cursor === 13, "completion canonical edit/UTF-8 selection");
     const stale = await client.applyFormulaCompletion({ ...completionApply, revision: "0" });
     verify(!stale.ok && stale.error.code === "STALE_CONTEXT", "stale completion accepted");
+    const catalog = { scope: { userSha256: "a".repeat(64), projectSha256: "b".repeat(64), documentSha256: "c".repeat(64), generation: completionInput.revision },
+      definitions: [{ id: "pair", revision: completionInput.revision, userSha256: "a".repeat(64), projectSha256: "b".repeat(64), command: "custompair", arguments: ["math", "text"] }] };
+    const scopedInput = { ...completionInput, source: "中😀\\cust", cursor: 12, catalog };
+    const scoped = await client.completeFormulaScoped(scopedInput);
+    verify(scoped.ok && scoped.data.context.schemaVersion === 2 && scoped.data.context.cell === null, "scoped query shape");
+    const scopedApply = { ...scopedInput, snapshot: scoped.data.snapshot, candidateId: "definition:pair" };
+    const scopedAccepted = await client.applyFormulaCompletionScoped(scopedApply);
+    verify(scopedAccepted.ok && scopedAccepted.data.source === "中😀\\custompair{}{}" && scopedAccepted.data.cursor === 19, "scoped canonical edit");
+    const changed = structuredClone(catalog); changed.scope.generation = "0";
+    const scopedStale = await client.applyFormulaCompletionScoped({ ...scopedApply, catalog: changed });
+    verify(!scopedStale.ok && scopedStale.error.code === "STALE_CONTEXT", "scoped reset guard");
+    const foreign = structuredClone(catalog); foreign.scope.userSha256 = "d".repeat(64);
+    const hidden = await client.completeFormulaScoped({ ...scopedInput, catalog: foreign });
+    verify(hidden.ok && hidden.data.candidates.length === 0, "foreign definitions leaked");
     client.terminate();
 
     let entered;
@@ -103,6 +117,27 @@ window.formulaWorkerProof = (async () => {
       verify(resumed.ok && resumed.data.snapshot.revision === completionInput.revision, "completion recovery did not execute Core");
     }
     const result = { ok: true, profile, clientReadyWallMillis, projections: 8, refusalCases: 2, workerResultBudget: true, hardCancellation: true, wasmTimeout: true, postRestartCoreConversions: 2, completion: true, completionUtf8: true, completionStaleGuard: true, completionHardAbort: true, completionWasmTimeout: true, host: "browser-only, not Obsidian" };
+    const scopedOversize = await lifecycle.completeFormulaScoped({ ...scopedInput, source: "fixture:oversize", cursor: 0 })
+      .then(() => { throw new Error("Oversized scoped envelope posted"); }, (error) => error);
+    verify(scopedOversize.detail.code === "WORKER_RESULT_LIMIT", "scoped worker result ceiling");
+    for (const cancellation of ["abort", "timeout"]) {
+      const signal = new AbortController();
+      probe = new Promise((resolve) => { entered = resolve; });
+      const stalled = lifecycle.completeFormulaScoped({ ...scopedInput, source: "fixture:infinite", cursor: 0 }, { signal: signal.signal, timeoutMillis: 1000 });
+      const failed = stalled.then(() => { throw new Error("Stalled scoped completion finished"); }, (error) => error);
+      await probe;
+      const before = workers.length;
+      if (cancellation === "abort") signal.abort();
+      const reason = await failed;
+      verify(reason.detail.code === (cancellation === "abort" ? "CANCELLED" : "WORKER_TASK_TIMEOUT"), "scoped cancellation/timeout");
+      await lifecycle.ready();
+      verify(workers.length === before + 1, "scoped Worker not rebuilt");
+      const resumed = await lifecycle.completeFormulaScoped(scopedInput);
+      verify(resumed.ok && resumed.data.snapshot.definitionsSha256 === scoped.data.snapshot.definitionsSha256, "scoped post-restart Core recovery");
+    }
+    result.scopedCompletion = true;
+    result.scopedHardAbort = true;
+    result.scopedWasmTimeout = true;
     document.querySelector("#result").textContent = JSON.stringify(result, null, 2);
     return result;
   } catch (error) {

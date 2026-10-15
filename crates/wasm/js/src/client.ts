@@ -14,6 +14,7 @@ import {
 import { validateWorkerRequest } from "./worker-request-validation.js";
 import { MAX_COMPLETION_ENVELOPE_BYTES, type FormulaCompletionRequest, type FormulaCompletionApplyRequest, type FormulaCompletionReply, type AppliedFormulaCompletion } from "./completion.js";
 import type { ApiEnvelopeV3 } from "./types.js";
+import type { ScopedFormulaCompletionRequest, ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletion } from "./completion.js";
 import { WorkerFormulaRegistry, type RegistryWorkerCommand } from "./worker-registry.js";
 
 interface PendingCall {
@@ -21,10 +22,12 @@ interface PendingCall {
   reject(error: WorkerRuntimeError): void;
 }
 
+type CompletionTaskRequest = Extract<WorkerRequest, { type: "complete-formula" | "apply-formula-completion" | "complete-formula-scoped" | "apply-formula-completion-scoped" }>;
+
 interface WorkerTask extends PendingCall {
   requestId: string;
   wireRequestId: string;
-  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" | "complete-formula" | "apply-formula-completion" | "formula-registry-create" | "formula-registry-command" }>;
+  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" | "formula-registry-create" | "formula-registry-command" }> | CompletionTaskRequest;
   durationMillis: number;
   resultBytes: number;
   onProgress?: (event: ProgressEvent) => void;
@@ -219,7 +222,15 @@ export class WasmWorkerClient {
     return this.completionTask("apply-formula-completion", input, options) as Promise<ApiEnvelopeV3<AppliedFormulaCompletion>>;
   }
 
-  private completionTask(type: "complete-formula" | "apply-formula-completion", input: (FormulaCompletionRequest | FormulaCompletionApplyRequest) & { requestId?: string }, options: WorkerCallOptions): Promise<unknown> {
+  completeFormulaScoped(input: ScopedFormulaCompletionRequest & { requestId?: string }, options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<ScopedFormulaCompletion>> {
+    return this.completionTask("complete-formula-scoped", input, options) as Promise<ApiEnvelopeV3<ScopedFormulaCompletion>>;
+  }
+
+  applyFormulaCompletionScoped(input: ScopedFormulaCompletionApplyRequest & { requestId?: string }, options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<AppliedFormulaCompletion>> {
+    return this.completionTask("apply-formula-completion-scoped", input, options) as Promise<ApiEnvelopeV3<AppliedFormulaCompletion>>;
+  }
+
+  private completionTask(type: CompletionTaskRequest["type"], input: (FormulaCompletionRequest | FormulaCompletionApplyRequest | ScopedFormulaCompletionRequest | ScopedFormulaCompletionApplyRequest) & { requestId?: string }, options: WorkerCallOptions): Promise<unknown> {
     if (this.terminated) return Promise.reject(this.runtimeError("WORKER_TERMINATED", "Worker client is terminated"));
     if (options.signal?.aborted) return Promise.reject(this.runtimeError("CANCELLED", "Completion was aborted"));
     const { requestId: suppliedId, ...parameters } = input;
@@ -233,7 +244,7 @@ export class WasmWorkerClient {
     if (!Number.isSafeInteger(durationMillis) || durationMillis <= 0) return Promise.reject(this.runtimeError("WORKER_RPC_INVALID_TIMEOUT", "Completion duration must be a positive safe integer"));
     if (this.hasRequest(requestId)) return Promise.reject(this.runtimeError("DUPLICATE_REQUEST_ID", "Duplicate completion request ID"));
     if (this.queue.length >= this.maxQueueLength) return Promise.reject(this.runtimeError("WORKER_QUEUE_FULL", "Worker task queue is full"));
-    const owned = structuredClone(request) as Extract<WorkerRequest, { type: "complete-formula" | "apply-formula-completion" }>;
+    const owned = structuredClone(request) as CompletionTaskRequest;
     return new Promise((resolve, reject) => {
       const abort = (): void => { this.cancel(requestId); };
       const cleanup = (): void => { options.signal?.removeEventListener("abort", abort); };

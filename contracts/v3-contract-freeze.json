@@ -29,10 +29,11 @@
     "crates/model/src/manifest_v3.rs": "7a7d2f15532978d732b633557ec1227713b633fdfe0b977aee5bc714236d9213",
     "crates/plugin/src/manifest_v3.rs": "4fb41389e3956a849dbe4d59c3c1d3e388f2fd0a5a8a80424c10338356f5ccbb",
     "crates/plugin/src/signed_registry.rs": "3ab061a24eeb038469170a8d7ec7ffbc9c9ddae5f4748cd70adf1dd62ea09464",
-    "crates/wasm/js/src/completion.ts": "86e9629901b7ca5aae6d25273003fc87a1e6f04662a5e28e797346dea2187eb1",
+    "crates/wasm/js/src/client.ts": "e5031b60a2aacde8832182ca9c261c84bb1e020413c23e94f561764a5cfb6d6b",
+    "crates/wasm/js/src/completion.ts": "a3bd093ac8f4ee22390c3ffc796c379250064654934ebd7bc7dbd7f5b8b62f87",
     "crates/wasm/js/src/formula.ts": "db19cfe4eb77b49075c0e128d3bebf008ce9014847af9e156f278e70b95b393e",
     "crates/wasm/js/src/registry.ts": "d9b57bae79fc13dc5916095c5504d6652fcca0a35c4ef49b5c1cf4662e772362",
-    "crates/wasm/js/src/types.ts": "7081e759cbe8ed92c7f9a08703433e65480cc67ef7c239ffff80c30938529224",
+    "crates/wasm/js/src/types.ts": "9f01d252aced32094a929cd191a79a8488a86753c0acaf72edd18d37b38aabd5",
     "crates/wasm/js/src/worker-registry.ts": "9415a59458c48974ddd47a4333a6f96f1a937b808390f55765357bc713e0d012",
     "quality/failure-corpus/candidate.schema.json": "c5a2f6bd1c4098f02fe1faf90f10772a45c61eabbb071b96a42887928e9423ec",
     "quality/int8/thresholds.v1.json": "2dbde09e4e91f13738d237e4467aff20aba82e9f4b13789afaa889ee1b7e3140",
@@ -59,7 +60,7 @@
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
     "crates/syntax/src": "f636808624324eb3702cd50914fed9dc1c185b3cd130cb1f0dc650491cd63bed",
     "crates/tensor/src": "317374cd7d8096dd3c0680e15b92d56d3670572952fe2451672e0bdb0567d899",
-    "crates/wasm/src": "85e8231b4a97fdac2698e4ba4162f3d6f63e48588ab4d80080047c7cf4dac2a1",
+    "crates/wasm/src": "56e64c9dfe063fc10d9d8138d1f61cd2fd808f2787fbda635a8ebf6ee07b0fb7",
     "crates/worker/src": "69f6dcc5ae1e69236e4faae53fac3db6be79bf9d106ebdcb4efb9551c2467ffe"
   },
   "schemaVersion": 1

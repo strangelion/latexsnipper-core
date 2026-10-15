@@ -75,6 +75,48 @@ fallback. The host still rechecks current editor state, owns explicit acceptance
 undo and writes, and must not treat structural closure as mathematical validity.
 This is not an editor integration, mobile-host acceptance or learned ranking.
 
+### Scoped command signatures
+
+Both full and conversion-only packages add `complete_formula_scoped_v3`,
+`apply_formula_completion_scoped_v3` and `formula_scoped_completion_capabilities_v3`.
+These expose editing schema 2 separately from v1. The JS direct helpers are
+`completeFormulaScoped`, `applyFormulaCompletionScoped` and
+`formulaScopedCompletionCapabilities`; interactive hosts should use
+`client.completeFormulaScoped` / `client.applyFormulaCompletionScoped` instead.
+Worker actions are additive `complete-formula-scoped` and
+`apply-formula-completion-scoped`, still on transport protocol 1.
+
+Query input adds the current `catalog: {scope, definitions}`. Scope has opaque
+`userSha256`, nullable `projectSha256/documentSha256`, and `generation`.
+Definitions have `id/revision/userSha256/projectSha256/command/arguments`, with at
+most 64 items and four required `math`/`text` arguments each (empty for symbols).
+Commands are 1–64 ASCII letters without backslash/digits; IDs allow ASCII
+letters/digits/`-_.` up to 64 bytes. All revisions/generations are exact canonical
+decimal strings, including `"18446744073709551615"`. Scope hashes must be 64
+lowercase hexadecimal characters. They are identities, not credentials.
+
+Query data is `{snapshot, context, candidates}` (not the v1 nested completion
+shape); each candidate has `edit` and nullable `definition` (ID/revision). To
+accept, provide CURRENT source/cursor/revision/catalog, the returned scoped
+snapshot and candidateId. Core binds effective signature content even if a host
+forgot to advance its definition version, plus active user/project/document and
+reset generation. The host must advance generation on clear/reset and owns
+authorized retrieval, acceptance, writes and undo. Other user/project definitions
+are filtered before private semantic validation; effective collisions refuse
+explicitly rather than guessing precedence. There is no macro body, expansion,
+global registry, preference/history store or learning.
+
+Both host and Worker check the closed transport. The Worker wrapper additionally
+caps catalog JSON at 64 KiB; raw WASM retains the shared 1 MiB request cap.
+Core validates active declaration semantics (`INVALID_CATALOG`), and uses the
+same tree/source/result budgets. Queued requests deep-copy the catalog and scoped
+snapshot, then share the existing queue, abort/deadline, result limits and
+generation-based stale-response dropping. Active edits are never retried after a
+Worker restart. Missing scoped exports refuse explicitly, with no v1 or
+main-thread downgrade. Full/slim generated Node packages and real slim browser
+Worker checks cover scoped acceptance, reset rejection, hard abort/timeout and
+post-restart Core recovery; these are not mobile/editor or math-fidelity claims.
+
 ## Model-free formula conversion
 
 The default Rust feature set preserves recognition and every previous export.

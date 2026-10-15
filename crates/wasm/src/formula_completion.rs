@@ -1,6 +1,11 @@
 //! Shared full/conversion-only exports for the Core editing protocol.
 use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3};
 use latexsnipper_conversion::formula_completion::{
+    scoped::{
+        ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletionError,
+        ScopedFormulaCompletionRequest, FORMULA_COMPLETION_MAX_DEFINITIONS,
+        FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS, SCOPED_FORMULA_COMPLETION_VERSION,
+    },
     FormulaCompletionApplyRequest, FormulaCompletionError, FormulaCompletionRequest,
     FORMULA_COMPLETION_MAX_BYTES, FORMULA_COMPLETION_MAX_CANDIDATES, FORMULA_COMPLETION_MAX_DEPTH,
     FORMULA_COMPLETION_MAX_NODES, FORMULA_COMPLETION_VERSION,
@@ -44,6 +49,35 @@ fn request<T: DeserializeOwned>(source: &str) -> Result<T, ApiErrorV3> {
             "Invalid closed completion request or revision encoding.",
         )
     })
+}
+
+fn scoped_completion_error(value: ScopedFormulaCompletionError) -> ApiErrorV3 {
+    error(
+        match value {
+            ScopedFormulaCompletionError::InvalidCatalog => "INVALID_CATALOG",
+            ScopedFormulaCompletionError::InvalidCursor => "INVALID_CURSOR",
+            ScopedFormulaCompletionError::LimitExceeded => "LIMIT_EXCEEDED",
+            ScopedFormulaCompletionError::StaleContext => "STALE_CONTEXT",
+            ScopedFormulaCompletionError::UnknownCandidate => "UNKNOWN_CANDIDATE",
+        },
+        value.to_string(),
+    )
+}
+
+fn execute_scoped(source: &str, apply: bool) -> Result<Value, ApiErrorV3> {
+    if apply {
+        data(
+            request::<ScopedFormulaCompletionApplyRequest>(source)?
+                .execute()
+                .map_err(scoped_completion_error)?,
+        )
+    } else {
+        data(
+            request::<ScopedFormulaCompletionRequest>(source)?
+                .execute()
+                .map_err(scoped_completion_error)?,
+        )
+    }
 }
 fn data(value: impl Serialize) -> Result<Value, ApiErrorV3> {
     let value = serde_json::to_value(value)
@@ -106,9 +140,71 @@ pub fn apply_formula_completion_v3(request_json: &str) -> JsValue {
     response(execute(request_json, true))
 }
 
+/// Scoped v2 is additive; the v1 capability shape remains unchanged.
+#[wasm_bindgen]
+pub fn formula_scoped_completion_capabilities_v3() -> JsValue {
+    response(Ok(json!({
+        "schemaVersion": SCOPED_FORMULA_COMPLETION_VERSION,
+        "inputFormats": ["latex"], "offsetEncoding": "utf-8-bytes",
+        "revisionEncoding": "canonical-decimal-u64-string",
+        "scopeIdentityEncoding": "opaque-lowercase-sha256",
+        "definitionRevisionEncoding": "canonical-decimal-u64-string",
+        "generationEncoding": "canonical-decimal-u64-string",
+        "maxInputBytes": FORMULA_COMPLETION_MAX_BYTES, "maxNodes": FORMULA_COMPLETION_MAX_NODES,
+        "maxDepthExclusive": FORMULA_COMPLETION_MAX_DEPTH, "maxCandidates": FORMULA_COMPLETION_MAX_CANDIDATES,
+        "maxRequestBytes": MAX_REQUEST_BYTES, "maxResultDataBytes": MAX_DATA_BYTES,
+        "maxDefinitions": FORMULA_COMPLETION_MAX_DEFINITIONS,
+        "maxDefinitionArguments": FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+        "macroExpansion": false, "persistence": false
+    })))
+}
+/// No registry, macro expansion or IO. Pass only host-authorized definitions.
+#[wasm_bindgen]
+pub fn complete_formula_scoped_v3(request_json: &str) -> JsValue {
+    response(execute_scoped(request_json, false))
+}
+/// Recheck CURRENT scope, definition content and editor state before acceptance.
+#[wasm_bindgen]
+pub fn apply_formula_completion_scoped_v3(request_json: &str) -> JsValue {
+    response(execute_scoped(request_json, true))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn scoped_wasm_requests_bind_catalog_scope_and_precise_versions() {
+        let mut params = json!({"source":"中\\cust","cursor":8,"inputFormat":"latex","revision":"18446744073709551615",
+            "catalog":{"scope":{"userSha256":"a".repeat(64),"projectSha256":null,"documentSha256":null,"generation":"18446744073709551615"},
+                "definitions":[{"id":"pair","revision":"18446744073709551615","userSha256":"a".repeat(64),"projectSha256":null,"command":"custompair","arguments":["math","text"]}]}});
+        let reply = execute_scoped(&params.to_string(), false).unwrap();
+        assert_eq!(
+            reply["candidates"][0]["definition"]["revision"],
+            "18446744073709551615"
+        );
+        params["snapshot"] = reply["snapshot"].clone();
+        params["candidateId"] = json!("definition:pair");
+        assert_eq!(
+            execute_scoped(&params.to_string(), true).unwrap()["source"],
+            "中\\custompair{}{}"
+        );
+        params["catalog"]["scope"]["generation"] = json!("0");
+        assert_eq!(
+            execute_scoped(&params.to_string(), true).unwrap_err().code,
+            "STALE_CONTEXT"
+        );
+        params["catalog"]["scope"]["generation"] = json!(0);
+        assert_eq!(
+            execute_scoped(&params.to_string(), true).unwrap_err().code,
+            "INVALID_JSON"
+        );
+        assert_eq!(
+            execute_scoped(&" ".repeat(MAX_REQUEST_BYTES + 1), false)
+                .unwrap_err()
+                .code,
+            "INPUT_TOO_LARGE"
+        );
+    }
     #[test]
     fn wasm_completion_preserves_revision_and_refuses_stale_or_malformed_requests() {
         let mut params = json!({"source":"中\\fr","cursor":6,"inputFormat":"latex","revision":"18446744073709551615"});
