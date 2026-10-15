@@ -5,6 +5,9 @@
 use super::{fragments::*, scoped::*, *};
 use std::sync::{Arc, Weak};
 
+#[path = "formula_completion_preference_storage.rs"]
+pub mod persistence;
+
 pub const FORMULA_PREFERENCE_MAX_EVENTS: usize = 1024;
 
 /// Disabled by default; sensitive learning requires its own explicit host allow.
@@ -88,6 +91,7 @@ struct FeedbackEvent {
     id: u64,
     key: [u8; 32],
     undone: bool,
+    sensitive: bool,
 }
 
 /// Host-owned volatile state, not Clone/Serialize/Debug. Never stores formula text,
@@ -100,6 +104,7 @@ pub struct FormulaPreferenceStore {
     epoch: u64,
     last_event: Option<u64>,
     events: Vec<FeedbackEvent>,
+    last_checkpoint: Option<u64>,
 }
 
 impl FormulaPreferenceStore {
@@ -130,6 +135,7 @@ impl FormulaPreferenceStore {
             epoch: 0,
             last_event: None,
             events: Vec::new(),
+            last_checkpoint: None,
         })
     }
 
@@ -186,6 +192,7 @@ impl FormulaPreferenceStore {
         self.key = key;
         self.epoch = epoch;
         self.last_event = None;
+        self.last_checkpoint = None;
         Ok(())
     }
 
@@ -274,6 +281,7 @@ impl FormulaPreferenceStore {
             id: event_id,
             key,
             undone: false,
+            sensitive: request.catalog.policy.sensitive_document,
         });
         self.last_event = Some(event_id);
         Ok(Some(FormulaPreferenceReceipt {

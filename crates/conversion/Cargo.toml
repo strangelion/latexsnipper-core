@@ -24,6 +24,7 @@ imagesize = "0.13"
 lopdf = { version = "0.44", default-features = false, optional = true }
 zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 sha2.workspace = true
+hmac = "=0.12.1"
 base64 = "0.22"
 crc32fast = "1"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
