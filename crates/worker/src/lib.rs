@@ -4,6 +4,8 @@
 //! session contains the same [`RecognitionSession`] used by the C and Python
 //! adapters, so model/runtime lifetime and error semantics remain in Core.
 
+mod preferences;
+
 use std::collections::{BTreeSet, HashMap};
 use std::io::{self, BufRead, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -223,6 +225,7 @@ pub struct Worker {
     sessions: HashMap<u64, RecognitionSession>,
     next_session_id: u64,
     max_sessions: usize,
+    preferences: preferences::Registry,
 }
 
 impl Default for Worker {
@@ -237,6 +240,7 @@ impl Worker {
             sessions: HashMap::new(),
             next_session_id: 1,
             max_sessions: max_sessions.max(1),
+            preferences: preferences::Registry::default(),
         }
     }
 
@@ -257,7 +261,14 @@ impl Worker {
             );
             return (WorkerResponse::failure(id, error), false);
         }
-        match self.dispatch(request) {
+        let outcome = if request.action.starts_with("formula.preferences.") {
+            self.preferences
+                .dispatch(&request.action, line)
+                .map(DispatchOutcome::data)
+        } else {
+            self.dispatch(request)
+        };
+        match outcome {
             Ok(outcome) => {
                 let shutdown = outcome.shutdown;
                 (
@@ -320,6 +331,7 @@ impl Worker {
                         "persistence": false,
                         "learning": false
                     },
+                    "preferences": preferences::capabilities(),
                     "limits": {
                         "maxInputBytes": MAX_FORMULA_INPUT_BYTES,
                         "maxResultDataBytes": MAX_FORMULA_RESULT_BYTES,
@@ -369,7 +381,9 @@ impl Worker {
                 require_empty_params(request.params)?;
                 Ok(DispatchOutcome::data(json!({
                     "liveSessions": self.sessions.len(),
-                    "maxSessions": self.max_sessions
+                    "maxSessions": self.max_sessions,
+                    "livePreferenceOwners": self.preferences.len(),
+                    "maxPreferenceOwners": preferences::MAX_OWNERS
                 })))
             }
             "worker.shutdown" => {
@@ -615,6 +629,7 @@ impl Worker {
     }
 
     fn close_all(&mut self) {
+        self.preferences.close_all();
         for (_, mut session) in self.sessions.drain() {
             session.close();
         }
@@ -652,7 +667,7 @@ pub fn run<R: BufRead, W: Write>(mut reader: R, mut writer: W) -> io::Result<()>
                         best_effort_id(&line),
                         WorkerError::protocol(
                             "INTERNAL",
-                            "The request handler panicked; all worker sessions were closed.",
+                            "The request handler panicked; all worker sessions and preference owners were closed.",
                         ),
                     ),
                     false,
@@ -734,9 +749,8 @@ fn read_bounded_line(reader: &mut impl BufRead) -> io::Result<Option<Result<Stri
 }
 
 fn parse_request(line: &str) -> Result<WorkerRequest, WorkerError> {
-    let request: WorkerRequest = serde_json::from_str(line).map_err(|error| {
+    let request: WorkerRequest = serde_json::from_str(line).map_err(|_| {
         WorkerError::protocol("INVALID_REQUEST", "The request is not valid worker JSON.")
-            .with_details(json!({ "detail": error.to_string() }))
     })?;
     if !matches!(request.id, Value::String(_) | Value::Number(_)) {
         return Err(WorkerError::protocol(

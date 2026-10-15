@@ -5,6 +5,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+#[path = "support/preferences_process.rs"]
+mod preferences;
+
 struct Process {
     child: Child,
     input: Option<ChildStdin>,
@@ -38,20 +41,22 @@ impl Process {
     }
 
     fn call(&mut self, id: Value, action: &str, params: Value) -> Value {
+        let response = self.raw(
+            &json!({ "version": 1, "id": id, "action": action, "params": params }).to_string(),
+        );
+        assert_eq!(response["id"], id);
+        response
+    }
+
+    fn raw(&mut self, request: &str) -> Value {
         let input = self.input.as_mut().unwrap();
-        writeln!(
-            input,
-            "{}",
-            json!({ "version": 1, "id": id, "action": action, "params": params })
-        )
-        .unwrap();
+        writeln!(input, "{request}").unwrap();
         input.flush().unwrap();
         let line = self
             .responses
             .recv_timeout(Duration::from_secs(15))
             .expect("worker must flush a response while stdin remains open");
         let response: Value = serde_json::from_str(&line).unwrap();
-        assert_eq!(response["id"], id);
         assert_eq!(response["protocolVersion"], 1);
         response
     }

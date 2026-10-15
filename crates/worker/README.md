@@ -48,6 +48,9 @@ or `error`). A successful recognition keeps the authoritative `document` in
 | `formula.convert` | Convert a declared formula string without creating or changing recognition sessions. |
 | `formula.complete` | Query bounded LaTeX editing structure and candidate edits without a model. |
 | `formula.completion.apply` | Revalidate a snapshot and return an explicitly selected canonical edit. |
+| `formula.preferences.create` | Create an independent, default-off volatile preference owner. |
+| `formula.preferences.command` | Query ranking or explicitly capture/record/undo/reset feedback. |
+| `formula.preferences.close` | Release one owner and invalidate its feedback tokens. |
 | `worker.status` | Read live and maximum session counts. |
 | `worker.shutdown` | Close all sessions, flush the response, and exit successfully. |
 
@@ -166,6 +169,82 @@ acceptance and undo; hashes/snapshots are not security credentials. Existing inp
 result, queue and cancellation bounds also apply. See the
 [Core interface boundary](../../docs/formula-completion.md) for the full contract.
 
+## Explicit volatile preference owners
+
+`formula.capabilities.data.preferences` advertises this additive schema 1;
+transport protocol remains 1 and editing requests/snapshots remain profile 3.
+No existing completion action records feedback automatically. Create parameters
+are `{schemaVersion:1, scope, keyHex}`: scope is the complete existing scoped
+identity, and keyHex is a private random 32-byte host key encoded as 64 lowercase
+hex characters. Defaults are all disabled. The caller owns human consent and
+must not log private key material, formula input or response candidates.
+
+Create returns `{ownerId, info}`. `ownerId`, `captureId` and `receiptId` are opaque
+strings, not numeric session IDs or the C ABI's decimal handles. Keep them verbatim,
+never parse their implementation shape, and never treat them as credentials.
+The worker lazily obtains a 128-bit instance namespace from native OS randomness;
+unavailability explicitly refuses preference creation with `PREFERENCE_UNAVAILABLE`
+without blocking ordinary sessions or completion. Namespace plus a non-wrapping
+counter isolates owners/tokens across streams, processes and restarts. Even if a
+caller accidentally reuses its scope/key, old routing identities do not alias a
+new worker's owners. This is identity isolation, not authentication or consent.
+
+`formula.preferences.command` parameters are `{ownerId, command}`:
+
+| command.kind | Other command fields | Result data |
+|---|---|---|
+| `info` | none | scope, policy and bounded event/capture/receipt counts |
+| `set-policy` | `policy` | current policy |
+| `capture` | none | `{captureId}` |
+| `discard-capture` | `captureId` | `{discarded:true}` |
+| `rank-fragments` | `request` | `{completion, order, features}` |
+| `record-acceptance` | `captureId, eventId, request` | `{receiptId:string|null}` |
+| `undo` | `receiptId` | `{undone:true}` |
+| `clear` | `generation, keyHex` | cleared info |
+
+Policy explicitly requires `rankingEnabled`, `feedbackEnabled`, and
+`allowSensitiveFeedback` booleans. Sensitive template retrieval is not permission
+to use/record preferences. `request` is the existing closed fragment query or
+acceptance request. Ranking only returns a permutation of freshly validated Core
+candidates, never injects an edit or writes a document. Event IDs must be strictly
+increasing positive canonical-decimal u64 strings; generation/nested revisions
+retain their canonical string encoding. JSON numbers and alternate spellings refuse.
+
+Acquire a capture BEFORE dispatching acceptance/feedback work. Only report
+`record-acceptance` AFTER the real host transaction succeeded, using its captured
+pre-edit request. Success, including disabled/null recording, consumes the capture;
+errors leave it available for explicit correction/discard. A true undo consumes its
+receipt once. Policy transitions and clear invalidate outstanding tokens, including
+off/on ABA; setting the identical policy is a no-op. Do not mint a new capture for
+a late job to hide its age. Feedback failure must never roll back a successful
+editor transaction, block editing or trigger automatic mutation retries.
+
+Clear requires a newer actual scope generation and a different nonzero key.
+Update the actual catalog generation and query a new snapshot before acceptance.
+`formula.preferences.close` takes `{ownerId}` and releases all owner state;
+duplicate/unknown close returns `PREFERENCE_NOT_FOUND`. Tokens cannot cross owners.
+EOF, shutdown, error unwind and handler-panic cleanup release owners together with
+recognition sessions. Clear-all never resets a live instance's identity sequence.
+`worker.status` adds `livePreferenceOwners/maxPreferenceOwners`, independently of
+recognition session counts. No original source, symbol name or timestamp is stored
+in feedback; there is no disk save, state import/export, cross-document merge or model.
+These are logical cleanup claims, not secure heap/backup erasure guarantees.
+
+Limits: 64 owners, 128 pending captures per owner, 1024 events including undos per
+owner; metadata params 4 KiB, request LINE 1 MiB and ranking data 1 MiB. Existing
+source/tree/candidate limits remain. Prefer explicit discard instead of accumulating
+unused captures. At capacity, deterministic completion remains independently usable.
+Preference params are decoded from raw JSON, including duplicate-field rejection;
+they are not round-tripped through a map that could silently overwrite keys.
+Preference/schema and outer-envelope parse errors omit raw serde details that may
+contain private values/field names. Error codes remain explicit, and a refusal does
+not poison subsequent requests. Serialized budgets are not peak memory guarantees.
+
+The supervisor owns timeouts/hard cancellation and MUST discard all owners/tokens
+after restart. Never replay old acceptance/undo commands during recovery. This
+trusted local interface must not be forwarded directly to untrusted plugins/MCP.
+See [Core preference boundaries](../../docs/formula-completion-preferences.md).
+
 ## Limits and concurrency
 
 - at most 32 live sessions by default;
@@ -184,7 +263,7 @@ cancellation is required. A request timeout is cooperative at Core pipeline
 boundaries; the supervisor remains responsible for a hard process deadline.
 Formula conversion and completion are synchronous and have no in-process interruption or deadline
 parameter. Hard cancellation requires terminating the child; all process-local
-recognition sessions then disappear. The supervisor must correlate IDs, discard
+recognition sessions and preference owners then disappear. The supervisor must correlate IDs, discard
 stale replies and explicitly recreate any sessions; it must not automatically
 repeat a document mutation. Mobile integrations should use the WASM Worker route.
 Image recognition remains path-only. Binary-buffer callers should use the C or

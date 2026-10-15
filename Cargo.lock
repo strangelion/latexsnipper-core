@@ -2852,6 +2852,7 @@ dependencies = [
 name = "latexsnipper-worker"
 version = "3.2.1"
 dependencies = [
+ "getrandom 0.3.4",
  "latexsnipper-api-types",
  "latexsnipper-ast",
  "latexsnipper-conversion",
