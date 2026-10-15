@@ -77,10 +77,12 @@ LATEXSNIPPER_API char *latexsnipper_formula_completion_apply(const uint8_t *requ
  * Scope IDs are opaque lowercase SHA-256 strings, not authorization credentials.
  * All revisions/generations are canonical decimal u64 strings. <=64 declarations,
  * ASCII IDs <=64 bytes (letters/digits/-_.), ASCII-letter commands <=64 bytes
- * without backslash/digits, <=4 required math/text arguments; empty for symbols.
+ * without backslash/digits, <=4 arguments; empty for symbols. Capabilities expose
+ * argumentKinds and maxLeadingOptionalArguments for required math/text and one
+ * leading optional-math/optional-text. Defaults are not expanded.
  * Only current-user global/current-project definitions participate. Ambiguous or
  * builtin-colliding effective definitions fail INVALID_CATALOG. No macro bodies,
- * optional arguments, expansion, retrieval, saved history or implicit execution.
+ * expansion, retrieval, saved history or implicit execution.
  * Apply adds the scoped snapshot and candidateId; Core also binds actual effective
  * signatures, revisions, user/project/document and reset generation. Host owns
  * authorization and must advance generation on clear/reset. Stale replies cannot
@@ -90,6 +92,32 @@ LATEXSNIPPER_API char *latexsnipper_formula_completion_apply(const uint8_t *requ
 LATEXSNIPPER_API char *latexsnipper_formula_scoped_completion_capabilities(void);
 LATEXSNIPPER_API char *latexsnipper_formula_complete_scoped(const uint8_t *request_json, size_t request_json_len);
 LATEXSNIPPER_API char *latexsnipper_formula_completion_apply_scoped(const uint8_t *request_json, size_t request_json_len);
+
+/* Additive schema-v3 private fragments; distinct from v1/v2 editing and the v3
+ * JSON envelope. Feature-detect these symbols; never downgrade a failed accept.
+ * Query adds catalog {commands, policy, fragments}; commands is the v2 catalog.
+ * Policy requires retrievalEnabled/sensitiveDocument/allowInSensitiveDocument.
+ * Fragments have id/revision/userSha256/nullable projectSha256/documentSha256,
+ * trigger/label/source. Current-user global/current-project/current-document
+ * filtering and sensitive-document policy run before private semantic checks or
+ * hashing. Core does not read history, files, databases or network resources.
+ * <=64 fragments, <=8 KiB source each; IDs <=64 ASCII letters/digits/-_., triggers
+ * <=64 ASCII letters (no backslash); nonempty single-line labels <=128 bytes.
+ * Sources must be closed finite editing templates with bare formula shape: no
+ * document/math wrapper, lexical/package commands or unterminated final comment.
+ * Shape checks do not grant permission to execute arbitrary TeX commands.
+ * Data: snapshot/context/candidates. Each candidate has edit and nullable
+ * definition/fragment references (id/revision). Snapshot uses catalogSha256 and
+ * binds actual effective content, scope/generation and all policy fields.
+ * Apply adds CURRENT catalog/editor state, snapshot, candidateId. The host owns
+ * retrieval consent, real current policy, reset epochs, explicit acceptance,
+ * undo and document writes. Hashes/booleans are not authorization credentials.
+ * Other request/source/result limits and string_free ownership above apply.
+ * Calls are synchronous: no internal retries, sessions, learning or persistence.
+ */
+LATEXSNIPPER_API char *latexsnipper_formula_fragment_completion_capabilities(void);
+LATEXSNIPPER_API char *latexsnipper_formula_complete_fragments(const uint8_t *request_json, size_t request_json_len);
+LATEXSNIPPER_API char *latexsnipper_formula_completion_apply_fragments(const uint8_t *request_json, size_t request_json_len);
 
 /* Additive instance-local registered conversion ABI v1, distinct from OCR
  * session handles. Every response uses the v3 envelope and string_free.

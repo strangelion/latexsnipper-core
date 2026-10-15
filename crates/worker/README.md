@@ -142,7 +142,7 @@ catalog), `policy`, and `fragments`. Retrieval and sensitive-document access mus
 be authorized by the host. Foreign/inactive templates are filtered before private
 semantic validation or hashing; acceptance rechecks the actual current policy,
 catalog content and editing snapshot. No history, storage provider or learning is
-implemented. See the [fragment contract](../../docs/formula-completion.md#显式私有片段rust--jsonl).
+implemented. See the [fragment contract](../../docs/formula-completion.md).
 
 The catalog has `scope: {userSha256, projectSha256, documentSha256, generation}`
 and `definitions: [{id, revision, userSha256, projectSha256, command, arguments}]`.

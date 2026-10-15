@@ -32,7 +32,7 @@ use crate::common::{free_string, string_to_cstr};
 pub const APPLICATION_SESSION_ABI_VERSION: u32 = 1;
 
 const MAX_SESSIONS: usize = 64;
-const MAX_REQUEST_JSON_BYTES: usize = 1024 * 1024;
+pub(crate) const MAX_REQUEST_JSON_BYTES: usize = 1024 * 1024;
 const MAX_INPUT_BYTES: usize = 100 * 1024 * 1024;
 const MAX_FORMULA_RESULT_DATA_BYTES: usize = 256 * 1024;
 const MAX_TIMEOUT_MS: u64 = 10 * 60 * 1_000;

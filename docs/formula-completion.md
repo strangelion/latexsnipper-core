@@ -5,7 +5,7 @@
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
 公共绑定均有 v1 及独立的定义驱动签名/作用域 v2 接口；
-Rust/JSONL 另有独立的私有片段编辑 schema 3；其他片段绑定、偏好及实际编辑器接入仍待完成。
+Rust/C/JSONL 另有独立的私有片段编辑 schema 3；其他片段绑定、偏好及实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -160,11 +160,11 @@ JSONL 新增 `formula.complete.scoped` / `formula.completion.apply.scoped`，传
 Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲染/转换/插件执行权限。
 学习开关、偏好清空及私有存储检索宿主仍是后续工作；显式传入片段的边界见下节。
 
-## 显式私有片段（Rust / JSONL）
+## 显式私有片段（Rust / C / JSONL）
 
 `formula_completion::fragments` 的 `complete_formula_fragments` / `apply_formula_candidate_fragments`
 使用独立编辑 schema 3；JSONL 协议仍为 1，动作是 `formula.complete.fragments` 与
-`formula.completion.apply.fragments`。C/Python/WASM-JS 尚未接入这两个片段动作，不能通过 v1/v2 降级接受。
+`formula.completion.apply.fragments`。C 的独立符号见下文；正式 Python 与 WASM-JS 尚未接入片段接口，不能通过 v1/v2 降级接受。
 
 查询仍带 source/inputFormat/cursor/revision，catalog 为：
 
@@ -253,6 +253,17 @@ v2 作用域另增 `latexsnipper_formula_scoped_completion_capabilities()`、
 有效声明错误为 `INVALID_CATALOG`，闭合 JSON 格式错误仍为 `INVALID_JSON`；
 长度/所有权/序列化预算及无会话生命周期与 v1 相同。ctypes 示例支持这三个新符号；
 已用实际 Windows DLL 验证查询、接受、迟到拒绝、私有定义过滤和反复释放，其他平台依 CI 验收。
+
+v3 私有片段另有 `latexsnipper_formula_fragment_completion_capabilities()`、
+`latexsnipper_formula_complete_fragments(...)` 与 `latexsnipper_formula_completion_apply_fragments(...)`，
+复用上文片段 JSONL 的 catalog、策略、快照和候选形状。能力响应同时给出请求/结果、定义和片段预算；
+原 v1/v2 能力数据不变。调用同步、无句柄，既不打开模型/私人存储，也不执行返回的 LaTeX。
+三个符号均须探测；所有成功或失败响应仍使用同一个 `latexsnipper_string_free` 恰好释放一次。
+
+ctypes 参考调用者已支持片段；这不是正式 PyO3 绑定。实际 Windows DLL 和 MSVC C11/C++17
+消费程序已验证公开头文件、查询/接受及旧接口兼容；Linux CI 已接同一消费程序，未用本地结果代替其他平台验收。
+运行 `python crates/ffi/examples/c_header_smoke.py --library-dir target/debug`（Windows 须在 x64 VS 开发环境中），
+会在独立临时目录编译并调用实际库，退出后清理自己创建的编译产物，不删除构建库或项目文件。
 
 ## Python 公共绑定
 

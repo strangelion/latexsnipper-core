@@ -12,6 +12,77 @@ from pathlib import Path
 from python_session import CoreError, Library, Session
 
 
+def fragment_completion_smoke(library: Library) -> None:
+    caps = library.fragment_completion_capabilities()
+    assert caps["schemaVersion"] == 3 and caps["maxFragments"] == 64
+    assert caps["maxRequestBytes"] == 1024 * 1024 and caps["maxResultDataBytes"] == 1024 * 1024
+    assert not caps["persistence"] and not caps["learning"] and not caps["macroExpansion"]
+    revision = 2**64 - 1
+    catalog = {
+        "commands": {"scope": {"userSha256": "a" * 64, "projectSha256": "b" * 64,
+            "documentSha256": "c" * 64, "generation": str(revision)}, "definitions": []},
+        "policy": {"retrievalEnabled": True, "sensitiveDocument": False, "allowInSensitiveDocument": False},
+        "fragments": [{"id": "saved", "revision": str(revision), "userSha256": "a" * 64,
+            "projectSha256": "b" * 64, "documentSha256": "c" * 64, "trigger": "bayes",
+            "label": "Saved formula", "source": r"\frac{α}{}"}],
+    }
+    source = "中😀\\bay"
+    cursor = len(source.encode("utf-8"))
+    params = dict(source=source, cursor=cursor, revision=revision, catalog=catalog)
+    for _ in range(32):
+        result = library.complete_formula_fragments(**params)
+        assert result["snapshot"]["revision"] == str(revision)
+        assert result["candidates"][0]["fragment"] == {"id": "saved", "revision": str(revision)}
+        assert result["candidates"][0]["definition"] is None
+        applied = library.apply_formula_completion_fragments(**params,
+            snapshot=result["snapshot"], candidate_id="fragment:saved")
+        assert applied == {"source": "中😀\\frac{α}{}", "cursor": 17, "tabStops": [{"start": 17, "end": 17}]}
+    for field in ("generation", "userSha256", "projectSha256", "documentSha256", "body",
+                  "retrievalEnabled", "sensitiveDocument", "allowInSensitiveDocument", "clear"):
+        changed = deepcopy(catalog)
+        if field == "body":
+            changed["fragments"][0]["source"] = "x+1"
+        elif field == "clear":
+            changed["fragments"] = []
+        elif field in changed["policy"]:
+            changed["policy"][field] = field != "retrievalEnabled"
+        else:
+            changed["commands"]["scope"][field] = "0" if field == "generation" else "d" * 64
+        try:
+            library.apply_formula_completion_fragments(**{**params, "catalog": changed},
+                snapshot=result["snapshot"], candidate_id="fragment:saved")
+        except CoreError as error:
+            assert error.code == "STALE_CONTEXT", (field, error.code)
+        else:
+            raise AssertionError("stale fragment acceptance succeeded")
+    for field in ("userSha256", "projectSha256", "documentSha256", "disabled", "sensitive"):
+        changed = deepcopy(catalog)
+        changed["fragments"][0]["source"] = "x" * 8193
+        changed["fragments"][0]["label"] = "PRIVATE_SECRET"
+        if field == "disabled":
+            changed["policy"]["retrievalEnabled"] = False
+        elif field == "sensitive":
+            changed["policy"]["sensitiveDocument"] = True
+        else:
+            changed["fragments"][0][field] = "d" * 64
+        hidden = library.complete_formula_fragments(**{**params, "catalog": changed})
+        assert hidden["candidates"] == [] and "PRIVATE_SECRET" not in str(hidden)
+    large = deepcopy(catalog)
+    item = large["fragments"][0]
+    item["source"] = "x %" + '"' * 8188 + "\n"
+    large["fragments"] = [{**item, "id": f"entry-{index}"} for index in range(60)]
+    large_source = "x" * 3900 + r"\bay"
+    try:
+        library.complete_formula_fragments(**{**params, "source": large_source,
+            "cursor": len(large_source), "catalog": large})
+    except CoreError as error:
+        assert error.code == "OUTPUT_TOO_LARGE", error.code
+    else:
+        raise AssertionError("oversized fragment result was not refused")
+    assert library.complete_formula_fragments(**params)["snapshot"]["schemaVersion"] == 3
+    print("C fragments: native exports, precise Unicode edits, scope/policy guards and result refusal passed")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--library-dir", required=True, type=Path)
@@ -21,6 +92,7 @@ def main() -> None:
         "darwin": "liblatexsnipper_ffi.dylib",
     }.get(sys.platform, "liblatexsnipper_ffi.so")
     library = Library(args.library_dir / filename)
+    fragment_completion_smoke(library)
     routes = library.formula_capabilities()
     assert len(routes) == 176
     assert len({(r["input"], r["output"], r["mode"]) for r in routes}) == 176
@@ -224,7 +296,8 @@ def main() -> None:
     else:
         raise AssertionError("non-control-word declaration succeeded")
     for symbol in ("latexsnipper_formula_complete", "latexsnipper_formula_completion_apply",
-                   "latexsnipper_formula_complete_scoped", "latexsnipper_formula_completion_apply_scoped"):
+                   "latexsnipper_formula_complete_scoped", "latexsnipper_formula_completion_apply_scoped",
+                   "latexsnipper_formula_complete_fragments", "latexsnipper_formula_completion_apply_fragments"):
         function = getattr(library._dll, symbol)
         function.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
         function.restype = ctypes.c_void_p

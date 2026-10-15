@@ -2,6 +2,11 @@
 use std::ffi::c_char;
 
 use latexsnipper_conversion::formula_completion::{
+    fragments::{
+        FormulaFragmentCompletionApplyRequest, FormulaFragmentCompletionRequest,
+        FORMULA_COMPLETION_MAX_FRAGMENTS, FORMULA_COMPLETION_MAX_FRAGMENT_BYTES,
+        FRAGMENT_FORMULA_COMPLETION_VERSION,
+    },
     scoped::{
         ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletionError,
         ScopedFormulaCompletionRequest, FORMULA_COMPLETION_ARGUMENT_KINDS,
@@ -15,7 +20,7 @@ use latexsnipper_conversion::formula_completion::{
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::application_c::{ffi_response, parse_request, AdapterError};
+use crate::application_c::{ffi_response, parse_request, AdapterError, MAX_REQUEST_JSON_BYTES};
 
 const MAX_COMPLETION_DATA_BYTES: usize = 1024 * 1024;
 
@@ -172,6 +177,73 @@ pub unsafe extern "C" fn latexsnipper_formula_completion_apply_scoped(
     })
 }
 
+/// Discover schema-v3 fragment completion without opening a model or session.
+/// Free the v3 JSON envelope once with `latexsnipper_string_free`.
+#[no_mangle]
+pub extern "C" fn latexsnipper_formula_fragment_completion_capabilities() -> *mut c_char {
+    ffi_response(|| {
+        Ok::<_, AdapterError>(json!({
+            "schemaVersion": FRAGMENT_FORMULA_COMPLETION_VERSION,
+            "inputFormats": ["latex"], "offsetEncoding": "utf-8-bytes",
+            "revisionEncoding": "canonical-decimal-u64-string",
+            "scopeIdentityEncoding": "opaque-lowercase-sha256",
+            "definitionRevisionEncoding": "canonical-decimal-u64-string",
+            "fragmentRevisionEncoding": "canonical-decimal-u64-string",
+            "generationEncoding": "canonical-decimal-u64-string",
+            "maxInputBytes": FORMULA_COMPLETION_MAX_BYTES,
+            "maxNodes": FORMULA_COMPLETION_MAX_NODES,
+            "maxDepthExclusive": FORMULA_COMPLETION_MAX_DEPTH,
+            "maxCandidates": FORMULA_COMPLETION_MAX_CANDIDATES,
+            "maxRequestBytes": MAX_REQUEST_JSON_BYTES,
+            "maxResultDataBytes": MAX_COMPLETION_DATA_BYTES,
+            "maxDefinitions": FORMULA_COMPLETION_MAX_DEFINITIONS,
+            "maxDefinitionArguments": FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+            "argumentKinds": FORMULA_COMPLETION_ARGUMENT_KINDS,
+            "maxLeadingOptionalArguments": 1,
+            "maxFragments": FORMULA_COMPLETION_MAX_FRAGMENTS,
+            "maxFragmentBytes": FORMULA_COMPLETION_MAX_FRAGMENT_BYTES,
+            "retrievalSource": "explicit-host-catalog",
+            "sensitiveDocumentRequiresHostAllow": true,
+            "macroExpansion": false, "persistence": false, "learning": false
+        }))
+    })
+}
+
+/// Query explicitly supplied, host-authorized fragments. No storage is accessed.
+/// Free the v3 JSON envelope once with `latexsnipper_string_free`.
+///
+/// # Safety
+/// `request_json` must reference `request_json_len` readable bytes for this call.
+#[no_mangle]
+pub unsafe extern "C" fn latexsnipper_formula_complete_fragments(
+    request_json: *const u8,
+    request_json_len: usize,
+) -> *mut c_char {
+    ffi_response(|| {
+        let request: FormulaFragmentCompletionRequest =
+            unsafe { parse_request(request_json, request_json_len) }?;
+        bound_data(request.execute().map_err(scoped_completion_error)?)
+    })
+}
+
+/// Recheck CURRENT scope, policy, fragment/definition contents and editor state.
+/// This returns data only; snapshots are not authorization or document writes.
+/// Free the v3 JSON envelope once with `latexsnipper_string_free`.
+///
+/// # Safety
+/// `request_json` must reference `request_json_len` readable bytes for this call.
+#[no_mangle]
+pub unsafe extern "C" fn latexsnipper_formula_completion_apply_fragments(
+    request_json: *const u8,
+    request_json_len: usize,
+) -> *mut c_char {
+    ffi_response(|| {
+        let request: FormulaFragmentCompletionApplyRequest =
+            unsafe { parse_request(request_json, request_json_len) }?;
+        bound_data(request.execute().map_err(scoped_completion_error)?)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,6 +304,8 @@ mod tests {
             latexsnipper_formula_completion_apply,
             latexsnipper_formula_complete_scoped,
             latexsnipper_formula_completion_apply_scoped,
+            latexsnipper_formula_complete_fragments,
+            latexsnipper_formula_completion_apply_fragments,
         ] {
             for length in [0, 1, 1024 * 1024 + 1] {
                 let response = unsafe { take_json(function(std::ptr::null(), length)) };

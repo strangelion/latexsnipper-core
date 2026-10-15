@@ -211,6 +211,32 @@ class Library:
             "snapshot": snapshot, "candidateId": candidate_id,
         })
 
+    def fragment_completion_capabilities(self) -> dict[str, Any]:
+        function = self._dll.latexsnipper_formula_fragment_completion_capabilities
+        function.argtypes = []
+        function.restype = ctypes.c_void_p
+        return self._decode(function())
+
+    def complete_formula_fragments(
+        self, source: str, *, cursor: int, revision: int, catalog: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Supply only the host-authorized current local fragment catalog/policy."""
+        return self._completion_request("latexsnipper_formula_complete_fragments", {
+            "source": source, "inputFormat": "latex", "cursor": cursor,
+            "revision": str(revision), "catalog": catalog,
+        })
+
+    def apply_formula_completion_fragments(
+        self, source: str, *, cursor: int, revision: int, catalog: dict[str, Any],
+        snapshot: dict[str, Any], candidate_id: str,
+    ) -> dict[str, Any]:
+        """Recheck current policy and scope; this does not authorize host writes."""
+        return self._completion_request("latexsnipper_formula_completion_apply_fragments", {
+            "source": source, "inputFormat": "latex", "cursor": cursor,
+            "revision": str(revision), "catalog": catalog,
+            "snapshot": snapshot, "candidateId": candidate_id,
+        })
+
     def warmup(self, handle: int, profile: str) -> dict[str, Any]:
         request_bytes = self._encode({"profile": profile})
         request_buffer = ctypes.create_string_buffer(request_bytes)
