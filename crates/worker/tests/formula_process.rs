@@ -159,6 +159,22 @@ fn scoped_completion_rpc_filters_definitions_and_rejects_cross_scope_edits() {
 #[test]
 fn delimiter_ownership_and_closure_survive_the_real_jsonl_transport() {
     let mut worker = Process::start();
+    let sized_source = "中\\Bigl(x";
+    let sized_input = json!({"source": sized_source, "cursor": sized_source.len(), "revision": "42", "inputFormat": "latex"});
+    let sized = worker.call(
+        json!("sized-query"),
+        "formula.complete",
+        sized_input.clone(),
+    );
+    let mut sized_apply = sized_input;
+    sized_apply["snapshot"] = sized["data"]["snapshot"].clone();
+    sized_apply["candidateId"] = json!("structure:close-delimiter");
+    let sized = worker.call(
+        json!("sized-apply"),
+        "formula.completion.apply",
+        sized_apply,
+    );
+    assert_eq!(sized["data"]["source"], "中\\Bigl(x\\Bigr)");
     let source = "中\\left(x";
     let params = json!({"source": source, "cursor": source.len(), "revision": "18446744073709551615", "inputFormat": "latex"});
     let reply = worker.call(json!("fence-query"), "formula.complete", params.clone());

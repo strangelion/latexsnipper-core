@@ -57,6 +57,15 @@ window.formulaWorkerProof = (async () => {
     verify(fence.ok && fence.data.completion.context.slot === "group", "fence owner metadata");
     const fenceClosed = await client.applyFormulaCompletion({ ...fenceInput, snapshot: fence.data.snapshot, candidateId: "structure:close-delimiter" });
     verify(fenceClosed.ok && fenceClosed.data.source === "中\\left(x\\right)", "fence closure transport");
+    const sizedSource = "中\\Bigl(x";
+    const sizedInput = { source: sizedSource, cursor: utf16ToFormulaByteOffset(sizedSource, sizedSource.length), revision: "42", inputFormat: "latex" };
+    const sized = await client.completeFormula(sizedInput);
+    const sizedClosed = await client.applyFormulaCompletion({ ...sizedInput, snapshot: sized.data.snapshot, candidateId: "structure:close-delimiter" });
+    verify(sizedClosed.ok && sizedClosed.data.source === "中\\Bigl(x\\Bigr)", "sized fence closure transport");
+    const starredInput = { source: "\\oper", cursor: 5, revision: "42", inputFormat: "latex" };
+    const starred = await client.completeFormula(starredInput);
+    const starredEdit = await client.applyFormulaCompletion({ ...starredInput, snapshot: starred.data.snapshot, candidateId: "builtin:operatorname-star" });
+    verify(starredEdit.ok && starredEdit.data.source === "\\operatorname*{}", "operator star transport");
     const catalog = { scope: { userSha256: "a".repeat(64), projectSha256: "b".repeat(64), documentSha256: "c".repeat(64), generation: completionInput.revision },
       definitions: [{ id: "pair", revision: completionInput.revision, userSha256: "a".repeat(64), projectSha256: "b".repeat(64), command: "custompair", arguments: ["math", "text"] }] };
     const scopedInput = { ...completionInput, source: "中😀\\cust", cursor: 12, catalog };

@@ -4,6 +4,15 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export function completionSmoke(api) {
+  const sizedSource = "中\\Bigl(x";
+  const sizedInput = { source: sizedSource, cursor: new TextEncoder().encode(sizedSource).byteLength, revision: "42", inputFormat: "latex" };
+  const sized = api.complete_formula_v3(JSON.stringify(sizedInput));
+  assert.equal(api.apply_formula_completion_v3(JSON.stringify({ ...sizedInput, snapshot: sized.data.snapshot, candidateId: "structure:close-delimiter" })).data.source, "中\\Bigl(x\\Bigr)");
+  const starredInput = { source: "\\oper", cursor: 5, revision: "42", inputFormat: "latex" };
+  const starred = api.complete_formula_v3(JSON.stringify(starredInput));
+  assert.equal(api.apply_formula_completion_v3(JSON.stringify({ ...starredInput, snapshot: starred.data.snapshot, candidateId: "builtin:operatorname-star" })).data.source, "\\operatorname*{}");
+  const literal = "\\mbox{\\fr";
+  assert.deepEqual(api.complete_formula_v3(JSON.stringify({ source: literal, cursor: literal.length, revision: "42", inputFormat: "latex" })).data.completion.candidates, []);
   const fenceSource = "中\\left(x";
   const fenceInput = { source: fenceSource, cursor: new TextEncoder().encode(fenceSource).byteLength, revision: "42", inputFormat: "latex" };
   const fence = api.complete_formula_v3(JSON.stringify(fenceInput));

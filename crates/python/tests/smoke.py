@@ -93,6 +93,16 @@ def formula_smoke() -> None:
 
 def completion_smoke() -> None:
     fence_source = "中\\left(x"
+    sized_source = "中\\Bigl(x"
+    sized_cursor = len(sized_source.encode("utf-8"))
+    sized = complete_formula(sized_source, cursor=sized_cursor, revision=42)
+    assert apply_formula_completion(sized_source, cursor=sized_cursor, revision=42,
+        snapshot=sized["snapshot"], candidate_id="structure:close-delimiter")["source"] == "中\\Bigl(x\\Bigr)"
+    starred = complete_formula(r"\oper", cursor=5, revision=42)
+    assert apply_formula_completion(r"\oper", cursor=5, revision=42,
+        snapshot=starred["snapshot"], candidate_id="builtin:operatorname-star")["source"] == r"\operatorname*{}"
+    literal = r"\mbox{\fr"
+    assert not complete_formula(literal, cursor=len(literal), revision=42)["completion"]["candidates"]
     fence_cursor = len(fence_source.encode("utf-8"))
     fence = complete_formula(fence_source, cursor=fence_cursor, revision=42)
     assert fence["completion"]["context"]["slot"] == "group"

@@ -275,6 +275,7 @@ fn delimiter_depth_source_growth_and_generated_range_invariants_are_bounded() {
     for source in [
         format!("{}x{}", "(".repeat(70), ")".repeat(70)),
         format!("{}x{}", r"\left(".repeat(70), r"\right)".repeat(70)),
+        format!("{}x{}", r"\Bigl(".repeat(70), r"\bigr)".repeat(70)),
     ] {
         assert_eq!(
             analyze_formula_context(&source, 0, 0),
@@ -295,6 +296,12 @@ fn delimiter_depth_source_growth_and_generated_range_invariants_are_bounded() {
         "]",
         r"\left(",
         r"\right]",
+        r"\Bigl(",
+        r"\bigr]",
+        r"\Biggm|",
+        r"\big|",
+        r"\operatorname*",
+        r"\mbox",
         r"\langle",
         r"\rangle",
         "{",

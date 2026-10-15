@@ -16,6 +16,72 @@ const PAIRS: &[(&str, &str)] = &[
 ];
 const SYMMETRIC: &[&str] = &["|", "\\vert", "\\Vert", "\\|", ".", "/", "\\backslash"];
 
+#[derive(Clone, Copy)]
+struct FenceStyle {
+    left: &'static str,
+    right: &'static str,
+    middle: &'static str,
+}
+const STYLES: &[FenceStyle] = &[
+    FenceStyle {
+        left: "left",
+        right: "right",
+        middle: "middle",
+    },
+    FenceStyle {
+        left: "bigl",
+        right: "bigr",
+        middle: "bigm",
+    },
+    FenceStyle {
+        left: "Bigl",
+        right: "Bigr",
+        middle: "Bigm",
+    },
+    FenceStyle {
+        left: "biggl",
+        right: "biggr",
+        middle: "biggm",
+    },
+    FenceStyle {
+        left: "Biggl",
+        right: "Biggr",
+        middle: "Biggm",
+    },
+];
+fn opening_style(source: &str) -> Option<FenceStyle> {
+    STYLES
+        .iter()
+        .find(|style| control(source, style.left))
+        .copied()
+}
+fn closing_style(source: &str) -> Option<FenceStyle> {
+    STYLES
+        .iter()
+        .find(|style| control(source, style.right))
+        .copied()
+}
+
+fn middle_style(source: &str) -> Option<FenceStyle> {
+    STYLES
+        .iter()
+        .find(|style| control(source, style.middle))
+        .copied()
+}
+
+fn compatible(left: FenceStyle, right: FenceStyle) -> bool {
+    // Sized class markers may deliberately use different heights. Only the
+    // dynamic left/right pair creates its own TeX grouping boundary.
+    (left.left == "left") == (right.left == "left")
+}
+
+pub(super) fn single_marker(name: &str) -> bool {
+    matches!(name, "big" | "Big" | "bigg" | "Bigg")
+        || STYLES
+            .iter()
+            .any(|style| style.left != "left" && style.middle == name)
+}
+
 fn control(source: &str, name: &str) -> bool {
     source
         .strip_prefix('\\')
@@ -51,25 +117,50 @@ fn matching(opening: &str) -> Option<&'static str> {
 }
 
 pub(super) fn builtin_command(name: &str) -> bool {
-    PAIRS
-        .iter()
-        .flat_map(|(left, right)| [*left, *right])
-        .chain(SYMMETRIC.iter().copied())
-        .any(|value| value.strip_prefix('\\') == Some(name))
+    single_marker(name)
+        || STYLES
+            .iter()
+            .any(|style| [style.left, style.right, style.middle].contains(&name))
+        || PAIRS
+            .iter()
+            .flat_map(|(left, right)| [*left, *right])
+            .chain(SYMMETRIC.iter().copied())
+            .any(|value| value.strip_prefix('\\') == Some(name))
 }
 
 pub(super) fn opening_command(name: &str) -> bool {
-    PAIRS
-        .iter()
-        .any(|(left, _)| left.strip_prefix('\\') == Some(name))
+    STYLES.iter().any(|style| style.left == name)
+        || PAIRS
+            .iter()
+            .any(|(left, _)| left.strip_prefix('\\') == Some(name))
 }
 
 impl EditingParser<'_> {
     fn fence_marker(&mut self, parent: usize, depth: usize) -> EditResult<()> {
+        if depth >= MAX_DEPTH {
+            return Err(FormulaCompletionError::LimitExceeded);
+        }
         if self.ch() == Some('\\') {
-            self.command(parent, depth, false, false)
+            self.command_token(parent).map(|_| ())
         } else {
             self.leaf(parent)
+        }
+    }
+
+    pub(super) fn sized_marker(&mut self, parent: usize, depth: usize) -> EditResult<bool> {
+        self.trivia(parent)?;
+        if token(&self.source[self.pos..]).is_some() {
+            self.fence_marker(parent, depth)?;
+            Ok(true)
+        } else {
+            self.diagnostic(
+                "MISSING_DELIMITER",
+                FormulaSourceRange {
+                    start: self.pos,
+                    end: self.pos,
+                },
+            );
+            Ok(false)
         }
     }
 
@@ -105,7 +196,7 @@ impl EditingParser<'_> {
     pub(super) fn fence(&mut self, parent: usize, depth: usize) -> EditResult<bool> {
         let start = self.pos;
         let rest = &self.source[start..];
-        let scalable = control(rest, "left");
+        let style = opening_style(rest);
         let opening = token(rest);
         let fixed = opening.and_then(|opening| {
             PAIRS
@@ -113,12 +204,12 @@ impl EditingParser<'_> {
                 .find(|(left, _)| *left == opening)
                 .map(|(_, right)| *right)
         });
-        if !scalable && fixed.is_none() {
-            if control(rest, "right")
+        if style.is_none() && fixed.is_none() {
+            if closing_style(rest).is_some()
                 || opening.is_some_and(|value| PAIRS.iter().any(|(_, right)| *right == value))
             {
                 self.fence_marker(parent, depth)?;
-                if control(rest, "right") {
+                if closing_style(rest).is_some() {
                     self.trivia(parent)?;
                     if token(&self.source[self.pos..]).is_some() {
                         self.fence_marker(parent, depth)?;
@@ -142,7 +233,7 @@ impl EditingParser<'_> {
             start,
         )?;
         self.fence_marker(id, depth)?;
-        let expected = if scalable {
+        let expected = if style.is_some() {
             self.trivia(id)?;
             let Some(opening) = token(&self.source[self.pos..]) else {
                 self.nodes[id].content.start = self.pos;
@@ -164,8 +255,8 @@ impl EditingParser<'_> {
                 break false;
             }
             let rest = &self.source[self.pos..];
-            if control(rest, "right") {
-                if !scalable {
+            if let Some(ending) = closing_style(rest) {
+                if style.is_none_or(|style| !compatible(style, ending)) {
                     break false;
                 }
                 self.fence_marker(id, depth)?;
@@ -183,7 +274,9 @@ impl EditingParser<'_> {
                 );
                 break false;
             }
-            if scalable && control(rest, "middle") {
+            if style.is_some_and(|style| {
+                middle_style(rest).is_some_and(|middle| compatible(style, middle))
+            }) {
                 self.fence_marker(id, depth)?;
                 self.trivia(id)?;
                 if token(&self.source[self.pos..]).is_some() {
@@ -199,7 +292,7 @@ impl EditingParser<'_> {
                 }
                 continue;
             }
-            if !scalable {
+            if style.is_none() {
                 if let Some(value) = token(rest) {
                     // Ordinary round/square intervals may have mixed endpoints.
                     let interval = matches!(expected, ")" | "]") && matches!(value, ")" | "]");
@@ -227,9 +320,9 @@ fn closing_hint(source: &str, node: &FormulaEditNode) -> Option<String> {
         return None;
     }
     let rest = &source[node.range.start..];
-    if control(rest, "left") {
+    if let Some(style) = opening_style(rest) {
         // Recover the opening marker without guessing private macro expansion.
-        let mut tail = &rest[5..];
+        let mut tail = &rest[style.left.len() + 1..];
         loop {
             tail = tail.trim_start_matches(char::is_whitespace);
             if !tail.starts_with('%') {
@@ -240,11 +333,13 @@ fn closing_hint(source: &str, node: &FormulaEditNode) -> Option<String> {
         let opening = token(tail)?;
         let expected = matching(opening).unwrap_or(".");
         let pending = &source[node.content.end..node.range.end];
-        Some(if control(pending, "right") {
-            expected.into()
-        } else {
-            format!("\\right{expected}")
-        })
+        Some(
+            if closing_style(pending).is_some_and(|right| compatible(style, right)) {
+                expected.into()
+            } else {
+                format!("\\{}{expected}", style.right)
+            },
+        )
     } else {
         let opening = token(rest)?;
         PAIRS
@@ -256,7 +351,7 @@ fn closing_hint(source: &str, node: &FormulaEditNode) -> Option<String> {
 pub(super) fn is_fence(source: &str, node: &FormulaEditNode) -> bool {
     node.kind == FormulaEditKind::Group
         && node.slot == Some(FormulaSlot::Group)
-        && (control(&source[node.range.start..], "left")
+        && (opening_style(&source[node.range.start..]).is_some()
             || token(&source[node.range.start..])
                 .is_some_and(|value| PAIRS.iter().any(|(left, _)| *left == value)))
 }
@@ -266,8 +361,10 @@ pub(super) fn owns_closing_header(source: &str, node: &FormulaEditNode, cursor: 
         && node.kind == FormulaEditKind::Group
         && node.content.end <= cursor
         && cursor <= node.range.end
-        && control(&source[node.range.start..], "left")
-        && control(&source[node.content.end..node.range.end], "right")
+        && opening_style(&source[node.range.start..]).is_some_and(|style| {
+            closing_style(&source[node.content.end..node.range.end])
+                .is_some_and(|right| compatible(style, right))
+        })
 }
 
 pub(super) fn prefix_closure(

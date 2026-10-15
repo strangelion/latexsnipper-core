@@ -126,26 +126,10 @@ fn valid_optional_hash(value: &Option<String>) -> bool {
 fn reserved(command: &str) -> bool {
     candidates::builtin_command(command)
         || delimiters::builtin_command(command)
+        || commands::builtin_command(command)
         || matches!(
             command,
-            "dbinom"
-                | "tbinom"
-                | "textrm"
-                | "textbf"
-                | "textit"
-                | "textsf"
-                | "texttt"
-                | "underline"
-                | "mathsf"
-                | "mathtt"
-                | "mathfrak"
-                | "begin"
-                | "end"
-                | "verb"
-                | "left"
-                | "right"
-                | "middle"
-                | "newcommand"
+            "newcommand"
                 | "renewcommand"
                 | "providecommand"
                 | "def"

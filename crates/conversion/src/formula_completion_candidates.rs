@@ -106,6 +106,10 @@ const SYMBOLS: &[&str] = &[
     "prod",
 ];
 const STRUCTURES: &[(&str, &str)] = &[
+    ("bigl", "\\bigl(\\bigr)"),
+    ("Bigl", "\\Bigl(\\Bigr)"),
+    ("biggl", "\\biggl(\\biggr)"),
+    ("Biggl", "\\Biggl(\\Biggr)"),
     ("langle", "\\langle\\rangle"),
     ("lceil", "\\lceil\\rceil"),
     ("lfloor", "\\lfloor\\rfloor"),
@@ -116,6 +120,8 @@ const STRUCTURES: &[(&str, &str)] = &[
     ("tfrac", "\\tfrac{}{}"),
     ("cfrac", "\\cfrac{}{}"),
     ("binom", "\\binom{}{}"),
+    ("dbinom", "\\dbinom{}{}"),
+    ("tbinom", "\\tbinom{}{}"),
     ("sqrt", "\\sqrt{}"),
     ("sqrt-index", "\\sqrt[]{}"),
     ("vec", "\\vec{}"),
@@ -124,15 +130,60 @@ const STRUCTURES: &[(&str, &str)] = &[
     ("overline", "\\overline{}"),
     ("overbrace", "\\overbrace{}"),
     ("underbrace", "\\underbrace{}"),
+    ("underline", "\\underline{}"),
     ("mathrm", "\\mathrm{}"),
     ("mathbf", "\\mathbf{}"),
     ("mathbb", "\\mathbb{}"),
     ("mathcal", "\\mathcal{}"),
     ("mathit", "\\mathit{}"),
     ("operatorname", "\\operatorname{}"),
+    ("operatorname-star", "\\operatorname*{}"),
     ("text", "\\text{}"),
     ("overset", "\\overset{}{}"),
     ("underset", "\\underset{}{}"),
+    ("stackrel", "\\stackrel{}{}"),
+    ("dot", "\\dot{}"),
+    ("ddot", "\\ddot{}"),
+    ("widehat", "\\widehat{}"),
+    ("tilde", "\\tilde{}"),
+    ("widetilde", "\\widetilde{}"),
+    ("overrightarrow", "\\overrightarrow{}"),
+    ("overleftarrow", "\\overleftarrow{}"),
+    ("boldsymbol", "\\boldsymbol{}"),
+    ("bm", "\\bm{}"),
+    ("boxed", "\\boxed{}"),
+    ("mathsf", "\\mathsf{}"),
+    ("mathtt", "\\mathtt{}"),
+    ("mathfrak", "\\mathfrak{}"),
+    ("mathscr", "\\mathscr{}"),
+    ("mathnormal", "\\mathnormal{}"),
+    ("ensuremath", "\\ensuremath{}"),
+    ("phantom", "\\phantom{}"),
+    ("hphantom", "\\hphantom{}"),
+    ("vphantom", "\\vphantom{}"),
+    ("mbox", "\\mbox{}"),
+    ("fbox", "\\fbox{}"),
+    ("textnormal", "\\textnormal{}"),
+    ("textrm", "\\textrm{}"),
+    ("textbf", "\\textbf{}"),
+    ("textit", "\\textit{}"),
+    ("textsf", "\\textsf{}"),
+    ("texttt", "\\texttt{}"),
+    ("textmd", "\\textmd{}"),
+    ("textsc", "\\textsc{}"),
+    ("textsl", "\\textsl{}"),
+    ("textup", "\\textup{}"),
+    ("dddot", "\\dddot{}"),
+    ("ddddot", "\\ddddot{}"),
+    ("check", "\\check{}"),
+    ("breve", "\\breve{}"),
+    ("acute", "\\acute{}"),
+    ("grave", "\\grave{}"),
+    ("mathring", "\\mathring{}"),
+    ("overleftrightarrow", "\\overleftrightarrow{}"),
+    ("underleftarrow", "\\underleftarrow{}"),
+    ("underrightarrow", "\\underrightarrow{}"),
+    ("underleftrightarrow", "\\underleftrightarrow{}"),
 ];
 const ENVIRONMENTS: &[&str] = &[
     "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "cases", "aligned",
@@ -209,7 +260,7 @@ pub(super) fn candidate(
     })
 }
 
-pub(super) fn existing_group(source: &str, mut pos: usize, optional: bool) -> bool {
+pub(super) fn after_trivia(source: &str, mut pos: usize) -> usize {
     loop {
         match source.as_bytes().get(pos) {
             Some(byte) if byte.is_ascii_whitespace() => pos += 1,
@@ -225,6 +276,11 @@ pub(super) fn existing_group(source: &str, mut pos: usize, optional: bool) -> bo
             _ => break,
         }
     }
+    pos
+}
+
+pub(super) fn existing_group(source: &str, pos: usize, optional: bool) -> bool {
+    let pos = after_trivia(source, pos);
     source.as_bytes().get(pos) == Some(&b'{')
         || optional && source.as_bytes().get(pos) == Some(&b'[')
 }
@@ -329,8 +385,15 @@ pub(super) fn complete_with_signatures(
             if !name.starts_with(&prefix.prefix) {
                 continue;
             }
-            let bare = format!("\\{name}");
-            let insert = if existing_group(source, prefix.replace.end, name == "sqrt")
+            let has_star = commands::starred(name)
+                && source
+                    .as_bytes()
+                    .get(after_trivia(source, prefix.replace.end))
+                    == Some(&b'*');
+            let wants_star = commands::starred(name) && scaffold.starts_with(&format!("\\{name}*"));
+            let bare = format!("\\{name}{}", if wants_star && !has_star { "*" } else { "" });
+            let insert = if has_star
+                || existing_group(source, prefix.replace.end, name == "sqrt")
                 || delimiters::opening_command(name) && prefix.replace.end < source.len()
             {
                 bare.as_str()

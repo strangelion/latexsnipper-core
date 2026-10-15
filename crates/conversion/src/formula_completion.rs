@@ -17,6 +17,8 @@ use sha2::{Digest, Sha256};
 
 #[path = "formula_completion_candidates.rs"]
 mod candidates;
+#[path = "formula_completion_commands.rs"]
+mod commands;
 #[path = "formula_completion_delimiters.rs"]
 mod delimiters;
 pub use candidates::{
@@ -405,13 +407,7 @@ impl EditingParser<'_> {
         Ok(())
     }
 
-    fn command(
-        &mut self,
-        parent: usize,
-        depth: usize,
-        text: bool,
-        matched_end: bool,
-    ) -> EditResult<()> {
+    fn command_token(&mut self, parent: usize) -> EditResult<(usize, String, usize, usize)> {
         let start = self.pos;
         self.pos += 1;
         let name_start = self.pos;
@@ -430,26 +426,23 @@ impl EditingParser<'_> {
             None,
             start,
         )?;
+        self.finish(id, name_end, true);
+        Ok((id, name, start, name_end))
+    }
+
+    fn command(
+        &mut self,
+        parent: usize,
+        depth: usize,
+        text: bool,
+        matched_end: bool,
+    ) -> EditResult<()> {
+        let (id, name, start, name_end) = self.command_token(parent)?;
         if text {
             self.finish(id, name_end, true);
             return Ok(());
         }
-        let builtin_slots: &[FormulaSlot] = match name.as_str() {
-            "frac" | "dfrac" | "tfrac" | "cfrac" => &[
-                FormulaSlot::FractionNumerator,
-                FormulaSlot::FractionDenominator,
-            ],
-            "binom" | "dbinom" | "tbinom" => {
-                &[FormulaSlot::BinomialUpper, FormulaSlot::BinomialLower]
-            }
-            "text" | "textrm" | "textbf" | "textit" | "textsf" | "texttt" => &[FormulaSlot::Text],
-            "vec" | "hat" | "bar" | "overline" | "underline" | "overbrace" | "underbrace"
-            | "mathrm" | "mathbb" | "mathbf" | "mathit" | "mathcal" | "mathsf" | "mathtt"
-            | "mathfrak" | "operatorname" => &[FormulaSlot::MathArgument],
-            "overset" | "underset" => &[FormulaSlot::MathArgument, FormulaSlot::MathArgument],
-            "begin" | "end" => &[FormulaSlot::EnvironmentName],
-            _ => &[],
-        };
+        let builtin_slots = commands::slots(&name);
         // Copy the bounded signature so recursive parsing can mutably borrow self.
         let declared_slots = self
             .signatures
@@ -461,6 +454,15 @@ impl EditingParser<'_> {
             [FormulaSlot::MathArgument; scoped::FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS];
         slots[..count].copy_from_slice(declared_slots);
         let mut closed = true;
+        if commands::starred(&name) {
+            self.trivia(id)?;
+            if self.ch() == Some('*') {
+                self.pos += 1;
+            }
+        }
+        if delimiters::single_marker(&name) {
+            closed &= self.sized_marker(id, depth)?;
+        }
         if name == "cfrac" {
             self.trivia(id)?;
             if self.ch() == Some('[') {
