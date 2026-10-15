@@ -157,6 +157,42 @@ LATEXSNIPPER_API char *latexsnipper_formula_registry_close(uint64_t handle);
 LATEXSNIPPER_API char *latexsnipper_formula_registry_approvals(uint64_t handle);
 LATEXSNIPPER_API char *latexsnipper_formula_registry_approval(uint64_t handle, const uint8_t *request_json, size_t request_json_len);
 
+/* Additive volatile preference owners, schema 1. Every returned v3 JSON envelope
+ * must be freed once with latexsnipper_string_free. No document or disk writes.
+ * create: {schemaVersion:1,scope:{userSha256,projectSha256,documentSha256,
+ * generation},keyHex}. keyHex is PRIVATE random 32-byte host key material encoded
+ * as 64 lowercase hex characters: never log it or expose these APIs to guests.
+ * Defaults: ranking/capture OFF. Returned data.handle is a canonical u64 decimal
+ * STRING; parse losslessly before passing as uint64_t, never through a double.
+ * command kinds (closed JSON; nested request uses fragment editing schema 3):
+ * info; set-policy {policy:{rankingEnabled,feedbackEnabled,allowSensitiveFeedback}};
+ * capture -> {captureId}; discard-capture {captureId};
+ * rank-fragments {request} -> {completion,order,features};
+ * record-acceptance {captureId,eventId,request} -> {receiptId:string|null};
+ * undo {receiptId}; clear {generation,keyHex}.
+ * IDs and generation/eventId use canonical decimal u64 STRINGS, not numbers.
+ * Capture BEFORE dispatch; record only AFTER a real host acceptance succeeded.
+ * Successful record (including disabled/null) consumes the capture; errors leave
+ * it available for explicit retry/discard. Undo consumes its receipt once.
+ * Policy transitions/clear invalidate outstanding tokens; tokens are globally
+ * unique in this loaded library and cannot alias another live owner. No wrap.
+ * Clear requires newer scope generation and a fresh nonzero key. Update actual
+ * catalog generation and requery; do not forge a capture for late queued work.
+ * Retrieval allow does not authorize sensitive feedback. Handles/tokens and
+ * policy booleans are not permission credentials. Trusted host owns all consent.
+ * Limits: 64 owners, 128 pending captures/owner, 1024 events including undos;
+ * create/metadata 4 KiB, editing command/result data 1 MiB, source/tree unchanged.
+ * Busy is prompt PREFERENCE_BUSY without removal/replay; close only succeeds when
+ * it can remove the owner. Repeated close/unknown handle: PREFERENCE_NOT_FOUND.
+ * Discard all handles after library unload or process restart. This is not
+ * persistence, secure heap erasure, user-level merging, model ranking or OLE IO.
+ * Feature-detect these additive symbols in older libraries.
+ */
+LATEXSNIPPER_API char *latexsnipper_formula_preferences_capabilities(void);
+LATEXSNIPPER_API char *latexsnipper_formula_preferences_create(const uint8_t *request_json, size_t request_json_len);
+LATEXSNIPPER_API char *latexsnipper_formula_preferences_command(uint64_t handle, const uint8_t *request_json, size_t request_json_len);
+LATEXSNIPPER_API char *latexsnipper_formula_preferences_close(uint64_t handle);
+
 /* request_json example:
  * {"modelsDir":"models","runtimePreference":"auto","maxThreads":4}
  */

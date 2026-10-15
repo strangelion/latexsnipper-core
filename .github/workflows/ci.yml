@@ -88,6 +88,8 @@ jobs:
         run: cargo build --locked -p latexsnipper-ffi --features android-jni --release
       - name: Validate exported C formula symbols and session compatibility
         run: python crates/ffi/examples/formula_smoke.py --library-dir target/release
+      - name: Validate preference owners against the native library
+        run: python crates/ffi/examples/formula_preferences_smoke.py --library-dir target/release
       - name: Compile and run public C and C++ fragment consumers
         if: runner.os == 'Linux'
         run: python crates/ffi/examples/c_header_smoke.py --library-dir target/release
