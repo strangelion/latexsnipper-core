@@ -4,7 +4,7 @@
 
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
-公共绑定已有。定义驱动签名/作用域接口先提供 Rust 与 JSONL；
+公共绑定已有。定义驱动签名/作用域接口先提供 Rust、C 与 JSONL；
 其他绑定的作用域扩展、更广语法及实际编辑器接入仍待完成。
 
 ## 使用
@@ -81,7 +81,7 @@ v1 没有自定义定义注册；v2 显式传入有界签名，不保存注册�
 若某候选插入后超预算，该候选不列出，其余可用候选仍可返回。
 构造候选需要分析拟议源码；真实编辑延迟与 IME/宿主交互仍须独立评估。
 
-## 自定义命令签名与作用域（Rust / JSONL）
+## 自定义命令签名与作用域（Rust / C / JSONL）
 
 `formula_completion::scoped` 是新增的 v2 编辑协议，不替换 v1。
 `complete_formula_scoped(source, cursor, revision, &catalog)` 返回
@@ -119,7 +119,7 @@ JSONL 新增 `formula.complete.scoped` / `formula.completion.apply.scoped`，传
 无效声明返回 `INVALID_CATALOG`，未知 JSON 字段仍为 `INVALID_PARAMS`，超预算明确失败。
 
 Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲染/转换/插件执行权限。
-敏感文档的学习开关、偏好清空、私有片段检索和其他绑定接入仍是后续工作，不能视为已完成。
+敏感文档的学习开关、偏好清空、私有片段检索及正式 Python/WASM-JS 作用域接入仍是后续工作。
 
 ## 独立进程调用
 
@@ -161,6 +161,13 @@ Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲
 旧 `latexsnipper_formula_capabilities()` 数组和 session ABI v1 不变；先探测新增符号，
 不能假设旧 DLL 已支持。`crates/ffi/examples/python_session.py` 提供零依赖 ctypes 示例；
 它是 C 参考调用者，不能和下面的正式 PyO3 接口混用。
+
+v2 作用域另增 `latexsnipper_formula_scoped_completion_capabilities()`、
+`latexsnipper_formula_complete_scoped(...)` 和 `latexsnipper_formula_completion_apply_scoped(...)`。
+请求/data 复用上文 scoped JSONL 形状，旧 v1 能力响应不追加或改写字段。
+有效声明错误为 `INVALID_CATALOG`，闭合 JSON 格式错误仍为 `INVALID_JSON`；
+长度/所有权/序列化预算及无会话生命周期与 v1 相同。ctypes 示例支持这三个新符号；
+已用实际 Windows DLL 验证查询、接受、迟到拒绝、私有定义过滤和反复释放，其他平台依 CI 验收。
 
 ## Python 公共绑定
 

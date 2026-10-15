@@ -69,6 +69,28 @@ LATEXSNIPPER_API char *latexsnipper_formula_completion_capabilities(void);
 LATEXSNIPPER_API char *latexsnipper_formula_complete(const uint8_t *request_json, size_t request_json_len);
 LATEXSNIPPER_API char *latexsnipper_formula_completion_apply(const uint8_t *request_json, size_t request_json_len);
 
+/* Additive schema-v2 scoped completion; feature-detect these separate symbols.
+ * Complete adds catalog {scope, definitions}; data is snapshot/context/candidates
+ * (no v1 completion nesting). Candidates contain edit and nullable definition.
+ * Scope has userSha256, nullable projectSha256/documentSha256, generation;
+ * definitions have id/revision/userSha256/nullable projectSha256/command/arguments.
+ * Scope IDs are opaque lowercase SHA-256 strings, not authorization credentials.
+ * All revisions/generations are canonical decimal u64 strings. <=64 declarations,
+ * ASCII IDs <=64 bytes (letters/digits/-_.), ASCII-letter commands <=64 bytes
+ * without backslash/digits, <=4 required math/text arguments; empty for symbols.
+ * Only current-user global/current-project definitions participate. Ambiguous or
+ * builtin-colliding effective definitions fail INVALID_CATALOG. No macro bodies,
+ * optional arguments, expansion, retrieval, saved history or implicit execution.
+ * Apply adds the scoped snapshot and candidateId; Core also binds actual effective
+ * signatures, revisions, user/project/document and reset generation. Host owns
+ * authorization and must advance generation on clear/reset. Stale replies cannot
+ * be accepted through v1. Other budgets/errors and string_free ownership above
+ * remain unchanged. Existing v1 capability data and session ABI are unchanged.
+ */
+LATEXSNIPPER_API char *latexsnipper_formula_scoped_completion_capabilities(void);
+LATEXSNIPPER_API char *latexsnipper_formula_complete_scoped(const uint8_t *request_json, size_t request_json_len);
+LATEXSNIPPER_API char *latexsnipper_formula_completion_apply_scoped(const uint8_t *request_json, size_t request_json_len);
+
 /* Additive instance-local registered conversion ABI v1, distinct from OCR
  * session handles. Every response uses the v3 envelope and string_free.
  * Create JSON: {"schemaVersion":1}, or the same plus "pluginStore" (existing

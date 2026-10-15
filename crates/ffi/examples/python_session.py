@@ -185,6 +185,32 @@ class Library:
             "snapshot": snapshot, "candidateId": candidate_id,
         })
 
+    def scoped_completion_capabilities(self) -> dict[str, Any]:
+        function = self._dll.latexsnipper_formula_scoped_completion_capabilities
+        function.argtypes = []
+        function.restype = ctypes.c_void_p
+        return self._decode(function())
+
+    def complete_formula_scoped(
+        self, source: str, *, cursor: int, revision: int, catalog: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Catalog revisions/generation must already be canonical decimal strings."""
+        return self._completion_request("latexsnipper_formula_complete_scoped", {
+            "source": source, "inputFormat": "latex", "cursor": cursor,
+            "revision": str(revision), "catalog": catalog,
+        })
+
+    def apply_formula_completion_scoped(
+        self, source: str, *, cursor: int, revision: int, catalog: dict[str, Any],
+        snapshot: dict[str, Any], candidate_id: str,
+    ) -> dict[str, Any]:
+        """Recheck CURRENT scope/catalog; this does not authorize a document write."""
+        return self._completion_request("latexsnipper_formula_completion_apply_scoped", {
+            "source": source, "inputFormat": "latex", "cursor": cursor,
+            "revision": str(revision), "catalog": catalog,
+            "snapshot": snapshot, "candidateId": candidate_id,
+        })
+
     def warmup(self, handle: int, profile: str) -> dict[str, Any]:
         request_bytes = self._encode({"profile": profile})
         request_buffer = ctypes.create_string_buffer(request_bytes)

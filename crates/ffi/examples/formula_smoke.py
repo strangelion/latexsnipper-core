@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+from copy import deepcopy
 import sys
 import tempfile
 from pathlib import Path
@@ -143,8 +144,60 @@ def main() -> None:
             assert error.code == code, (code, error.code)
         else:
             raise AssertionError(f"expected completion error {code}")
-    for symbol in ("latexsnipper_formula_complete", "latexsnipper_formula_completion_apply"):
+    scoped_caps = library.scoped_completion_capabilities()
+    assert scoped_caps["schemaVersion"] == 2
+    assert scoped_caps["maxDefinitions"] == 64
+    assert scoped_caps["persistence"] is False
+    catalog = {
+        "scope": {"userSha256": "a" * 64, "projectSha256": "b" * 64,
+                  "documentSha256": "c" * 64, "generation": str(revision)},
+        "definitions": [{"id": "pair", "revision": str(revision), "userSha256": "a" * 64,
+                         "projectSha256": "b" * 64, "command": "custompair", "arguments": ["math", "text"]}],
+    }
+    custom_source = "中\\cust"
+    custom_cursor = len(custom_source.encode("utf-8"))
+    for _ in range(32):
+        scoped = library.complete_formula_scoped(custom_source, cursor=custom_cursor, revision=revision, catalog=catalog)
+        assert scoped["context"]["schemaVersion"] == 2
+        assert scoped["candidates"][0]["definition"] == {"id": "pair", "revision": str(revision)}
+        selected = library.apply_formula_completion_scoped(
+            custom_source, cursor=custom_cursor, revision=revision, catalog=catalog,
+            snapshot=scoped["snapshot"], candidate_id="definition:pair",
+        )
+        assert selected == {"source": "中\\custompair{}{}", "cursor": 15,
+                            "tabStops": [{"start": 15, "end": 15}, {"start": 17, "end": 17}]}
+    for field in ("generation", "projectSha256", "documentSha256", "signature"):
+        changed = deepcopy(catalog)
+        if field == "signature":
+            changed["definitions"][0]["arguments"] = []
+        else:
+            changed["scope"][field] = "0" if field == "generation" else "d" * 64
+        try:
+            library.apply_formula_completion_scoped(
+                custom_source, cursor=custom_cursor, revision=revision, catalog=changed,
+                snapshot=scoped["snapshot"], candidate_id="definition:pair",
+            )
+        except CoreError as error:
+            assert error.code == "STALE_CONTEXT"
+        else:
+            raise AssertionError("stale scoped completion succeeded")
+    foreign = deepcopy(catalog)
+    foreign["scope"]["userSha256"] = "d" * 64
+    hidden = library.complete_formula_scoped(custom_source, cursor=custom_cursor, revision=revision, catalog=foreign)
+    assert hidden["candidates"] == [] and "custompair" not in str(hidden)
+    invalid = deepcopy(catalog)
+    invalid["definitions"][0]["command"] = "mysymbol2"
+    try:
+        library.complete_formula_scoped(custom_source, cursor=custom_cursor, revision=revision, catalog=invalid)
+    except CoreError as error:
+        assert error.code == "INVALID_CATALOG"
+    else:
+        raise AssertionError("non-control-word declaration succeeded")
+    for symbol in ("latexsnipper_formula_complete", "latexsnipper_formula_completion_apply",
+                   "latexsnipper_formula_complete_scoped", "latexsnipper_formula_completion_apply_scoped"):
         function = getattr(library._dll, symbol)
+        function.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+        function.restype = ctypes.c_void_p
         for length in (0, 1, 1024 * 1024 + 1):
             try:
                 library._decode(function(None, length))
@@ -166,6 +219,7 @@ def main() -> None:
             assert session.warmup("formula")["alreadyWarm"] is True
             assert "<m:f>" in library.convert_formula(samples["latex"], input_format="latex", output_format="omml")["content"]
             assert library.complete_formula("\\fr", cursor=3, revision=0)["completion"]["candidates"]
+            assert library.complete_formula_scoped(custom_source, cursor=custom_cursor, revision=revision, catalog=catalog)["candidates"]
             assert session.warmup("formula")["alreadyWarm"] is True
             assert isinstance(session.health(), dict)
         assert session.closed
