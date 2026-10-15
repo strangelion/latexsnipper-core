@@ -40,6 +40,30 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo test --locked --workspace --all-features
 
+  preference-storage-windows:
+    name: Windows protected preference storage
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test native publication, process recovery, and owned cleanup
+        shell: pwsh
+        run: |
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP ("snipper-preference-fixtures-" + [Guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
+          $env:SNIPPER_PREFERENCE_FIXTURE_PARENT = $fixtureRoot
+          cargo test --locked -p latexsnipper-preference-storage --all-targets
+          $testExit = $LASTEXITCODE
+          if (@(Get-ChildItem -LiteralPath $fixtureRoot -Force).Count -ne 0) {
+            throw "Owned preference fixture directories were not cleaned"
+          }
+          Remove-Item -LiteralPath $fixtureRoot
+          if ($testExit -ne 0) { exit $testExit }
+          cargo clippy --locked -p latexsnipper-preference-storage --all-targets -- -D warnings
+          exit $LASTEXITCODE
+
   python-adapter:
     name: Python adapter (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

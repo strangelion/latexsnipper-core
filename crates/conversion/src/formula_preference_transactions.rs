@@ -161,11 +161,24 @@ impl ProtectedPreferenceRecord {
     pub fn revision(&self) -> u64 {
         self.wire.revision
     }
+    pub fn owner_sha256(&self) -> &str {
+        &self.wire.owner_sha256
+    }
     pub fn scope(&self) -> &FormulaDefinitionScope {
         &self.wire.scope
     }
     pub fn checkpoint(&self) -> u64 {
         self.wire.checkpoint
+    }
+    /// Authenticates an already-owned provider record without returning history
+    /// or authorizing storage/learning. Sessions still recheck real host consent.
+    pub fn validate_checkpoint_integrity(&self) -> Result<()> {
+        self.validate()?;
+        self.restore(FormulaPreferenceStoragePermission {
+            storage_enabled: true,
+            allow_sensitive_storage: true,
+        })?;
+        Ok(())
     }
     pub fn witness(&self) -> Result<PreferenceStorageWitness> {
         let mut digest = Sha256::new();

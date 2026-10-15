@@ -2623,6 +2623,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "latexsnipper-preference-storage"
+version = "3.2.1"
+dependencies = [
+ "cap-fs-ext",
+ "cap-std",
+ "fs2",
+ "getrandom 0.3.4",
+ "hex",
+ "latexsnipper-conversion",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "windows-sys 0.61.2",
+ "zeroize",
+]
+
+[[package]]
 name = "latexsnipper-python"
 version = "3.2.1"
 dependencies = [

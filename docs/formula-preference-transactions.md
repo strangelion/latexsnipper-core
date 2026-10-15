@@ -2,7 +2,8 @@
 
 Rust `formula_completion::preferences::persistence::transactions` 协调检查点发布、
 显式回读和清空。它可用于原生或 WASM 宿主，不访问文件、系统密钥库、浏览器存储或网络，
-也不授予用户同意。实际受保护 provider 和其他语言的存储绑定仍待实现。
+也不授予用户同意。独立的 [Windows 原生 provider](../crates/preference-storage/README.md) 已有，
+其他系统/浏览器 provider、其他语言的存储绑定和应用接入仍待实现。
 
 ## 宿主与 provider 的责任
 
@@ -91,6 +92,7 @@ revision/generation 到达 u64::MAX 时明确拒绝回绕；checkpoint 到顶可
 事务测试使用原子内存 CAS 模拟 provider，覆盖双线程竞争、写前/写后不确定、写后 panic、
 明确回读、敏感许可变化、关闭存储后清空、旧实例/令牌失效、上限与整数耗尽。
 这证明协调逻辑，不证明磁盘加密、OS 密钥隔离、跨进程 CAS、真实断电或登录会话持久性。
-受保护 native/browser provider、实际文件/备份清理和各绑定存储生命周期验收继续保留待办。
+Windows provider 另有真实文件/系统凭据、双进程 CAS、五处终止恢复和限定清理验证，见其独立文档。
+其他系统/浏览器 provider、备份清理和各绑定/应用存储生命周期验收继续保留待办。
 
 [检查点数据边界](formula-preference-checkpoints.md) · [辅助计划](formula-assistance-roadmap.md)

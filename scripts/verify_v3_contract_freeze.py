@@ -65,6 +65,7 @@ PUBLIC_RUST_TREES = (
     "crates/syntax/src",
     "crates/export/src",
     "crates/conversion/src",
+    "crates/preference-storage/src",
     "crates/inference/src",
     "crates/api-types/src",
     "crates/pipeline/src",

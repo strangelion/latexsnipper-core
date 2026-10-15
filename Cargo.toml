@@ -12,6 +12,7 @@ members = [
     "crates/pipeline",
     "crates/syntax",
     "crates/conversion",
+    "crates/preference-storage",
     "crates/export",
     "crates/model",
     "crates/engine",
@@ -68,6 +69,7 @@ latexsnipper-inference = { path = "crates/inference", version = "3.2.1" }
 latexsnipper-pipeline = { path = "crates/pipeline", version = "3.2.1", default-features = false }
 latexsnipper-syntax = { path = "crates/syntax", version = "3.2.1" }
 latexsnipper-conversion = { path = "crates/conversion", version = "3.2.1", default-features = false }
+latexsnipper-preference-storage = { path = "crates/preference-storage", version = "3.2.1" }
 latexsnipper-export = { path = "crates/export", version = "3.2.1" }
 latexsnipper-model = { path = "crates/model", version = "3.2.1", default-features = false }
 latexsnipper-engine = { path = "crates/engine", version = "3.2.1", default-features = false }

@@ -4,7 +4,8 @@ Rust `formula_completion::preferences::persistence` 提供显式、有界的认�
 Core 不创建文件、不选择数据库或密钥提供者，也不自动恢复或记录用户历史。
 这是持久化的数据和恢复边界；Rust/C ABI/Python/JSONL/WASM-JS 的显式存取绑定已有。
 Rust 另有 [可信宿主事务协调器](formula-preference-transactions.md)，处理 CAS、明确回读及空重置；
-宿主受保护 provider 及真实断电恢复仍待实现。
+独立的 [Windows 原生 provider](../crates/preference-storage/README.md) 已有；
+其他系统/浏览器 provider、应用接入及真实断电/登录会话恢复仍待完成。
 
 ## 授权与接口
 

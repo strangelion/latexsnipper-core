@@ -107,6 +107,9 @@ LaTeXSnipper Core is more than an image-to-LaTeX wrapper. It provides a shared d
 - **Operational tooling** — CLI, SDK, capability inspection, model management, plugin package management, diagnostics, batch reports, shell completions, and man pages.
 - **Persistent application adapters** — independent C handles, PyO3 sessions,
   and a bounded local JSONL worker reuse model/runtime state across requests.
+- **Explicit preference persistence** — authenticated checkpoints and an opt-in
+  [Windows trusted storage provider](crates/preference-storage/README.md), separate
+  from conversion/WASM dependencies. Learning stays off after restore.
 - **Security-oriented parsing** — signature-first detection, bounded archive/XML processing, safe package paths, checksum verification, and structured failures.
 - **Drawing contracts and compilation** — source-preserving Drawing documents, Core-owned Office payload/readiness schemas, sanitized SVG, and fail-closed supervised TikZ/PGFPlots and Graphviz routes. See [Drawing domain and adapter policy](docs/drawing-domain.md).
 
@@ -476,6 +479,7 @@ crates/
 ├── pipeline/     stage graph, region resolution, reading order
 ├── syntax/       LaTeX, Typst, and Markdown parsers/renderers
 ├── conversion/   importers, semantic conversion, Office package handling
+├── preference-storage/ explicit trusted native preference storage (Windows)
 ├── export/       SVG, PNG, PDF, and text rendering
 ├── engine/       orchestration, SDK, jobs, metrics
 ├── api-types/    versioned public request/response types
