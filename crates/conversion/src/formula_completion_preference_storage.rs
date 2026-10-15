@@ -6,6 +6,9 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
+#[path = "formula_preference_transactions.rs"]
+pub mod transactions;
+
 pub const FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES: usize = 256 * 1024;
 type Result<T> = std::result::Result<T, FormulaPreferenceStorageError>;
 type HmacSha256 = Hmac<Sha256>;
