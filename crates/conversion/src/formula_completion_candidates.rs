@@ -133,6 +133,13 @@ const ENVIRONMENTS: &[&str] = &[
     "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "cases", "aligned",
 ];
 
+pub(super) fn builtin_command(name: &str) -> bool {
+    SYMBOLS.contains(&name)
+        || STRUCTURES
+            .iter()
+            .any(|(id, _)| id.split('-').next() == Some(name))
+}
+
 fn splice(source: &str, replace: FormulaSourceRange, insert: &str) -> EditResult<String> {
     if replace.start > replace.end
         || replace.end > source.len()
@@ -152,16 +159,17 @@ fn splice(source: &str, replace: FormulaSourceRange, insert: &str) -> EditResult
     ))
 }
 
-fn candidate(
+pub(super) fn candidate(
     source: &str,
     context: &FormulaCompletionContext,
     id: &str,
     label: &str,
     replace: FormulaSourceRange,
     insert: &str,
+    signatures: &[CommandSignature],
 ) -> EditResult<FormulaCompletionCandidate> {
     let proposed = splice(source, replace, insert)?;
-    let tree = analyze_formula_context(&proposed, replace.start, context.revision)?;
+    let tree = analyze_with_signatures(&proposed, replace.start, context.revision, signatures)?;
     let inserted_end = replace.start + insert.len();
     let tab_stops = tree
         .nodes
@@ -196,7 +204,7 @@ fn candidate(
     })
 }
 
-fn existing_group(source: &str, mut pos: usize, optional: bool) -> bool {
+pub(super) fn existing_group(source: &str, mut pos: usize, optional: bool) -> bool {
     loop {
         match source.as_bytes().get(pos) {
             Some(byte) if byte.is_ascii_whitespace() => pos += 1,
@@ -223,7 +231,16 @@ pub fn complete_formula(
     cursor: usize,
     revision: u64,
 ) -> EditResult<FormulaCompletionResult> {
-    let context = analyze_formula_context(source, cursor, revision)?;
+    complete_with_signatures(source, cursor, revision, &[])
+}
+
+pub(super) fn complete_with_signatures(
+    source: &str,
+    cursor: usize,
+    revision: u64,
+    signatures: &[CommandSignature],
+) -> EditResult<FormulaCompletionResult> {
+    let context = analyze_with_signatures(source, cursor, revision, signatures)?;
     let mut candidates = Vec::new();
     if context.in_comment
         || context.in_text
@@ -240,7 +257,7 @@ pub fn complete_formula(
     let mut add =
         |id: &str, label: &str, replace: FormulaSourceRange, insert: &str| -> EditResult<()> {
             // Omit an unavailable candidate rather than fail all available choices.
-            match candidate(source, &context, id, label, replace, insert) {
+            match candidate(source, &context, id, label, replace, insert, signatures) {
                 Ok(value) => {
                     if candidates.len() < FORMULA_COMPLETION_MAX_CANDIDATES
                         && !candidates.iter().any(|old: &FormulaCompletionCandidate| {
@@ -454,6 +471,13 @@ pub fn apply_formula_candidate(
         .iter()
         .find(|candidate| candidate.id == candidate_id)
         .ok_or(FormulaCompletionError::UnknownCandidate)?;
+    apply_selected(source, selected)
+}
+
+pub(super) fn apply_selected(
+    source: &str,
+    selected: &FormulaCompletionCandidate,
+) -> EditResult<AppliedFormulaCompletion> {
     let source = splice(source, selected.replace, &selected.insert)?;
     let tab_stops: Vec<_> = selected
         .tab_stops

@@ -122,7 +122,37 @@ absolute tabStops. The host owns explicit acceptance, revision updates and undo.
 file writes or recognition-session changes. Completion results are data only;
 finite structural closure does not prove mathematical or rendering validity.
 This is not a learned ranker, a macro interpreter, or a generation service.
-More grammar and the remaining language bindings are tracked separately.
+More grammar and host editor integration are tracked separately.
+
+### Scoped command definitions
+
+`formula.complete.scoped` and `formula.completion.apply.scoped` are additive
+protocol-v1 actions with **editing schema 2**. Query params add `catalog` to the
+v1 source/inputFormat/cursor/revision fields; apply additionally echoes the scoped
+snapshot and candidateId. Query data is `{snapshot, context, candidates}` (not the
+v1 nested completion shape). Each candidate contains `edit` and nullable
+`definition` (ID/revision). `data.scopedCompletion` in formula capabilities
+describes the actions and bounds; the v1 completion capability stays unchanged.
+
+The catalog has `scope: {userSha256, projectSha256, documentSha256, generation}`
+and `definitions: [{id, revision, userSha256, projectSha256, command, arguments}]`.
+Scope identities are opaque lowercase SHA-256 strings; optional project/document
+identities may be null. Revision and generation are canonical decimal u64 strings.
+At most 64 declarations are accepted, with 1–64 byte ASCII IDs (`A-Z/a-z/0-9/-_.`),
+ASCII-letter control words (no backslash/digits), and at most four required math
+or text arguments. Empty arguments describe a zero-argument symbol. There are no
+macro bodies, optional arguments, filesystem lookups, expansion or saved history.
+
+Core filters other users/projects before checking their private names/signatures.
+Effective duplicate IDs/commands or builtin collisions fail with INVALID_CATALOG.
+The snapshot binds effective declaration content, revisions, active user/project/
+document and generation. Definition order is irrelevant. Changing any bound
+state makes acceptance stale, even when a host forgot a definition version bump.
+Clear/reset must advance the host's generation. A scoped context cannot be passed
+to the v1 accept action. The host still owns authorization, current editor state,
+acceptance and undo; hashes/snapshots are not security credentials. Existing input,
+result, queue and cancellation bounds also apply. See the
+[Core interface boundary](../../docs/formula-completion.md) for the full contract.
 
 ## Limits and concurrency
 

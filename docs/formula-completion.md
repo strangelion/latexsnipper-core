@@ -4,7 +4,8 @@
 
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
-公共绑定已有；更广语法、定义驱动签名及实际编辑器接入仍待完成。
+公共绑定已有。定义驱动签名/作用域接口先提供 Rust 与 JSONL；
+其他绑定的作用域扩展、更广语法及实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -55,7 +56,7 @@ array 列规格、cfrac 对齐设置及未闭合参数有独立上下文，不�
 未知命令保留为命令/组源码，不展开宏，也不推测其参数声明。
 注释、普通 text 参数及有限单行 `verb/verb*` 内不提供数学候选。
 当前不是完整 TeX、化学式、TikZ、Typst 或 UnicodeMath 的编辑语法。
-普通定界符配对、更多命令签名及自定义定义接入仍需继续补齐。
+普通定界符配对、更多内置命令签名仍需继续补齐；自定义签名见下方独立作用域接口。
 
 `closed` 及结构诊断只说明有限编辑结构是否闭合，不代表公式数学正确、转换支持或排版一致。
 空占位符是编辑入口；宿主在渲染/转换/写入前仍使用对应的 Core 验证与执行路径。
@@ -72,12 +73,53 @@ Core 输出固定顺序的有界命令/结构模板、环境模板、空槽位�
 接受候选时再次校验当前源码摘要、编辑版本和光标，过期结果返回 `STALE_CONTEXT`。
 Core 重新生成被选 ID 的编辑和占位符，返回载荷里的替换范围/插入文本不能扩大这次编辑。
 返回的占位符为新源码的绝对范围，供宿主选择、Tab 跳转和一次撤销。
-目前没有自定义符号注册、历史检索、持久反馈、学习排序或数学续写；这些沿 C-10/SC-03 之后推进。
+v1 没有自定义定义注册；v2 显式传入有界签名，不保存注册表。
+历史检索、持久反馈、学习排序和数学续写仍未提供。
 
 输入最多 64 KiB、编辑树最多 4096 节点、递归深度低于 64，候选最多 128 个。
 字符/空白也计入节点预算，超限分析返回 `LIMIT_EXCEEDED`，不返回半棵树。
 若某候选插入后超预算，该候选不列出，其余可用候选仍可返回。
 构造候选需要分析拟议源码；真实编辑延迟与 IME/宿主交互仍须独立评估。
+
+## 自定义命令签名与作用域（Rust / JSONL）
+
+`formula_completion::scoped` 是新增的 v2 编辑协议，不替换 v1。
+`complete_formula_scoped(source, cursor, revision, &catalog)` 返回
+`ScopedFormulaCompletion { snapshot, context, candidates }`；候选为
+`{ edit, definition }`，自定义项附定义 ID/精确版本，内置项 `definition` 为 null。
+`apply_formula_candidate_scoped(..., &catalog, &snapshot, candidate_id)` 接受时重建规范编辑，
+不信任客户端的 `insert/replace/tabStops`。对应的两个共享请求类型也有 `execute()`。
+
+宿主每次传入 `FormulaDefinitionCatalog { scope, definitions }`：
+
+- scope 的 `userSha256`、可选 `projectSha256/documentSha256` 是 64 个小写十六进制字符的不透明身份，
+  不是用户名、路径、权限凭据或匿名化保证。宿主负责身份产生和定义检索授权。
+- `generation` 为宿主维护的重置代数；清空/重置时推进。Core 无持久状态，不能自行发现未上报的重置。
+- 每个定义包含 `id/revision/userSha256/projectSha256/command/arguments`。
+  ID 为 1–64 字节 ASCII 字母/数字/`-_.`，命令为 1–64 字节 ASCII 字母，不带反斜杠。
+  `mysymbol2` 不是单个 TeX 控制词，明确拒绝，不静默改名。
+- 签名最多四个必需参数，逐个标记 `math` 或 `text`；空参数列表表示零参数自定义符号。
+  参数具有结构所有权，text 内不生成数学候选；无可选参数、宏体、展开或任意片段执行。
+- 最多 64 个输入定义（包括异作用域项）。只保留同用户的用户级项和当前项目项；
+  其他项在检查私有名称/签名前被过滤，不进入候选、诊断或有效定义摘要。
+  有效项的重复 ID/命令、用户级与项目级冲突及已支持内置命令覆盖明确拒绝，不猜测优先级。
+
+查询的 `snapshot` 绑定当前源码 SHA-256、编辑版本、光标及有效定义/作用域/重置代数摘要。
+摘要也绑定签名实际内容，即使忘记递增定义版本也会使旧候选失效；输入定义顺序不影响摘要。
+切换文档或项目、定义变更、清空/重置后，旧候选返回 `STALE_CONTEXT`。
+context 和 snapshot 的 `schemaVersion` 都为 2，不能经旧 v1 接受接口降级绕过复验。
+这些是迟到结果保护，不是防止恶意宿主伪造当前状态的认证机制。
+
+JSONL 新增 `formula.complete.scoped` / `formula.completion.apply.scoped`，传输协议仍为 1。
+查询 params 使用 `source/inputFormat/cursor/revision/catalog`；接受再加返回的
+`snapshot` 与 `candidateId`。所有编辑版本、定义版本和重置代数都使用规范十进制 u64 字符串。
+查询 data 直接为 `snapshot/context/candidates`，不要按 v1 的 `completion` 嵌套形状读取。
+`formula.capabilities.data.scopedCompletion` 提供版本、动作、签名预算和无持久化/宏展开声明。
+原 v1 动作及其能力字段保持不变；源/树/候选及 JSONL 请求/结果预算仍适用。
+无效声明返回 `INVALID_CATALOG`，未知 JSON 字段仍为 `INVALID_PARAMS`，超预算明确失败。
+
+Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲染/转换/插件执行权限。
+敏感文档的学习开关、偏好清空、私有片段检索和其他绑定接入仍是后续工作，不能视为已完成。
 
 ## 独立进程调用
 

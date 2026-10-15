@@ -14,6 +14,11 @@ use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3, RecognitionProfile};
 use latexsnipper_ast::{Diagnostic, ImportOptions};
 use latexsnipper_conversion::{
     formula_completion::{
+        scoped::{
+            ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletionError,
+            ScopedFormulaCompletionRequest, FORMULA_COMPLETION_MAX_DEFINITIONS,
+            FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS, SCOPED_FORMULA_COMPLETION_VERSION,
+        },
         FormulaCompletionApplyRequest, FormulaCompletionError, FormulaCompletionRequest,
         FORMULA_COMPLETION_MAX_BYTES, FORMULA_COMPLETION_MAX_CANDIDATES,
         FORMULA_COMPLETION_MAX_DEPTH, FORMULA_COMPLETION_MAX_NODES, FORMULA_COMPLETION_VERSION,
@@ -283,6 +288,17 @@ impl Worker {
                         "maxDepthExclusive": FORMULA_COMPLETION_MAX_DEPTH,
                         "maxCandidates": FORMULA_COMPLETION_MAX_CANDIDATES
                     },
+                    "scopedCompletion": {
+                        "schemaVersion": SCOPED_FORMULA_COMPLETION_VERSION,
+                        "actions": ["formula.complete.scoped", "formula.completion.apply.scoped"],
+                        "maxDefinitions": FORMULA_COMPLETION_MAX_DEFINITIONS,
+                        "maxDefinitionArguments": FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS,
+                        "scopeIdentityEncoding": "opaque-lowercase-sha256",
+                        "definitionRevisionEncoding": "canonical-decimal-u64-string",
+                        "generationEncoding": "canonical-decimal-u64-string",
+                        "macroExpansion": false,
+                        "persistence": false
+                    },
                     "limits": {
                         "maxInputBytes": MAX_FORMULA_INPUT_BYTES,
                         "maxResultDataBytes": MAX_FORMULA_RESULT_BYTES,
@@ -299,6 +315,16 @@ impl Worker {
             "formula.completion.apply" => {
                 let params: FormulaCompletionApplyRequest = decode_params(request.params)?;
                 let reply = params.execute().map_err(completion_error)?;
+                bound_completion_result(to_value(reply)?).map(DispatchOutcome::data)
+            }
+            "formula.complete.scoped" => {
+                let params: ScopedFormulaCompletionRequest = decode_params(request.params)?;
+                let reply = params.execute().map_err(scoped_completion_error)?;
+                bound_completion_result(to_value(reply)?).map(DispatchOutcome::data)
+            }
+            "formula.completion.apply.scoped" => {
+                let params: ScopedFormulaCompletionApplyRequest = decode_params(request.params)?;
+                let reply = params.execute().map_err(scoped_completion_error)?;
                 bound_completion_result(to_value(reply)?).map(DispatchOutcome::data)
             }
             "session.create" => self.create_session(request.params),
@@ -861,6 +887,17 @@ fn session_not_found(session_id: u64) -> WorkerError {
         "SESSION_NOT_FOUND",
         format!("Recognition session {session_id} does not exist or is closed."),
     )
+}
+
+fn scoped_completion_error(error: ScopedFormulaCompletionError) -> WorkerError {
+    let code = match error {
+        ScopedFormulaCompletionError::InvalidCatalog => "INVALID_CATALOG",
+        ScopedFormulaCompletionError::InvalidCursor => "INVALID_CURSOR",
+        ScopedFormulaCompletionError::LimitExceeded => "LIMIT_EXCEEDED",
+        ScopedFormulaCompletionError::StaleContext => "STALE_CONTEXT",
+        ScopedFormulaCompletionError::UnknownCandidate => "UNKNOWN_CANDIDATE",
+    };
+    WorkerError::protocol(code, error.to_string())
 }
 
 fn completion_error(error: FormulaCompletionError) -> WorkerError {

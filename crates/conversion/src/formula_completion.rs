@@ -21,6 +21,8 @@ pub use candidates::{
     apply_formula_candidate, apply_formula_completion, complete_formula, AppliedFormulaCompletion,
     FormulaCompletionCandidate, FormulaCompletionResult,
 };
+#[path = "formula_completion_scoped.rs"]
+pub mod scoped;
 #[path = "formula_completion_wire.rs"]
 mod wire;
 pub use wire::{
@@ -170,9 +172,15 @@ type EditResult<T> = Result<T, FormulaCompletionError>;
 
 struct EditingParser<'a> {
     source: &'a str,
+    signatures: &'a [CommandSignature],
     pos: usize,
     nodes: Vec<FormulaEditNode>,
     diagnostics: Vec<FormulaEditDiagnostic>,
+}
+
+struct CommandSignature {
+    command: String,
+    slots: Vec<FormulaSlot>,
 }
 
 impl EditingParser<'_> {
@@ -409,7 +417,7 @@ impl EditingParser<'_> {
             self.finish(id, name_end, true);
             return Ok(());
         }
-        let slots: &[FormulaSlot] = match name.as_str() {
+        let builtin_slots: &[FormulaSlot] = match name.as_str() {
             "frac" | "dfrac" | "tfrac" | "cfrac" => &[
                 FormulaSlot::FractionNumerator,
                 FormulaSlot::FractionDenominator,
@@ -425,6 +433,16 @@ impl EditingParser<'_> {
             "begin" | "end" => &[FormulaSlot::EnvironmentName],
             _ => &[],
         };
+        // Copy the bounded signature so recursive parsing can mutably borrow self.
+        let declared_slots = self
+            .signatures
+            .iter()
+            .find(|entry| entry.command == name)
+            .map_or(builtin_slots, |entry| entry.slots.as_slice());
+        let count = declared_slots.len();
+        let mut slots =
+            [FormulaSlot::MathArgument; scoped::FORMULA_COMPLETION_MAX_DEFINITION_ARGUMENTS];
+        slots[..count].copy_from_slice(declared_slots);
         let mut closed = true;
         if name == "cfrac" {
             self.trivia(id)?;
@@ -482,7 +500,7 @@ impl EditingParser<'_> {
             }
         }
         let mut environment = None;
-        for slot in slots {
+        for slot in &slots[..count] {
             let arg = self.argument(
                 id,
                 *slot,
@@ -691,6 +709,15 @@ pub fn analyze_formula_context(
     cursor: usize,
     revision: u64,
 ) -> EditResult<FormulaCompletionContext> {
+    analyze_with_signatures(source, cursor, revision, &[])
+}
+
+fn analyze_with_signatures(
+    source: &str,
+    cursor: usize,
+    revision: u64,
+    signatures: &[CommandSignature],
+) -> EditResult<FormulaCompletionContext> {
     if source.len() > MAX_BYTES {
         return Err(FormulaCompletionError::LimitExceeded);
     }
@@ -699,6 +726,7 @@ pub fn analyze_formula_context(
     }
     let mut parser = EditingParser {
         source,
+        signatures,
         pos: 0,
         nodes: Vec::new(),
         diagnostics: Vec::new(),

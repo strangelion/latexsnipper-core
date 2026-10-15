@@ -79,6 +79,84 @@ impl Drop for Process {
 }
 
 #[test]
+fn scoped_completion_rpc_filters_definitions_and_rejects_cross_scope_edits() {
+    let mut worker = Process::start();
+    let caps = worker.call(json!("caps-scoped"), "formula.capabilities", json!({}));
+    assert_eq!(caps["data"]["scopedCompletion"]["schemaVersion"], 2);
+    let catalog = json!({
+        "scope": {"userSha256": "a".repeat(64), "projectSha256": "b".repeat(64),
+            "documentSha256": "c".repeat(64), "generation": "18446744073709551615"},
+        "definitions": [{"id": "pair", "revision": "18446744073709551615",
+            "userSha256": "a".repeat(64), "projectSha256": "b".repeat(64),
+            "command": "custompair", "arguments": ["math", "text"]}]
+    });
+    let params = json!({"source": "中\\cust", "cursor": 8,
+        "revision": "18446744073709551615", "inputFormat": "latex", "catalog": catalog});
+    let completed = worker.call(
+        json!("scoped-query"),
+        "formula.complete.scoped",
+        params.clone(),
+    );
+    assert_eq!(completed["ok"], true, "{completed}");
+    let data = &completed["data"];
+    assert_eq!(data["context"]["schemaVersion"], 2);
+    assert_eq!(
+        data["candidates"][0]["definition"]["revision"],
+        "18446744073709551615"
+    );
+    let mut apply = params.clone();
+    apply["snapshot"] = data["snapshot"].clone();
+    apply["candidateId"] = json!("definition:pair");
+    for change in [
+        "project",
+        "generation",
+        "signature",
+        "revision",
+        "source",
+        "snapshot",
+    ] {
+        let mut stale = apply.clone();
+        match change {
+            "project" => stale["catalog"]["scope"]["projectSha256"] = json!("d".repeat(64)),
+            "generation" => stale["catalog"]["scope"]["generation"] = json!("0"),
+            "signature" => stale["catalog"]["definitions"][0]["arguments"] = json!([]),
+            "revision" => stale["revision"] = json!("0"),
+            "source" => stale["source"] = json!("中\\custx"),
+            _ => stale["snapshot"]["definitionsSha256"] = json!("0".repeat(64)),
+        }
+        let failed = worker.call(json!(change), "formula.completion.apply.scoped", stale);
+        assert_eq!(failed["error"]["code"], "STALE_CONTEXT", "{failed}");
+    }
+    let mut foreign = params.clone();
+    foreign["catalog"]["scope"]["userSha256"] = json!("d".repeat(64));
+    let foreign = worker.call(json!("foreign"), "formula.complete.scoped", foreign);
+    assert_eq!(foreign["data"]["candidates"], json!([]));
+    assert!(!foreign.to_string().contains("custompair"));
+    let mut invalid = apply.clone();
+    invalid["catalog"]["definitions"][0]["body"] = json!(r"\input{private}");
+    let failed = worker.call(json!("body"), "formula.completion.apply.scoped", invalid);
+    assert_eq!(failed["error"]["code"], "INVALID_PARAMS");
+    let applied = worker.call(
+        json!("scoped-apply"),
+        "formula.completion.apply.scoped",
+        apply,
+    );
+    assert_eq!(applied["data"]["source"], "中\\custompair{}{}");
+    assert_eq!(applied["data"]["tabStops"].as_array().unwrap().len(), 2);
+    let ordinary = worker.call(
+        json!("v1-after-scoped"),
+        "formula.complete",
+        json!({"source": r"\fr", "cursor": 3, "revision": "0", "inputFormat": "latex"}),
+    );
+    assert_eq!(ordinary["data"]["snapshot"]["schemaVersion"], 1);
+    let status = worker.call(json!("scoped-status"), "worker.status", json!({}));
+    assert_eq!(status["data"]["liveSessions"], 0);
+    let stopped = worker.call(json!("scoped-stop"), "worker.shutdown", json!({}));
+    assert_eq!(stopped["ok"], true);
+    worker.successful_exit();
+}
+
+#[test]
 fn formula_rpc_reuses_real_process_after_error_and_flushes_before_shutdown() {
     let mut worker = Process::start();
     let capabilities = worker.call(json!(1), "formula.capabilities", json!({}));
