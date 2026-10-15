@@ -134,7 +134,7 @@ fn valid_hash(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn valid_optional_hash(value: &Option<String>) -> bool {
+pub(super) fn valid_optional_hash(value: &Option<String>) -> bool {
     value.as_deref().is_none_or(valid_hash)
 }
 
@@ -162,13 +162,13 @@ fn reserved(command: &str) -> bool {
         )
 }
 
-struct PreparedCatalog<'a> {
+pub(super) struct PreparedCatalog<'a> {
     definitions: Vec<&'a FormulaCommandDefinition>,
-    signatures: Vec<CommandSignature>,
-    digest: String,
+    pub(super) signatures: Vec<CommandSignature>,
+    pub(super) digest: String,
 }
 
-fn prepare(catalog: &FormulaDefinitionCatalog) -> ScopedResult<PreparedCatalog<'_>> {
+pub(super) fn prepare(catalog: &FormulaDefinitionCatalog) -> ScopedResult<PreparedCatalog<'_>> {
     if catalog.definitions.len() > FORMULA_COMPLETION_MAX_DEFINITIONS {
         return Err(ScopedFormulaCompletionError::LimitExceeded);
     }
@@ -263,7 +263,7 @@ pub fn complete_formula_scoped(
     complete_prepared(source, cursor, revision, &prepared)
 }
 
-fn complete_prepared(
+pub(super) fn complete_prepared(
     source: &str,
     cursor: usize,
     revision: u64,

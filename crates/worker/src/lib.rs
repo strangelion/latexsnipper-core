@@ -14,6 +14,11 @@ use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3, RecognitionProfile};
 use latexsnipper_ast::{Diagnostic, ImportOptions};
 use latexsnipper_conversion::{
     formula_completion::{
+        fragments::{
+            FormulaFragmentCompletionApplyRequest, FormulaFragmentCompletionRequest,
+            FORMULA_COMPLETION_MAX_FRAGMENTS, FORMULA_COMPLETION_MAX_FRAGMENT_BYTES,
+            FRAGMENT_FORMULA_COMPLETION_VERSION,
+        },
         scoped::{
             ScopedFormulaCompletionApplyRequest, ScopedFormulaCompletionError,
             ScopedFormulaCompletionRequest, FORMULA_COMPLETION_ARGUMENT_KINDS,
@@ -302,6 +307,19 @@ impl Worker {
                         "macroExpansion": false,
                         "persistence": false
                     },
+                    "fragmentCompletion": {
+                        "schemaVersion": FRAGMENT_FORMULA_COMPLETION_VERSION,
+                        "actions": ["formula.complete.fragments", "formula.completion.apply.fragments"],
+                        "maxFragments": FORMULA_COMPLETION_MAX_FRAGMENTS,
+                        "maxFragmentBytes": FORMULA_COMPLETION_MAX_FRAGMENT_BYTES,
+                        "maxCandidates": FORMULA_COMPLETION_MAX_CANDIDATES,
+                        "maxResultDataBytes": MAX_COMPLETION_RESULT_BYTES,
+                        "retrievalSource": "explicit-host-catalog",
+                        "sensitiveDocumentRequiresHostAllow": true,
+                        "macroExpansion": false,
+                        "persistence": false,
+                        "learning": false
+                    },
                     "limits": {
                         "maxInputBytes": MAX_FORMULA_INPUT_BYTES,
                         "maxResultDataBytes": MAX_FORMULA_RESULT_BYTES,
@@ -327,6 +345,16 @@ impl Worker {
             }
             "formula.completion.apply.scoped" => {
                 let params: ScopedFormulaCompletionApplyRequest = decode_params(request.params)?;
+                let reply = params.execute().map_err(scoped_completion_error)?;
+                bound_completion_result(to_value(reply)?).map(DispatchOutcome::data)
+            }
+            "formula.complete.fragments" => {
+                let params: FormulaFragmentCompletionRequest = decode_params(request.params)?;
+                let reply = params.execute().map_err(scoped_completion_error)?;
+                bound_completion_result(to_value(reply)?).map(DispatchOutcome::data)
+            }
+            "formula.completion.apply.fragments" => {
+                let params: FormulaFragmentCompletionApplyRequest = decode_params(request.params)?;
                 let reply = params.execute().map_err(scoped_completion_error)?;
                 bound_completion_result(to_value(reply)?).map(DispatchOutcome::data)
             }

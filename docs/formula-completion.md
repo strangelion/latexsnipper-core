@@ -5,7 +5,7 @@
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
 公共绑定均有 v1 及独立的定义驱动签名/作用域 v2 接口；
-更广语法、私有片段/偏好和实际编辑器接入仍待完成。
+Rust/JSONL 另有独立的私有片段编辑 schema 3；其他片段绑定、偏好及实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -158,7 +158,53 @@ JSONL 新增 `formula.complete.scoped` / `formula.completion.apply.scoped`，传
 无效声明返回 `INVALID_CATALOG`，未知 JSON 字段仍为 `INVALID_PARAMS`，超预算明确失败。
 
 Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲染/转换/插件执行权限。
-敏感文档的学习开关、偏好清空和私有片段检索仍是后续工作。
+学习开关、偏好清空及私有存储检索宿主仍是后续工作；显式传入片段的边界见下节。
+
+## 显式私有片段（Rust / JSONL）
+
+`formula_completion::fragments` 的 `complete_formula_fragments` / `apply_formula_candidate_fragments`
+使用独立编辑 schema 3；JSONL 协议仍为 1，动作是 `formula.complete.fragments` 与
+`formula.completion.apply.fragments`。C/Python/WASM-JS 尚未接入这两个片段动作，不能通过 v1/v2 降级接受。
+
+查询仍带 source/inputFormat/cursor/revision，catalog 为：
+
+```json
+{
+  "commands": {
+    "scope": {"userSha256": "<64 lowercase hex>", "projectSha256": null, "documentSha256": null, "generation": "0"},
+    "definitions": []
+  },
+  "policy": {"retrievalEnabled": true, "sensitiveDocument": false, "allowInSensitiveDocument": false},
+  "fragments": [{"id": "saved-integral", "revision": "0", "userSha256": "<same user hash>",
+    "projectSha256": null, "documentSha256": null, "trigger": "myintegral", "label": "Saved integral",
+    "source": "\\int_{}^{} {}\\,dx"}]
+}
+```
+
+示意哈希必须换成真实的宿主身份摘要。commands 复用 v2 的定义目录；片段最多 64 条、每条源码最多 8 KiB，
+ID 为 1–64 字节 ASCII 字母/数字/`-_.`，trigger 为 1–64 个 ASCII 字母（不含反斜线），
+label 为不含控制字符的单行非空文字，最多 128 字节。源码保留原字节，不能含非空白控制字符，须通过裸公式形状及有限编辑结构检查。
+文档/包载入声明、独立显示环境和 math-mode 外壳会拒绝（如 `align` 应由宿主显式准备成 `aligned`，不在此自动重写）；
+末尾注释必须已有换行，不能吞掉插入点后的正文。注释及合法空白原样保留。
+这不证明数学正确、完整 TeX 合法或可安全执行；片段中任何命令均不展开，渲染、转换与文档写入仍走各自门禁。
+
+只在控制字前缀匹配 trigger 时给出片段候选；注释、文本、环境名称及 array/cfrac 头部不检索。
+片段按 ID 排序，置于定义/内置候选之前，共享 128 项总上限。`fragment:<id>` 的 edit.source 为
+`core:fragment`，fragment 提供 ID/精确版本，definition 为 null；定义和内置项的 fragment 为 null。
+空的类型化槽位产生占位符，接受只替换当前完整命令 token，不删除周围正文，也不会自动写入宿主。
+
+禁用检索，或敏感文档没有显式允许时，片段在私有名称、源码和标签校验/摘要之前全部过滤；
+非当前用户、非当前项目、非当前文档片段亦先过滤。null 项目/文档表示当前用户授权的更广范围，
+不表示可读取其他用户内容。有效 ID 冲突明确拒绝，不猜测覆盖顺序；错误不包含私有片段值。
+
+快照的 catalogSha256 绑定有效片段的实际内容/版本、commands 摘要及所有策略字段；源码、光标和编辑版本也复验。
+目录顺序和外来片段不影响摘要，关闭检索、改变敏感文档策略、移除片段或更改内容后，旧接受均失败。
+接受请求必须使用宿主实际的当前目录和策略，不得原样回送旧请求作为授权证明；清空/重置仍须递增 scope.generation，防止旧状态恢复后重用快照。
+
+Core 不读取数据库、目录或私人历史，不保存公式、偏好或学习反馈，不联网。宿主先取得检索授权再提供目录；
+这些布尔策略和哈希只供确定性隔离与复验，不能替代用户同意或授予插件权限。偏好排序、学习和实际编辑器接入仍独立待办。
+存储/检索失败或有效目录不合法时，宿主仍可独立查询 v1/v2 的确定性候选；接受必须使用产生该候选的原协议和当前快照，
+不得将失败的片段接受降级为其他协议或自动写入。裸源码形状检查也可单独使用 `formula_fragment::validate_latex_fragment_source`，不会替调用方剥壳或改写输入。
 
 ## 独立进程调用
 

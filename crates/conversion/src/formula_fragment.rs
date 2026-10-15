@@ -17,6 +17,39 @@ pub fn latex_display_to_fragment(display: &str) -> Result<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| fragment_error("formula fragment requires exactly one display formula"))?;
+    let trailing_comment = fragment_shape(source)?;
+    // A trailing comment would swallow the synthetic outer closing delimiter.
+    // The source trim above intentionally retains comments; add a line boundary.
+    Ok(if trailing_comment {
+        format!("{source}\n")
+    } else {
+        source.to_string()
+    })
+}
+
+/// Validate an already-bare formula without trimming, wrapping or rewriting it.
+/// This checks shape only, not full TeX validity or permission to execute commands.
+pub fn validate_latex_fragment_source(source: &str) -> Result<()> {
+    if source.len() > 64 * 1024 {
+        return Err(SnipperError::LimitExceeded(
+            "formula fragment exceeds 64 KiB".into(),
+        ));
+    }
+    if crate::latex_utils::without_comments(source)
+        .trim()
+        .is_empty()
+    {
+        return Err(fragment_error("formula fragment is empty"));
+    }
+    if fragment_shape(source)? {
+        return Err(fragment_error(
+            "formula fragment ends in an unterminated comment",
+        ));
+    }
+    Ok(())
+}
+
+fn fragment_shape(source: &str) -> Result<bool> {
     let bytes = source.as_bytes();
     let mut index = 0;
     let mut trailing_comment = false;
@@ -79,9 +112,13 @@ pub fn latex_display_to_fragment(display: &str) -> Result<String> {
                         let environment = rest
                             .strip_prefix('{')
                             .and_then(|rest| rest.split_once('}'))
-                            .map(|(name, _)| name.trim());
+                            .map(|(name, _)| {
+                                crate::latex_utils::without_comments(name)
+                                    .split_whitespace()
+                                    .collect::<String>()
+                            });
                         if matches!(
-                            environment,
+                            environment.as_deref(),
                             Some(
                                 "document"
                                     | "math"
@@ -111,13 +148,7 @@ pub fn latex_display_to_fragment(display: &str) -> Result<String> {
             _ => index += 1,
         }
     }
-    // A trailing comment would swallow the synthetic outer closing delimiter.
-    // The source trim above intentionally retains comments; add a line boundary.
-    Ok(if trailing_comment {
-        format!("{source}\n")
-    } else {
-        source.to_string()
-    })
+    Ok(trailing_comment)
 }
 
 fn fragment_error(message: impl Into<String>) -> SnipperError {

@@ -222,6 +222,89 @@ fn delimiter_ownership_and_closure_survive_the_real_jsonl_transport() {
 }
 
 #[test]
+fn local_fragment_rpc_keeps_policy_scope_and_editor_guards_in_the_real_process() {
+    let mut worker = Process::start();
+    let caps = worker.call(json!("fragment-caps"), "formula.capabilities", json!({}));
+    assert_eq!(caps["data"]["fragmentCompletion"]["schemaVersion"], 3);
+    assert_eq!(caps["data"]["fragmentCompletion"]["maxFragments"], 64);
+    assert_eq!(caps["data"]["fragmentCompletion"]["learning"], false);
+    let catalog = json!({"commands": {"scope": {"userSha256": "a".repeat(64), "projectSha256": "b".repeat(64),
+        "documentSha256": "c".repeat(64), "generation": "18446744073709551615"}, "definitions": []},
+        "policy": {"retrievalEnabled": true, "sensitiveDocument": false, "allowInSensitiveDocument": false},
+        "fragments": [{"id":"saved", "revision":"18446744073709551615", "userSha256":"a".repeat(64),
+            "projectSha256": null, "documentSha256": "c".repeat(64), "trigger":"bayes", "label":"Saved formula", "source":r"\frac{}{}"}]});
+    let params = json!({"source":"中\\bay", "cursor":7, "revision":"18446744073709551615", "inputFormat":"latex", "catalog":catalog});
+    let result = worker.call(
+        json!("fragment-query"),
+        "formula.complete.fragments",
+        params.clone(),
+    );
+    assert_eq!(result["ok"], true, "{result}");
+    assert_eq!(result["data"]["context"]["schemaVersion"], 3);
+    assert_eq!(
+        result["data"]["candidates"][0]["fragment"]["revision"],
+        "18446744073709551615"
+    );
+    assert!(result["data"]["candidates"][0]["definition"].is_null());
+    let mut apply = params.clone();
+    apply["snapshot"] = result["data"]["snapshot"].clone();
+    apply["candidateId"] = json!("fragment:saved");
+    let accepted = worker.call(
+        json!("fragment-apply"),
+        "formula.completion.apply.fragments",
+        apply.clone(),
+    );
+    assert_eq!(accepted["data"]["source"], "中\\frac{}{}");
+    assert_eq!(
+        accepted["data"]["tabStops"],
+        json!([{"start":9,"end":9},{"start":11,"end":11}])
+    );
+    for field in ["disabled", "sensitive", "generation", "body", "clear"] {
+        let mut changed = apply.clone();
+        match field {
+            "disabled" => changed["catalog"]["policy"]["retrievalEnabled"] = json!(false),
+            "sensitive" => changed["catalog"]["policy"]["sensitiveDocument"] = json!(true),
+            "generation" => changed["catalog"]["commands"]["scope"]["generation"] = json!("0"),
+            "clear" => changed["catalog"]["fragments"] = json!([]),
+            _ => changed["catalog"]["fragments"][0]["source"] = json!("x+1"),
+        }
+        let failed = worker.call(json!(field), "formula.completion.apply.fragments", changed);
+        assert_eq!(failed["error"]["code"], "STALE_CONTEXT");
+    }
+    for field in ["disabled", "foreign", "sensitive"] {
+        let mut changed = params.clone();
+        changed["catalog"]["fragments"][0]["source"] = json!(r"PRIVATE_SECRET\frac{");
+        match field {
+            "disabled" => changed["catalog"]["policy"]["retrievalEnabled"] = json!(false),
+            "foreign" => {
+                changed["catalog"]["fragments"][0]["documentSha256"] = json!("d".repeat(64))
+            }
+            _ => changed["catalog"]["policy"]["sensitiveDocument"] = json!(true),
+        }
+        let hidden = worker.call(
+            json!(format!("hidden-{field}")),
+            "formula.complete.fragments",
+            changed,
+        );
+        assert_eq!(hidden["data"]["candidates"], json!([]));
+        assert!(!hidden.to_string().contains("PRIVATE_SECRET"));
+    }
+    let mut invalid = apply;
+    invalid["insert"] = json!("untrusted");
+    let failed = worker.call(
+        json!("fragment-payload"),
+        "formula.completion.apply.fragments",
+        invalid,
+    );
+    assert_eq!(failed["error"]["code"], "INVALID_PARAMS");
+    let status = worker.call(json!("fragment-status"), "worker.status", json!({}));
+    assert_eq!(status["data"]["liveSessions"], 0);
+    let stopped = worker.call(json!("fragment-stop"), "worker.shutdown", json!({}));
+    assert_eq!(stopped["ok"], true);
+    worker.successful_exit();
+}
+
+#[test]
 fn formula_rpc_reuses_real_process_after_error_and_flushes_before_shutdown() {
     let mut worker = Process::start();
     let capabilities = worker.call(json!(1), "formula.capabilities", json!({}));

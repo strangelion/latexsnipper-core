@@ -134,14 +134,26 @@ v1 nested completion shape). Each candidate contains `edit` and nullable
 `definition` (ID/revision). `data.scopedCompletion` in formula capabilities
 describes the actions and bounds; the v1 completion capability stays unchanged.
 
+The separate `formula.complete.fragments` / `formula.completion.apply.fragments`
+actions expose editing schema 3 with explicit host-supplied local templates.
+`data.fragmentCompletion` advertises the 64-fragment / 8-KiB-per-fragment bounds;
+shared input/result budgets still apply. The catalog contains `commands` (the v2
+catalog), `policy`, and `fragments`. Retrieval and sensitive-document access must
+be authorized by the host. Foreign/inactive templates are filtered before private
+semantic validation or hashing; acceptance rechecks the actual current policy,
+catalog content and editing snapshot. No history, storage provider or learning is
+implemented. See the [fragment contract](../../docs/formula-completion.md#显式私有片段rust--jsonl).
+
 The catalog has `scope: {userSha256, projectSha256, documentSha256, generation}`
 and `definitions: [{id, revision, userSha256, projectSha256, command, arguments}]`.
 Scope identities are opaque lowercase SHA-256 strings; optional project/document
 identities may be null. Revision and generation are canonical decimal u64 strings.
 At most 64 declarations are accepted, with 1–64 byte ASCII IDs (`A-Z/a-z/0-9/-_.`),
-ASCII-letter control words (no backslash/digits), and at most four required math
-or text arguments. Empty arguments describe a zero-argument symbol. There are no
-macro bodies, optional arguments, filesystem lookups, expansion or saved history.
+ASCII-letter control words (no backslash/digits), and at most four arguments.
+Required kinds are `math`/`text`; `argumentKinds` and `maxLeadingOptionalArguments`
+advertise one leading `optional-math`/`optional-text`. Empty arguments describe a
+zero-argument symbol. No macro bodies, defaults, filesystem lookups, expansion or
+saved history are loaded by this API.
 
 Core filters other users/projects before checking their private names/signatures.
 Effective duplicate IDs/commands or builtin collisions fail with INVALID_CATALOG.

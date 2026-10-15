@@ -25,6 +25,8 @@ pub use candidates::{
     apply_formula_candidate, apply_formula_completion, complete_formula, AppliedFormulaCompletion,
     FormulaCompletionCandidate, FormulaCompletionResult,
 };
+#[path = "formula_completion_fragments.rs"]
+pub mod fragments;
 #[path = "formula_completion_scoped.rs"]
 pub mod scoped;
 #[path = "formula_completion_wire.rs"]
