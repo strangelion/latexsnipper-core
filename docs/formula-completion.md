@@ -5,7 +5,7 @@
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
 公共绑定均有 v1 及独立的定义驱动签名/作用域 v2 接口；
-Rust/C/Python/JSONL 另有独立的私有片段编辑 schema 3；WASM-JS 片段绑定、偏好及实际编辑器接入仍待完成。
+Rust/C/Python/JSONL/WASM-JS 另有独立的私有片段编辑 schema 3；偏好及实际编辑器接入仍待完成。
 
 ## 使用
 
