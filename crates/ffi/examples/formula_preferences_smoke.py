@@ -4,12 +4,14 @@ import ctypes
 import json
 from pathlib import Path
 import secrets
+import subprocess
 import sys
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--library-dir", type=Path, required=True)
+    parser.add_argument("--wasm-package", type=Path, help="Also verify native-to-WASM-to-native checkpoint transfer with Node")
     args = parser.parse_args()
     filename = "latexsnipper_ffi.dll" if sys.platform == "win32" else "liblatexsnipper_ffi.dylib" if sys.platform == "darwin" else "liblatexsnipper_ffi.so"
     library = ctypes.CDLL(str(args.library_dir.resolve() / filename))
@@ -95,6 +97,51 @@ def main():
         assert command(restored, "undo", receiptId=receipt)["error"]["code"] == "STALE_FEEDBACK"
         assert command(restored, "export-checkpoint", storageKeyHex=storage_key,
             checkpoint="18446744073709551615", permission=permission)["error"]["code"] == "STALE_CHECKPOINT"
+        if args.wasm_package is not None:
+            cross = new()
+            assert command(cross, "set-policy", policy=policy)["ok"]
+            cross_capture = command(cross, "capture")["data"]["captureId"]
+            assert command(cross, "record-acceptance", captureId=cross_capture, eventId="1", request=request)["ok"]
+            cross_export = command(cross, "export-checkpoint", storageKeyHex=storage_key, checkpoint="1", permission=permission)
+            assert cross_export["ok"]
+            restoration = dict(schemaVersion=1, scope=scope, keyHex=keys[cross], storageKeyHex=storage_key,
+                expectedCheckpoint="1", snapshotJson=cross_export["data"]["snapshotJson"], permission=permission)
+            child_code = """import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+const api = createRequire(import.meta.url)(process.argv[1]);
+const input = JSON.parse(readFileSync(0, 'utf8'));
+function data(reply) { if (!reply.ok) throw new Error('Interop Core refusal: ' + reply.error.code); return reply.data; }
+const owner = api.restore_formula_preferences_v1(JSON.stringify(input.restoration));
+try {
+  const info = data(owner.command('{"kind":"info"}'));
+  if (info.eventCount !== 1 || Object.values(info.policy).some(Boolean)) throw new Error('Interop restore state mismatch');
+  data(owner.command(JSON.stringify({kind:'set-policy',policy:input.policy})));
+  const ranked = data(owner.command(JSON.stringify({kind:'rank-fragments',request:input.query})));
+  if (ranked.features[0].accepted !== 1) throw new Error('Interop digest mismatch');
+  const capture = data(owner.command('{"kind":"capture"}')).captureId;
+  data(owner.command(JSON.stringify({kind:'record-acceptance',captureId:capture,eventId:'2',request:input.request})));
+  const checkpoint = data(owner.command(JSON.stringify({kind:'export-checkpoint',storageKeyHex:input.restoration.storageKeyHex,
+    checkpoint:'2',permission:input.restoration.permission})));
+  process.stdout.write(JSON.stringify(checkpoint.snapshotJson));
+} finally { owner.free(); }
+"""
+            module = (args.wasm_package.resolve(strict=True) / "latexsnipper_wasm.js").resolve(strict=True)
+            child = subprocess.run(["node", "--input-type=module", "--eval", child_code, str(module)],
+                input=json.dumps(dict(restoration=restoration, query=query, request=request, policy=policy), ensure_ascii=False),
+                capture_output=True, text=True, encoding="utf-8", timeout=60, check=True)
+            assert len(child.stdout.encode("utf-8")) <= 1024 * 1024
+            returned_snapshot = json.loads(child.stdout)
+            assert isinstance(returned_snapshot, str)
+            restoration.update(expectedCheckpoint="2", snapshotJson=returned_snapshot)
+            returned = call("preferences_restore", body=restoration)
+            assert returned["ok"], returned
+            handle = int(returned["data"]["handle"]); owners.append(handle)
+            assert returned["data"]["info"]["eventCount"] == 2
+            assert not any(returned["data"]["info"]["policy"].values())
+            assert command(handle, "set-policy", policy=policy)["ok"]
+            features = command(handle, "rank-fragments", request=query)["data"]["features"][0]
+            assert features["accepted"] == 2 and features["lastAcceptedEvent"] == "2"
+            print("Native-WASM-native checkpoints: authenticated transfer, stable candidate digests and precise event/sequence continuation passed")
         capture = command(first, "capture")["data"]["captureId"]
         assert command(first, "set-policy", policy=dict(policy, rankingEnabled=False))["ok"]
         assert command(first, "set-policy", policy=policy)["ok"]

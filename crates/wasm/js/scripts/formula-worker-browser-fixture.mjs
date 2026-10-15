@@ -47,6 +47,17 @@ export function create_formula_preferences_v1(configurationJson) {
   };
 }
 
+export function restore_formula_preferences_v1(configurationJson) {
+  const owner = core.restore_formula_preferences_v1(configurationJson);
+  // A valid whitespace suffix stalls AFTER actual restoration/owner allocation,
+  // making timeout/abort prove that unknown state is discarded, never replayed.
+  if (JSON.parse(configurationJson).snapshotJson.endsWith("\n")) {
+    postMessage({ protocolVersion: 1, type: "progress", requestId: "fixture:probe", stage: "fixture-spin", progress: 0 });
+    spin();
+  }
+  return owner;
+}
+
 export function complete_formula_v3(requestJson) {
   const request = JSON.parse(requestJson);
   if (request.source === "fixture:infinite") {

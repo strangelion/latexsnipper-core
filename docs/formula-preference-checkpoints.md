@@ -2,7 +2,7 @@
 
 Rust `formula_completion::preferences::persistence` 提供显式、有界的认证检查点。
 Core 不创建文件、不选择数据库或密钥提供者，也不自动恢复或记录用户历史。
-这是持久化的数据和恢复边界；C ABI/Python/JSONL 的显式存取绑定已有，WASM-JS 绑定、
+这是持久化的数据和恢复边界；Rust/C ABI/Python/JSONL/WASM-JS 的显式存取绑定已有，
 宿主受保护存储及断电恢复仍待实现。
 
 ## 授权与接口
@@ -80,4 +80,6 @@ Python 提供 `export_checkpoint` 与静态 `restore_checkpoint`，检查点使�
 JSONL 提供 `export-checkpoint` 及 `formula.preferences.restore`；恢复在新 Worker 命名空间创建
 默认关闭的 owner，不恢复旧路由标识。请求行仍限制 1 MiB，检查点字符串限制 256 KiB，
 见 [JSONL 接口](../crates/worker/README.md#explicit-authenticated-checkpoints)。
-WASM-JS 尚不提供检查点存取，不能依据已有内存偏好能力推断为可恢复。
+WASM-JS 提供原始恢复工厂、直接包装对象和显式 Worker 恢复 RPC；Worker 重启后不重放检查点操作，
+恢复后仍默认关闭学习且拒绝旧令牌，见 [WASM/JS 接口](formula-preferences-wasm.md#显式检查点)。
+所有绑定只认证/返回数据；不能把公共检查点接口的完成视为宿主可信存储和真实故障恢复验收完成。

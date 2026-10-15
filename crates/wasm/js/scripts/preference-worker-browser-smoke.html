@@ -6,6 +6,7 @@
 <script type="module">
 import { WasmWorkerClient } from "../dist/index.js";
 import { preferenceProof } from "./preference-proof.mjs";
+import { checkpointProof } from "./preference-checkpoint-proof.mjs";
 const verify = (condition, message) => { if (!condition) throw new Error(message); };
 const workerUrl = new URL("../dist/worker-entry.js", import.meta.url);
 const profile = new URL(location.href).searchParams.get("profile") ?? "conversion";
@@ -19,6 +20,8 @@ window.preferenceWorkerProof = (async () => {
     await client.ready();
     const functional = await preferenceProof((configuration) => client.createFormulaPreferences(configuration),
       (input) => client.completeFormulaFragments(input));
+    const checkpoints = await checkpointProof((configuration) => client.createFormulaPreferences(configuration),
+      (configuration) => client.restoreFormulaPreferences(configuration), (input) => client.completeFormulaFragments(input));
     const lifecycle = new WasmWorkerClient({ workerUrl,
       moduleUrl: new URL(`./formula-worker-browser-fixture.mjs?profile=${profile}`, import.meta.url).href,
       workerFactory() {
@@ -60,7 +63,47 @@ window.preferenceWorkerProof = (async () => {
       const info = await fresh.info(); verify(info.ok && info.data.eventCount === 0 && !info.data.policy.feedbackEnabled, "fresh disabled state");
       await fresh.close();
     }
-    const result = { profile, ...functional, hardAbort: true, acceptanceTimeout: true, noFeedbackReplay: true, oldOwnersInvalidated: true };
+    for (const mode of ["restore-abort", "restore-timeout"]) {
+      const seed = await lifecycle.createFormulaPreferences(configuration);
+      const policy = { rankingEnabled: true, feedbackEnabled: true, allowSensitiveFeedback: false };
+      await seed.setPolicy(policy);
+      const input = { source: "\\bay", cursor: 4, revision: "0", inputFormat: "latex", catalog: {
+        commands: { scope: configuration.scope, definitions: [] },
+        policy: { retrievalEnabled: true, sensitiveDocument: false, allowInSensitiveDocument: false },
+        fragments: [{ id: "saved", revision: "0", userSha256: configuration.scope.userSha256,
+          projectSha256: null, documentSha256: null, trigger: "bayes", label: "Fixture", source: "x^2" }] } };
+      const completion = await lifecycle.completeFormulaFragments(input); verify(completion.ok, "seed completion");
+      const capture = await seed.captureContext(); verify(capture.ok, "seed capture");
+      const recorded = await seed.command({ kind: "record-acceptance", captureId: capture.data.captureId, eventId: "1",
+        request: { ...input, snapshot: completion.data.snapshot, candidateId: "fragment:saved" } });
+      verify(recorded.ok && recorded.data.receiptId, "seed feedback");
+      const permission = { storageEnabled: true, allowSensitiveStorage: false };
+      const checkpoint = await seed.exportCheckpoint("cd".repeat(32), "1", permission); verify(checkpoint.ok, "seed export");
+      const restoration = { ...configuration, storageKeyHex: "cd".repeat(32), expectedCheckpoint: "1",
+        snapshotJson: checkpoint.data.snapshotJson, permission };
+      const controller = new AbortController();
+      const spun = new Promise((resolve) => { entered = resolve; });
+      const pending = lifecycle.restoreFormulaPreferences({ ...restoration, snapshotJson: restoration.snapshotJson + "\n" },
+        { signal: controller.signal, timeoutMillis: 1000 });
+      const failed = pending.then(() => { throw new Error("Stalled restore unexpectedly completed"); }, (cause) => cause);
+      await spun;
+      const queued = lifecycle.restoreFormulaPreferences(restoration).then(() => { throw new Error("Queued restore replayed"); }, (cause) => cause);
+      const count = workers.length;
+      if (mode === "restore-abort") controller.abort();
+      const reason = await failed;
+      verify(reason.detail.code === (mode === "restore-abort" ? "CANCELLED" : "WORKER_TASK_TIMEOUT"), "restore hard interruption");
+      verify((await queued).detail.code === "WORKER_PREFERENCES_STALE", "queued restore invalidated");
+      await lifecycle.ready();
+      verify(workers.length === count + 1 && !workers.at(-1).some((type) => type.startsWith("formula-preferences-")), "no implicit checkpoint replay");
+      const recovered = await lifecycle.restoreFormulaPreferences(restoration);
+      const info = await recovered.info(); verify(info.ok && info.data.eventCount === 1 && !info.data.policy.feedbackEnabled, "explicit cross-Worker recovery is default-off");
+      await recovered.setPolicy(policy);
+      const stale = await recovered.command({ kind: "undo", receiptId: recorded.data.receiptId });
+      verify(!stale.ok && stale.error.code === "STALE_FEEDBACK", "restored owner rejects pre-restart receipt");
+      await recovered.close();
+    }
+    const result = { profile, ...functional, ...checkpoints, hardAbort: true, acceptanceTimeout: true,
+      restoreAbort: true, restoreTimeout: true, explicitRestartRecovery: true, noFeedbackReplay: true, oldOwnersInvalidated: true };
     document.querySelector("#result").textContent = JSON.stringify(result, null, 2);
     return result;
   } catch (cause) {

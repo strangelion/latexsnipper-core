@@ -18,7 +18,7 @@ export interface WorkerRequestValidationOptions {
 }
 
 import { completionInputError, scopedCompletionInputError, fragmentCompletionInputError } from "./completion.js";
-import { preferenceConfigurationError, preferenceCommandError, preferenceCommandBudget, preferenceJson, type PreferenceWorkerCommand } from "./preferences.js";
+import { preferenceConfigurationError, preferenceRestoreConfigurationError, preferenceCommandError, preferenceCommandBudget, preferenceJson, type PreferenceWorkerCommand } from "./preferences.js";
 
 const MAX_REQUEST_ID_LENGTH = 256;
 const MAX_NAME_LENGTH = 256;
@@ -213,11 +213,14 @@ function validateRegistry(value: Record<string, unknown>): WorkerRequestValidati
 
 function validatePreferences(value: Record<string, unknown>): WorkerRequestValidationResult {
   try {
-    if (value.type === "formula-preferences-create") {
-      if (!closed(value, ["protocolVersion", "type", "requestId", "configuration"]) || preferenceConfigurationError(value.configuration)) {
+    if (value.type === "formula-preferences-create" || value.type === "formula-preferences-restore") {
+      const restore = value.type === "formula-preferences-restore";
+      if (!closed(value, ["protocolVersion", "type", "requestId", "configuration"]) ||
+          (restore ? preferenceRestoreConfigurationError : preferenceConfigurationError)(value.configuration)) {
         return invalid(value, "Invalid preference creation request");
       }
-      preferenceJson(value.configuration);
+      if (restore) preferenceJson(value, 1024 * 1024);
+      else preferenceJson(value.configuration);
     } else {
       if (!closed(value, ["protocolVersion", "type", "requestId", "ownerId", "command"]) || !isNonEmptyString(value.ownerId, 96) || preferenceCommandError(value.command)) {
         return invalid(value, "Invalid preference command request");
@@ -269,6 +272,7 @@ export function validateWorkerRequest(
       return cause ? invalid(value, cause) : { ok: true, request: value as unknown as WorkerRequest };
     }
     case "formula-preferences-create":
+    case "formula-preferences-restore":
     case "formula-preferences-command":
       return validatePreferences(value);
     case "formula-registry-create":

@@ -18,7 +18,7 @@ import type { ScopedFormulaCompletionRequest, ScopedFormulaCompletionApplyReques
 import type { FormulaFragmentCompletionRequest, FormulaFragmentCompletionApplyRequest, FormulaFragmentCompletion } from "./completion.js";
 import { WorkerFormulaRegistry, type RegistryWorkerCommand } from "./worker-registry.js";
 import { WorkerFormulaPreferences } from "./worker-preferences.js";
-import type { FormulaPreferenceConfiguration } from "./preferences.js";
+import type { FormulaPreferenceConfiguration, FormulaPreferenceRestoreConfiguration } from "./preferences.js";
 
 interface PendingCall {
   resolve(value: unknown): void;
@@ -30,7 +30,7 @@ type CompletionTaskRequest = Extract<WorkerRequest, { type: "complete-formula" |
 interface WorkerTask extends PendingCall {
   requestId: string;
   wireRequestId: string;
-  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" | "formula-registry-create" | "formula-registry-command" | "formula-preferences-create" | "formula-preferences-command" }> | CompletionTaskRequest;
+  request: Extract<WorkerRequest, { type: "recognize" | "convert-formula" | "formula-registry-create" | "formula-registry-command" | "formula-preferences-create" | "formula-preferences-restore" | "formula-preferences-command" }> | CompletionTaskRequest;
   durationMillis: number;
   resultBytes: number;
   onProgress?: (event: ProgressEvent) => void;
@@ -287,6 +287,18 @@ export class WasmWorkerClient {
     const generation = this.generation;
     const created = await this.registryTask({ protocolVersion: 1, type: "formula-preferences-create",
       requestId: this.nextId("preferences"), configuration }, generation, options);
+    return this.preferenceOwner(created, generation);
+  }
+
+  /** Explicit trusted-host restore, never automatic on restart or failed response. */
+  async restoreFormulaPreferences(configuration: FormulaPreferenceRestoreConfiguration, options: WorkerCallOptions = {}): Promise<WorkerFormulaPreferences> {
+    const generation = this.generation;
+    const created = await this.registryTask({ protocolVersion: 1, type: "formula-preferences-restore",
+      requestId: this.nextId("preferences"), configuration }, generation, options);
+    return this.preferenceOwner(created, generation);
+  }
+
+  private preferenceOwner(created: unknown, generation: number): WorkerFormulaPreferences {
     if (generation !== this.generation || typeof created !== "object" || created === null ||
         typeof (created as { ownerId?: unknown }).ownerId !== "string" ||
         !/^preferences:[1-9][0-9]{0,15}$/.test((created as { ownerId: string }).ownerId)) {
@@ -298,7 +310,7 @@ export class WasmWorkerClient {
       type: "formula-preferences-command", requestId: this.nextId("preferences"), ownerId, command }, generation, options));
   }
 
-  private registryTask(request: Extract<WorkerRequest, { type: "formula-registry-create" | "formula-registry-command" | "formula-preferences-create" | "formula-preferences-command" }>,
+  private registryTask(request: Extract<WorkerRequest, { type: "formula-registry-create" | "formula-registry-command" | "formula-preferences-create" | "formula-preferences-restore" | "formula-preferences-command" }>,
     generation: number, options: WorkerCallOptions): Promise<unknown> {
     const preferences = request.type.startsWith("formula-preferences-");
     if (this.terminated) return Promise.reject(this.runtimeError("WORKER_TERMINATED", "Worker client is terminated"));
@@ -314,7 +326,7 @@ export class WasmWorkerClient {
       const abort = (): void => { this.cancel(owned.requestId); };
       const cleanup = (): void => { options.signal?.removeEventListener("abort", abort); };
       this.queue.push({ requestId: owned.requestId, wireRequestId: owned.requestId, request: owned,
-        generation, durationMillis, resultBytes: preferences ? (request.type === "formula-preferences-create" ? 4096 : this.maxCompletionResultBytes) : 2 * 1024 * 1024 + 64 * 1024,
+        generation, durationMillis, resultBytes: preferences ? (request.type === "formula-preferences-create" || request.type === "formula-preferences-restore" ? 4096 : this.maxCompletionResultBytes) : 2 * 1024 * 1024 + 64 * 1024,
         resolve: (value) => { cleanup(); resolve(value); }, reject: (error) => { cleanup(); reject(error); } });
       options.signal?.addEventListener("abort", abort, { once: true });
       if (options.signal?.aborted) abort();

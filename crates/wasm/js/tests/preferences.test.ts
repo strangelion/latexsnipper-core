@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import test from "node:test";
-import { FormulaPreferences, type NativeFormulaPreferences, type FormulaPreferenceConfiguration } from "../src/preferences.js";
+import { FormulaPreferences, type NativeFormulaPreferences, type FormulaPreferenceConfiguration, type FormulaPreferenceRestoreConfiguration } from "../src/preferences.js";
 import { WorkerFormulaPreferences } from "../src/worker-preferences.js";
 import { WasmWorkerClient, WorkerRuntimeError } from "../src/client.js";
 import { validateWorkerRequest } from "../src/worker-request-validation.js";
@@ -9,6 +9,8 @@ import type { WorkerLike, WorkerRequest, WorkerResponse } from "../src/types.js"
 // Fixed fixture identity, never a production feedback key.
 const configuration: FormulaPreferenceConfiguration = { schemaVersion: 1, keyHex: "ab".repeat(32),
   scope: { userSha256: "a".repeat(64), projectSha256: null, documentSha256: null, generation: "0" } };
+const restoration: FormulaPreferenceRestoreConfiguration = { ...configuration, storageKeyHex: "cd".repeat(32),
+  expectedCheckpoint: "18446744073709551615", snapshotJson: "{}", permission: { storageEnabled: true, allowSensitiveStorage: false } };
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 class FakeWorker implements WorkerLike {
   onmessage: ((event: MessageEvent<WorkerResponse>) => void) | null = null;
@@ -16,9 +18,12 @@ class FakeWorker implements WorkerLike {
   onmessageerror: ((event: MessageEvent<unknown>) => void) | null = null;
   requests: WorkerRequest[] = [];
   terminated = false;
+  autoRestore = true;
+  onRestore: (() => void) | undefined;
   postMessage(value: WorkerRequest): void {
     this.requests.push(value);
-    if (value.type === "initialize" || value.type === "formula-preferences-create") queueMicrotask(() =>
+    if (value.type === "formula-preferences-restore") this.onRestore?.();
+    if (value.type === "initialize" || value.type === "formula-preferences-create" || (value.type === "formula-preferences-restore" && this.autoRestore)) queueMicrotask(() =>
       this.emit(value.requestId, value.type === "initialize" ? true : { ownerId: "preferences:1" }));
   }
   emit(requestId: string, data: unknown): void {
@@ -45,6 +50,88 @@ test("preference transport is closed, finite and precision preserving", () => {
   assert.equal(validateWorkerRequest({ ...base, command: { kind: "clear", generation: "18446744073709551615", keyHex: configuration.keyHex } }).ok, true);
   assert.equal(validateWorkerRequest({ ...base, url: "https://evil.invalid", command: { kind: "info" } }).ok, false);
 });
+
+test("checkpoint wire has independent closed consent, exact u64 strings and a UTF-8 snapshot budget", () => {
+  const base = { protocolVersion: 1, requestId: "restore", type: "formula-preferences-restore", configuration: restoration };
+  assert.equal(validateWorkerRequest(base).ok, true);
+  for (const bad of [{ ...restoration, ignored: true }, { ...restoration, expectedCheckpoint: 1 },
+    { ...restoration, expectedCheckpoint: "01" }, { ...restoration, expectedCheckpoint: "18446744073709551616" },
+    { ...restoration, permission: { storageEnabled: true } },
+    { ...restoration, permission: { ...restoration.permission, storageEnabled: 1 } },
+    { ...restoration, permission: { ...restoration.permission, PRIVATE_SECRET: true } },
+    { ...restoration, snapshotJson: "中".repeat(90000) }, { ...restoration, snapshotJson: " ".repeat(256 * 1024 + 1) }]) {
+    const result = validateWorkerRequest({ ...base, configuration: bad });
+    assert.equal(result.ok, false);
+    assert.equal(JSON.stringify(result).includes("PRIVATE_SECRET"), false);
+  }
+  assert.equal(validateWorkerRequest({ ...base, url: "https://evil.invalid" }).ok, false);
+  const command = { kind: "export-checkpoint", storageKeyHex: restoration.storageKeyHex,
+    checkpoint: restoration.expectedCheckpoint, permission: restoration.permission };
+  const wire = { protocolVersion: 1, requestId: "export", type: "formula-preferences-command", ownerId: "preferences:1", command };
+  assert.equal(validateWorkerRequest(wire).ok, true);
+  assert.equal(validateWorkerRequest({ ...wire, command: { ...command, checkpoint: 1 } }).ok, false);
+  assert.equal(validateWorkerRequest({ ...wire, command: { ...command, permission: { storageEnabled: true } } }).ok, false);
+});
+
+test("direct restore selects only its explicit factory and frees once after getter-driven export closure", () => {
+  let restored = 0, commanded = 0, freed = 0;
+  const native = { command: () => { commanded++; return { ok: true, data: true }; },
+    close: () => ({ ok: true, data: true }), free: () => { freed++; } } as unknown as NativeFormulaPreferences;
+  const owner = FormulaPreferences.restore({ restore_formula_preferences_v1(json) {
+    restored++; assert.deepEqual(JSON.parse(json), restoration); return native;
+  } }, restoration);
+  assert.equal(restored, 1);
+  const permission = { get storageEnabled() { owner.close(); return true; }, allowSensitiveStorage: false };
+  assert.throws(() => owner.exportCheckpoint(restoration.storageKeyHex, "1", permission), /closed/);
+  assert.equal(commanded, 0); assert.equal(freed, 1); owner.close(); assert.equal(freed, 1);
+  assert.throws(() => FormulaPreferences.restore({} as never, restoration), /factory/);
+  assert.throws(() => FormulaPreferences.restore({ restore_formula_preferences_v1: () => native },
+    { ...restoration, permission: { storageEnabled: true } } as never), /restore configuration/);
+});
+
+test("queued restore owns its input and uses the independent 4 KiB owner result budget", async () => {
+  const worker = new FakeWorker();
+  const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", maxCompletionResultBytes: 16, workerFactory: () => worker });
+  try {
+    const owner = await client.createFormulaPreferences(configuration);
+    const active = owner.captureContext(); await tick();
+    const request = worker.requests.find((value) => value.type === "formula-preferences-command"); assert.ok(request);
+    const input = structuredClone(restoration);
+    const restored = client.restoreFormulaPreferences(input);
+    input.permission.storageEnabled = false; input.expectedCheckpoint = "1"; input.scope.generation = "2";
+    worker.emit(request.requestId, true); await active;
+    await restored;
+    const sent = worker.requests.find((value) => value.type === "formula-preferences-restore");
+    assert.ok(sent?.type === "formula-preferences-restore"); assert.deepEqual(sent.configuration, restoration);
+    assert.equal(worker.terminated, false);
+  } finally { client.terminate(); }
+});
+
+for (const mode of ["abort", "timeout", "crash"] as const) {
+  test(`active checkpoint restore ${mode} drops queued restores/feedback without replay`, { timeout: 5000 }, async () => {
+    const workers: FakeWorker[] = [];
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const client = new WasmWorkerClient({ workerUrl: "worker.js", moduleUrl: "wasm.js", workerFactory: () => {
+      const worker = new FakeWorker(); worker.autoRestore = false; worker.onRestore = entered; workers.push(worker); return worker;
+    } });
+    try {
+      const controller = new AbortController();
+      const pending = client.restoreFormulaPreferences(restoration, mode === "timeout" ? { timeoutMillis: 15 } : { signal: controller.signal });
+      const failed = assert.rejects(pending, (cause: unknown) => cause instanceof WorkerRuntimeError);
+      await started;
+      const queued = client.restoreFormulaPreferences(restoration);
+      const refused = assert.rejects(queued, (cause: unknown) => cause instanceof WorkerRuntimeError && cause.detail.code === "WORKER_PREFERENCES_STALE");
+      if (mode === "abort") controller.abort();
+      if (mode === "crash") workers[0]!.onerror?.({ message: "fixture crash" } as ErrorEvent);
+      await Promise.all([failed, refused]); await client.ready();
+      assert.equal(workers[0]!.terminated, true);
+      assert.equal(workers[1]!.requests.some((value) => value.type.startsWith("formula-preferences-")), false);
+      workers[1]!.autoRestore = true;
+      await client.restoreFormulaPreferences(restoration);
+    } finally { client.terminate(); }
+  });
+}
 
 test("direct preference wrapper validates, frees once and guards getter-driven closure", () => {
   let calls = 0, freed = 0;

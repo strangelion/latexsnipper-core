@@ -3,6 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
 use latexsnipper_api_types::{ApiEnvelopeV3, ApiErrorV3};
+use latexsnipper_conversion::formula_completion::preferences::persistence::*;
 use latexsnipper_conversion::formula_completion::{fragments::*, preferences::*, scoped::*};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -21,6 +22,17 @@ struct Create {
     schema_version: u16,
     scope: FormulaDefinitionScope,
     key_hex: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Restore {
+    schema_version: u16,
+    scope: FormulaDefinitionScope,
+    key_hex: String,
+    storage_key_hex: String,
+    expected_checkpoint: Decimal,
+    snapshot_json: String,
+    permission: FormulaPreferenceStoragePermission,
 }
 struct Decimal(u64);
 impl<'de> Deserialize<'de> for Decimal {
@@ -69,6 +81,11 @@ enum Command {
     Clear {
         generation: Decimal,
         key_hex: String,
+    },
+    ExportCheckpoint {
+        storage_key_hex: String,
+        checkpoint: Decimal,
+        permission: FormulaPreferenceStoragePermission,
     },
 }
 fn error(code: &str, message: &str) -> ApiErrorV3 {
@@ -132,6 +149,21 @@ fn core_error(value: FormulaPreferenceError) -> ApiErrorV3 {
         ),
     }
 }
+fn storage_error(value: FormulaPreferenceStorageError) -> ApiErrorV3 {
+    error(
+        match value {
+            FormulaPreferenceStorageError::Disabled => "PREFERENCE_STORAGE_DISABLED",
+            FormulaPreferenceStorageError::InvalidKey => "INVALID_ARGUMENT",
+            FormulaPreferenceStorageError::InvalidSnapshot => "INVALID_SNAPSHOT",
+            FormulaPreferenceStorageError::AuthenticationFailed => "AUTHENTICATION_FAILED",
+            FormulaPreferenceStorageError::ScopeMismatch => "SCOPE_MISMATCH",
+            FormulaPreferenceStorageError::StaleCheckpoint => "STALE_CHECKPOINT",
+            FormulaPreferenceStorageError::SensitiveStorageDenied => "SENSITIVE_STORAGE_DENIED",
+            FormulaPreferenceStorageError::LimitExceeded => "LIMIT_EXCEEDED",
+        },
+        &value.to_string(),
+    )
+}
 fn decode<T: serde::de::DeserializeOwned>(raw: &str, maximum: usize) -> Result<T> {
     if raw.len() > maximum {
         return Err(error(
@@ -194,7 +226,8 @@ impl State {
     fn info(&self) -> Value {
         json!({"schemaVersion":1,"scope":self.core.scope(),"policy":self.core.policy(),
             "eventCount":self.core.event_count(),"captureCount":self.captures.len(),"receiptCount":self.receipts.len(),
-            "inMemory":true,"persistence":false,"automaticCapture":false})
+            "inMemory":true,"persistence":false,"automaticCapture":false,
+            "authenticatedCheckpoints":true,"automaticStorage":false})
     }
     fn execute(&mut self, command: Command) -> Result<Value> {
         match command {
@@ -261,6 +294,17 @@ impl State {
                 self.captures.clear();
                 self.receipts.clear();
                 Ok(self.info())
+            }
+            Command::ExportCheckpoint {
+                storage_key_hex,
+                checkpoint,
+                permission,
+            } => {
+                let snapshot = self
+                    .core
+                    .export_checkpoint(&key(&storage_key_hex)?, checkpoint.0, permission)
+                    .map_err(storage_error)?;
+                bound(json!({"snapshotJson":snapshot,"checkpoint":checkpoint.0.to_string()}))
             }
         }
     }
@@ -338,31 +382,69 @@ pub fn create_formula_preferences_v1(
         }
         let core = FormulaPreferenceStore::new(request.scope, key(&request.key_hex)?)
             .map_err(core_error)?;
-        let namespace = namespace()?;
-        OWNERS.with(|count| {
-            if count.get() >= MAX_OWNERS {
-                return Err(limit());
-            }
-            count.set(count.get() + 1);
-            Ok(())
-        })?;
-        Ok(FormulaPreferencesWasm {
-            agent: std::marker::PhantomData,
-            state: RefCell::new(Some(State {
-                core,
-                namespace,
-                next: 0,
-                captures: BTreeMap::new(),
-                receipts: BTreeMap::new(),
-            })),
-        })
+        own(core)
     };
     create().map_err(|value| response(Err(value)))
+}
+
+fn own(core: FormulaPreferenceStore) -> Result<FormulaPreferencesWasm> {
+    if OWNERS.with(|count| count.get() >= MAX_OWNERS) {
+        return Err(limit());
+    }
+    let namespace = namespace()?;
+    // Web Crypto can invoke host code; recheck before reserving the owner slot.
+    OWNERS.with(|count| {
+        if count.get() >= MAX_OWNERS {
+            return Err(limit());
+        }
+        count.set(count.get() + 1);
+        Ok(())
+    })?;
+    Ok(FormulaPreferencesWasm {
+        agent: std::marker::PhantomData,
+        state: RefCell::new(Some(State {
+            core,
+            namespace,
+            next: 0,
+            captures: BTreeMap::new(),
+            receipts: BTreeMap::new(),
+        })),
+    })
+}
+
+/// Explicitly restore a NEW default-off owner. The host must supply current
+/// trusted scope/freshness and separate storage consent; no file IO or replay.
+#[wasm_bindgen]
+pub fn restore_formula_preferences_v1(
+    configuration_json: &str,
+) -> std::result::Result<FormulaPreferencesWasm, JsValue> {
+    let restore = || -> Result<FormulaPreferencesWasm> {
+        let request: Restore = decode(configuration_json, MAX_DATA)?;
+        if request.schema_version != 1 {
+            return Err(error("VERSION_MISMATCH", "Unsupported preference schema."));
+        }
+        if OWNERS.with(|count| count.get() >= MAX_OWNERS) {
+            return Err(limit());
+        }
+        let core = FormulaPreferenceStore::restore_checkpoint(
+            request.scope,
+            key(&request.key_hex)?,
+            &key(&request.storage_key_hex)?,
+            request.expected_checkpoint.0,
+            &request.snapshot_json,
+            request.permission,
+        )
+        .map_err(storage_error)?;
+        own(core)
+    };
+    restore().map_err(|value| response(Err(value)))
 }
 #[wasm_bindgen]
 pub fn formula_preference_capabilities_v3() -> JsValue {
     response(Ok(
         json!({"schemaVersion":1,"defaultEnabled":false,"automaticCapture":false,"persistence":false,
+        "authenticatedCheckpoints":true,"automaticStorage":false,"storagePermissionRequired":true,
+        "maxSnapshotBytes":FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES,
         "maxOwners":MAX_OWNERS,"maxCaptures":MAX_CAPTURES,"maxEvents":FORMULA_PREFERENCE_MAX_EVENTS,
         "maxMetadataBytes":MAX_METADATA,"maxRequestBytes":MAX_DATA,"maxResultDataBytes":MAX_DATA,
         "revisionEncoding":"canonical-decimal-u64-string","identityEncoding":"opaque-instance-token"}),

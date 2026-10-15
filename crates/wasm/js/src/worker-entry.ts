@@ -7,10 +7,11 @@ import { validateWorkerRequest } from "./worker-request-validation.js";
 import type { WasmFormulaApi, WasmFormulaFragmentApi } from "./formula.js";
 import { MAX_COMPLETION_ENVELOPE_BYTES, type WasmFormulaCompletionApi, type WasmScopedFormulaCompletionApi, type WasmFragmentFormulaCompletionApi } from "./completion.js";
 import { registryJson, type NativeFormulaRegistry, type WasmFormulaRegistryApi } from "./registry.js";
-import { preferenceJson, preferenceCommandBudget, type NativeFormulaPreferences, type WasmFormulaPreferenceApi } from "./preferences.js";
+import { preferenceJson, preferenceCommandBudget, type NativeFormulaPreferences, type WasmFormulaPreferenceApi, type WasmFormulaPreferenceRestoreApi } from "./preferences.js";
 
 interface WasmApi {
   create_formula_preferences_v1?: WasmFormulaPreferenceApi["create_formula_preferences_v1"];
+  restore_formula_preferences_v1?: WasmFormulaPreferenceRestoreApi["restore_formula_preferences_v1"];
   complete_formula_fragments_v3?: WasmFragmentFormulaCompletionApi["complete_formula_fragments_v3"];
   apply_formula_completion_fragments_v3?: WasmFragmentFormulaCompletionApi["apply_formula_completion_fragments_v3"];
   complete_formula_scoped_v3?: WasmScopedFormulaCompletionApi["complete_formula_scoped_v3"];
@@ -46,6 +47,20 @@ const registries = new Map<string, NativeFormulaRegistry>();
 let registrySequence = 0;
 const preferences = new Map<string, NativeFormulaPreferences>();
 let preferenceSequence = 0;
+
+// Preserve actionable Core codes, never echo a factory's private message/data.
+const RESTORE_FAILURE_CODES = new Set(["PREFERENCE_STORAGE_DISABLED", "INVALID_ARGUMENT", "INVALID_SNAPSHOT",
+  "AUTHENTICATION_FAILED", "SCOPE_MISMATCH", "STALE_CHECKPOINT", "SENSITIVE_STORAGE_DENIED", "LIMIT_EXCEEDED",
+  "PREFERENCE_UNAVAILABLE", "VERSION_MISMATCH", "INVALID_JSON", "INPUT_TOO_LARGE"]);
+function restoreFailureCode(cause: unknown): string {
+  try {
+    if (typeof cause === "object" && cause !== null && (cause as { ok?: unknown }).ok === false) {
+      const value = (cause as { error?: { code?: unknown } }).error?.code;
+      if (typeof value === "string" && RESTORE_FAILURE_CODES.has(value)) return value;
+    }
+  } catch { /* Untrusted thrown getters must not escape the redacted boundary. */ }
+  return "WORKER_PREFERENCES_RESTORE_FAILED";
+}
 
 function respond(message: WorkerResponse): void {
   scope.postMessage(message);
@@ -88,14 +103,19 @@ async function handle(request: WorkerRequest): Promise<void> {
       error(request.requestId, "WORKER_NOT_INITIALIZED", "Initialize the worker before use");
       return;
     }
-    if (request.type === "formula-preferences-create") {
-      if (!api.create_formula_preferences_v1) { error(request.requestId, "WORKER_PREFERENCES_UNAVAILABLE", "Loaded package lacks a preference factory"); return; }
+    if (request.type === "formula-preferences-create" || request.type === "formula-preferences-restore") {
+      const restoring = request.type === "formula-preferences-restore";
+      const factory = restoring ? api.restore_formula_preferences_v1 : api.create_formula_preferences_v1;
+      if (!factory) { error(request.requestId, "WORKER_PREFERENCES_UNAVAILABLE", "Loaded package lacks the requested preference factory"); return; }
       if (preferences.size >= 64 || !Number.isSafeInteger(preferenceSequence + 1)) {
         error(request.requestId, "WORKER_PREFERENCES_LIMIT", "Preference owner or identifier limit reached"); return;
       }
       let owner: NativeFormulaPreferences;
-      try { owner = api.create_formula_preferences_v1(preferenceJson(request.configuration)); }
-      catch { error(request.requestId, "WORKER_PREFERENCES_CREATE_FAILED", "Preference creation was refused; check configuration and Web Crypto availability"); return; }
+      try { owner = factory.call(api, preferenceJson(request.configuration, restoring ? 1024 * 1024 : 4096)); }
+      catch (cause) {
+        error(request.requestId, restoring ? restoreFailureCode(cause) : "WORKER_PREFERENCES_CREATE_FAILED",
+          restoring ? "Preference checkpoint restoration was refused" : "Preference creation was refused; check configuration and Web Crypto availability"); return;
+      }
       const ownerId = `preferences:${++preferenceSequence}`;
       preferences.set(ownerId, owner);
       respond({ protocolVersion: 1, type: "result", requestId: request.requestId, data: { ownerId } }); return;

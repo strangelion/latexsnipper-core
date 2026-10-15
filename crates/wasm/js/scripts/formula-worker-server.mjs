@@ -10,7 +10,8 @@ const port = Number(process.argv[2] ?? 8766);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid loopback test port");
 const prefixes = ["/crates/wasm/js/dist/", "/target/wasm-fragment-web/", "/target/wasm-full-web/", "/target/wasm-conversion-web/"];
 const fixtures = ["/crates/wasm/js/scripts/formula-worker-browser-fixture.mjs", "/crates/wasm/js/scripts/formula-worker-browser-smoke.html", "/crates/wasm/js/scripts/fragment-worker-browser-proof.mjs",
-  "/crates/wasm/js/scripts/preference-worker-browser-smoke.html", "/crates/wasm/js/scripts/preference-proof.mjs"];
+  "/crates/wasm/js/scripts/preference-worker-browser-smoke.html", "/crates/wasm/js/scripts/preference-proof.mjs",
+  "/crates/wasm/js/scripts/preference-checkpoint-proof.mjs"];
 const mime = { ".js": "text/javascript", ".mjs": "text/javascript", ".html": "text/html", ".wasm": "application/wasm" };
 const realRoot = await realpath(root);
 const assetRoots = prefixes.map((prefix) => resolve(realRoot, `.${prefix}`) + sep);

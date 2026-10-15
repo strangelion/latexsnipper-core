@@ -1,7 +1,8 @@
 import type { ApiEnvelopeV3 } from "./types.js";
 import type { WorkerCallOptions } from "./client.js";
 import type { FormulaFragmentCompletionRequest } from "./completion.js";
-import type { FormulaPreferenceCommand, FormulaPreferenceInfo, FormulaPreferencePolicy, PreferenceWorkerCommand, PreferredFormulaCompletion } from "./preferences.js";
+import type { FormulaPreferenceCommand, FormulaPreferenceInfo, FormulaPreferencePolicy, PreferenceWorkerCommand, PreferredFormulaCompletion,
+  FormulaPreferenceCheckpoint, FormulaPreferenceStoragePermission } from "./preferences.js";
 
 /** Tied to one Worker generation. Neither state nor feedback is replayed after reset. */
 export class WorkerFormulaPreferences {
@@ -20,6 +21,10 @@ export class WorkerFormulaPreferences {
   captureContext(options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<{ captureId: string }>> { return this.command({ kind: "capture" }, options); }
   rankFragments(request: FormulaFragmentCompletionRequest, options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<PreferredFormulaCompletion>> {
     return this.command({ kind: "rank-fragments", request }, options);
+  }
+  exportCheckpoint(storageKeyHex: string, checkpoint: string, permission: FormulaPreferenceStoragePermission,
+    options: WorkerCallOptions = {}): Promise<ApiEnvelopeV3<FormulaPreferenceCheckpoint>> {
+    return this.command({ kind: "export-checkpoint", storageKeyHex, checkpoint, permission }, options);
   }
   close(options: WorkerCallOptions = {}): Promise<void> {
     if (this.closing) return this.closing;
