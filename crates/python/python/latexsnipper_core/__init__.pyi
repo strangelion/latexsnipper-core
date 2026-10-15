@@ -36,6 +36,18 @@ def apply_formula_completion_scoped(
     snapshot: dict[str, Any], candidate_id: str, input_format: str = "latex",
 ) -> dict[str, Any]: ...
 
+def formula_fragment_completion_capabilities() -> dict[str, Any]: ...
+
+def complete_formula_fragments(
+    source: str, *, cursor: int, revision: int, catalog: dict[str, Any],
+    input_format: str = "latex",
+) -> dict[str, Any]: ...
+
+def apply_formula_completion_fragments(
+    source: str, *, cursor: int, revision: int, catalog: dict[str, Any],
+    snapshot: dict[str, Any], candidate_id: str, input_format: str = "latex",
+) -> dict[str, Any]: ...
+
 class LaTeXSnipperError(Exception):
     code: str
     detail: str | None

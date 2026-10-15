@@ -5,7 +5,7 @@
 当前提供有限 LaTeX 编辑结构、候选及应用接口，位于
 `latexsnipper_conversion::formula_completion`。Rust、C、Python、JSONL 与 WASM/JS
 公共绑定均有 v1 及独立的定义驱动签名/作用域 v2 接口；
-Rust/C/JSONL 另有独立的私有片段编辑 schema 3；其他片段绑定、偏好及实际编辑器接入仍待完成。
+Rust/C/Python/JSONL 另有独立的私有片段编辑 schema 3；WASM-JS 片段绑定、偏好及实际编辑器接入仍待完成。
 
 ## 使用
 
@@ -160,11 +160,11 @@ JSONL 新增 `formula.complete.scoped` / `formula.completion.apply.scoped`，传
 Core 不读取符号资产、保存偏好或上传公式；该声明不授予渲染/转换/插件执行权限。
 学习开关、偏好清空及私有存储检索宿主仍是后续工作；显式传入片段的边界见下节。
 
-## 显式私有片段（Rust / C / JSONL）
+## 显式私有片段
 
 `formula_completion::fragments` 的 `complete_formula_fragments` / `apply_formula_candidate_fragments`
 使用独立编辑 schema 3；JSONL 协议仍为 1，动作是 `formula.complete.fragments` 与
-`formula.completion.apply.fragments`。C 的独立符号见下文；正式 Python 与 WASM-JS 尚未接入片段接口，不能通过 v1/v2 降级接受。
+`formula.completion.apply.fragments`。C 与正式 Python 的独立接口见下文；WASM-JS 尚未接入片段接口，不能通过 v1/v2 降级接受。
 
 查询仍带 source/inputFormat/cursor/revision，catalog 为：
 
@@ -285,6 +285,17 @@ Windows 构建 wheel 的实际导入、并发调用及会话兼容已验证；�
 目录 JSON 单独限制 64 KiB，快照 4 KiB，Core 计算/结果序列化释放 GIL；无持久注册表。
 schema/编码错误为 `INVALID_ARGUMENT`，声明语义错误为 `INVALID_CATALOG`，其余保持 Core 错误。
 Windows wheel 的实际导入、隔离并发和会话兼容已有验证；不替代其他平台或真实编辑器验收。
+
+正式 wheel 另有 `complete_formula_fragments`、`apply_formula_completion_fragments` 与
+`formula_fragment_completion_capabilities`，使用编辑 schema 3 和上文片段 catalog/策略/快照形状；
+调用方式沿用 v2，catalog 和 snapshot 均为字典，编辑 revision 仍须为非 bool 的 Python u64 整数。
+片段/定义版本与 generation 仍为字典中的规范十进制字符串；不存在向 v1/v2 的接受降级。
+
+片段目录使用独立的 1 MiB UTF-8 JSON 预算，不把非 ASCII 字符膨胀成转义后的尺寸；旧 v2 的 64 KiB 目录限制不变。快照 4 KiB、返回 data 1 MiB，
+片段 64 条/每条 8 KiB，其余源/树/候选预算不变。查询/接受的 Rust 解码、Core 计算及结果序列化释放 GIL；
+Python 字典的 JSON 编码与结果构建仍持有 GIL。预算指序列化 JSON，不是 Python 对象或编码阶段峰值内存保证。
+Windows wheel 已实际验证导出、敏感策略/作用域/重置复验、并发隔离、超限后恢复及旧会话兼容；其他平台和宿主仍独立验收。
+这不是私有存储、学习器或权限界面：宿主仍先取得授权，再提供真实当前目录和策略。
 
 ## WASM/JS 公共绑定
 

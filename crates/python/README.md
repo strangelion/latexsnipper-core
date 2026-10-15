@@ -186,6 +186,50 @@ Core work/serialization release the GIL; Python dict encoding/result decoding do
 not. No global registry, IO, macro expansion, preferences, learning or history is
 introduced. Hosts still own consent, acceptance, revisions and undo.
 
+### Explicit local fragments
+
+`complete_formula_fragments`, `apply_formula_completion_fragments` and
+`formula_fragment_completion_capabilities` expose editing schema 3 separately
+from v1/v2. They use the same keyword-only arguments as scoped completion, with
+`catalog = {commands, policy, fragments}`. Commands is the v2 catalog; policy has
+`retrievalEnabled`, `sensitiveDocument`, and `allowInSensitiveDocument` booleans.
+
+```python
+from latexsnipper_core import complete_formula_fragments, apply_formula_completion_fragments
+
+catalog = {
+    "commands": {"scope": {"userSha256": "a" * 64, "projectSha256": None,
+                  "documentSha256": None, "generation": "0"}, "definitions": []},
+    "policy": {"retrievalEnabled": True, "sensitiveDocument": False, "allowInSensitiveDocument": False},
+    "fragments": [{"id": "saved", "revision": "1", "userSha256": "a" * 64,
+        "projectSha256": None, "documentSha256": None, "trigger": "myfraction",
+        "label": "Saved fraction", "source": r"\frac{}{}"}],
+}
+result = complete_formula_fragments(r"\myf", cursor=4, revision=42, catalog=catalog)
+selected = apply_formula_completion_fragments(
+    r"\myf", cursor=4, revision=42, catalog=catalog,
+    snapshot=result["snapshot"], candidate_id="fragment:saved",
+)
+assert selected["source"] == r"\frac{}{}"
+```
+
+The illustrative hashes are identities, not consent credentials. The host must
+authorize local retrieval and pass actual current policy/catalog/editor state.
+Foreign user/project/document and disabled/sensitive-disallowed fragments are
+filtered before private semantic checks or hashing. Source is preserved, must
+have bare formula shape and closed finite editing structure, and is never executed.
+The snapshot binds effective content, policy, scope and reset epoch; changing them
+invalidates old edits. Do not downgrade failed acceptance to an old API.
+
+At most 64 fragments / 8 KiB source each are allowed. This API has its own 1 MiB
+UTF-8 catalog JSON budget (without ASCII-escape inflation), preserving v2's 64 KiB limit. Snapshots remain 4 KiB and
+serialized result data 1 MiB. Schema/encoding errors use INVALID_ARGUMENT;
+semantic catalog errors use INVALID_CATALOG and other Core errors keep their codes.
+Rust decoding, Core work and result serialization release the GIL; Python dict
+encoding and result construction do not. These serialized budgets do not promise
+peak object memory limits. No private storage, history, preferences or learning
+is introduced. See the [shared fragment contract](../../docs/formula-completion.md).
+
 ## Explicit registered conversion
 
 `FormulaRegistry` is the formal PyO3 interface to the same native registry used by

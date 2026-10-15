@@ -1,6 +1,7 @@
 //! Persistent PyO3 adapter for the application-facing recognition session.
 
 mod formula_completion;
+mod formula_fragments;
 mod formula_registry;
 pub use formula_registry::FormulaRegistry;
 
@@ -668,6 +669,18 @@ impl Drop for Session {
 
 #[pymodule]
 fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(
+        formula_fragments::complete_formula_fragments,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        formula_fragments::apply_formula_completion_fragments,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        formula_fragments::formula_fragment_completion_capabilities,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(
         formula_completion::complete_formula_scoped,
         module

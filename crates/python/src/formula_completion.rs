@@ -18,11 +18,11 @@ use serde_json::json;
 
 use crate::{json_to_python, python_error, serialize_json, BindingError};
 
-const MAX_COMPLETION_DATA_BYTES: usize = 1024 * 1024;
-const MAX_SNAPSHOT_BYTES: usize = 4096;
+pub(super) const MAX_COMPLETION_DATA_BYTES: usize = 1024 * 1024;
+pub(super) const MAX_SNAPSHOT_BYTES: usize = 4096;
 const MAX_CATALOG_BYTES: usize = 64 * 1024;
 
-fn scoped_completion_error(error: ScopedFormulaCompletionError) -> BindingError {
+pub(super) fn scoped_completion_error(error: ScopedFormulaCompletionError) -> BindingError {
     BindingError {
         code: match error {
             ScopedFormulaCompletionError::InvalidCatalog => "INVALID_CATALOG",
@@ -53,7 +53,7 @@ fn completion_error(error: FormulaCompletionError) -> BindingError {
     }
 }
 
-fn encode_result(data: &impl Serialize) -> Result<String, BindingError> {
+pub(super) fn encode_result(data: &impl Serialize) -> Result<String, BindingError> {
     let encoded = serialize_json(data)?;
     if encoded.len() > MAX_COMPLETION_DATA_BYTES {
         return Err(BindingError {
@@ -66,7 +66,7 @@ fn encode_result(data: &impl Serialize) -> Result<String, BindingError> {
     Ok(encoded)
 }
 
-fn input_format(value: &str) -> Result<FormulaCompletionInputFormat, BindingError> {
+pub(super) fn input_format(value: &str) -> Result<FormulaCompletionInputFormat, BindingError> {
     match value {
         "latex" => Ok(FormulaCompletionInputFormat::Latex),
         _ => Err(BindingError::invalid(
@@ -75,7 +75,7 @@ fn input_format(value: &str) -> Result<FormulaCompletionInputFormat, BindingErro
     }
 }
 
-fn revision(value: &Bound<'_, PyAny>) -> Result<u64, BindingError> {
+pub(super) fn revision(value: &Bound<'_, PyAny>) -> Result<u64, BindingError> {
     if value.is_instance_of::<PyBool>() || !value.is_instance_of::<PyInt>() {
         return Err(BindingError::invalid(
             "revision must be an unsigned 64-bit integer, not a bool or string.",

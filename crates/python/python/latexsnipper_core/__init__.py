@@ -5,6 +5,7 @@ from ._native import (
     convert_formula, formula_conversion_capabilities,
     complete_formula, apply_formula_completion, formula_completion_capabilities,
     complete_formula_scoped, apply_formula_completion_scoped, formula_scoped_completion_capabilities,
+    complete_formula_fragments, apply_formula_completion_fragments, formula_fragment_completion_capabilities,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "convert_formula", "formula_conversion_capabilities",
     "complete_formula", "apply_formula_completion", "formula_completion_capabilities",
     "complete_formula_scoped", "apply_formula_completion_scoped", "formula_scoped_completion_capabilities",
+    "complete_formula_fragments", "apply_formula_completion_fragments", "formula_fragment_completion_capabilities",
 ]

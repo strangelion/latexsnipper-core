@@ -30,6 +30,8 @@ CONTRACT_FILES = (
     "crates/ffi/include/latexsnipper_session.h",
     "crates/ffi/include/latexsnipper_legacy.h",
     "crates/ffi/java/com/latexsnipper/core/NativeSessionBridge.java",
+    "crates/python/python/latexsnipper_core/__init__.py",
+    "crates/python/python/latexsnipper_core/__init__.pyi",
     "crates/evaluation/src/schema.rs",
     "crates/evaluation/src/int8.rs",
     "crates/evaluation/src/failure_corpus.rs",
