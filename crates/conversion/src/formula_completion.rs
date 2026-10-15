@@ -27,6 +27,8 @@ pub use candidates::{
 };
 #[path = "formula_completion_fragments.rs"]
 pub mod fragments;
+#[path = "formula_completion_preferences.rs"]
+pub mod preferences;
 #[path = "formula_completion_scoped.rs"]
 pub mod scoped;
 #[path = "formula_completion_wire.rs"]
