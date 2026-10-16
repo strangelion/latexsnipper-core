@@ -60,7 +60,7 @@
     "crates/pipeline/src": "096ce9615defb76d69c0271eebb4933cbcfd7b0f5c18f7f324b68c42a67b613f",
     "crates/plugin-wasi/src": "b031baf701cc544b266077250a0abee6907782d19023991d60ef9778c4f49eaa",
     "crates/plugin/src": "eaa2d23e1c074a6995b1faad45f2cedba979965a26ba260eeef61210f020cbbb",
-    "crates/preference-storage/src": "d3e024b1dee4006f01c11e7f4557db77a6f61ae7902afa9dbfd7a19ea4667d1d",
+    "crates/preference-storage/src": "a26bf262603515ba7b02c9fcc146a6a4b4733a5d5f9279fbd65af6f8fc9909fb",
     "crates/python/src": "1f1133748f618d69599cfa0b80796f6d76fa39ce4887734e600f8e000cfb5c8c",
     "crates/runtime/src": "eef4ddf7b37e3b9ba8ce9d36e84f98c3276522cb440457a85beb2bdf8a11c445",
     "crates/syntax/src": "f636808624324eb3702cd50914fed9dc1c185b3cd130cb1f0dc650491cd63bed",

@@ -12,6 +12,9 @@ owner/密文 SHA-256 选择记录，不保存原公式或私有密钥。文件�
 读写均持有同一 OS 文件锁，所有协作进程都必须使用此 provider。
 
 每次读取复验私有目录/文件 DACL、单硬链接、密文摘要、DPAPI 解密、owner/scope 和内层 HMAC。
+根目录 owner 必须是当前用户；文件 owner 也允许已在严格 DACL 中持有完整访问的
+SYSTEM/Administrators，以兼容提升权限 token 的默认对象所有者，不增加任何访问主体。
+Windows 的默认 owner 来自创建进程的 token，见 [微软说明](https://learn.microsoft.com/en-us/windows/win32/secauthz/owner-of-a-new-object)。
 丢失、损坏或不符的当前对象明确拒绝，不从目录挑选“最新”或旧副本，不自动初始化。
 同基线 CAS 只允许一个赢家；新 head/keys/历史作为一个完整记录被选中，不分别推进。
 错误和 Debug 不输出私有记录、密钥或路径。

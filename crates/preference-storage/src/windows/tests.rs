@@ -94,7 +94,12 @@ fn initialize(backend: &WindowsPreferenceCheckpoint) -> Session {
     session.preferences_mut().set_policy(enabled()).unwrap();
     record(&mut session, 1, "fragment:z");
     let mut stage = session.prepare(permission()).unwrap();
-    session.commit(&mut stage, permission()).unwrap();
+    if let Err(cause) = session.commit(&mut stage, permission()) {
+        panic!(
+            "fixture publication refused: {cause}; provider category: {:?}",
+            backend.read_current_record().err()
+        );
+    }
     session
 }
 
@@ -189,6 +194,32 @@ fn explicit_dpapi_publication_restores_from_a_fresh_handle_with_learning_off() {
             .object_sha256,
         head.object_sha256
     );
+}
+
+#[test]
+fn newly_created_files_accept_only_the_current_user_or_already_trusted_os_owners() {
+    let fixture = Fixture::new();
+    let backend = fixture.backend();
+    let mut options = OpenOptions::new();
+    options
+        .write(true)
+        .create_new(true)
+        .follow(FollowSymlinks::No);
+    let file = backend
+        .inner
+        .directory
+        .open_with("fixture-default-owner.bin", &options)
+        .unwrap();
+    let category = private_root::fixture_owner_category(file.as_raw_handle()).unwrap();
+    println!("Private fixture file owner category: {category}");
+    private_root::verify(file.as_raw_handle(), false).unwrap();
+    private_root::verify(backend.inner.directory.as_raw_handle(), true).unwrap();
+    drop(file);
+    backend
+        .inner
+        .directory
+        .remove_file("fixture-default-owner.bin")
+        .unwrap();
 }
 
 #[test]

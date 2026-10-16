@@ -178,6 +178,31 @@ fn bounded_sid(sid: PSID, available: usize) -> Result<()> {
     }
     Ok(())
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OwnerKind {
+    CurrentUser,
+    System,
+    Administrators,
+    Other,
+}
+fn owner_kind(owner: PSID, current_user: PSID) -> OwnerKind {
+    // SAFETY: callers hold valid SIDs from live OS descriptor/token allocations.
+    unsafe {
+        if EqualSid(owner, current_user) != 0 {
+            OwnerKind::CurrentUser
+        } else if IsWellKnownSid(owner, WinLocalSystemSid) != 0 {
+            OwnerKind::System
+        } else if IsWellKnownSid(owner, WinBuiltinAdministratorsSid) != 0 {
+            OwnerKind::Administrators
+        } else {
+            OwnerKind::Other
+        }
+    }
+}
+fn accepted_owner(kind: OwnerKind, directory: bool) -> bool {
+    kind == OwnerKind::CurrentUser
+        || (!directory && matches!(kind, OwnerKind::System | OwnerKind::Administrators))
+}
 pub(super) fn verify(handle: HANDLE, directory: bool) -> Result<()> {
     let user = UserSid::current()?;
     let mut owner = null_mut();
@@ -206,7 +231,10 @@ pub(super) fn verify(handle: HANDLE, directory: bool) -> Result<()> {
     if length == 0 || length > 64 * 1024 || owner.is_null() || acl.is_null() {
         return Err(denied());
     }
-    if unsafe { EqualSid(owner, user.as_ptr()) } == 0 {
+    // Elevated tokens may give a new file the Administrators default owner.
+    // Those OS principals already have FILE_ALL_ACCESS in our exact DACL;
+    // this changes no allowed access principal. The root still binds the user.
+    if !accepted_owner(owner_kind(owner, user.as_ptr()), directory) {
         return Err(denied());
     }
     let mut control = 0;
@@ -285,6 +313,38 @@ fn denied() -> Error {
 }
 
 #[cfg(test)]
+pub(super) fn fixture_owner_category(handle: HANDLE) -> Result<&'static str> {
+    let user = UserSid::current()?;
+    let mut owner = null_mut();
+    let mut raw = null_mut();
+    // SAFETY: live fixture handle; descriptor is an owned OS allocation.
+    if unsafe {
+        GetSecurityInfo(
+            handle,
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            &mut owner,
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            &mut raw,
+        )
+    } != 0
+        || raw.is_null()
+        || owner.is_null()
+    {
+        return Err(denied());
+    }
+    let _allocation = Allocation(raw);
+    Ok(match owner_kind(owner, user.as_ptr()) {
+        OwnerKind::CurrentUser => "current-user",
+        OwnerKind::System => "system",
+        OwnerKind::Administrators => "administrators",
+        OwnerKind::Other => "unsupported",
+    })
+}
+
+#[cfg(test)]
 pub(super) fn fixture_dacl(path: &Path, broad: bool) {
     use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
     let sid = UserSid::current().unwrap().text().unwrap();
@@ -316,5 +376,39 @@ pub(super) fn fixture_dacl(path: &Path, broad: bool) {
             ),
             0
         );
+    }
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+
+    #[test]
+    fn trusted_file_owners_never_replace_the_current_user_root_owner() {
+        let user = UserSid::current().unwrap();
+        for (sddl_owner, accepted_file) in [
+            ("SY", true),
+            ("BA", true),
+            ("WD", false),
+            ("AU", false),
+            ("BU", false),
+        ] {
+            let descriptor = descriptor(&format!("O:{sddl_owner}")).unwrap();
+            let mut owner = null_mut();
+            let mut defaulted = 0;
+            // SAFETY: live OS-parsed descriptor with an explicit owner SID.
+            assert_ne!(
+                unsafe { GetSecurityDescriptorOwner(descriptor.0, &mut owner, &mut defaulted) },
+                0
+            );
+            let kind = owner_kind(owner, user.as_ptr());
+            assert_eq!(
+                accepted_owner(kind, false),
+                accepted_file || kind == OwnerKind::CurrentUser
+            );
+            assert_eq!(accepted_owner(kind, true), kind == OwnerKind::CurrentUser);
+        }
+        assert!(accepted_owner(OwnerKind::CurrentUser, true));
+        assert!(accepted_owner(OwnerKind::CurrentUser, false));
     }
 }

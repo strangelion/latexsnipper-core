@@ -54,7 +54,7 @@ jobs:
           $fixtureRoot = Join-Path $env:RUNNER_TEMP ("snipper-preference-fixtures-" + [Guid]::NewGuid().ToString("N"))
           New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
           $env:SNIPPER_PREFERENCE_FIXTURE_PARENT = $fixtureRoot
-          cargo test --locked -p latexsnipper-preference-storage --all-targets
+          cargo test --locked -p latexsnipper-preference-storage --all-targets -- --nocapture
           $testExit = $LASTEXITCODE
           if (@(Get-ChildItem -LiteralPath $fixtureRoot -Force).Count -ne 0) {
             throw "Owned preference fixture directories were not cleaned"
