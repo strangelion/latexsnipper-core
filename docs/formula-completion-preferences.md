@@ -100,7 +100,9 @@ Rust 另有 [可信宿主事务协调器](formula-preference-transactions.md)，
 关闭存储后的空重置；独立 Windows 当前用户受保护 provider 与显式可选 C/Python 存储生命周期已有，
 其他系统/浏览器 provider、JSONL/JS 存储生命周期、应用接入及真实断电/登录会话恢复仍待完成；
 没有跨进程持久句柄、用户/项目层级合并或云端模型。
-后续先补宿主授权检索与可信存储，再比较排序后端与实际编辑体验。
+Rust 宿主授权检索已有（`FormulaPreferenceRetrievalPermission` + `retrieve_checkpoint`）：
+读取已认证检查点用于排序，与存储写入同意分离，不授权新的持久化写入。
+后续比较排序后端与实际编辑体验。
 在完成固定基准和真实反馈授权前，不宣称 Top-1、接受率或节省输入的提升。
 
 相关资料：[补全接口](formula-completion.md)、[辅助计划](formula-assistance-roadmap.md)。

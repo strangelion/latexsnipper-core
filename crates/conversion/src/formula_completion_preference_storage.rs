@@ -20,6 +20,15 @@ pub struct FormulaPreferenceStoragePermission {
     pub storage_enabled: bool,
     pub allow_sensitive_storage: bool,
 }
+/// Retrieval consent is separate from storage-write consent. A host may authorize
+/// reading stored preferences for ranking without authorizing new durable writes,
+/// and vice versa. Neither consent can enable feedback recording or ranking by itself.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FormulaPreferenceRetrievalPermission {
+    pub retrieval_enabled: bool,
+    pub allow_sensitive_retrieval: bool,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FormulaPreferenceStorageError {
     Disabled,
@@ -117,6 +126,13 @@ fn permission(permission: FormulaPreferenceStoragePermission) -> Result<()> {
         Err(FormulaPreferenceStorageError::Disabled)
     }
 }
+fn retrieval_permitted(permission: FormulaPreferenceRetrievalPermission) -> Result<()> {
+    if permission.retrieval_enabled {
+        Ok(())
+    } else {
+        Err(FormulaPreferenceStorageError::Disabled)
+    }
+}
 fn keys(feedback_key: &[u8; 32], storage_key: &[u8; 32]) -> Result<()> {
     if feedback_key == storage_key || storage_key.iter().all(|b| *b == 0) {
         Err(FormulaPreferenceStorageError::InvalidKey)
@@ -124,8 +140,8 @@ fn keys(feedback_key: &[u8; 32], storage_key: &[u8; 32]) -> Result<()> {
         Ok(())
     }
 }
-fn sensitive(events: &[Event], permission: FormulaPreferenceStoragePermission) -> Result<()> {
-    if !permission.allow_sensitive_storage && events.iter().any(|event| event.sensitive) {
+fn sensitive(events: &[Event], allow_sensitive: bool) -> Result<()> {
+    if !allow_sensitive && events.iter().any(|event| event.sensitive) {
         Err(FormulaPreferenceStorageError::SensitiveStorageDenied)
     } else {
         Ok(())
@@ -168,7 +184,7 @@ impl FormulaPreferenceStore {
                 })
                 .collect(),
         };
-        sensitive(&body.events, storage_permission)?;
+        sensitive(&body.events, storage_permission.allow_sensitive_storage)?;
         let encoded = serde_json::to_vec(&body)
             .map_err(|_| FormulaPreferenceStorageError::InvalidSnapshot)?;
         let authentication = hex(&mac(storage_key, SNAPSHOT_DOMAIN, &encoded)?
@@ -191,6 +207,7 @@ impl FormulaPreferenceStore {
     /// Restore creates a NEW owner, always with feedback/ranking disabled. No
     /// captures or receipts survive. Expected scope/checkpoint must come from
     /// current trusted host state, never from the untrusted snapshot itself.
+    /// Authorized by durable storage consent (`storage_enabled`).
     pub fn restore_checkpoint(
         scope: FormulaDefinitionScope,
         feedback_key: [u8; 32],
@@ -200,6 +217,49 @@ impl FormulaPreferenceStore {
         storage_permission: FormulaPreferenceStoragePermission,
     ) -> Result<Self> {
         permission(storage_permission)?;
+        Self::restore_authorized(
+            scope,
+            feedback_key,
+            storage_key,
+            expected_checkpoint,
+            snapshot_json,
+            storage_permission.allow_sensitive_storage,
+        )
+    }
+
+    /// Host-authorized retrieval: read an authenticated checkpoint back into a
+    /// fresh, ranking-ready owner WITHOUT authorizing durable storage writes.
+    /// Retrieval consent (`retrieval_enabled`) is independent of storage consent,
+    /// so a host may rank from restored history while storage writes stay denied.
+    pub fn retrieve_checkpoint(
+        scope: FormulaDefinitionScope,
+        feedback_key: [u8; 32],
+        storage_key: &[u8; 32],
+        expected_checkpoint: u64,
+        snapshot_json: &str,
+        retrieval_permission: FormulaPreferenceRetrievalPermission,
+    ) -> Result<Self> {
+        retrieval_permitted(retrieval_permission)?;
+        Self::restore_authorized(
+            scope,
+            feedback_key,
+            storage_key,
+            expected_checkpoint,
+            snapshot_json,
+            retrieval_permission.allow_sensitive_retrieval,
+        )
+    }
+
+    /// Shared authenticated restore. The host has already authorized this read;
+    /// `allow_sensitive` distinguishes storage-write vs retrieval consent.
+    fn restore_authorized(
+        scope: FormulaDefinitionScope,
+        feedback_key: [u8; 32],
+        storage_key: &[u8; 32],
+        expected_checkpoint: u64,
+        snapshot_json: &str,
+        allow_sensitive: bool,
+    ) -> Result<Self> {
         keys(&feedback_key, storage_key)?;
         if snapshot_json.len() > FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES {
             return Err(FormulaPreferenceStorageError::LimitExceeded);
@@ -229,7 +289,7 @@ impl FormulaPreferenceStore {
         mac(storage_key, KEY_DOMAIN, &store.key)?
             .verify_slice(&digest(&body.key_binding)?)
             .map_err(|_| FormulaPreferenceStorageError::AuthenticationFailed)?;
-        sensitive(&body.events, storage_permission)?;
+        sensitive(&body.events, allow_sensitive)?;
         let mut previous = None;
         for event in body.events {
             if event.event_id == 0 || previous.is_some_and(|id| event.event_id <= id) {
@@ -310,5 +370,97 @@ mod tests {
                 }
             );
         }
+    }
+
+    fn events(ids: &[(u64, bool)]) -> Vec<Event> {
+        ids.iter()
+            .map(|&(id, sensitive)| Event {
+                event_id: id,
+                digest: "a".repeat(64),
+                undone: false,
+                sensitive,
+            })
+            .collect()
+    }
+    fn authed_snapshot(events: Vec<Event>) -> String {
+        let mut store = FormulaPreferenceStore::new(scope(), [19; 32]).unwrap();
+        let base = store.export_checkpoint(&[27; 32], 1, permission()).unwrap();
+        let mut snapshot: Snapshot = serde_json::from_str(&base).unwrap();
+        snapshot.body.events = events;
+        let body = serde_json::to_vec(&snapshot.body).unwrap();
+        snapshot.authentication = hex(&mac(&[27; 32], SNAPSHOT_DOMAIN, &body)
+            .unwrap()
+            .finalize()
+            .into_bytes());
+        serde_json::to_string(&snapshot).unwrap()
+    }
+
+    #[test]
+    fn retrieval_requires_explicit_retrieval_consent() {
+        let mut store = FormulaPreferenceStore::new(scope(), [19; 32]).unwrap();
+        let encoded = store.export_checkpoint(&[27; 32], 1, permission()).unwrap();
+        let result = FormulaPreferenceStore::retrieve_checkpoint(
+            scope(),
+            [19; 32],
+            &[27; 32],
+            1,
+            &encoded,
+            FormulaPreferenceRetrievalPermission::default(),
+        );
+        assert_eq!(
+            result.err().unwrap(),
+            FormulaPreferenceStorageError::Disabled
+        );
+    }
+
+    #[test]
+    fn retrieval_restores_events_without_storage_consent() {
+        let encoded = authed_snapshot(events(&[(1, false), (2, false)]));
+        let retrieved = FormulaPreferenceStore::retrieve_checkpoint(
+            scope(),
+            [19; 32],
+            &[27; 32],
+            1,
+            &encoded,
+            FormulaPreferenceRetrievalPermission {
+                retrieval_enabled: true,
+                allow_sensitive_retrieval: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(retrieved.event_count(), 2);
+    }
+
+    #[test]
+    fn sensitive_retrieval_requires_allow_sensitive_retrieval() {
+        let encoded = authed_snapshot(events(&[(1, true)]));
+        let denied = FormulaPreferenceStore::retrieve_checkpoint(
+            scope(),
+            [19; 32],
+            &[27; 32],
+            1,
+            &encoded,
+            FormulaPreferenceRetrievalPermission {
+                retrieval_enabled: true,
+                allow_sensitive_retrieval: false,
+            },
+        );
+        assert_eq!(
+            denied.err().unwrap(),
+            FormulaPreferenceStorageError::SensitiveStorageDenied
+        );
+        let allowed = FormulaPreferenceStore::retrieve_checkpoint(
+            scope(),
+            [19; 32],
+            &[27; 32],
+            1,
+            &encoded,
+            FormulaPreferenceRetrievalPermission {
+                retrieval_enabled: true,
+                allow_sensitive_retrieval: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(allowed.event_count(), 1);
     }
 }
