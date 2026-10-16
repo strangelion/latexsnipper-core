@@ -2652,6 +2652,7 @@ dependencies = [
  "latexsnipper-engine",
  "latexsnipper-ffi",
  "latexsnipper-plugin",
+ "latexsnipper-preference-storage",
  "pyo3",
  "serde",
  "serde_json",

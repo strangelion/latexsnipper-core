@@ -181,6 +181,46 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked -p latexsnipper-runtime-coreml --all-targets
 
+  preference-python-windows:
+    name: Windows protected Python preference storage
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 2
+      PYTHONDONTWRITEBYTECODE: 1
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the declared wheel build frontend
+        run: python -m pip install "maturin>=1.9,<2.0"
+      - name: Test and lint the enabled native Python owner
+        run: |
+          cargo test --locked -p latexsnipper-python --features protected-preferences --lib
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --locked -p latexsnipper-python --features protected-preferences --all-targets -- -D warnings
+          exit $LASTEXITCODE
+      - name: Build the explicit storage wheel
+        run: python -m maturin build --locked --manifest-path crates/python/Cargo.toml --features protected-preferences --out target/python-protected-wheel
+      - name: Verify the actual wheel in fresh processes without installing it
+        shell: pwsh
+        run: |
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP ("snipper-python-preference-fixtures-" + [Guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
+          $env:SNIPPER_PREFERENCE_FIXTURE_PARENT = $fixtureRoot
+          $wheels = @(Get-ChildItem -LiteralPath target/python-protected-wheel -Filter '*.whl')
+          if ($wheels.Count -ne 1) { throw "Expected exactly one explicit storage wheel" }
+          python crates/python/tests/wheel_smoke.py $wheels[0].FullName --expect-protected-preferences
+          $testExit = $LASTEXITCODE
+          if (@(Get-ChildItem -LiteralPath $fixtureRoot -Force).Count -ne 0) {
+            throw "Owned Python preference fixture directories were not cleaned"
+          }
+          Remove-Item -LiteralPath $fixtureRoot
+          exit $testExit
+
   focused-tests:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest

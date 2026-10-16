@@ -2,8 +2,9 @@
 
 `latexsnipper-preference-storage` 是 workspace 内的可信宿主适配 crate，当前提供 Windows
 `WindowsPreferenceCheckpoint`。不被转换/WASM 包依赖，不自动创建用户历史、启用学习或接入应用 UI。
-已有可选 [C ABI 存储生命周期](../../docs/formula-preferences-c.md#可选-windows-受保护存储)；
-其他系统和浏览器 provider、Python/JSONL/JS 存储生命周期仍待实现。
+已有可选 [C ABI 存储生命周期](../../docs/formula-preferences-c.md#可选-windows-受保护存储) 和
+[Python 对象生命周期](../python/README.md#optional-windows-protected-preference-storage)；
+其他系统和浏览器 provider、JSONL/JS 存储生命周期仍待实现。
 
 ## 数据与发布
 
@@ -69,8 +70,14 @@ let mut session = FormulaPreferenceStorageSession::open(
 ```
 
 新 crate 尚未发布到 crates.io；以上为 workspace Rust 宿主接口。C ABI 通过显式
-`protected-preferences` 特性启用，不自动迁移普通 owner；Python/JSONL/JS 尚无系统存储生命周期，
+`protected-preferences` 特性启用，不自动迁移普通 owner；Python 同样可显式启用，JSONL/JS 尚无系统存储生命周期，
 也不代表 Office 已接入。
+
+C/Python 工厂共用 `WindowsPreferenceOpenRequest` 的闭合 schema 与显式 `open()`，避免
+初始化/恢复语义分歧。请求不实现 Debug/Serialize、不含 keys，不授予用户同意；绑定先把编码输入
+限制在 16 KiB，直接使用 Rust 反序列化的宿主同样须限制自己的传输预算。
+`OpenedWindowsPreferenceStorage` 返回同一 session 和 backend，供可信宿主做候选反馈、限定清理
+和实际目录 capability 重叠检查；`WindowsPreferenceSessionError` 只返回静态代码与脱敏说明。
 
 ## 清理与故障边界
 

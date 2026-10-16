@@ -334,7 +334,89 @@ Errors retain `PREFERENCE_STORAGE_DISABLED`, `INVALID_SNAPSHOT`,
 `SCOPE_MISMATCH`, `LIMIT_EXCEEDED` or `INVALID_ARGUMENT`; they do not echo metadata.
 HMAC is not encryption, secure erasure or independent rollback prevention.
 See [checkpoint storage/clear boundaries](../../docs/formula-preference-checkpoints.md)
-before implementing a durable host provider; no provider is included here.
+before implementing a durable host provider. These raw checkpoint methods do not
+perform storage IO; the separate explicit Windows lifecycle below is opt-in.
+
+## Optional Windows protected preference storage
+
+Build a dedicated wheel with `--features protected-preferences`. Ordinary wheels,
+other platforms and ordinary `FormulaPreferences(scope=..., key=...)` instances
+do not silently acquire storage. `FormulaPreferences.storage_capabilities()` is
+available in every wheel; unsupported `open_windows` explicitly raises
+`PREFERENCE_STORAGE_UNAVAILABLE` without directory IO.
+Discovery reports compiled support, not a validated directory/profile or current
+user consent; the explicit factory can still refuse unavailable native storage.
+
+```python
+from latexsnipper_core import FormulaPreferences
+
+# Values and current consent come from trusted application code, not a plugin.
+request = {
+    "schemaVersion": 1, "owner": "example.formula-completion.v1",
+    "identity": host_identity,
+    "persistence": "logon-session", "operationTimeoutMs": 5000,
+    "permission": current_storage_permission,
+    "action": {"kind": "create-new", "parentPath": trusted_parent,
+               "directoryName": "preferences", "generation": "0"},
+}
+with FormulaPreferences.open_windows(request=request) as preferences:
+    # Capture/rank/record/undo retain their existing opaque-object API.
+    # Learning remains off until the host explicitly sets an authorized policy.
+    stage = preferences.prepare_storage(permission=current_storage_permission)
+    preferences.commit_storage(stage, permission=current_storage_permission)
+```
+
+The closed request shares the [C factory schema](../../docs/formula-preferences-c.md#可选-windows-受保护存储),
+including explicit `open-existing` and `initialize-existing` actions, stable
+identity and canonical decimal-u64 generation **strings inside request metadata**.
+Encoded UTF-8 is limited to 16 KiB; missing/corrupt state never falls back to
+initialization. Keys are generated internally and never returned. No global
+Python owner registry or transferable numeric handles are introduced.
+
+This is a trusted native-host interface, not a guest/MCP RPC. The host must keep
+the private root and physical aliases/ancestors/descendants outside every guest
+directory grant at execution boundaries. Metadata flags/path strings cannot prove
+actual consent/isolation. Rust embedders can use the returned provider's physical
+`check_no_directory_overlap` check; see the [native provider threat boundary](../preference-storage/README.md).
+
+`prepare_storage(permission=...)` returns a non-constructible, non-pickleable
+`FormulaPreferenceStorageStage` with read-only Python integer `checkpoint`,
+`revision`, `event_count`, and boolean `clear` properties. Each instance retains
+at most four stages. Discard explicitly with `discard_storage_stage(stage)`;
+dropping the Python token does not implicitly publish or discard its native stage.
+Cross-instance, consumed, discarded and old-base stages raise
+`PREFERENCE_STAGE_NOT_FOUND`. Prepare reserves capacity before advancing export
+sequence, and successful adoption invalidates other old-base stages. Feedback
+accepted after prepare remains live rather than being replaced by the older save.
+
+`commit_storage(stage, permission=...)` rechecks current consent and publishes once.
+`reconcile_storage(stage, permission=...)` explicitly reads back `"applied"` or
+`"unchanged"`, never replays publication. Failure/unchanged keeps the stage;
+conflict/uncertainty fences ordinary saves. Discard is not reconciliation, disk
+undo or cancellation. Errors retain the native static codes with no paths/keys
+or private metadata; only `PREFERENCE_BUSY` is retryable, not authority to replay IO.
+
+`prepare_storage_clear(generation=...)` takes a strict Python u64 **integer**, not
+bool/float/string. It rotates both keys and creates an empty epoch above local and
+protected generations. Only this explicit empty reset may commit/reconcile while
+storage is disabled. Successful clear invalidates old opaque feedback and stages,
+keeps the current process policy, and requires a new catalog generation/query;
+subsequent reopen still has learning off. Raw `clear`/`export_checkpoint` refuse
+managed instances with `PREFERENCE_STORAGE_MANAGED`.
+
+`cleanup_storage(maximum=...)` explicitly removes at most 1–128 old objects and
+returns `inspected/removed/more`; current head/object/lock/tombstone remain. Failure
+can follow partial cleanup; it is not backup erasure. Close/context exit/GC discard
+memory only, without saving pending feedback or deleting protected state.
+
+Native work releases the GIL and uses an instance try-lock. Concurrent operations,
+including close, return `PREFERENCE_BUSY` without removing/replaying the instance;
+different objects stay independent. Native OS calls are synchronous and cannot be
+forcibly cancelled: the 1–30000 ms provider timeout is checked at operation
+boundaries. Run IO off the UI thread. Real wheel tests include a held Windows
+file lock to observe live GIL/busy behavior, cold-process restore and exact owned
+fixture cleanup; they do not prove power-loss, logout/relogin, other filesystems,
+guest deployment isolation, Python/OS combinations or application consent UI.
 
 ## Explicit registered conversion
 

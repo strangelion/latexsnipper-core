@@ -14,6 +14,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("wheel", type=Path)
     parser.add_argument("--expect-wasi", action="store_true")
+    parser.add_argument("--expect-protected-preferences", action="store_true")
     parser.add_argument("--fixture-store", type=Path)
     args = parser.parse_args()
     tests = Path(__file__).resolve().parent
@@ -34,13 +35,16 @@ def main() -> None:
         env["PYTHONPATH"] = str(root)
         env["SNIPPER_EXPECTED_WHEEL_ROOT"] = str(root)
         env["SNIPPER_EXPECTED_WASI"] = "1" if args.expect_wasi else "0"
+        env["SNIPPER_EXPECTED_PROTECTED_PREFERENCES"] = "1" if args.expect_protected_preferences else "0"
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         check = """import os
 from pathlib import Path
 import latexsnipper_core._native as native
-from latexsnipper_core import FormulaRegistry
+from latexsnipper_core import FormulaRegistry, FormulaPreferences
 assert Path(native.__file__).resolve().is_relative_to(Path(os.environ['SNIPPER_EXPECTED_WHEEL_ROOT']).resolve())
 with FormulaRegistry() as registry:
     assert registry.info()['wasiFormulaCompiled'] == (os.environ['SNIPPER_EXPECTED_WASI'] == '1')
+assert FormulaPreferences.storage_capabilities()['available'] == (os.environ['SNIPPER_EXPECTED_PROTECTED_PREFERENCES'] == '1')
 print('Verified wheel-native origin and explicit feature identity')
 """
         subprocess.run([sys.executable, "-c", check], env=env, cwd=root, check=True, timeout=120)
@@ -49,6 +53,7 @@ print('Verified wheel-native origin and explicit feature identity')
         if args.fixture_store is not None:
             command += ["--fixture-store", str(args.fixture_store.resolve())]
         subprocess.run(command, env=env, cwd=root, check=True, timeout=180)
+        subprocess.run([sys.executable, str(tests / "preference_storage_smoke.py")], env=env, cwd=root, check=True, timeout=180)
     print("Extracted wheel smoke passed; isolated native files removed")
 
 

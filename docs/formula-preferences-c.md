@@ -162,6 +162,7 @@ stage 是内存路由标识，不是凭据；不接受其他 owner 的 stage。�
 
 真实 Windows DLL 和 MSVC C11/C++17 头文件/链接检查由 smoke 消费器验证；其他平台和发布包仍以 CI/实际产物验证为准。
 JSONL/WASM-JS 也已有独立内存态偏好和显式检查点绑定。
-其他语言的受保护存储、其他 OS provider、断电/注销重登、实际部署隔离、跨文档合并及学习效果验收仍开放。
+Python 另有同一共享工厂和拥有对象的可选存储生命周期；JSONL/JS 存储、其他 OS provider、
+断电/注销重登、实际部署隔离、跨文档合并及学习效果验收仍开放。
 
 相关资料：[Core 偏好边界](formula-completion-preferences.md)、[补全接口](formula-completion.md)。

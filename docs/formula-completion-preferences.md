@@ -91,8 +91,8 @@ WASM-JS 另有完整/精简包共用的拥有对象及 Worker 路线；实例隔
 Rust/C/Python/JSONL/WASM-JS 另有默认关闭的显式认证检查点，复验当前作用域、key 绑定、检查点和敏感存储许可，
 恢复后不启用策略或复活旧反馈令牌，见 [检查点边界](formula-preference-checkpoints.md)。
 Rust 另有 [可信宿主事务协调器](formula-preference-transactions.md)，支持 CAS、不确定写入后明确回读、
-关闭存储后的空重置；独立 Windows 当前用户受保护 provider 与显式可选 C ABI 存储生命周期已有，
-其他系统/浏览器 provider、其余存储绑定、应用接入及真实断电/登录会话恢复仍待完成；
+关闭存储后的空重置；独立 Windows 当前用户受保护 provider 与显式可选 C/Python 存储生命周期已有，
+其他系统/浏览器 provider、JSONL/JS 存储生命周期、应用接入及真实断电/登录会话恢复仍待完成；
 没有跨进程持久句柄、用户/项目层级合并或云端模型。
 后续先补宿主授权检索与可信存储，再比较排序后端与实际编辑体验。
 在完成固定基准和真实反馈授权前，不宣称 Top-1、接受率或节省输入的提升。

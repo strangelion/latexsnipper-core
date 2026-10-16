@@ -26,6 +26,10 @@ serde_json = { workspace = true, features = ["raw_value"] }
 [features]
 default = []
 wasi-formula = ["latexsnipper-ffi/wasi-formula"]
+protected-preferences = ["dep:latexsnipper-preference-storage"]
+
+[target.'cfg(windows)'.dependencies]
+latexsnipper-preference-storage = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"

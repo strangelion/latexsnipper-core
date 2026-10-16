@@ -2,105 +2,26 @@
 use super::*;
 use latexsnipper_conversion::formula_completion::preferences::persistence::transactions::*;
 use latexsnipper_preference_storage::{
-    windows::{generate_host_keys, WindowsPreferenceCheckpoint, WindowsPreferencePersistence},
+    windows::{
+        generate_host_keys, WindowsPreferenceCheckpoint, WindowsPreferenceOpenRequest,
+        WindowsPreferenceSessionError,
+    },
     PreferenceProviderError,
 };
-use std::path::Path;
-use std::time::Duration;
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct Open {
-    schema_version: u16,
-    owner: String,
-    identity: Identity,
-    persistence: Persistence,
-    operation_timeout_ms: u32,
-    permission: FormulaPreferenceStoragePermission,
-    action: Action,
-}
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Identity {
-    user_sha256: String,
-    project_sha256: Option<String>,
-    document_sha256: Option<String>,
-}
-impl From<Identity> for FormulaPreferenceStorageIdentity {
-    fn from(value: Identity) -> Self {
-        Self {
-            user_sha256: value.user_sha256,
-            project_sha256: value.project_sha256,
-            document_sha256: value.document_sha256,
-        }
-    }
-}
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
-enum Persistence {
-    LogonSession,
-    ThisUserThisComputer,
-}
-impl From<Persistence> for WindowsPreferencePersistence {
-    fn from(value: Persistence) -> Self {
-        match value {
-            Persistence::LogonSession => Self::LogonSession,
-            Persistence::ThisUserThisComputer => Self::ThisUserThisComputer,
-        }
-    }
-}
-#[derive(Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "kebab-case",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-enum Action {
-    OpenExisting {
-        root_path: String,
-    },
-    InitializeExisting {
-        root_path: String,
-        generation: Decimal,
-    },
-    CreateNew {
-        parent_path: String,
-        directory_name: String,
-        generation: Decimal,
-    },
+#[serde(transparent)]
+pub(super) struct Open(WindowsPreferenceOpenRequest);
+
+fn session_error(value: WindowsPreferenceSessionError) -> AdapterError {
+    error(value.code(), &value.to_string())
 }
 
 fn provider_error(value: PreferenceProviderError) -> AdapterError {
-    let code = match value {
-        PreferenceProviderError::InvalidConfiguration => "INVALID_ARGUMENT",
-        PreferenceProviderError::PrivateDirectoryRequired => "PRIVATE_DIRECTORY_REQUIRED",
-        PreferenceProviderError::Unavailable => "PREFERENCE_PROVIDER_UNAVAILABLE",
-        PreferenceProviderError::InvalidRecord => "INVALID_PROTECTED_RECORD",
-        PreferenceProviderError::IntegrityMismatch => "PREFERENCE_INTEGRITY_MISMATCH",
-        PreferenceProviderError::DeadlineExceeded => "PREFERENCE_DEADLINE_EXCEEDED",
-        PreferenceProviderError::CleanupLimit => "PREFERENCE_CLEANUP_LIMIT",
-    };
-    error(code, &value.to_string())
+    session_error(value.into())
 }
 fn transaction_error(value: FormulaPreferenceTransactionError) -> AdapterError {
-    if let FormulaPreferenceTransactionError::Storage(value) = value {
-        return storage_error(value);
-    }
-    let code = match value {
-        FormulaPreferenceTransactionError::InvalidRecord => "INVALID_PROTECTED_RECORD",
-        FormulaPreferenceTransactionError::IdentityMismatch => "PREFERENCE_IDENTITY_MISMATCH",
-        FormulaPreferenceTransactionError::NotFound => "PREFERENCE_STORAGE_NOT_FOUND",
-        FormulaPreferenceTransactionError::ProviderUnavailable => "PREFERENCE_PROVIDER_UNAVAILABLE",
-        FormulaPreferenceTransactionError::StaleTransaction => "PREFERENCE_STALE_TRANSACTION",
-        FormulaPreferenceTransactionError::Conflict => "PREFERENCE_CONFLICT",
-        FormulaPreferenceTransactionError::NotCommitted => "PREFERENCE_NOT_COMMITTED",
-        FormulaPreferenceTransactionError::Indeterminate => "PREFERENCE_INDETERMINATE",
-        FormulaPreferenceTransactionError::RecoveryRequired => "PREFERENCE_RECOVERY_REQUIRED",
-        FormulaPreferenceTransactionError::Exhausted => "LIMIT_EXCEEDED",
-        FormulaPreferenceTransactionError::Storage(_) => unreachable!(),
-    };
-    error(code, &value.to_string())
+    session_error(value.into())
 }
 
 type Session = FormulaPreferenceStorageSession<WindowsPreferenceCheckpoint>;
@@ -127,97 +48,10 @@ pub(super) struct Outcome {
 
 impl Open {
     pub(super) fn open(self) -> Result<ProtectedOwner> {
-        if self.schema_version != 1 {
-            return Err(error(
-                "VERSION_MISMATCH",
-                "Unsupported preference storage schema.",
-            ));
-        }
-        // Consent is checked before any directory/provider IO, even provisioning.
-        if !self.permission.storage_enabled {
-            return Err(storage_error(FormulaPreferenceStorageError::Disabled));
-        }
-        let identity: FormulaPreferenceStorageIdentity = self.identity.into();
-        let persistence = self.persistence.into();
-        let timeout = Duration::from_millis(self.operation_timeout_ms.into());
-        let (backend, generation) = match self.action {
-            Action::OpenExisting { root_path } => (
-                WindowsPreferenceCheckpoint::open_verified_private_root(
-                    Path::new(&root_path),
-                    &self.owner,
-                    identity.clone(),
-                    persistence,
-                    timeout,
-                )
-                .map_err(provider_error)?,
-                None,
-            ),
-            Action::InitializeExisting {
-                root_path,
-                generation,
-            } => (
-                WindowsPreferenceCheckpoint::open_verified_private_root(
-                    Path::new(&root_path),
-                    &self.owner,
-                    identity.clone(),
-                    persistence,
-                    timeout,
-                )
-                .map_err(provider_error)?,
-                Some(generation.0),
-            ),
-            Action::CreateNew {
-                parent_path,
-                directory_name,
-                generation,
-            } => (
-                WindowsPreferenceCheckpoint::create_private_root(
-                    Path::new(&parent_path),
-                    &directory_name,
-                    &self.owner,
-                    identity.clone(),
-                    persistence,
-                    timeout,
-                )
-                .map_err(provider_error)?,
-                Some(generation.0),
-            ),
-        };
-        let owner = backend.owner_sha256().to_owned();
-        let session = match generation {
-            None => Session::open(backend.clone(), owner, identity, self.permission)
-                .map_err(transaction_error)?,
-            Some(generation) => {
-                // Explicit initialization never falls back from missing/corrupt
-                // restore, and CAS(None) still protects the later publication race.
-                if backend
-                    .read_current_record()
-                    .map_err(provider_error)?
-                    .is_some()
-                {
-                    return Err(error(
-                        "PREFERENCE_ALREADY_INITIALIZED",
-                        "Protected preference state already exists.",
-                    ));
-                }
-                let scope = FormulaDefinitionScope {
-                    user_sha256: identity.user_sha256,
-                    project_sha256: identity.project_sha256,
-                    document_sha256: identity.document_sha256,
-                    generation,
-                };
-                Session::new(
-                    backend.clone(),
-                    owner,
-                    scope,
-                    generate_host_keys().map_err(provider_error)?,
-                )
-                .map_err(transaction_error)?
-            }
-        };
+        let opened = self.0.open().map_err(session_error)?;
         Ok(ProtectedOwner {
-            session,
-            backend,
+            session: opened.session,
+            backend: opened.backend,
             stages: BTreeMap::new(),
         })
     }

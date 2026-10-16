@@ -33,6 +33,10 @@ use zeroize::{Zeroize, Zeroizing};
 
 mod isolation;
 mod private_root;
+mod session;
+pub use session::{
+    OpenedWindowsPreferenceStorage, WindowsPreferenceOpenRequest, WindowsPreferenceSessionError,
+};
 #[cfg(test)]
 mod tests;
 type Result<T> = std::result::Result<T, Error>;

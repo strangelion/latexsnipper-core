@@ -109,7 +109,8 @@ LaTeXSnipper Core is more than an image-to-LaTeX wrapper. It provides a shared d
   and a bounded local JSONL worker reuse model/runtime state across requests.
 - **Explicit preference persistence** — authenticated checkpoints and an opt-in
   [Windows trusted storage provider](crates/preference-storage/README.md), separate
-  from conversion/WASM dependencies, with an explicit opt-in [C lifecycle](docs/formula-preferences-c.md#可选-windows-受保护存储).
+  from conversion/WASM dependencies, with explicit opt-in [C](docs/formula-preferences-c.md#可选-windows-受保护存储)
+  and [Python](crates/python/README.md#optional-windows-protected-preference-storage) lifecycles.
   Learning stays off after restore; closing never silently saves.
 - **Security-oriented parsing** — signature-first detection, bounded archive/XML processing, safe package paths, checksum verification, and structured failures.
 - **Drawing contracts and compilation** — source-preserving Drawing documents, Core-owned Office payload/readiness schemas, sanitized SVG, and fail-closed supervised TikZ/PGFPlots and Graphviz routes. See [Drawing domain and adapter policy](docs/drawing-domain.md).

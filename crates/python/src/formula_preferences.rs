@@ -1,4 +1,5 @@
-//! Explicit owned preference objects. No process-global registry or disk IO.
+//! Explicit owned preference objects. Storage is opt-in, never automatic.
+use std::ops::{Deref, DerefMut};
 use std::sync::{Mutex, MutexGuard, TryLockError};
 
 use latexsnipper_conversion::formula_completion::preferences::persistence::*;
@@ -13,6 +14,18 @@ use serde_json::json;
 use crate::formula_completion::{encode_result, input_format, revision, scoped_completion_error};
 use crate::formula_fragments::{catalog, dict_json_utf8, snapshot};
 use crate::{json_to_python, python_error, BindingError};
+
+#[cfg(all(windows, feature = "protected-preferences"))]
+mod windows_storage;
+const MAX_STORAGE_OPEN_BYTES: usize = 16 * 1024;
+const MAX_PREPARED_STAGES: usize = 4;
+
+fn unavailable_storage() -> BindingError {
+    error(
+        "PREFERENCE_STORAGE_UNAVAILABLE",
+        "This instance/build has no enabled protected preference storage provider.",
+    )
+}
 
 fn error(code: &str, message: &str) -> BindingError {
     BindingError {
@@ -91,12 +104,74 @@ pub struct PreferenceReceipt {
     value: FormulaPreferenceReceipt,
 }
 
+/// Opaque stage identity; read-only metadata is not a permission credential.
+#[pyclass(
+    frozen,
+    name = "FormulaPreferenceStorageStage",
+    module = "latexsnipper_core._native"
+)]
+pub struct PreferenceStorageStage {
+    #[cfg(all(windows, feature = "protected-preferences"))]
+    id: u64,
+    #[cfg(all(windows, feature = "protected-preferences"))]
+    owner: std::sync::Weak<()>,
+    #[pyo3(get)]
+    checkpoint: u64,
+    #[pyo3(get)]
+    revision: u64,
+    #[pyo3(get)]
+    event_count: usize,
+    #[pyo3(get)]
+    clear: bool,
+}
+
+enum OwnerCore {
+    Memory(Box<FormulaPreferenceStore>),
+    #[cfg(all(windows, feature = "protected-preferences"))]
+    Protected(Box<windows_storage::ProtectedOwner>),
+}
+impl Deref for OwnerCore {
+    type Target = FormulaPreferenceStore;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Memory(core) => core,
+            #[cfg(all(windows, feature = "protected-preferences"))]
+            Self::Protected(owner) => owner.storage.session.preferences(),
+        }
+    }
+}
+impl DerefMut for OwnerCore {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Memory(core) => core,
+            #[cfg(all(windows, feature = "protected-preferences"))]
+            Self::Protected(owner) => owner.storage.session.preferences_mut(),
+        }
+    }
+}
+impl OwnerCore {
+    fn is_protected(&self) -> bool {
+        match self {
+            Self::Memory(_) => false,
+            #[cfg(all(windows, feature = "protected-preferences"))]
+            Self::Protected(_) => true,
+        }
+    }
+    #[cfg(all(windows, feature = "protected-preferences"))]
+    fn protected(&mut self) -> Result<&mut windows_storage::ProtectedOwner, BindingError> {
+        match self {
+            Self::Protected(owner) => Ok(owner),
+            Self::Memory(_) => Err(unavailable_storage()),
+        }
+    }
+}
+
 #[pyclass(frozen, module = "latexsnipper_core._native")]
 pub struct FormulaPreferences {
-    state: Mutex<Option<FormulaPreferenceStore>>,
+    state: Mutex<Option<OwnerCore>>,
 }
 impl FormulaPreferences {
-    fn lock(&self) -> Result<MutexGuard<'_, Option<FormulaPreferenceStore>>, BindingError> {
+    fn lock(&self) -> Result<MutexGuard<'_, Option<OwnerCore>>, BindingError> {
         self.state.try_lock().map_err(|cause| match cause {
             TryLockError::WouldBlock => error(
                 "PREFERENCE_BUSY",
@@ -110,6 +185,12 @@ impl FormulaPreferences {
     fn with_store<T>(
         &self,
         action: impl FnOnce(&mut FormulaPreferenceStore) -> Result<T, BindingError>,
+    ) -> Result<T, BindingError> {
+        self.with_owner(|owner| action(owner))
+    }
+    fn with_owner<T>(
+        &self,
+        action: impl FnOnce(&mut OwnerCore) -> Result<T, BindingError>,
     ) -> Result<T, BindingError> {
         let mut state = self.lock()?;
         action(
@@ -134,7 +215,7 @@ impl FormulaPreferences {
             })
             .map_err(|cause| python_error(py, cause))?;
         Ok(Self {
-            state: Mutex::new(Some(state)),
+            state: Mutex::new(Some(OwnerCore::Memory(Box::new(state)))),
         })
     }
 
@@ -177,8 +258,158 @@ impl FormulaPreferences {
             })
             .map_err(|cause| python_error(py, cause))?;
         Ok(Self {
-            state: Mutex::new(Some(state)),
+            state: Mutex::new(Some(OwnerCore::Memory(Box::new(state)))),
         })
+    }
+
+    /// Feature discovery does not open a directory or enable storage consent.
+    #[staticmethod]
+    fn storage_capabilities(py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let encoded=encode_result(&json!({"schemaVersion":1,"available":cfg!(all(windows,feature="protected-preferences")),
+            "provider":"windows-dpapi","maxOpenRequestBytes":MAX_STORAGE_OPEN_BYTES,
+            "maxPreparedStages":MAX_PREPARED_STAGES,"opaqueStages":true,"globalOwnerRegistry":false,
+            "keysReturned":false,"automaticStorage":false}))
+            .map_err(|cause|python_error(py,cause))?;
+        json_to_python(py, encoded)
+    }
+
+    /// Explicit trusted-host opening; never expose to a guest/plugin as an RPC.
+    #[staticmethod]
+    #[pyo3(signature=(*,request))]
+    fn open_windows(py: Python<'_>, request: &Bound<'_, PyDict>) -> PyResult<Self> {
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        {
+            let encoded = dict_json_utf8(request)?;
+            let state = py
+                .detach(move || windows_storage::ProtectedOwner::open(&encoded))
+                .map_err(|cause| python_error(py, cause))?;
+            Ok(Self {
+                state: Mutex::new(Some(OwnerCore::Protected(Box::new(state)))),
+            })
+        }
+        #[cfg(not(all(windows, feature = "protected-preferences")))]
+        {
+            let _ = request;
+            Err(python_error(py, unavailable_storage()))
+        }
+    }
+
+    #[pyo3(signature=(*,permission))]
+    fn prepare_storage(
+        &self,
+        py: Python<'_>,
+        permission: &Bound<'_, PyDict>,
+    ) -> PyResult<PreferenceStorageStage> {
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        {
+            let encoded = dict_json_utf8(permission)?;
+            py.detach(move || {
+                self.with_owner(|owner| owner.protected()?.prepare(decode(&encoded)?))
+            })
+            .map_err(|cause| python_error(py, cause))
+        }
+        #[cfg(not(all(windows, feature = "protected-preferences")))]
+        {
+            let _ = permission;
+            Err(python_error(py, unavailable_storage()))
+        }
+    }
+
+    #[pyo3(signature=(*,generation))]
+    fn prepare_storage_clear(
+        &self,
+        py: Python<'_>,
+        generation: &Bound<'_, PyAny>,
+    ) -> PyResult<PreferenceStorageStage> {
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        {
+            let generation = revision(generation).map_err(|cause| python_error(py, cause))?;
+            py.detach(move || self.with_owner(|owner| owner.protected()?.prepare_clear(generation)))
+                .map_err(|cause| python_error(py, cause))
+        }
+        #[cfg(not(all(windows, feature = "protected-preferences")))]
+        {
+            let _ = generation;
+            Err(python_error(py, unavailable_storage()))
+        }
+    }
+
+    #[pyo3(signature=(stage,*,permission))]
+    fn commit_storage(
+        &self,
+        py: Python<'_>,
+        stage: &PreferenceStorageStage,
+        permission: &Bound<'_, PyDict>,
+    ) -> PyResult<()> {
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        {
+            let encoded = dict_json_utf8(permission)?;
+            py.detach(move || {
+                self.with_owner(|owner| owner.protected()?.commit(stage, decode(&encoded)?))
+            })
+            .map_err(|cause| python_error(py, cause))
+        }
+        #[cfg(not(all(windows, feature = "protected-preferences")))]
+        {
+            let _ = (stage, permission);
+            Err(python_error(py, unavailable_storage()))
+        }
+    }
+
+    #[pyo3(signature=(stage,*,permission))]
+    fn reconcile_storage(
+        &self,
+        py: Python<'_>,
+        stage: &PreferenceStorageStage,
+        permission: &Bound<'_, PyDict>,
+    ) -> PyResult<&'static str> {
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        {
+            let encoded = dict_json_utf8(permission)?;
+            py.detach(move || {
+                self.with_owner(|owner| owner.protected()?.reconcile(stage, decode(&encoded)?))
+            })
+            .map_err(|cause| python_error(py, cause))
+        }
+        #[cfg(not(all(windows, feature = "protected-preferences")))]
+        {
+            let _ = (stage, permission);
+            Err(python_error(py, unavailable_storage()))
+        }
+    }
+
+    fn discard_storage_stage(
+        &self,
+        py: Python<'_>,
+        stage: &PreferenceStorageStage,
+    ) -> PyResult<()> {
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        {
+            py.detach(|| self.with_owner(|owner| owner.protected()?.discard(stage)))
+                .map_err(|cause| python_error(py, cause))
+        }
+        #[cfg(not(all(windows, feature = "protected-preferences")))]
+        {
+            let _ = stage;
+            Err(python_error(py, unavailable_storage()))
+        }
+    }
+
+    #[pyo3(signature=(*,maximum))]
+    fn cleanup_storage(&self, py: Python<'_>, maximum: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        {
+            let maximum = revision(maximum).map_err(|cause| python_error(py, cause))?;
+            let encoded = py
+                .detach(move || self.with_owner(|owner| owner.protected()?.cleanup(maximum)))
+                .map_err(|cause| python_error(py, cause))?;
+            json_to_python(py, encoded)
+        }
+        #[cfg(not(all(windows, feature = "protected-preferences")))]
+        {
+            let _ = maximum;
+            Err(python_error(py, unavailable_storage()))
+        }
     }
 
     #[pyo3(signature = (*, storage_key, checkpoint, permission))]
@@ -194,7 +425,13 @@ impl FormulaPreferences {
         let permission = dict_json_utf8(permission)?;
         py.detach(move || {
             let permission = decode::<FormulaPreferenceStoragePermission>(&permission)?;
-            self.with_store(|state| {
+            self.with_owner(|state| {
+                if state.is_protected() {
+                    return Err(error(
+                        "PREFERENCE_STORAGE_MANAGED",
+                        "Protected owners do not expose keys or raw checkpoint export.",
+                    ));
+                }
                 state
                     .export_checkpoint(&storage_key, checkpoint, permission)
                     .map_err(storage_error)
@@ -213,15 +450,25 @@ impl FormulaPreferences {
     fn info(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let encoded = py
             .detach(|| {
-                self.with_store(|state| encode_result(&json!({
-            "schemaVersion": 1, "scope": state.scope(), "policy": state.policy(),
-            "eventCount": state.event_count(), "maxEvents": FORMULA_PREFERENCE_MAX_EVENTS,
-            "inMemory": true, "persistence": false, "automaticCapture": false,
-            "authenticatedCheckpoints": true, "automaticStorage": false,
-            "maxSnapshotBytes": FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES,
-            "opaqueFeedbackObjects": true, "maxCatalogBytes": 1024 * 1024,
-            "maxResultDataBytes": 1024 * 1024, "maxMetadataBytes": 4096
-        })))
+                self.with_owner(|state| {
+                    let value = json!({
+                    "schemaVersion": 1, "scope": state.scope(), "policy": state.policy(),
+                    "eventCount": state.event_count(), "maxEvents": FORMULA_PREFERENCE_MAX_EVENTS,
+                    "inMemory": true, "persistence": false, "automaticCapture": false,
+                    "authenticatedCheckpoints": true, "automaticStorage": false,
+                    "maxSnapshotBytes": FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES,
+                    "opaqueFeedbackObjects": true, "maxCatalogBytes": 1024 * 1024,
+                    "maxResultDataBytes": 1024 * 1024, "maxMetadataBytes": 4096
+                        });
+                    #[cfg(all(windows, feature = "protected-preferences"))]
+                    if let OwnerCore::Protected(owner) = state {
+                        let mut value = value;
+                        value["persistence"] = json!(true);
+                        value["protectedStorage"] = owner.info();
+                        return encode_result(&value);
+                    }
+                    encode_result(&value)
+                })
             })
             .map_err(|cause| python_error(py, cause))?;
         json_to_python(py, encoded)
@@ -336,7 +583,15 @@ impl FormulaPreferences {
         let generation = revision(generation).map_err(|cause| python_error(py, cause))?;
         let key = host_key(key)?;
         py.detach(move || {
-            self.with_store(|state| state.clear(generation, key).map_err(preference_error))
+            self.with_owner(|state| {
+                if state.is_protected() {
+                    return Err(error(
+                        "PREFERENCE_STORAGE_MANAGED",
+                        "Use an explicit protected clear transaction.",
+                    ));
+                }
+                state.clear(generation, key).map_err(preference_error)
+            })
         })
         .map_err(|cause| python_error(py, cause))
     }
@@ -392,7 +647,9 @@ mod tests {
             generation: 0,
         };
         let instance = FormulaPreferences {
-            state: Mutex::new(Some(FormulaPreferenceStore::new(scope, [42; 32]).unwrap())),
+            state: Mutex::new(Some(OwnerCore::Memory(Box::new(
+                FormulaPreferenceStore::new(scope, [42; 32]).unwrap(),
+            )))),
         };
         let mut lock = instance.lock().unwrap();
         assert_eq!(

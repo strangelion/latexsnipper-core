@@ -80,7 +80,7 @@ C ABI 提供 `export-checkpoint` 命令及独立 `latexsnipper_formula_preferenc
 Python 提供 `export_checkpoint` 与静态 `restore_checkpoint`，检查点使用严格 Python u64 int，
 返回独立拥有对象并释放 GIL；见 [Python 接口](../crates/python/README.md#explicit-preference-checkpoints)。
 两者的原始检查点入口均要求独立存储许可和 key，不代管磁盘、系统密钥或用户同意。
-C ABI 另有可选 Windows 受保护存储对象，原始检查点与受保护生命周期分开，不自动保存或恢复授权。
+C/Python 另有可选 Windows 受保护存储对象，原始检查点与受保护生命周期分开，不自动保存或恢复授权。
 JSONL 提供 `export-checkpoint` 及 `formula.preferences.restore`；恢复在新 Worker 命名空间创建
 默认关闭的 owner，不恢复旧路由标识。请求行仍限制 1 MiB，检查点字符串限制 256 KiB，
 见 [JSONL 接口](../crates/worker/README.md#explicit-authenticated-checkpoints)。

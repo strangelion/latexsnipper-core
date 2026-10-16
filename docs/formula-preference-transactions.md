@@ -3,8 +3,8 @@
 Rust `formula_completion::preferences::persistence::transactions` 协调检查点发布、
 显式回读和清空。它可用于原生或 WASM 宿主，不访问文件、系统密钥库、浏览器存储或网络，
 也不授予用户同意。独立的 [Windows 原生 provider](../crates/preference-storage/README.md) 已有，
-Windows 可选 C ABI 已接显式工厂、有限 stage、提交/回读/清空和限定清理；
-其他系统/浏览器 provider、其余语言的存储绑定和应用接入仍待实现。
+Windows 可选 C/Python 已接共享显式工厂、有限 stage、提交/回读/清空和限定清理；
+其他系统/浏览器 provider、JSONL/JS 存储生命周期和应用接入仍待实现。
 
 ## 宿主与 provider 的责任
 
@@ -94,7 +94,8 @@ revision/generation 到达 u64::MAX 时明确拒绝回绕；checkpoint 到顶可
 明确回读、敏感许可变化、关闭存储后清空、旧实例/令牌失效、上限与整数耗尽。
 这证明协调逻辑，不证明磁盘加密、OS 密钥隔离、跨进程 CAS、真实断电或登录会话持久性。
 Windows provider 另有真实文件/系统凭据、双进程 CAS、五处终止恢复和限定清理验证，见其独立文档。
-Windows C ABI 的有限生命周期另见 [接口文档](formula-preferences-c.md#可选-windows-受保护存储)；
-其他系统/浏览器 provider、备份清理和其余绑定/应用存储生命周期验收继续保留待办。
+Windows C ABI 的有限生命周期另见 [接口文档](formula-preferences-c.md#可选-windows-受保护存储)，
+Python 保留同一 Core 拥有对象及不透明暂存令牌，见其 [存储接口](../crates/python/README.md#optional-windows-protected-preference-storage)。
+其他系统/浏览器 provider、备份清理及 JSONL/JS/应用存储生命周期验收继续保留待办。
 
 [检查点数据边界](formula-preference-checkpoints.md) · [辅助计划](formula-assistance-roadmap.md)
