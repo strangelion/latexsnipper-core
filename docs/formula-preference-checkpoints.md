@@ -79,10 +79,11 @@ C ABI 提供 `export-checkpoint` 命令及独立 `latexsnipper_formula_preferenc
 见 [C ABI 接口](formula-preferences-c.md#显式检查点)。
 Python 提供 `export_checkpoint` 与静态 `restore_checkpoint`，检查点使用严格 Python u64 int，
 返回独立拥有对象并释放 GIL；见 [Python 接口](../crates/python/README.md#explicit-preference-checkpoints)。
-两者均要求独立存储许可和 key，不代管磁盘、系统密钥或用户同意。
+两者的原始检查点入口均要求独立存储许可和 key，不代管磁盘、系统密钥或用户同意。
+C ABI 另有可选 Windows 受保护存储对象，原始检查点与受保护生命周期分开，不自动保存或恢复授权。
 JSONL 提供 `export-checkpoint` 及 `formula.preferences.restore`；恢复在新 Worker 命名空间创建
 默认关闭的 owner，不恢复旧路由标识。请求行仍限制 1 MiB，检查点字符串限制 256 KiB，
 见 [JSONL 接口](../crates/worker/README.md#explicit-authenticated-checkpoints)。
 WASM-JS 提供原始恢复工厂、直接包装对象和显式 Worker 恢复 RPC；Worker 重启后不重放检查点操作，
 恢复后仍默认关闭学习且拒绝旧令牌，见 [WASM/JS 接口](formula-preferences-wasm.md#显式检查点)。
-所有绑定只认证/返回数据；不能把公共检查点接口的完成视为宿主可信存储和真实故障恢复验收完成。
+上述原始检查点入口只认证/返回数据；不能把公共检查点接口的完成视为所有宿主可信存储和真实故障恢复验收完成。

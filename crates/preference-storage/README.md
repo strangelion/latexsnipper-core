@@ -2,7 +2,8 @@
 
 `latexsnipper-preference-storage` 是 workspace 内的可信宿主适配 crate，当前提供 Windows
 `WindowsPreferenceCheckpoint`。不被转换/WASM 包依赖，不自动创建用户历史、启用学习或接入应用 UI。
-其他系统和浏览器 provider、其他语言的存储生命周期绑定仍待实现。
+已有可选 [C ABI 存储生命周期](../../docs/formula-preferences-c.md#可选-windows-受保护存储)；
+其他系统和浏览器 provider、Python/JSONL/JS 存储生命周期仍待实现。
 
 ## 数据与发布
 
@@ -67,8 +68,9 @@ let mut session = FormulaPreferenceStorageSession::open(
 // No automatic set_policy(), retry, history merge or document write follows.
 ```
 
-新 crate 尚未发布到 crates.io；以上为 workspace Rust 宿主接口，不代表 C/Python/JSONL/JS
-已经自动使用系统存储，也不代表 Office 已接入。
+新 crate 尚未发布到 crates.io；以上为 workspace Rust 宿主接口。C ABI 通过显式
+`protected-preferences` 特性启用，不自动迁移普通 owner；Python/JSONL/JS 尚无系统存储生命周期，
+也不代表 Office 已接入。
 
 ## 清理与故障边界
 

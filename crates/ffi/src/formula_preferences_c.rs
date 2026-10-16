@@ -1,6 +1,7 @@
 //! Bounded native preference owners. Handles are not permission credentials.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::c_char;
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 
@@ -12,10 +13,15 @@ use serde_json::{json, Value};
 
 use crate::application_c::{ffi_response, parse_request, AdapterError};
 
+#[cfg(all(windows, feature = "protected-preferences"))]
+mod windows_storage;
+
 const MAX_STORES: usize = 64;
 const MAX_CAPTURES: usize = 128;
 const MAX_METADATA_BYTES: usize = 4096;
 const MAX_JSON_BYTES: usize = 1024 * 1024;
+const MAX_STORAGE_OPEN_BYTES: usize = 16 * 1024;
+const MAX_PREPARED_STAGES: usize = 4;
 type Result<T> = std::result::Result<T, AdapterError>;
 type Owner = Arc<Mutex<Option<State>>>;
 static OWNERS: Lazy<Mutex<Owners>> = Lazy::new(|| Mutex::new(Owners::default()));
@@ -26,11 +32,46 @@ static NEXT_TOKEN: AtomicU64 = AtomicU64::new(0);
 struct Owners {
     next: u64,
     entries: BTreeMap<u64, Owner>,
+    reservations: BTreeSet<u64>,
 }
 struct State {
-    core: FormulaPreferenceStore,
+    core: OwnerCore,
     captures: BTreeMap<u64, FormulaPreferenceCapture>,
     receipts: BTreeMap<u64, FormulaPreferenceReceipt>,
+}
+
+enum OwnerCore {
+    Memory(Box<FormulaPreferenceStore>),
+    #[cfg(all(windows, feature = "protected-preferences"))]
+    Protected(Box<windows_storage::ProtectedOwner>),
+}
+impl Deref for OwnerCore {
+    type Target = FormulaPreferenceStore;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Memory(core) => core,
+            #[cfg(all(windows, feature = "protected-preferences"))]
+            Self::Protected(owner) => owner.session.preferences(),
+        }
+    }
+}
+impl DerefMut for OwnerCore {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Memory(core) => core,
+            #[cfg(all(windows, feature = "protected-preferences"))]
+            Self::Protected(owner) => owner.session.preferences_mut(),
+        }
+    }
+}
+impl OwnerCore {
+    fn is_protected(&self) -> bool {
+        match self {
+            Self::Memory(_) => false,
+            #[cfg(all(windows, feature = "protected-preferences"))]
+            Self::Protected(_) => true,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -106,6 +147,34 @@ enum Command {
         storage_key_hex: String,
         checkpoint: Decimal,
         permission: FormulaPreferenceStoragePermission,
+    },
+    // Keep closed decoding on unsupported builds, then return explicit
+    // unavailable rather than pretending to process these platform fields.
+    #[cfg_attr(not(all(windows, feature = "protected-preferences")), allow(dead_code))]
+    StoragePrepare {
+        permission: FormulaPreferenceStoragePermission,
+    },
+    #[cfg_attr(not(all(windows, feature = "protected-preferences")), allow(dead_code))]
+    StoragePrepareClear {
+        generation: Decimal,
+    },
+    #[cfg_attr(not(all(windows, feature = "protected-preferences")), allow(dead_code))]
+    StorageCommit {
+        stage_id: Decimal,
+        permission: FormulaPreferenceStoragePermission,
+    },
+    #[cfg_attr(not(all(windows, feature = "protected-preferences")), allow(dead_code))]
+    StorageReconcile {
+        stage_id: Decimal,
+        permission: FormulaPreferenceStoragePermission,
+    },
+    #[cfg_attr(not(all(windows, feature = "protected-preferences")), allow(dead_code))]
+    StorageDiscardStage {
+        stage_id: Decimal,
+    },
+    #[cfg_attr(not(all(windows, feature = "protected-preferences")), allow(dead_code))]
+    StorageCleanup {
+        maximum: u16,
     },
 }
 
@@ -228,10 +297,18 @@ fn next_token(counter: &AtomicU64) -> Result<u64> {
 
 impl State {
     fn info(&self) -> Value {
-        json!({"schemaVersion":1, "scope":self.core.scope(), "policy":self.core.policy(),
+        let value = json!({"schemaVersion":1, "scope":self.core.scope(), "policy":self.core.policy(),
             "eventCount":self.core.event_count(), "captureCount":self.captures.len(), "receiptCount":self.receipts.len(),
             "inMemory":true, "persistence":false, "authenticatedCheckpoints":true,
-            "automaticStorage":false, "automaticCapture":false})
+            "automaticStorage":false, "automaticCapture":false});
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        if let OwnerCore::Protected(owner) = &self.core {
+            let mut value = value;
+            value["persistence"] = json!(true);
+            value["protectedStorage"] = owner.info();
+            return value;
+        }
+        value
     }
     fn execute(&mut self, command: Command) -> Result<Value> {
         match command {
@@ -295,6 +372,12 @@ impl State {
                 generation,
                 key_hex,
             } => {
+                if self.core.is_protected() {
+                    return Err(error(
+                        "PREFERENCE_STORAGE_MANAGED",
+                        "Use an explicit protected clear transaction.",
+                    ));
+                }
                 self.core
                     .clear(generation.0, key(&key_hex)?)
                     .map_err(core_error)?;
@@ -307,38 +390,119 @@ impl State {
                 checkpoint,
                 permission,
             } => {
+                if self.core.is_protected() {
+                    return Err(error(
+                        "PREFERENCE_STORAGE_MANAGED",
+                        "Protected owners do not expose keys or raw checkpoint export.",
+                    ));
+                }
                 let snapshot = self
                     .core
                     .export_checkpoint(&key(&storage_key_hex)?, checkpoint.0, permission)
                     .map_err(storage_error)?;
                 bounded(json!({"snapshotJson":snapshot,"checkpoint":checkpoint.0.to_string()}))
             }
+            command @ (Command::StoragePrepare { .. }
+            | Command::StoragePrepareClear { .. }
+            | Command::StorageCommit { .. }
+            | Command::StorageReconcile { .. }
+            | Command::StorageDiscardStage { .. }
+            | Command::StorageCleanup { .. }) => {
+                #[cfg(all(windows, feature = "protected-preferences"))]
+                if let OwnerCore::Protected(owner) = &mut self.core {
+                    let outcome = owner.execute(command)?;
+                    if outcome.cleared {
+                        self.captures.clear();
+                        self.receipts.clear();
+                    }
+                    let mut value = outcome.value;
+                    value["info"] = self.info();
+                    return bounded(value);
+                }
+                let _ = command;
+                Err(error(
+                    "PREFERENCE_STORAGE_UNAVAILABLE",
+                    "This owner has no enabled protected storage provider.",
+                ))
+            }
         }
     }
 }
 
-fn register(core: FormulaPreferenceStore) -> Result<Value> {
+impl Owners {
+    fn reserve(&mut self) -> Result<u64> {
+        if self.entries.len() + self.reservations.len() >= MAX_STORES {
+            return Err(error(
+                "LIMIT_EXCEEDED",
+                "Preference owner budget exhausted.",
+            ));
+        }
+        let handle = self
+            .next
+            .checked_add(1)
+            .ok_or_else(|| error("LIMIT_EXCEEDED", "Preference handle space exhausted."))?;
+        self.next = handle;
+        self.reservations.insert(handle);
+        Ok(handle)
+    }
+}
+#[cfg(any(test, all(windows, feature = "protected-preferences")))]
+struct Reservation {
+    handle: u64,
+    live: bool,
+}
+#[cfg(any(test, all(windows, feature = "protected-preferences")))]
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        if self.live {
+            // Registry operations contain no external IO/callbacks. Cleanup must
+            // release a reservation even during short-lived registry contention.
+            if let Ok(mut owners) = OWNERS.lock() {
+                owners.reservations.remove(&self.handle);
+            }
+        }
+    }
+}
+#[cfg(any(test, all(windows, feature = "protected-preferences")))]
+fn register_with(create: impl FnOnce() -> Result<OwnerCore>) -> Result<Value> {
+    let mut reservation = Reservation {
+        handle: lock(&OWNERS)?.reserve()?,
+        live: true,
+    };
+    // Reserve quota before provider IO, without holding the registry lock during
+    // native calls. A failed factory never exposes a guessed/reserved handle.
     let state = State {
-        core,
+        core: create()?,
         captures: BTreeMap::new(),
         receipts: BTreeMap::new(),
     };
-    let mut owners = lock(&OWNERS)?;
-    if owners.entries.len() >= MAX_STORES {
-        return Err(error(
-            "LIMIT_EXCEEDED",
-            "Preference owner budget exhausted.",
-        ));
-    }
-    let handle = owners
-        .next
-        .checked_add(1)
-        .ok_or_else(|| error("LIMIT_EXCEEDED", "Preference handle space exhausted."))?;
     let info = state.info();
+    let mut owners = OWNERS
+        .lock()
+        .map_err(|_| error("INTERNAL", "Preference registry is unavailable."))?;
+    owners.reservations.remove(&reservation.handle);
+    owners
+        .entries
+        .insert(reservation.handle, Arc::new(Mutex::new(Some(state))));
+    reservation.live = false;
+    Ok(json!({"handle":reservation.handle.to_string(), "info":info}))
+}
+fn register(core: FormulaPreferenceStore) -> Result<Value> {
+    // Volatile create/restore retain the original prompt BUSY contract. Only a
+    // factory that has already performed native provisioning needs the short
+    // blocking publication section in register_with.
+    let state = State {
+        core: OwnerCore::Memory(Box::new(core)),
+        captures: BTreeMap::new(),
+        receipts: BTreeMap::new(),
+    };
+    let info = state.info();
+    let mut owners = lock(&OWNERS)?;
+    let handle = owners.reserve()?;
+    owners.reservations.remove(&handle);
     owners
         .entries
         .insert(handle, Arc::new(Mutex::new(Some(state))));
-    owners.next = handle;
     Ok(json!({"handle":handle.to_string(), "info":info}))
 }
 
@@ -347,14 +511,48 @@ fn register(core: FormulaPreferenceStore) -> Result<Value> {
 pub extern "C" fn latexsnipper_formula_preferences_capabilities() -> *mut c_char {
     ffi_response(|| {
         Ok::<_, AdapterError>(
-            json!({"schemaVersion":1, "inMemory":true, "persistence":false,
+            json!({"schemaVersion":1, "inMemory":true, "persistence":cfg!(all(windows, feature="protected-preferences")),
         "authenticatedCheckpoints":true,"automaticStorage":false,
         "maxSnapshotBytes":FORMULA_PREFERENCE_MAX_SNAPSHOT_BYTES,"storagePermissionRequired":true,
         "automaticCapture":false, "maxStores":MAX_STORES, "maxCaptures":MAX_CAPTURES,
         "maxEvents":FORMULA_PREFERENCE_MAX_EVENTS, "maxMetadataBytes":MAX_METADATA_BYTES,
         "maxRequestBytes":MAX_JSON_BYTES, "maxResultDataBytes":MAX_JSON_BYTES,
-        "idEncoding":"canonical-decimal-u64-string", "defaultEnabled":false}),
+        "idEncoding":"canonical-decimal-u64-string", "defaultEnabled":false,
+        "protectedStorage":{"available":cfg!(all(windows, feature="protected-preferences")),
+            "provider":"windows-dpapi","maxOpenRequestBytes":MAX_STORAGE_OPEN_BYTES,
+            "maxPreparedStages":MAX_PREPARED_STAGES,"keysReturned":false}}),
         )
+    })
+}
+
+/// Explicit trusted-host Windows storage factory. Never use as an untrusted
+/// guest RPC or substitute its request flags for current user consent.
+/// # Safety
+/// When supported, pointer must reference length readable bytes for this call.
+#[no_mangle]
+pub unsafe extern "C" fn latexsnipper_formula_preferences_open_windows(
+    pointer: *const u8,
+    length: usize,
+) -> *mut c_char {
+    ffi_response(|| {
+        #[cfg(all(windows, feature = "protected-preferences"))]
+        {
+            let request: windows_storage::Open =
+                unsafe { decode(pointer, length, MAX_STORAGE_OPEN_BYTES) }?;
+            register_with(|| {
+                request
+                    .open()
+                    .map(|owner| OwnerCore::Protected(Box::new(owner)))
+            })
+        }
+        #[cfg(not(all(windows, feature = "protected-preferences")))]
+        {
+            let _ = (pointer, length);
+            Err::<Value, _>(error(
+                "PREFERENCE_STORAGE_UNAVAILABLE",
+                "Windows protected preference storage is not enabled in this build/platform.",
+            ))
+        }
     })
 }
 
@@ -404,8 +602,9 @@ pub unsafe extern "C" fn latexsnipper_formula_preferences_restore(
     })
 }
 
-/// Explicit commands return data only. Capture before dispatch; record only after
-/// actual host acceptance. Failed feedback must not roll back a successful edit.
+/// Volatile owners perform no storage IO. Explicit storage commands on a managed
+/// owner may perform synchronous native IO. Capture before dispatch; record only
+/// after actual host acceptance. Failed feedback must not roll back an edit.
 /// # Safety
 /// The buffer must contain `length` readable bytes for this call.
 #[no_mangle]
@@ -457,6 +656,7 @@ pub extern "C" fn latexsnipper_formula_preferences_close(handle: u64) -> *mut c_
 #[cfg(test)]
 mod tests {
     use super::*;
+    static REGISTRY_TESTS: Mutex<()> = Mutex::new(());
     #[test]
     fn token_counter_is_unique_and_refuses_wrap() {
         let counter = AtomicU64::new(u64::MAX - 1);
@@ -535,6 +735,7 @@ mod tests {
 
     #[test]
     fn busy_close_keeps_owner_and_successful_close_invalidates_retained_entry() {
+        let _serial = REGISTRY_TESTS.lock().unwrap();
         use crate::application_c::latexsnipper_string_free;
         use std::ffi::CStr;
         fn take(pointer: *mut c_char) -> Value {
@@ -563,5 +764,62 @@ mod tests {
         );
         assert!(lock(&retained).unwrap().is_none());
         assert!(owner(handle).is_err());
+    }
+
+    #[test]
+    fn factory_reservation_is_private_and_does_not_hold_global_lock_during_io() {
+        use std::sync::mpsc::channel;
+        use std::time::Duration;
+        let _serial = REGISTRY_TESTS.lock().unwrap();
+        let make_core = || {
+            FormulaPreferenceStore::new(
+                FormulaDefinitionScope {
+                    user_sha256: "a".repeat(64),
+                    project_sha256: None,
+                    document_sha256: None,
+                    generation: 0,
+                },
+                [0xab; 32],
+            )
+            .unwrap()
+        };
+        let registered = register(make_core()).unwrap();
+        let existing = registered["handle"].as_str().unwrap().parse().unwrap();
+        let (ready_tx, ready_rx) = channel();
+        let (release_tx, release_rx) = channel();
+        let worker = std::thread::spawn(move || {
+            register_with(|| {
+                ready_tx.send(()).unwrap();
+                release_rx
+                    .recv_timeout(Duration::from_secs(5))
+                    .map_err(|_| error("INTERNAL", "Fixture release was not received."))?;
+                Ok(OwnerCore::Memory(Box::new(make_core())))
+            })
+        });
+        ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        // Another live owner remains queryable while the factory is waiting.
+        let retained = owner(existing).unwrap();
+        assert!(lock(&retained)
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .info()
+            .is_object());
+        let reserved = {
+            let owners = lock(&OWNERS).unwrap();
+            assert_eq!(owners.reservations.len(), 1);
+            *owners.reservations.first().unwrap()
+        };
+        assert!(owner(reserved).is_err());
+        release_tx.send(()).unwrap();
+        let created = worker.join().unwrap().unwrap();
+        assert_eq!(created["handle"], reserved.to_string());
+        assert!(lock(&OWNERS).unwrap().reservations.is_empty());
+        // Test-only exact handles; free every returned C allocation.
+        for handle in [existing, reserved] {
+            let reply = latexsnipper_formula_preferences_close(handle);
+            assert!(!reply.is_null());
+            unsafe { crate::application_c::latexsnipper_string_free(reply) };
+        }
     }
 }

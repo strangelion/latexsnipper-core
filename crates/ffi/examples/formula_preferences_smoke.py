@@ -2,16 +2,82 @@
 import argparse
 import ctypes
 import json
+import os
 from pathlib import Path
 import secrets
 import subprocess
 import sys
+import tempfile
+
+
+def protected_windows_smoke(call, command, library_dir, query, request, policy):
+    """Opt-in real DLL/DPAPI roundtrip; only fresh owned fixtures are removed."""
+    assert os.name == "nt"
+    assert call("preferences_capabilities")["data"]["protectedStorage"]["available"]
+    permission = dict(storageEnabled=True, allowSensitiveStorage=False)
+    disabled = dict(storageEnabled=False, allowSensitiveStorage=False)
+    handles, targets = [], set()
+    def adopt(reply):
+        assert reply["ok"], reply
+        handle = int(reply["data"]["handle"]); handles.append(handle)
+        owner = reply["data"]["info"]["protectedStorage"]["ownerSha256"]
+        assert len(owner) == 64 and all(c in "0123456789abcdef" for c in owner)
+        targets.add("LaTeXSnipperCore.Preferences.v1/" + owner)
+        return handle
+    parent = os.environ.get("SNIPPER_PREFERENCE_FIXTURE_PARENT")
+    with tempfile.TemporaryDirectory(prefix="snipper-c-dll-preferences-", dir=parent) as directory:
+        try:
+            base = dict(schemaVersion=1, owner="c-dll-fixture", identity=dict(userSha256="a" * 64,
+                projectSha256=None, documentSha256="c" * 64), persistence="logon-session",
+                operationTimeoutMs=10000, permission=permission,
+                action=dict(kind="create-new", parentPath=directory, directoryName="private", generation="0"))
+            owner = adopt(call("preferences_open_windows", body=base))
+            restore = dict(base, action=dict(kind="open-existing", rootPath=str(Path(directory) / "private")))
+            assert call("preferences_open_windows", body=restore)["error"]["code"] == "PREFERENCE_STORAGE_NOT_FOUND"
+            assert command(owner, "set-policy", policy=policy)["ok"]
+            capture = command(owner, "capture")["data"]["captureId"]
+            assert command(owner, "record-acceptance", captureId=capture, eventId="9007199254740993", request=request)["ok"]
+            stage = command(owner, "storage-prepare", permission=permission)["data"]
+            assert command(owner, "storage-commit", stageId=stage["stageId"], permission=disabled)["error"]["code"] == "PREFERENCE_STORAGE_DISABLED"
+            assert command(owner, "storage-commit", stageId=stage["stageId"], permission=permission)["ok"]
+            # A fresh process loads the actual DLL and protected head, never keys
+            # from this process. Metadata goes through stdin, not a fixture file.
+            child = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--library-dir", str(library_dir),
+                "--protected-windows-open-stdin"], input=json.dumps(restore), capture_output=True,
+                text=True, encoding="utf-8", timeout=60, check=True)
+            assert child.stdout.strip() == "Protected C DLL cold-process restore passed"
+            restored = adopt(call("preferences_open_windows", body=restore))
+            info = command(restored, "info")["data"]
+            assert info["eventCount"] == 1 and not any(info["policy"].values())
+            assert command(restored, "set-policy", policy=policy)["ok"]
+            assert command(restored, "rank-fragments", request=query)["data"]["features"][0]["lastAcceptedEvent"] == "9007199254740993"
+            old_capture = command(restored, "capture")["data"]["captureId"]
+            clear = command(restored, "storage-prepare-clear", generation="9007199254740993")["data"]
+            assert command(restored, "storage-commit", stageId=clear["stageId"], permission=disabled)["ok"]
+            assert command(restored, "discard-capture", captureId=old_capture)["error"]["code"] == "STALE_FEEDBACK"
+            reopened = adopt(call("preferences_open_windows", body=restore))
+            info = command(reopened, "info")["data"]
+            assert info["eventCount"] == 0 and info["scope"]["generation"] == "9007199254740993"
+            assert command(reopened, "storage-cleanup", maximum=128)["ok"]
+        finally:
+            for handle in handles:
+                assert call("preferences_close", handle)["ok"]
+            credentials = ctypes.WinDLL("advapi32", use_last_error=True)
+            delete = credentials.CredDeleteW
+            delete.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32]; delete.restype = ctypes.c_int
+            for target in targets:
+                # Exact namespaces only; no credential enumeration or blanket cleanup.
+                assert delete(target, 1, 0) or ctypes.get_last_error() == 1168, "Owned fixture credential cleanup failed"
+    assert not Path(directory).exists()
+    print("Protected C DLL storage smoke passed; owned directories and exact credentials removed")
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--library-dir", type=Path, required=True)
     parser.add_argument("--wasm-package", type=Path, help="Also verify native-to-WASM-to-native checkpoint transfer with Node")
+    parser.add_argument("--protected-windows", action="store_true", help="Also exercise explicit Windows DPAPI storage with owned fixtures")
+    parser.add_argument("--protected-windows-open-stdin", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     filename = "latexsnipper_ffi.dll" if sys.platform == "win32" else "liblatexsnipper_ffi.dylib" if sys.platform == "darwin" else "liblatexsnipper_ffi.so"
     library = ctypes.CDLL(str(args.library_dir.resolve() / filename))
@@ -21,6 +87,7 @@ def main():
     for name, signature in {
         "preferences_capabilities": [], "preferences_create": [ctypes.c_void_p, ctypes.c_size_t],
         "preferences_restore": [ctypes.c_void_p, ctypes.c_size_t],
+        "preferences_open_windows": [ctypes.c_void_p, ctypes.c_size_t],
         "preferences_command": [ctypes.c_uint64, ctypes.c_void_p, ctypes.c_size_t],
         "preferences_close": [ctypes.c_uint64], "complete_fragments": [ctypes.c_void_p, ctypes.c_size_t],
     }.items():
@@ -44,6 +111,20 @@ def main():
         if not result["ok"]:
             assert not result["error"].get("details")
         return result
+
+    if args.protected_windows_open_stdin:
+        body = sys.stdin.buffer.read(16 * 1024 + 1)
+        assert len(body) <= 16 * 1024
+        result = call("preferences_open_windows", body=body)
+        assert result["ok"], "Protected cold-process restore refused"
+        handle = int(result["data"]["handle"])
+        try:
+            assert result["data"]["info"]["eventCount"] == 1
+            assert not any(result["data"]["info"]["policy"].values())
+        finally:
+            assert call("preferences_close", handle)["ok"]
+        print("Protected C DLL cold-process restore passed")
+        return
 
     scope = dict(userSha256="a" * 64, projectSha256=None, documentSha256="c" * 64, generation="0")
     owners = []
@@ -71,6 +152,8 @@ def main():
         assert capture != other_capture
         snapshot = call("complete_fragments", body=query)["data"]["snapshot"]
         request = dict(query, snapshot=snapshot, candidateId="fragment:saved")
+        if args.protected_windows:
+            protected_windows_smoke(call, command, args.library_dir.resolve(), query, request, policy)
         assert command(second, "record-acceptance", captureId=capture, eventId="1", request=request)["error"]["code"] == "STALE_FEEDBACK"
         result = command(first, "record-acceptance", captureId=capture, eventId="18446744073709551615", request=request)
         assert result["ok"], result

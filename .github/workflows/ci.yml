@@ -43,7 +43,9 @@ jobs:
   preference-storage-windows:
     name: Windows protected preference storage
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -63,6 +65,32 @@ jobs:
           if ($testExit -ne 0) { exit $testExit }
           cargo clippy --locked -p latexsnipper-preference-storage --all-targets -- -D warnings
           exit $LASTEXITCODE
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Test protected C owners and the exported DLL with exact owned cleanup
+        shell: pwsh
+        run: |
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP ("snipper-c-preference-fixtures-" + [Guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
+          $env:SNIPPER_PREFERENCE_FIXTURE_PARENT = $fixtureRoot
+          cargo test --locked -p latexsnipper-ffi --features protected-preferences --test formula_preferences_windows --test formula_preferences
+          $testExit = $LASTEXITCODE
+          if ($testExit -eq 0) {
+            cargo build --locked -p latexsnipper-ffi --features protected-preferences
+            $testExit = $LASTEXITCODE
+          }
+          if ($testExit -eq 0) {
+            python crates/ffi/examples/formula_preferences_smoke.py --library-dir target/debug --protected-windows
+            $testExit = $LASTEXITCODE
+          }
+          if (@(Get-ChildItem -LiteralPath $fixtureRoot -Force).Count -ne 0) {
+            throw "Owned C preference fixture directories were not cleaned"
+          }
+          Remove-Item -LiteralPath $fixtureRoot
+          exit $testExit
+      - name: Lint the enabled C storage implementation and consumers
+        run: cargo clippy --locked -p latexsnipper-ffi --features protected-preferences --all-targets -- -D warnings
 
   approval-storage-windows:
     name: Windows protected approval storage

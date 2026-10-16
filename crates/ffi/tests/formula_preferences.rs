@@ -230,7 +230,10 @@ fn c_checkpoint_wire_rejects_coercion_duplicate_fields_and_oversize_without_leak
     let caps = take(latexsnipper_formula_preferences_capabilities());
     assert_eq!(caps["data"]["authenticatedCheckpoints"], true);
     assert_eq!(caps["data"]["maxSnapshotBytes"], 256 * 1024);
-    assert_eq!(caps["data"]["persistence"], false);
+    assert_eq!(
+        caps["data"]["persistence"],
+        cfg!(all(windows, feature = "protected-preferences"))
+    );
     let exported = export(&owner, "1", false);
     let snapshot = exported["data"]["snapshotJson"].as_str().unwrap();
     let base = restore_request(snapshot, "1");

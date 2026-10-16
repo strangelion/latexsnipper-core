@@ -1,15 +1,16 @@
 # C ABI 补全偏好对象
 
 更新：2026-10-16。正式 C 传输复用 Rust 的默认关闭、有限偏好与显式认证检查点，
-不自动采集输入、写磁盘、恢复授权或修改宿主文档，不提供模型。
+不自动采集输入、写磁盘、恢复授权或修改宿主文档，不提供模型。Windows 可选特性另有显式受保护存储，见下节。
 
 ## 入口与所有权
 
-公开声明在 `crates/ffi/include/latexsnipper_session.h`，五个新增符号：
+公开声明在 `crates/ffi/include/latexsnipper_session.h`：
 
 - `latexsnipper_formula_preferences_capabilities()`：查询独立 schema 1 和实际限制。
 - `latexsnipper_formula_preferences_create(json, length)`：创建默认关闭的独立对象。
 - `latexsnipper_formula_preferences_restore(json, length)`：认证检查点并创建默认关闭的新对象。
+- `latexsnipper_formula_preferences_open_windows(json, length)`：显式创建/打开 Windows 受保护存储对象。
 - `latexsnipper_formula_preferences_command(handle, json, length)`：执行显式命令。
 - `latexsnipper_formula_preferences_close(handle)`：关闭并释放对象。
 
@@ -72,7 +73,8 @@ mutex 中毒不自动复位或恢复偏好，返回 `INTERNAL`，由可信宿主
 ## 显式检查点
 
 能力探测的 `authenticatedCheckpoints:true` 表示支持认证数据导出/恢复；
-`persistence:false`、`automaticStorage:false` 表示 Core 仍不做磁盘 IO 或自动恢复。
+普通 owner 的 `persistence:false` 表示不做磁盘 IO；`automaticStorage:false` 始终表示不自动保存。
+能力探测的 `persistence` 表示此构建是否支持下面的可选存储，不将所有 owner 自动升级为持久对象。
 `export-checkpoint` 的 `permission` 必须显式提供 `storageEnabled/allowSensitiveStorage` 两个布尔值，
 它独立于反馈/检索同意，缺字段、非布尔或额外字段均拒绝。
 `storageKeyHex` 是另一把独立、非零的宿主私有随机 key，不能复用反馈 key。
@@ -92,8 +94,74 @@ mutex 中毒不自动复位或恢复偏好，返回 `INTERNAL`，由可信宿主
 HMAC 不是加密。宿主仍需保护密钥、单写者/CAS、新鲜度及清空代数、原子提交与备份恢复路径；
 这些入口是可信宿主接口，不是插件可自批的权限机制。详见 [检查点边界](formula-preference-checkpoints.md)。
 
-真实 Windows DLL 和 MSVC C11/C++17 头文件/链接已验证；其他平台和发布包仍以 CI/实际产物验证为准。
+## 可选 Windows 受保护存储
+
+以 `cargo build -p latexsnipper-ffi --features protected-preferences` 明确启用。
+`open_windows` 在所有构建中导出；未启用/非 Windows 时返回 `PREFERENCE_STORAGE_UNAVAILABLE`，
+不解引用输入。启用后的闭合请求最多 16 KiB：
+
+```json
+{
+  "schemaVersion": 1,
+  "owner": "example.formula-completion.v1",
+  "identity": {"userSha256": "<64 lowercase hex>", "projectSha256": null, "documentSha256": null},
+  "persistence": "logon-session",
+  "operationTimeoutMs": 5000,
+  "permission": {"storageEnabled": true, "allowSensitiveStorage": false},
+  "action": {"kind": "create-new", "parentPath": "<trusted local parent>", "directoryName": "preferences", "generation": "0"}
+}
+```
+
+`persistence` 另可选 `this-user-this-computer`，仍是当前用户而非机器所有用户。
+`action` 另有 `open-existing {rootPath}` 与经用户确认的 `initialize-existing {rootPath,generation}`。
+generation 为规范 u64 字符串；打开已有状态从受保护 head 取得代数/密钥，不从快照猜测。
+缺失/损坏/身份不符不自动初始化；初始化拒绝已有 head，后续 CAS(None) 仍检查竞争。
+创建只生成全新私有子目录，不修复父/已有 ACL；创建后失败可能留下该新目录，不擅自递归删除。
+工厂先检查当前存储许可，再进行目录 IO；返回默认关闭的普通句柄，内部生成独立随机密钥且从不返回。
+
+这是**可信原生宿主入口**，不得作为插件/MCP 自助存储 RPC。宿主必须在执行边界确保私有根及其
+别名/祖先/子目录不与任何 guest 目录授权重叠。JSON 身份/布尔值/路径不是实际隔离或用户同意的证明；
+需要真实 capability 重叠检查的宿主应使用 [Rust provider](../crates/preference-storage/README.md) 的
+`check_no_directory_overlap`，不能仅做字符串比较或信任 guest 自报目录。
+
+受保护 owner 仍使用相同的 capture/rank/record/undo/policy；原始 `clear/export-checkpoint` 拒绝为
+`PREFERENCE_STORAGE_MANAGED`，防止绕过事务或暴露内部密钥。新增显式元数据命令仍限制 4 KiB：
+
+| kind | 字段 | 返回 data（均另含当前 `info`） |
+| --- | --- | --- |
+| `storage-prepare` | `permission` | `stageId, revision, checkpoint, eventCount, clear:false` |
+| `storage-prepare-clear` | `generation` | 同上，`clear:true` |
+| `storage-commit` | `stageId, permission` | `stageId, status:"applied"` |
+| `storage-reconcile` | `stageId, permission` | `stageId, status:"applied"/"unchanged"` |
+| `storage-discard-stage` | `stageId` | `stageId, discarded:true` |
+| `storage-cleanup` | `maximum`（1–128） | `inspected, removed, more` |
+
+stageId/revision/checkpoint 均为规范 u64 字符串；每 owner 最多 4 个 stage，达到配额先拒绝而不推进导出序号。
+stage 是内存路由标识，不是凭据；不接受其他 owner 的 stage。普通 prepare 不做发布；commit/reconcile
+每次复验当前存储与敏感许可。失败与 unchanged 保留 stage；applied 使所有旧基线 stage 失效，
+暂存后新增的本地反馈不被旧快照覆盖。成功 prepare-clear 才替换旧 stage；失败保留原 stage。
+明确清空轮换代数/双密钥并发布空 epoch，只有这种空重置可在存储许可已关闭时提交/回读。
+清空成功废弃旧 capture/receipt，保留当前进程策略；下次恢复策略仍关闭，宿主须更新目录代数并重新查询。
+
+冲突/不确定结果不自动重试，暂停普通写入；明确 reconcile 或重新打开，不能以 discard 消除恢复栅栏。
+关闭只丢弃内存与 stage，不保存未提交反馈、不删除 head/墓碑。cleanup 是独立明确动作，可能在出错前
+部分完成；保留当前对象/head/锁/墓碑，不承诺备份/磁盘残留擦除，也不枚举用户凭据。
+
+原生调用同步，不能保证抢占取消；timeout 限制 1–30000 ms，只在 provider 检查点复验。
+宿主应放到后台线程并管理队列，不能让编辑输入线程等待。IO 不持有全局 owner 表锁；工厂预留配额，
+成功后仅用短时注册锁发布句柄。普通命令/关闭争用仍立即返回 `PREFERENCE_BUSY`，从不自动重放。
+错误不回显路径、密钥或私有 JSON；除 BUSY 外不标记 recoverable，宿主不能据此自动重发存储。
+
+明确错误包括 `PRIVATE_DIRECTORY_REQUIRED`、`PREFERENCE_STORAGE_NOT_FOUND`、`PREFERENCE_ALREADY_INITIALIZED`、
+`PREFERENCE_PROVIDER_UNAVAILABLE`、`PREFERENCE_INTEGRITY_MISMATCH`、`INVALID_PROTECTED_RECORD`、
+`PREFERENCE_DEADLINE_EXCEEDED`、`PREFERENCE_CLEANUP_LIMIT`、`PREFERENCE_STAGE_NOT_FOUND`、
+`PREFERENCE_STALE_TRANSACTION`、`PREFERENCE_IDENTITY_MISMATCH`、`PREFERENCE_CONFLICT`、
+`PREFERENCE_NOT_COMMITTED`、`PREFERENCE_INDETERMINATE` 与 `PREFERENCE_RECOVERY_REQUIRED`；
+存储/敏感许可、规范输入及预算错误沿用前述代码。错误后可显式查询 info 的 pendingStages/recoveryRequired。
+原生 ACL、DPAPI、当前用户凭据和真实故障边界以 provider 文档为准，不声称硬件防回滚或完全安全内存擦除。
+
+真实 Windows DLL 和 MSVC C11/C++17 头文件/链接检查由 smoke 消费器验证；其他平台和发布包仍以 CI/实际产物验证为准。
 JSONL/WASM-JS 也已有独立内存态偏好和显式检查点绑定。
-磁盘/受保护存储、跨文档合并及学习效果验收仍开放。
+其他语言的受保护存储、其他 OS provider、断电/注销重登、实际部署隔离、跨文档合并及学习效果验收仍开放。
 
 相关资料：[Core 偏好边界](formula-completion-preferences.md)、[补全接口](formula-completion.md)。

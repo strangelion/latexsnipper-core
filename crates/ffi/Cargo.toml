@@ -26,6 +26,10 @@ jni = { version = "0.21", optional = true }
 [features]
 android-jni = ["dep:jni"]
 wasi-formula = ["dep:latexsnipper-plugin", "dep:latexsnipper-plugin-wasi"]
+protected-preferences = ["dep:latexsnipper-preference-storage"]
+
+[target.'cfg(windows)'.dependencies]
+latexsnipper-preference-storage = { workspace = true, optional = true }
 
 [lib]
 crate-type = ["lib", "cdylib"]
@@ -35,3 +39,6 @@ tempfile = "3"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 wit-component = { version = "0.239.0", features = ["dummy-module"] }
 sha2.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }

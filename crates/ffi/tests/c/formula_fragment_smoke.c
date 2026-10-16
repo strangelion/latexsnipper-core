@@ -32,6 +32,14 @@ static int preference_owner_smoke(void) {
     uint64_t handle;
     if (!expect_and_free(latexsnipper_formula_preferences_capabilities(), "\"maxStores\":64")) return 20;
     if (!expect_and_free(latexsnipper_formula_preferences_restore(NULL, 0), "INVALID_ARGUMENT")) return 26;
+    /* Both supported and unsupported builds must export this additive symbol. */
+    response = latexsnipper_formula_preferences_open_windows(NULL, 0);
+    if (response == NULL || (strstr(response, "INVALID_ARGUMENT") == NULL &&
+        strstr(response, "PREFERENCE_STORAGE_UNAVAILABLE") == NULL)) {
+        if (response != NULL) latexsnipper_string_free(response);
+        return 27;
+    }
+    latexsnipper_string_free(response);
     response = latexsnipper_formula_preferences_create((const uint8_t *)create, strlen(create));
     if (response == NULL) return 21;
     start = strstr(response, "\"handle\":\"");

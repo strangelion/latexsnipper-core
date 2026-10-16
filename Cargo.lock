@@ -2418,6 +2418,7 @@ dependencies = [
  "latexsnipper-image",
  "latexsnipper-plugin",
  "latexsnipper-plugin-wasi",
+ "latexsnipper-preference-storage",
  "latexsnipper-runtime",
  "log",
  "once_cell",
@@ -2427,6 +2428,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "windows-sys 0.61.2",
  "wit-component",
  "zip",
 ]
