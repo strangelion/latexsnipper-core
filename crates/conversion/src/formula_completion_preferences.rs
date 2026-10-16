@@ -87,6 +87,28 @@ pub struct PreferredFormulaCompletion {
     pub features: Vec<FormulaPreferenceFeatures>,
 }
 
+/// Deterministic candidate ordering strategies. Every strategy is a pure
+/// permutation of freshly generated Core candidates; none can add, edit,
+/// substitute or re-score candidates with anything beyond the bounded feedback
+/// the host has already authorized. Ordering ties always fall back to the
+/// original Core candidate index, so results are stable across platforms.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FormulaRankingStrategy {
+    /// Frequency/recency baseline: descending net acceptances, then descending
+    /// last surviving acceptance event, then original index. This is the only
+    /// ordering `rank_fragments` applies and the default for
+    /// `rank_fragments_with`.
+    #[default]
+    Baseline,
+    /// Fixed rule: preserve the original Core candidate order (no reordering).
+    Fixed,
+    /// Frequency only: descending net acceptances, then original index.
+    Frequency,
+    /// Recency only: descending last surviving acceptance event, then index.
+    Recency,
+}
+
 struct FeedbackEvent {
     id: u64,
     key: [u8; 32],
@@ -330,6 +352,18 @@ impl FormulaPreferenceStore {
         &self,
         request: &FormulaFragmentCompletionRequest,
     ) -> Result<PreferredFormulaCompletion, FormulaPreferenceError> {
+        self.rank_fragments_with(request, FormulaRankingStrategy::Baseline)
+    }
+
+    /// Strategy-aware ordering. The fixed `Baseline` behavior of
+    /// `rank_fragments` is unchanged; other strategies only permute the same
+    /// freshly generated candidates. Disabled ranking still yields the original
+    /// order for every strategy because all features are zeroed.
+    pub fn rank_fragments_with(
+        &self,
+        request: &FormulaFragmentCompletionRequest,
+        strategy: FormulaRankingStrategy,
+    ) -> Result<PreferredFormulaCompletion, FormulaPreferenceError> {
         self.check_scope(&request.catalog.commands.scope)?;
         let completion = request.execute()?;
         let enabled = self.policy.ranking_enabled
@@ -348,13 +382,36 @@ impl FormulaPreferenceStore {
             })
             .collect();
         let mut order: Vec<_> = (0..completion.candidates.len()).collect();
-        order.sort_by_key(|index| {
-            (
-                std::cmp::Reverse(features[*index].net_acceptances()),
-                std::cmp::Reverse(features[*index].last_accepted_event),
-                *index,
-            )
-        });
+        match strategy {
+            FormulaRankingStrategy::Baseline => {
+                order.sort_by_key(|index| {
+                    (
+                        std::cmp::Reverse(features[*index].net_acceptances()),
+                        std::cmp::Reverse(features[*index].last_accepted_event),
+                        *index,
+                    )
+                });
+            }
+            FormulaRankingStrategy::Fixed => {
+                order.sort_by_key(|index| *index);
+            }
+            FormulaRankingStrategy::Frequency => {
+                order.sort_by_key(|index| {
+                    (
+                        std::cmp::Reverse(features[*index].net_acceptances()),
+                        *index,
+                    )
+                });
+            }
+            FormulaRankingStrategy::Recency => {
+                order.sort_by_key(|index| {
+                    (
+                        std::cmp::Reverse(features[*index].last_accepted_event),
+                        *index,
+                    )
+                });
+            }
+        }
         Ok(PreferredFormulaCompletion {
             completion,
             order,

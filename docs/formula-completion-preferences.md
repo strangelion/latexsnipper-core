@@ -43,6 +43,12 @@ fn create_after_host_consent(
 不增加候选、不修改插入内容、不应用编辑、不授予执行权限。
 这只是频率/最近使用基线，不是模型排序或收益测量。
 
+`rank_fragments_with(&current_request, strategy)` 提供可替换排序策略：
+`FormulaRankingStrategy::Baseline`（默认，等价于 `rank_fragments`）、`Fixed`
+（保持原始候选顺序）、`Frequency`（仅按净接受次数）、`Recency`（仅按最近仍有效接受事件）。
+所有策略都是同一批新生成候选的纯排列，不增加、修改或替换候选，也不重评分；
+排序平局始终回退到原始候选索引，排名禁用时所有策略都返回原始顺序。
+
 宿主派发接受/反馈任务前先调用 `capture_context()` 捕获当前实例与策略代数。
 实际提交用户明确接受的编辑后，再用该上下文和捕获的接受前请求调用
 `record_acceptance_at(&capture, &validated_apply_request, positive_event_id)`。
