@@ -64,6 +64,21 @@ jobs:
           cargo clippy --locked -p latexsnipper-preference-storage --all-targets -- -D warnings
           exit $LASTEXITCODE
 
+  approval-storage-windows:
+    name: Windows protected approval storage
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test native checkpoints, private ACLs, isolation, recovery, and cleanup
+        run: cargo test --locked -p latexsnipper-plugin-wasi --lib windows_approval_checkpoint -- --include-ignored
+      - name: Lint the actual Windows host implementation
+        run: cargo clippy --locked -p latexsnipper-plugin-wasi --all-targets -- -D warnings
+
   python-adapter:
     name: Python adapter (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

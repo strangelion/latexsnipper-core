@@ -289,7 +289,12 @@ it never repairs ACLs. These strict entries check the actual held directory's
 owner and protected three-entry DACL, and recheck before credential reads,
 publication locks, snapshot access and permission vetoes. Lock/staging/selected
 files are also checked by handle for the same finite principal/access policy;
-file inheritance flags may differ from directory flags. Null/unprotected root
+file inheritance flags may differ from directory flags. Root ownership must bind
+the effective current user. Files may also be owned by SYSTEM/Administrators,
+which already hold full access in the same exact DACL; elevated token default
+ownership does not add another allowed principal. See Microsoft's
+[default-object-owner contract](https://learn.microsoft.com/en-us/windows/win32/secauthz/owner-of-a-new-object).
+Null/unprotected root
 DACLs, additional principals, other ACE forms and unexpected access masks fail
 closed. Copies retained by restored policies keep this validation. This is a
 deliberately finite policy, not a general Windows effective-access evaluator.
@@ -306,6 +311,8 @@ temporary roots are removed on exit. Recovered permissions do not renew consent
 expiry, expand its scope or undo a prior information disclosure. Deployment,
 untrusted ancestor races, administrators/SYSTEM, native same-user malware and
 logon/power-loss behavior remain separate acceptance boundaries.
+The Windows protected-approval CI job explicitly opts into these bounded owned
+credential/cleanup fixtures; they remain ignored by ordinary default test runs.
 
 `ApprovalStorageIsolation` is a trusted native permission veto, not consent.
 Declare private storage on every host before any guest execution using

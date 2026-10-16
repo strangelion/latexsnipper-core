@@ -232,6 +232,18 @@ fn verify(directory: &Dir) -> Result<(), WasiDiagnostic> {
     verify_security(directory.as_raw_handle(), true)
 }
 
+fn accepted_owner(owner: PSID, current_user: PSID, directory: bool) -> bool {
+    // SAFETY: callers retain valid SIDs from live OS descriptor/token allocations.
+    // Elevated tokens may default file ownership to an OS principal already
+    // granted full access by our exact DACL. Root ownership must still bind user.
+    unsafe {
+        EqualSid(owner, current_user) != 0
+            || (!directory
+                && (IsWellKnownSid(owner, WinLocalSystemSid) != 0
+                    || IsWellKnownSid(owner, WinBuiltinAdministratorsSid) != 0))
+    }
+}
+
 fn verify_security(handle: HANDLE, directory: bool) -> Result<(), WasiDiagnostic> {
     let user = UserSid::current()?;
     let mut owner = null_mut();
@@ -259,7 +271,7 @@ fn verify_security(handle: HANDLE, directory: bool) -> Result<(), WasiDiagnostic
     if length == 0 || length > 64 * 1024 || owner.is_null() || acl.is_null() {
         return Err(denied());
     }
-    if unsafe { EqualSid(owner, user.as_ptr()) } == 0 {
+    if !accepted_owner(owner, user.as_ptr(), directory) {
         return Err(denied());
     }
     let mut control = 0;
@@ -388,6 +400,57 @@ mod tests {
     fn restricted() -> String {
         let sid = UserSid::current().unwrap().text().unwrap();
         format!("D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)")
+    }
+
+    #[test]
+    fn elevated_file_owner_compatibility_retains_current_user_root_identity() {
+        let user = UserSid::current().unwrap();
+        for (owner_name, trusted_file) in [
+            ("SY", true),
+            ("BA", true),
+            ("WD", false),
+            ("AU", false),
+            ("BU", false),
+        ] {
+            let security = descriptor(&format!("O:{owner_name}")).unwrap();
+            let mut owner = null_mut();
+            let mut defaulted = 0;
+            // SAFETY: OS-parsed descriptor with an explicit live owner SID.
+            assert_ne!(
+                unsafe { GetSecurityDescriptorOwner(security.0, &mut owner, &mut defaulted) },
+                0
+            );
+            let is_user = unsafe { EqualSid(owner, user.as_ptr()) } != 0;
+            assert_eq!(
+                accepted_owner(owner, user.as_ptr(), false),
+                trusted_file || is_user
+            );
+            assert_eq!(accepted_owner(owner, user.as_ptr(), true), is_user);
+        }
+        let temporary = tempfile::tempdir().unwrap();
+        let backend = WindowsProtectedApprovalCheckpoint::create_private_root(
+            temporary.path(),
+            "private",
+            "fixture-default-file-owner",
+            WindowsApprovalPersistence::LogonSession,
+        )
+        .unwrap();
+        let mut options = OpenOptions::new();
+        options
+            .write(true)
+            .create_new(true)
+            .follow(FollowSymlinks::No);
+        let file = backend
+            .directory
+            .open_with("fixture-default-owner.bin", &options)
+            .unwrap();
+        backend
+            .check_private_file_dacl(file.as_raw_handle())
+            .unwrap();
+        backend.check_private_dacl().unwrap();
+        drop(file);
+        drop(backend);
+        temporary.close().unwrap();
     }
 
     #[test]

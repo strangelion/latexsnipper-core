@@ -58,7 +58,7 @@
     "crates/inference/src": "eef50571c27836cc072a198c902691ac5721bdf7c02d905f9291f01d180e3c5e",
     "crates/model/src": "5c3d4c094f12d4b679b84b8bb6c2cedf6535aa7ab9667277a0232ad647084df4",
     "crates/pipeline/src": "096ce9615defb76d69c0271eebb4933cbcfd7b0f5c18f7f324b68c42a67b613f",
-    "crates/plugin-wasi/src": "b031baf701cc544b266077250a0abee6907782d19023991d60ef9778c4f49eaa",
+    "crates/plugin-wasi/src": "e6bff808c7803d33d7cd9eb784cd9b6df4cf572a7aa5c7e6b99eb51734dddb54",
     "crates/plugin/src": "eaa2d23e1c074a6995b1faad45f2cedba979965a26ba260eeef61210f020cbbb",
     "crates/preference-storage/src": "a26bf262603515ba7b02c9fcc146a6a4b4733a5d5f9279fbd65af6f8fc9909fb",
     "crates/python/src": "1f1133748f618d69599cfa0b80796f6d76fa39ce4887734e600f8e000cfb5c8c",
